@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "validated_at": "2026-10-14",
+  "files": {
+    "AI-Project-Documentation-MVP-Plan.md": "fa5304cfe0b7c1dbb0c3b55d6e7e54079e2b2f94b8968ad512b250aa4b453ae3",
+    "AI-Project-Documentation-Tasks.md": "879983c096c9a675b38013d1ac77594e456960dea53a48cbb74a73f73cb9480d",
+    "specs/001-documentation-audit/spec.md": "2caca18a9f657a5d0a68ef3c39f7ef6f6c81b9bc0976929b437be689dc481099",
+    "specs/001-documentation-audit/plan.md": "462d53dea55419fbe40c6a1d0e689f8e630bfefa01bbb22ff996d09d9a590c86",
+    "specs/001-documentation-audit/tasks.md": "c6c613e474d80f801068b4f437891bb07b12d8514f9865868f93585ec62ba8f9",
+    "specs/001-documentation-audit/research.md": "fe3374d362b1009649cd8e8a8d48ed4702f1d72e3cd6805b21bdbdb1a63f6586",
+    ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3"
+  }
+}
