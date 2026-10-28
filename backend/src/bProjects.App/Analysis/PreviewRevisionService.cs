@@ -154,6 +154,15 @@ public sealed class PreviewRevisionService(AppDbContext db)
             return Reject(new(PreviewStatus.NotFound));
         }
 
+        // L'Analysis attiva si legge PRIMA dell'analisi corrente: il commit di una Analysis (revisione AI, Completed e CurrentAnalysisId, nella stessa
+        // transazione) non prende il lock della conversazione, quindi in READ COMMITTED può avvenire fra due letture. Letta in questo ordine, o si vede
+        // l'Analysis ancora attiva (409 processing_active) o la si vede completata e allora anche CurrentAnalysisId è già quello nuovo (analysis_not_current).
+        // Durante Document attiva gli edit sono ammessi (l'input del run è già congelato): blocca solo un'Analysis attiva.
+        var active = await db.ProcessingRuns.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && r.Kind == ProcessingRunKind.Analysis
+                && (r.Status == ProcessingRunStatus.Queued || r.Status == ProcessingRunStatus.Running))
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(ct);
         var currentAnalysisId = await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => p.CurrentAnalysisId).SingleAsync(ct);
         if (currentAnalysisId != analysisId)
         {
@@ -176,12 +185,6 @@ public sealed class PreviewRevisionService(AppDbContext db)
             .Where(r => r.AnalysisId == analysisId && r.Origin == AnalysisRevisionOrigin.PmEdit)
             .Select(r => r.Id)
             .ToListAsync(ct);
-        // Durante Document attiva gli edit sono ammessi (l'input del run è già congelato): blocca solo un'Analysis attiva.
-        var active = await db.ProcessingRuns.AsNoTracking()
-            .Where(r => r.ProjectId == projectId && r.Kind == ProcessingRunKind.Analysis
-                && (r.Status == ProcessingRunStatus.Queued || r.Status == ProcessingRunStatus.Running))
-            .Select(r => (Guid?)r.Id)
-            .FirstOrDefaultAsync(ct);
         return new(null, run, current, pmRevisionIds, active);
     }
 

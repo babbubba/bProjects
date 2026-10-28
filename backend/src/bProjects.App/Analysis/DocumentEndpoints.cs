@@ -113,6 +113,11 @@ public static class DocumentEndpoints
                 return Results.NotFound();
             }
 
+            // Il run formale attivo si legge PRIMA dell'analisi corrente: il commit di una Analysis (revisione AI, Completed e CurrentAnalysisId nella
+            // stessa transazione) non prende il lock della conversazione e in READ COMMITTED può avvenire fra due letture. In questo ordine o si vede
+            // l'Analysis ancora attiva (processing_active) o la si vede completata e allora CurrentAnalysisId è già quello nuovo (analysis_not_current).
+            // Nessun altro comando può attivare un run senza il lock: una lettura anticipata può solo essere prudente, mai ottimista.
+            var active = await ActiveRunAsync(db, projectId, ct);
             var currentAnalysisId = await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => p.CurrentAnalysisId).SingleAsync(ct);
             if (currentAnalysisId != analysisId)
             {
@@ -139,7 +144,6 @@ public static class DocumentEndpoints
                 return Problem(StatusCodes.Status409Conflict, "La revisione corrente non è stata confermata dal PM", "analysis_not_confirmed");
             }
 
-            var active = await ActiveRunAsync(db, projectId, ct);
             if (active is not null)
             {
                 return Problem(StatusCodes.Status409Conflict, "Un'elaborazione formale è già attiva", "processing_active", active);
