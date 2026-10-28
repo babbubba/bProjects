@@ -1,4 +1,9 @@
+#pragma warning disable MAAI001 // Compaction: API sperimentale MAF 1.26.0, adottata di proposito (research.md §6).
+
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Text;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 
 namespace bProjects.App.AI;
@@ -115,6 +120,81 @@ internal sealed class MonitoredSummarizerClient(IChatClient inner, CompactionMon
         {
             monitor.Record(e);
             throw;
+        }
+    }
+}
+
+/// <summary>
+/// Token reali (tokenizer del modello) dei testi di una chiamata. CompactionProvider costruisce il proprio indice senza
+/// tokenizer e stima i token come byte UTF-8 / 4, che per il modello reale non è calibrato: la soglia di attivazione
+/// legge invece questi conteggi, misurati in anticipo da <see cref="MeasuringChatClient"/>, così trigger e controllo finale
+/// parlano la stessa unità. Un testo mai misurato (la sintesi derivata) ricade sulla stima nativa; il controllo finale resta
+/// sempre sul conteggio reale.
+/// </summary>
+internal sealed class MeasuredTokens(TokenCounter count)
+{
+    private readonly ConcurrentDictionary<string, int> _byText = new(StringComparer.Ordinal);
+
+    /// <summary>Conteggio con cache: ogni testo viene misurato una sola volta per client.</summary>
+    public async ValueTask<int> CountAsync(string text, CancellationToken cancellationToken)
+    {
+        if (_byText.TryGetValue(text, out var known))
+        {
+            return known;
+        }
+
+        var tokens = await count(text, cancellationToken);
+        _byText[text] = tokens;
+        return tokens;
+    }
+
+    public async ValueTask MeasureAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+    {
+        foreach (var message in messages)
+        {
+            var text = message.Text;
+            if (text.Length > 0)
+            {
+                await CountAsync(text, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>Token dei messaggi non esclusi dall'indice di compattazione.</summary>
+    public int Included(CompactionMessageIndex index) =>
+        index.Groups.Where(g => !g.IsExcluded).Sum(g => g.Messages.Sum(Of));
+
+    private int Of(ChatMessage message)
+    {
+        var text = message.Text;
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        return _byText.TryGetValue(text, out var tokens) ? tokens : Encoding.UTF8.GetByteCount(text) / 4;
+    }
+}
+
+/// <summary>Anello più esterno: misura i token reali dei messaggi prima che li veda il provider di compattazione.</summary>
+internal sealed class MeasuringChatClient(IChatClient inner, MeasuredTokens measured) : DelegatingChatClient(inner)
+{
+    public override async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var list = messages.ToList();
+        await measured.MeasureAsync(list, cancellationToken);
+        return await base.GetResponseAsync(list, options, cancellationToken);
+    }
+
+    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var list = messages.ToList();
+        await measured.MeasureAsync(list, cancellationToken);
+        await foreach (var update in base.GetStreamingResponseAsync(list, options, cancellationToken))
+        {
+            yield return update;
         }
     }
 }

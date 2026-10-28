@@ -80,9 +80,9 @@ public sealed class ContextCompactionTests
     [Fact]
     public async Task Still_over_budget_after_compaction_fails_with_context_overflow_without_calling_the_model()
     {
-        var model = new ScriptedModel();
+        // 9 messaggi da 30 parole = 270 > 200: la sintesi parte, ma restituisce un testo che da solo non rientra nel budget.
+        var model = new ScriptedModel { SummaryOverride = string.Join(' ', Enumerable.Repeat("sintesi", 300)) };
         var agent = await AgentAsync(model, trigger: 200);
-        // 9 messaggi da 30 parole = 270 > 200; nulla e' sintetizzabile (sotto il minimo preservato) ne' tagliabile.
         var messages = Dialog(9, i => string.Join(' ', Enumerable.Repeat($"w{i}", 30)));
 
         var e = await Assert.ThrowsAsync<ContextOverflowException>(() => agent.RunAsync(messages, cancellationToken: Ct));
@@ -178,6 +178,92 @@ public sealed class ContextCompactionTests
         Assert.Equal(0, model.SummarizerCalls);
     }
 
+    // ---- T047 - caso osservato nel primo test manuale: storico di messaggi grandi oltre la finestra.
+
+    [Fact]
+    public async Task Ten_large_messages_over_the_budget_are_summarized_by_the_native_strategy_instead_of_overflowing()
+    {
+        var model = new ScriptedModel();
+        var agent = await AgentAsync(model, trigger: Options().InputBudgetTokens);   // soglia di default = budget
+        // 10 messaggi PM da 50 parole = 500 token, 2,5 volte il budget di 200: come 10 note da ~5k token su 27k.
+        var messages = Dialog(10, i => string.Join(' ', Enumerable.Repeat($"nota{i}", 50)));
+
+        await agent.RunAsync(messages, cancellationToken: Ct);
+
+        Assert.True(model.SummarizerCalls >= 1, "la compattazione nativa deve attivarsi");
+        var sent = model.LastChatCall;
+        var total = (await Task.WhenAll(sent.Select(m => Words(m.Text, Ct).AsTask()))).Sum() + 3;
+        Assert.True(total <= Options().InputBudgetTokens, $"contesto finale {total} oltre il budget");
+        Assert.Contains(sent, m => m.Text.StartsWith("nota9 ", StringComparison.Ordinal));   // l'ultimo messaggio e' intatto
+        Assert.Equal(10, messages.Count);                                                       // gli originali non sono toccati
+    }
+
+    [Fact]
+    public async Task A_single_message_over_the_budget_is_a_structural_limit_reported_with_measured_tokens_and_no_model_call()
+    {
+        var model = new ScriptedModel();
+        var agent = await AgentAsync(model, trigger: Options().InputBudgetTokens);
+        var original = string.Join(' ', Enumerable.Repeat("fatto", 250));     // 250 + 3 istruzioni > 200
+
+        var e = await Assert.ThrowsAsync<ContextOverflowException>(
+            () => agent.RunAsync(Dialog(1, _ => original), cancellationToken: Ct));
+
+        Assert.Equal(253, e.Tokens);                                           // misurato, non stimato
+        Assert.Equal(Options().InputBudgetTokens, e.BudgetTokens);
+        Assert.Equal(0, model.ChatCalls);
+        Assert.Equal(0, model.SummarizerCalls);                                // un solo gruppo: nulla da riassumere
+    }
+
+    [Fact]
+    public async Task A_last_message_over_the_budget_is_never_summarized_away_even_with_a_compactable_history()
+    {
+        var model = new ScriptedModel();
+        var agent = await AgentAsync(model, trigger: Options().InputBudgetTokens);
+        var history = Dialog(6, i => Words10($"m{i}"));
+        history.Add(new ChatMessage(ChatRole.User, string.Join(' ', Enumerable.Repeat("ultimo", 250))));
+
+        var e = await Assert.ThrowsAsync<ContextOverflowException>(() => agent.RunAsync(history, cancellationToken: Ct));
+
+        Assert.True(e.Tokens > e.BudgetTokens);
+        Assert.Equal(0, model.ChatCalls);
+    }
+
+    [Fact]
+    public async Task The_summarizer_receives_the_original_messages_and_instructions_to_keep_negations_exclusions_and_source_ids()
+    {
+        var model = new ScriptedModel();
+        var agent = await AgentAsync(model);
+        var messages = Dialog(20, i => i == 0
+            ? $"[messaggio id=11111111-1111-1111-1111-111111111111 sequenza=1] SMS escluso. Fatturazione fuori perimetro. {Words10("m0")}"
+            : Words10($"m{i}"));
+
+        await agent.RunAsync(messages, cancellationToken: Ct);
+
+        var prompt = model.LastSummarizerCall.First(m => m.Role == ChatRole.System).Text;
+        Assert.Contains("negazion", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("esclusion", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("identificativ", prompt, StringComparison.OrdinalIgnoreCase);
+        // Il summarizer vede il testo originale, compresi id e negazioni; la lista dell'utente resta invariata.
+        Assert.Contains(model.LastSummarizerCall, m => m.Text.Contains("SMS escluso") && m.Text.Contains("11111111-1111-1111-1111-111111111111"));
+        Assert.Contains("SMS escluso", messages[0].Text);
+    }
+
+    [Fact]
+    public async Task The_trigger_follows_the_model_token_counts_not_the_bytes_over_four_estimate_of_the_framework()
+    {
+        // Token del modello = 4 per parola, il doppio della stima nativa (8 byte per parola / 4 = 2): 10 messaggi da 8 parole
+        // sono ~160 token stimati dal framework (sotto la soglia 197) ma 320 reali (oltre il budget 200).
+        var model = new ScriptedModel();
+        static ValueTask<int> Dense(string text, CancellationToken _) =>
+            new(text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length * 4);
+        var agent = await new AgentFactory(Options(trigger: 0), model, Dense).CreateCompactingAgentAsync("A", "Sei un assistente", Ct);
+        var messages = Dialog(10, i => string.Join(' ', Enumerable.Repeat($"parola{i % 10}", 8)));
+
+        await agent.RunAsync(messages, cancellationToken: Ct);
+
+        Assert.True(model.SummarizerCalls >= 1, "con token reali oltre il budget la compattazione deve attivarsi");
+    }
+
     /// <summary>Modello scriptato: distingue la chiamata di sintesi (prompt di summarization) da quella principale.</summary>
     private sealed class ScriptedModel : IChatClient
     {
@@ -193,12 +279,15 @@ public sealed class ContextCompactionTests
 
         public List<ChatMessage> LastChatCall { get; private set; } = [];
 
+        public List<ChatMessage> LastSummarizerCall { get; private set; } = [];
+
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
         {
             var list = messages.ToList();
-            if (list.Any(m => m.Role == ChatRole.System && m.Text.Contains("summar", StringComparison.OrdinalIgnoreCase)))
+            if (list.Any(m => m.Role == ChatRole.System && m.Text == AgentFactory.SummarizationPrompt))
             {
                 SummarizerCalls++;
+                LastSummarizerCall = list;
                 if (SummarizerFailure is not null)
                 {
                     throw SummarizerFailure;

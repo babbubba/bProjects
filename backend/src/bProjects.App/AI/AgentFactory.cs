@@ -36,16 +36,40 @@ public sealed class AgentFactory
         var budget = ContextBudget.From(_options);
         var instructionTokens = await _count(instructions, cancellationToken);
         var monitor = new CompactionMonitor();
+        var measured = new MeasuredTokens(_count);
+        var messageTrigger = budget.MessageTriggerTokens(instructionTokens);
 
+        // Soglia nativa (CompactionTrigger) sui token reali del modello; la strategia nativa riassume solo i gruppi più
+        // vecchi necessari a rientrare e ne preserva almeno l'ultimo (il messaggio a cui rispondere): il minimo di default
+        // del framework (8 gruppi) renderebbe incomprimibile una conversazione di pochi messaggi molto lunghi.
         var strategy = new SummarizationCompactionStrategy(
             new MonitoredSummarizerClient(_model, monitor),
-            CompactionTriggers.TokensExceed(budget.MessageTriggerTokens(instructionTokens)));
+            index => measured.Included(index) > messageTrigger,
+            minimumPreservedGroups: PreservedGroups,
+            summarizationPrompt: SummarizationPrompt);
 
         return new ChatClientBuilder(_model)
+            .Use(inner => new MeasuringChatClient(inner, measured))
             .UseAIContextProviders(new CompactionProvider(strategy))
-            .Use(inner => new ContextBudgetChatClient(inner, budget, _count, monitor))
+            .Use(inner => new ContextBudgetChatClient(inner, budget, measured.CountAsync, monitor))
             .Build();
     }
+
+    /// <summary>Gruppi finali sempre preservati dalla sintesi: il solo ultimo, cioè il messaggio PM/istruzione del turno.</summary>
+    public const int PreservedGroups = 1;
+
+    /// <summary>
+    /// Prompt della sintesi nativa: il predefinito del framework chiede di omettere ciò che non è «chiave» e non nomina
+    /// negazioni, esclusioni né identificativi di fonte, che invece qui non devono perdersi.
+    /// </summary>
+    public const string SummarizationPrompt =
+        "Sei un riassuntore di conversazioni di raccolta requisiti. Produci una sintesi fedele e compatta dei messaggi forniti. "
+        + "Conserva sempre, senza attenuarli né invertirli: fatti, requisiti, vincoli, decisioni e assunzioni; "
+        + "negazioni ed esclusioni (ciò che è escluso, fuori perimetro o non richiesto, e ciò che il project manager non sa o non ha deciso); "
+        + "conflitti e punti aperti; nomi, numeri, date e termini tecnici; "
+        + "gli identificativi di messaggio e di sequenza (id=..., sequenza=...), riportandoli accanto al fatto a cui si riferiscono "
+        + "così che resti riconducibile al messaggio d'origine. "
+        + "Non aggiungere informazioni, interpretazioni o stime. Ometti solo convenevoli e ripetizioni. Rispondi solo con la sintesi.";
 
     /// <summary>Client del DocumentAgent: nessuna compattazione, fallisce con context_overflow prima della chiamata.</summary>
     public IChatClient CreateDocumentClient() =>
