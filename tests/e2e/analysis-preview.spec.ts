@@ -366,9 +366,9 @@ test.describe('anteprima: revisione e conferma persistenti (revisione AI seminat
     expect(sql(`SELECT count(*) FROM "ProcessingRuns" WHERE "ProjectId" = '${projectId}' AND "Kind" = 'Document';`)).toBe('0');
     expect(sql(`SELECT count(*) FROM "ProcessingRuns" WHERE "ProjectId" = '${projectId}';`)).toBe('1'); // solo l'analisi seminata
     expect(sql(`SELECT coalesce("LatestDraftId"::text, 'none') FROM "Projects" WHERE "Id" = '${projectId}';`)).toBe('none');
-    expect(
-      sql(`SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND (table_name ILIKE '%approv%' OR table_name ILIKE '%draft%');`),
-    ).toBe('0'); // nessuna entita' di approvazione cliente o bozza
+    // Nessuna entita' di approvazione cliente; la tabella Drafts esiste dal T040 ma questo progetto non ha bozze.
+    expect(sql(`SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name ILIKE '%approv%';`)).toBe('0');
+    expect(sql(`SELECT count(*) FROM "Drafts" WHERE "ProjectId" = '${projectId}';`)).toBe('0');
     expect(sql(`SELECT count(*) FROM "AnalysisRevisions" WHERE "AnalysisId" = '${seeded.analysisId}';`)).toBe('4');
   });
 });
