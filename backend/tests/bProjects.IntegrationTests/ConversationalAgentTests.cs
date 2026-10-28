@@ -165,7 +165,7 @@ public sealed class ConversationalAgentTests : IAsyncLifetime
 
     private sealed record Seed(Guid ProjectId, Guid ConversationId, List<Guid> Turns);
 
-    private static ConversationalAgent Agent(IChatClient model) =>
+    internal static ConversationalAgent Agent(IChatClient model) =>
         new(new AgentFactory(new AiOptions { ContextWindowTokens = 32768 }, model,
             (t, _) => new(t.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length)),
             new ChatOptions { ModelId = "fake" });
@@ -247,14 +247,14 @@ public sealed class ConversationalAgentTests : IAsyncLifetime
     {
         public ConversationalReply? Reply { get; private set; }
 
-        public Task CommitAsync(ChatTurnClaim claim, ConversationalReply reply, CancellationToken ct)
+        public Task<ChatTurnCommitResult> CommitAsync(ChatTurnClaim claim, ConversationalReply reply, CancellationToken ct)
         {
             Reply = reply;
-            return Task.CompletedTask;
+            return Task.FromResult(new ChatTurnCommitResult(ChatTurnCommitOutcome.Committed));
         }
     }
 
-    private sealed class FakeModel(string[] chunks) : IChatClient
+    internal sealed class FakeModel(string[] chunks) : IChatClient
     {
         public List<ChatMessage> LastRequest { get; private set; } = [];
 

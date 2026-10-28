@@ -108,7 +108,8 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                 "FencingToken" = t."FencingToken" + 1,
                 "AttemptCount" = t."AttemptCount" + 1,
                 "StartedAt" = COALESCE(t."StartedAt", clk.t),
-                "NextAttemptAt" = NULL
+                "NextAttemptAt" = NULL,
+                "SessionRevisionAtStart" = (SELECT v."ChatSessionRevision" FROM "Conversations" v WHERE v."Id" = t."ConversationId")
             FROM candidate, clk
             WHERE t."Id" = candidate."Id"
             RETURNING t."Id", t."ConversationId", t."TriggerMessageId", t."SourceCutoffSequence",

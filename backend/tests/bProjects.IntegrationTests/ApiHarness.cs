@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -23,11 +24,18 @@ public sealed class ApiHarness : IAsyncDisposable
 {
     private readonly WebApplicationFactory<Program> _factory;
 
-    private ApiHarness(string connectionString)
+    private ApiHarness(string connectionString, Action<IServiceCollection>? configure)
     {
         ConnectionString = connectionString;
         _factory = new TestApp(connectionString).WithWebHostBuilder(builder => builder.ConfigureServices(services =>
-            services.AddSingleton<InternalModelClient>(_ => throw new InvalidOperationException("Il client AI non deve essere inizializzato."))));
+        {
+            services.AddSingleton<InternalModelClient>(_ => throw new InvalidOperationException("Il client AI non deve essere inizializzato."));
+
+            // Senza richiesta esplicita il dispatcher resta inattivo: le prove di progetti e conversazioni non
+            // devono far eseguire i turni accodati. Chi vuole l'esecuzione reale la registra con <paramref name="configure"/>.
+            services.RemoveAll<IChatTurnExecutor>();
+            configure?.Invoke(services);
+        }));
     }
 
     public string ConnectionString { get; }
@@ -35,9 +43,9 @@ public sealed class ApiHarness : IAsyncDisposable
     public IServiceProvider Services => _factory.Services;
 
     /// <summary>Avvia l'app; con <paramref name="prepare"/> applica le migrazioni e crea i due PM di test.</summary>
-    public static async Task<ApiHarness> StartAsync(string connectionString, bool prepare = true)
+    public static async Task<ApiHarness> StartAsync(string connectionString, bool prepare = true, Action<IServiceCollection>? configure = null)
     {
-        var harness = new ApiHarness(connectionString);
+        var harness = new ApiHarness(connectionString, configure);
         if (prepare)
         {
             using var scope = harness.Services.CreateScope();

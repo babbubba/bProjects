@@ -24,7 +24,7 @@ public sealed record ConversationalReply(
 /// <summary>Chi committa atomicamente risposta, snapshot, watermark e Completed (T018). Deve rifiutare se lease/fencing/revisione non sono più validi.</summary>
 public interface IChatTurnCommitter
 {
-    Task CommitAsync(ChatTurnClaim claim, ConversationalReply reply, CancellationToken ct);
+    Task<ChatTurnCommitResult> CommitAsync(ChatTurnClaim claim, ConversationalReply reply, CancellationToken ct);
 }
 
 /// <summary>
@@ -118,6 +118,8 @@ public sealed class ConversationalTurnExecutor(IServiceScopeFactory scopes, Conv
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var reply = await agent.RunAsync(db, claim, onDelta: null, ct);
+        // Un commit rifiutato (lease perso, revisione cambiata) o già riconciliato non modifica nulla: il dispatcher
+        // tenta Failed solo con owner/fencing, quindi un vecchio worker non cambia mai l'esito.
         await scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>().CommitAsync(claim, reply, ct);
     }
 }
