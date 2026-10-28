@@ -12,7 +12,9 @@ const MEASURED = /\b(\d+) token oltre il budget di input di (\d+) token\b/;
  * Token e budget misurati dal backend per context_overflow (ModelFailure.Detail). Il contratto trasporta solo
  * testo: i numeri si mostrano se e solo se il messaggio li riporta, altrimenti null (mai valori o percentuali inventati).
  */
-export function measuredContext(message: string | null | undefined): { tokens: number; budget: number } | null {
+export function measuredContext(
+  message: string | null | undefined,
+): { tokens: number; budget: number } | null {
   const match = message ? MEASURED.exec(message) : null;
   if (!match) return null;
   const tokens = Number(match[1]);

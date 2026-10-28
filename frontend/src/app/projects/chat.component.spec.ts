@@ -237,14 +237,16 @@ describe('ChatComponent', () => {
       .expectOne((r) => r.method === 'POST')
       .flush({ message: userMessage(), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
     await settle();
-    http
-      .expectOne(`/api/projects/${P}/chat-turns/t-1`)
-      .flush(
-        turn({
-          status: 'Failed',
-          error: { code: 'context_overflow', message: 'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.' },
-        }),
-      );
+    http.expectOne(`/api/projects/${P}/chat-turns/t-1`).flush(
+      turn({
+        status: 'Failed',
+        error: {
+          code: 'context_overflow',
+          message:
+            'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.',
+        },
+      }),
+    );
     await settle();
 
     const text = el.querySelector('.turn-error')?.textContent ?? '';

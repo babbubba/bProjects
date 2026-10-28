@@ -618,9 +618,10 @@ export class AnalysisPreviewComponent {
     action: 'save' | 'confirm',
   ): Promise<void> {
     const verb = action === 'save' ? 'Il salvataggio' : 'La conferma';
+    const failed = action === 'save' ? 'riuscito' : 'riuscita';
     const mine = action === 'save' ? ' Le tue modifiche restano nel modulo.' : '';
     if (!(e instanceof HttpErrorResponse)) {
-      this.saveError.set(`${verb} non è riuscito.${mine} Riprova.`);
+      this.saveError.set(`${verb} non è ${failed}.${mine} Riprova.`);
       return;
     }
     const body = (e.error ?? {}) as {
@@ -648,7 +649,7 @@ export class AnalysisPreviewComponent {
     } else if (e.status === 401) {
       this.saveError.set('Sessione scaduta: accedi di nuovo.');
     } else {
-      this.saveError.set(`${verb} non è riuscito.${mine} Riprova.`);
+      this.saveError.set(`${verb} non è ${failed}.${mine} Riprova.`);
     }
   }
 

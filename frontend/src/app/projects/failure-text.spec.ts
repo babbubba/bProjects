@@ -16,7 +16,12 @@ describe('failure-text', () => {
   });
 
   it('context_overflow: spiegazione, valori misurati e azione praticabile, senza il generico rifiuto', () => {
-    const text = describeFailure({ code: 'context_overflow', message: MEASURED }, labels, 'x', 'chat');
+    const text = describeFailure(
+      { code: 'context_overflow', message: MEASURED },
+      labels,
+      'x',
+      'chat',
+    );
     expect(text).toContain('supera il contesto gestibile');
     expect(text).toContain('31000 token');
     expect(text).toContain('24000 token');
@@ -37,16 +42,27 @@ describe('failure-text', () => {
     }
   });
 
-  it('documento: l\'indicazione riguarda il contenuto confermato, non il messaggio più recente', () => {
-    const text = describeFailure({ code: 'context_overflow', message: MEASURED }, labels, 'x', 'document');
+  it("documento: l'indicazione riguarda il contenuto confermato, non il messaggio più recente", () => {
+    const text = describeFailure(
+      { code: 'context_overflow', message: MEASURED },
+      labels,
+      'x',
+      'document',
+    );
     expect(text).toMatch(/anteprima/);
     expect(text).not.toMatch(/messaggio più recente/);
   });
 
   it('gli altri codici restano invariati: etichetta nota, poi messaggio, poi fallback', () => {
-    expect(describeFailure({ code: 'llm_unavailable', message: 'x' }, labels, 'f', 'chat')).toBe(labels.llm_unavailable);
-    expect(describeFailure({ code: 'model_rejected', message: 'Dettaglio' }, labels, 'f', 'chat')).toBe('Dettaglio');
-    expect(describeFailure({ code: 'model_rejected', message: null }, labels, 'f', 'chat')).toBe('f');
+    expect(describeFailure({ code: 'llm_unavailable', message: 'x' }, labels, 'f', 'chat')).toBe(
+      labels.llm_unavailable,
+    );
+    expect(
+      describeFailure({ code: 'model_rejected', message: 'Dettaglio' }, labels, 'f', 'chat'),
+    ).toBe('Dettaglio');
+    expect(describeFailure({ code: 'model_rejected', message: null }, labels, 'f', 'chat')).toBe(
+      'f',
+    );
     expect(describeFailure(null, labels, 'f', 'chat')).toBe('f');
   });
 });

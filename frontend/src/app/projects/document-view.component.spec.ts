@@ -266,7 +266,11 @@ describe('DocumentViewComponent', () => {
       name: 'processing.state',
       data: run({
         status: 'Failed',
-        error: { code: 'context_overflow', message: 'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.' },
+        error: {
+          code: 'context_overflow',
+          message:
+            'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.',
+        },
       }),
     });
     await settle();
