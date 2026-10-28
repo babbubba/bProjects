@@ -222,8 +222,11 @@ public static class AnalysisEndpoints
     /// AnalysisView della revisione corrente. Null se l'analisi non esiste nel progetto; View nulla se non ha ancora una revisione.
     /// Modifica/conferma: solo sull'analisi corrente e mai durante una nuova Analysis attiva (un Document attivo non le blocca,
     /// il suo input è congelato); generare richiede inoltre nessun run formale attivo e la revisione confermata.
+    /// Con <paramref name="revisionId"/> la vista descrive quella revisione (la risposta di un PUT o di una conferma descrive ciò che il comando
+    /// ha scritto, anche se nel frattempo ne è arrivata una più recente); se non è l'ultima, confermare e generare non sono più proponibili.
     /// </summary>
-    internal static async Task<(AnalysisView? View, ProcessingRun Run)?> BuildViewAsync(AppDbContext db, Guid projectId, Guid analysisId, CancellationToken ct)
+    internal static async Task<(AnalysisView? View, ProcessingRun Run)?> BuildViewAsync(
+        AppDbContext db, Guid projectId, Guid analysisId, CancellationToken ct, Guid? revisionId = null)
     {
         var run = await db.ProcessingRuns.AsNoTracking().SingleOrDefaultAsync(
             r => r.Id == analysisId && r.ProjectId == projectId && r.Kind == ProcessingRunKind.Analysis, ct);
@@ -232,12 +235,16 @@ public static class AnalysisEndpoints
             return null;
         }
 
-        var revision = await db.AnalysisRevisions.AsNoTracking().Where(r => r.AnalysisId == analysisId).OrderByDescending(r => r.Version).FirstOrDefaultAsync(ct);
+        var latest = await db.AnalysisRevisions.AsNoTracking().Where(r => r.AnalysisId == analysisId).OrderByDescending(r => r.Version).FirstOrDefaultAsync(ct);
+        var revision = revisionId is { } wanted && latest is not null && latest.Id != wanted
+            ? await db.AnalysisRevisions.AsNoTracking().SingleOrDefaultAsync(r => r.AnalysisId == analysisId && r.Id == wanted, ct)
+            : latest;
         if (revision is null)
         {
             return (null, run);
         }
 
+        var isLatest = revision.Id == latest!.Id;
         var project = await db.Projects.AsNoTracking().SingleAsync(p => p.Id == projectId, ct);
         var active = await db.ProcessingRuns.AsNoTracking()
             .Where(r => r.ProjectId == projectId && (r.Status == ProcessingRunStatus.Queued || r.Status == ProcessingRunStatus.Running))
@@ -265,8 +272,8 @@ public static class AnalysisEndpoints
             run.SourceCutoffSequence!.Value,
             hasNewNotes,
             canEdit,
-            CanConfirm: canEdit && revision.ValidationState == AnalysisValidationState.Unvalidated,
-            CanGenerate: canEdit && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed), run);
+            CanConfirm: canEdit && isLatest && revision.ValidationState == AnalysisValidationState.Unvalidated,
+            CanGenerate: canEdit && isLatest && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed), run);
     }
 
     private static async Task<IResult> GetRevision(Guid projectId, Guid analysisId, string version, HttpContext http, AppDbContext db, CancellationToken ct)

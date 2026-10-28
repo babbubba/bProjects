@@ -76,7 +76,9 @@ public static class PreviewEndpoints
         switch (result.Status)
         {
             case PreviewStatus.Ok:
-                var built = await AnalysisEndpoints.BuildViewAsync(db, projectId, analysisId, ct);
+                // La risposta descrive la revisione che il comando ha scritto o confermato, non quella corrente dopo il commit: un PUT concorrente
+                // può già aver aggiunto la successiva (mai una conferma mostrata come v2 non confermata).
+                var built = await AnalysisEndpoints.BuildViewAsync(db, projectId, analysisId, ct, result.RevisionId);
                 if (built?.View is not { } view)
                 {
                     return Results.NotFound();
