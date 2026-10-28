@@ -1,3 +1,4 @@
+using bProjects.App.Conversations;
 using bProjects.App.Persistence;
 using Microsoft.Extensions.Options;
 
@@ -23,7 +24,8 @@ public sealed class AiDispatchService(
     IServiceScopeFactory scopes,
     IOptions<ExecutionOptions> options,
     ILogger<AiDispatchService> logger,
-    IChatTurnExecutor? executor = null) : BackgroundService
+    IChatTurnExecutor? executor = null,
+    ChatTurnEvents? events = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
@@ -82,6 +84,7 @@ public sealed class AiDispatchService(
             return false;
         }
 
+        await PublishState(claim.TurnId); // Running
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync(claim, leaseLost, stopHeartbeat.Token);
@@ -119,8 +122,11 @@ public sealed class AiDispatchService(
             // Un esecutore che torna senza aver committato Completed ha violato il contratto: Failed, mai un turno a metà.
             // Se il turno è già Completed la guardia di fencing rifiuta l'update, ed è l'esito normale.
             using var scope = scopes.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
-                .FailAsync(claim, "processing_failed", "L'esecuzione è terminata senza produrre una risposta.", ct);
+            if (await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
+                .FailAsync(claim, "processing_failed", "L'esecuzione è terminata senza produrre una risposta.", ct))
+            {
+                await PublishState(claim.TurnId);
+            }
         }
 
         return true;
@@ -132,8 +138,13 @@ public sealed class AiDispatchService(
         if (!await transition(scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>(), ct))
         {
             logger.LogInformation("Turno {TurnId}: transizione rifiutata (lease/fencing non più validi).", claim.TurnId);
+            return;
         }
+
+        await PublishState(claim.TurnId);
     }
+
+    private Task PublishState(Guid turnId) => events is null ? Task.CompletedTask : events.PublishStateAsync(turnId);
 
     /// <summary>Rinnova il lease ogni RenewInterval; se l'owner non è più valido annulla l'esecuzione.</summary>
     private async Task HeartbeatAsync(ChatTurnClaim claim, CancellationTokenSource leaseLost, CancellationToken stop)

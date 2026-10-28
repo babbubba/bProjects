@@ -35,6 +35,8 @@ builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredServic
 builder.Services.AddProblemDetails();
 
 // Dispatch dei ChatTurn (T014) con ConversationalAgent (T017) e commit atomico della risposta (T018).
+builder.Services.AddSingleton<ProjectEventHub>(); // notifiche SSE effimere in-process (T021)
+builder.Services.AddSingleton<ChatTurnEvents>();
 builder.Services.AddScoped<ExecutionLeaseStore>();
 builder.Services.AddSingleton(sp =>
 {
@@ -149,6 +151,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapAuthEndpoints();
 app.MapProjectEndpoints();
 app.MapConversationEndpoints();
+app.MapProjectEventsEndpoint();
 
 app.Run();
 

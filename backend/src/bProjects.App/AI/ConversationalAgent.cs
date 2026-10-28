@@ -111,15 +111,20 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
 /// Esecutore dei ChatTurn collegato al dispatcher (T014): esegue il ConversationalAgent e consegna il risultato al
 /// <see cref="IChatTurnCommitter"/>. Il token ricevuto si annulla quando il lease si perde.
 /// </summary>
-public sealed class ConversationalTurnExecutor(IServiceScopeFactory scopes, ConversationalAgent agent) : IChatTurnExecutor
+public sealed class ConversationalTurnExecutor(
+    IServiceScopeFactory scopes, ConversationalAgent agent, ChatTurnEvents? events = null) : IChatTurnExecutor
 {
     public async Task ExecuteAsync(ChatTurnClaim claim, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var reply = await agent.RunAsync(db, claim, onDelta: null, ct);
+        var reply = await agent.RunAsync(db, claim, onDelta: events?.DeltaSink(claim), ct);
         // Un commit rifiutato (lease perso, revisione cambiata) o già riconciliato non modifica nulla: il dispatcher
         // tenta Failed solo con owner/fencing, quindi un vecchio worker non cambia mai l'esito.
-        await scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>().CommitAsync(claim, reply, ct);
+        var result = await scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>().CommitAsync(claim, reply, ct);
+        if (events is not null && result.Outcome != ChatTurnCommitOutcome.Rejected)
+        {
+            await events.PublishStateAsync(claim.TurnId); // post-commit: Completed rimanda al resultMessageId persistito
+        }
     }
 }

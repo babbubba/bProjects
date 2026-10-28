@@ -65,6 +65,7 @@ public static class ConversationEndpoints
         ClaimsPrincipal user,
         AppDbContext db,
         IOptions<ExecutionOptions> execution,
+        ChatTurnEvents events,
         CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
@@ -160,6 +161,7 @@ public static class ConversationEndpoints
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
+        await events.PublishStateAsync(turn.Id); // post-commit; legge lo stato corrente, mai uno vecchio
         var view = await ViewOf(db, message, ct);
         return Results.Created($"/api/projects/{projectId}/messages/{message.Id}", new PostMessageResponse(view, turn.Id));
     }
@@ -250,7 +252,7 @@ public static class ConversationEndpoints
         m.ChatTurnId,
         m.ReplyToMessageId);
 
-    private static ChatTurnView ToView(ChatTurn t) => new(
+    internal static ChatTurnView ToView(ChatTurn t) => new(
         t.Id,
         t.TriggerMessageId,
         t.SourceCutoffSequence,
