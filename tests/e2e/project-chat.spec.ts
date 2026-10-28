@@ -128,6 +128,12 @@ test.describe('chat con modello reale', () => {
     await login(page);
     await createProject(page, name);
 
+    // Il dialogo non avvia mai l'analisi formale da solo: solo il comando esplicito del PM (Analizza) lo fa.
+    const analysisPosts: string[] = [];
+    page.on('request', (r) => {
+      if (r.method() === 'POST' && /\/analyses$/.test(new URL(r.url()).pathname)) analysisPosts.push(r.url());
+    });
+
     const replies: string[] = [];
     for (const [i, text] of messages.entries()) {
       // Osserva dal browser la comparsa dell'elemento di streaming (testo provvisorio) prima del commit.
@@ -154,8 +160,9 @@ test.describe('chat con modello reale', () => {
       replies.push(reply);
     }
 
-    // Nessuna analisi formale nella UI del dialogo.
-    await expect(page.getByRole('button', { name: /analizza/i })).toHaveCount(0);
+    // Nessuna analisi formale avviata dal dialogo (il pulsante Analizza esiste ma non e' stato premuto).
+    expect(analysisPosts).toEqual([]);
+    await expect(page.getByText('Nessuna analisi ancora')).toBeVisible();
 
     // Riapertura nella stessa sessione e in una sessione nuova (altro contesto, nuovo login).
     await reopen(page, name);
