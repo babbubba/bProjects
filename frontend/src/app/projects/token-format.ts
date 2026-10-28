@@ -1,14 +1,18 @@
 import { TokenSource, TokenValue } from './project-api.service';
 
-const numberFormat = new Intl.NumberFormat('it-IT');
 const percentFormat = new Intl.NumberFormat('it-IT', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
 
-/** Numero di token in locale it-IT (49152 → «49.152»). */
+/**
+ * Numero di token con il punto delle migliaia (49152 → «49.152»). Si raggruppa sempre: la regola it-IT di Intl
+ * omette il separatore sotto le 5 cifre (8192), mentre la UI mostra «8.192».
+ */
 export function formatCount(value: number): string {
-  return numberFormat.format(value);
+  return Math.round(value)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 export function formatPercent(value: number): string {
