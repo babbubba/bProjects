@@ -12,6 +12,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../auth/auth.service';
+import { ContextUsageStore } from './context-usage.store';
+import { InferenceMetricsComponent } from './inference-metrics.component';
 import { ChatTurnView, MessageView, ProjectApiService } from './project-api.service';
 import { describeFailure } from './failure-text';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
@@ -53,7 +55,7 @@ const errorLabels: Record<string, string> = {
 /** Chat centrale del progetto: la conferma di salvataggio PM è distinta dallo stato del turno AI. */
 @Component({
   selector: 'app-chat',
-  imports: [FormsModule],
+  imports: [FormsModule, InferenceMetricsComponent],
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss',
 })
@@ -62,6 +64,7 @@ export class ChatComponent {
   private readonly pollMs = inject(CHAT_POLL_MS);
   private readonly events = inject(ProjectEventsService);
   private readonly auth = inject(AuthService);
+  private readonly usage = inject(ContextUsageStore);
 
   readonly projectId = input.required<string>();
 
@@ -187,6 +190,7 @@ export class ChatComponent {
       if (this.draft() === pending.text) this.draft.set('');
       void this.refreshTurn(projectId, result.chatTurnId, gen);
       this.schedulePoll();
+      this.usage.refresh();
     } catch (e) {
       if (gen !== this.generation) return;
       const uncertain = this.isUncertain(e);
@@ -281,6 +285,7 @@ export class ChatComponent {
       const turn = await this.api.getChatTurn(projectId, turnId);
       if (gen !== this.generation) return;
       this.turns.update((t) => ({ ...t, [turnId]: turn }));
+      if (turn.status === 'Completed' || turn.status === 'Failed') this.usage.refresh();
       if (turn.status === 'Completed') await this.fetchNewMessages(projectId, gen);
     } catch {
       // Errore di trasporto: lo stato resta "in verifica" e la riconciliazione successiva riprova.

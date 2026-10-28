@@ -2,6 +2,95 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
+/** Provenienza di un valore in token (contratto «Metriche di inferenza»): mai ricavata da lunghezza / 4. */
+export type TokenSource = 'measured' | 'calculated' | 'estimated' | 'unavailable';
+
+export interface TokenValue {
+  value: number | null;
+  source: TokenSource;
+}
+
+export type InferencePhase = 'chat' | 'analysis' | 'document' | 'compaction';
+
+/** Telemetria tecnica reale di una richiesta AI; mai il contenuto del ragionamento. */
+export interface InferenceMetrics {
+  state: 'running' | 'completed' | 'failed' | 'interrupted';
+  phase: InferencePhase;
+  modelId: string;
+  startedAt: string;
+  durationMs: number | null;
+  contextWindowTokens: TokenValue;
+  maxOutputTokens: { value: number; confirmed: boolean };
+  serverDefaultNPredict: number | null;
+  reasoning: { requested: boolean; effective: 'on' | 'off' | 'unknown' };
+  promptTokens: TokenValue;
+  completionTokens: TokenValue;
+  totalTokens: TokenValue;
+  cachedTokens: TokenValue;
+  finishReason: string | null;
+  calls: number;
+  compaction: null | {
+    summaryCalls: number;
+    summaryPromptTokens: TokenValue;
+    summaryCompletionTokens: TokenValue;
+  };
+}
+
+export type ContextUsageKind = 'chat' | 'analysis' | 'document';
+
+export interface ContextCompositionItem {
+  key: string;
+  label: string;
+  tokens: TokenValue;
+  messageCount: number | null;
+}
+
+/** ContextUsage del contratto HTTP: monitor del contesto del progetto (GET context-usage). */
+export interface ContextUsage {
+  generatedAt: string;
+  runtime: {
+    status: 'online' | 'offline' | 'unverified';
+    checkedAt: string | null;
+    modelId: string;
+    contextWindowTokens: TokenValue;
+    configuredContextWindowTokens: number;
+    serverDefaultNPredict: number | null;
+    windowMismatch: boolean;
+  };
+  limits: {
+    safetyMarginTokens: number;
+    phases: Record<
+      InferencePhase,
+      { maxOutputTokens: number; enableThinking: boolean; inputBudgetTokens: number }
+    >;
+  };
+  last: null | {
+    kind: ContextUsageKind;
+    refId: string;
+    at: string;
+    metrics: InferenceMetrics;
+    usedPercent: number | null;
+    outputReservedTokens: number;
+    safetyMarginTokens: number;
+    remainingTokens: TokenValue;
+    staleReason: null | 'newer_messages';
+  };
+  composition: null | {
+    promptTokens: TokenValue;
+    items: ContextCompositionItem[];
+    attributedTokens: number;
+    unattributedTokens: TokenValue;
+  };
+  history: { messageCount: number; originalTokens: TokenValue };
+  compaction: null | {
+    at: string;
+    tokensBefore: TokenValue;
+    tokensAfter: TokenValue;
+    tokensSaved: TokenValue;
+    messagesSummarized: number;
+  };
+}
+
 /** Sottoinsieme di ProjectView (contratto HTTP) usato dalla UI. */
 export interface ProjectView {
   id: string;
@@ -34,6 +123,8 @@ export interface MessageView {
   agentId: string | null;
   chatTurnId: string | null;
   replyToMessageId: string | null;
+  /** Solo per i messaggi assistant; assente o null = record storico senza telemetria. */
+  metrics?: InferenceMetrics | null;
 }
 
 export interface MessagePage {
@@ -86,6 +177,8 @@ export interface ProcessingRunView {
   resultRevisionId: string | null;
   draftId: string | null;
   error: { code: string; message: string | null } | null;
+  /** Telemetria della richiesta AI del run; assente o null = nessuna telemetria disponibile. */
+  metrics?: InferenceMetrics | null;
 }
 
 export interface AnalyzeResult {
@@ -263,6 +356,13 @@ export class ProjectApiService {
       ),
     );
     return { run: response.body!, replayed: response.status === 200 };
+  }
+
+  /** Monitor del contesto del progetto: ultima richiesta AI, composizione, storico e compattazione. */
+  getContextUsage(projectId: string): Promise<ContextUsage> {
+    return firstValueFrom(
+      this.http.get<ContextUsage>(`/api/projects/${encodeURIComponent(projectId)}/context-usage`),
+    );
   }
 
   getRun(projectId: string, runId: string): Promise<ProcessingRunView> {

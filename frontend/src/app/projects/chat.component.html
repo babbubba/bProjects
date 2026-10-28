@@ -45,6 +45,7 @@
             <time class="text-secondary small">{{ formatTime(message.createdAt) }}</time>
           </header>
           <p class="msg-text">{{ message.text }}</p>
+          <app-inference-metrics [metrics]="message.metrics" />
         </article>
       }
     }
@@ -56,6 +57,7 @@
           <span class="badge text-bg-secondary">Risposta in corso (provvisoria)</span>
         </header>
         <p class="msg-text">{{ item.text }}</p>
+        <app-inference-metrics [running]="true" phase="chat" />
       </article>
     }
   </div>

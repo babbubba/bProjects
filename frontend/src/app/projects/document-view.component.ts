@@ -21,6 +21,7 @@ import {
   ProjectApiService,
 } from './project-api.service';
 import { describeFailure } from './failure-text';
+import { InferenceMetricsComponent } from './inference-metrics.component';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 
 const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'short' });
@@ -54,7 +55,7 @@ type GenerateState = 'idle' | 'sending' | 'uncertain';
  */
 @Component({
   selector: 'app-document-view',
-  imports: [NgTemplateOutlet],
+  imports: [InferenceMetricsComponent, NgTemplateOutlet],
   templateUrl: './document-view.component.html',
   styleUrl: './document-view.component.scss',
 })
@@ -85,6 +86,11 @@ export class DocumentViewComponent {
   });
   readonly busy = computed(() => this.active() || this.generateState() === 'sending');
   protected readonly failed = computed(() => this.run()?.status === 'Failed');
+  /** Metriche del run: a run completato (anche storico, senza telemetria) o in corso se già note; mai per un run fallito. */
+  protected readonly showMetrics = computed(() => {
+    const run = this.run();
+    return run?.status === 'Completed' || (this.active() && !!run?.metrics);
+  });
   protected readonly blocks = computed<MdBlock[]>(() =>
     parseMarkdown(this.draft()?.markdown ?? ''),
   );

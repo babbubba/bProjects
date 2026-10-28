@@ -1,0 +1,16 @@
+:host {
+  display: block;
+}
+
+.inference-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.4rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric[title] {
+  cursor: help;
+}

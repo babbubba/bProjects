@@ -20,6 +20,7 @@ import {
   ProjectApiService,
 } from './project-api.service';
 import { describeFailure } from './failure-text';
+import { InferenceMetricsComponent } from './inference-metrics.component';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 import type { CurrentRevision } from './document-view.component';
 
@@ -185,6 +186,7 @@ type AnalyzeState = 'idle' | 'sending' | 'uncertain';
  */
 @Component({
   selector: 'app-analysis-preview',
+  imports: [InferenceMetricsComponent],
   templateUrl: './analysis-preview.component.html',
   styleUrl: './analysis-preview.component.scss',
 })
@@ -209,6 +211,11 @@ export class AnalysisPreviewComponent {
     return status === 'Queued' || status === 'Running';
   });
   protected readonly failed = computed(() => this.run()?.status === 'Failed');
+  /** Metriche del run: a run completato (anche storico, senza telemetria) o in corso se già note; mai per un run fallito. */
+  protected readonly showMetrics = computed(() => {
+    const run = this.run();
+    return run?.status === 'Completed' || (this.active() && !!run?.metrics);
+  });
   protected readonly canAnalyze = computed(
     () =>
       !this.loading() &&

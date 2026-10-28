@@ -45,6 +45,12 @@
     </p>
   }
 
+  @if (showMetrics()) {
+    <div class="run-metrics" data-testid="run-metrics">
+      <app-inference-metrics [metrics]="run()!.metrics" phase="analysis" />
+    </div>
+  }
+
   @if (failed()) {
     <div class="alert alert-danger py-2" role="alert" data-testid="run-error">
       <strong>Analisi non riuscita.</strong> {{ runError() }}
