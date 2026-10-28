@@ -17,9 +17,54 @@ public static class AnalysisSchema
     public const string Name = "analysis_content";
 
     private static readonly Lazy<JsonElement> Schema = new(() =>
-        AIJsonUtilities.CreateJsonSchema(typeof(AnalysisContent), serializerOptions: AnalysisContentJson.Options).Clone());
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(
+            AIJsonUtilities.CreateJsonSchema(typeof(AnalysisContent), serializerOptions: AnalysisContentJson.Options).GetRawText())!;
+
+        // schemaVersion ha un convertitore dedicato, quindi il generatore emette lo schema «true» (qualunque valore),
+        // che il runtime llama.cpp rifiuta con 400 («Unrecognized schema: true»): lo si vincola alla sola versione corrente.
+        node["properties"]!["schemaVersion"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "string",
+            ["enum"] = new System.Text.Json.Nodes.JsonArray(AnalysisContent.CurrentSchemaVersion),
+        };
+
+        // Il runtime ignora format "uuid" (stringa libera: il modello inventava id come «g1a2…»): si aggiunge un pattern esplicito.
+        ConstrainUuidFormats(node);
+
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        return document.RootElement.Clone();
+    });
 
     public static JsonElement Element => Schema.Value;
+
+    private const string UuidPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+
+    private static void ConstrainUuidFormats(System.Text.Json.Nodes.JsonNode? node)
+    {
+        switch (node)
+        {
+            case System.Text.Json.Nodes.JsonObject obj:
+                if (obj["format"]?.GetValue<string>() == "uuid")
+                {
+                    obj["pattern"] = UuidPattern;
+                }
+
+                foreach (var child in obj.Select(p => p.Value).ToList())
+                {
+                    ConstrainUuidFormats(child);
+                }
+
+                break;
+            case System.Text.Json.Nodes.JsonArray array:
+                foreach (var child in array)
+                {
+                    ConstrainUuidFormats(child);
+                }
+
+                break;
+        }
+    }
 }
 
 /// <summary>Esito osservabile di un'esecuzione del workflow: lo stato di dominio del run, riletto dal database.</summary>
