@@ -80,10 +80,12 @@ describe('ChatComponent', () => {
     fixture.componentRef.setInput('projectId', P);
     fixture.detectChanges();
     await Promise.resolve();
-    http.expectOne((r) => r.url === MESSAGES && r.method === 'GET').flush({
-      items: [],
-      nextAfterSequence: null,
-    });
+    http
+      .expectOne((r) => r.url === MESSAGES && r.method === 'GET')
+      .flush({
+        items: [],
+        nextAfterSequence: null,
+      });
     await settle();
   });
 
@@ -95,7 +97,10 @@ describe('ChatComponent', () => {
     const post = http.expectOne((r) => r.url === MESSAGES && r.method === 'POST');
     expect(post.request.body.text).toBe('Ciao');
     expect(post.request.body.clientMessageId).toBeTruthy();
-    post.flush({ message: userMessage(), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
+    post.flush(
+      { message: userMessage(), chatTurnId: 't-1' },
+      { status: 201, statusText: 'Created' },
+    );
     await settle();
 
     // Salvato subito, mentre lo stato AI non è ancora noto.
@@ -120,28 +125,32 @@ describe('ChatComponent', () => {
       .expectOne(`/api/projects/${P}/chat-turns/t-1`)
       .flush(turn({ status: 'Completed', resultMessageId: 'm-2' }));
     await Promise.resolve();
-    http.expectOne((r) => r.url === MESSAGES && r.method === 'GET').flush({
-      items: [
-        userMessage(),
-        userMessage({
-          id: 'm-2',
-          sequence: 2,
-          role: 'assistant',
-          text: 'Risposta',
-          authorId: null,
-          authorDisplayName: null,
-          agentId: 'a',
-          chatTurnId: 't-1',
-          replyToMessageId: 'm-1',
-        }),
-      ],
-      nextAfterSequence: 2,
-    });
+    http
+      .expectOne((r) => r.url === MESSAGES && r.method === 'GET')
+      .flush({
+        items: [
+          userMessage(),
+          userMessage({
+            id: 'm-2',
+            sequence: 2,
+            role: 'assistant',
+            text: 'Risposta',
+            authorId: null,
+            authorDisplayName: null,
+            agentId: 'a',
+            chatTurnId: 't-1',
+            replyToMessageId: 'm-1',
+          }),
+        ],
+        nextAfterSequence: 2,
+      });
     await settle();
-    http.expectOne((r) => r.url === MESSAGES && r.method === 'GET').flush({
-      items: [],
-      nextAfterSequence: null,
-    });
+    http
+      .expectOne((r) => r.url === MESSAGES && r.method === 'GET')
+      .flush({
+        items: [],
+        nextAfterSequence: null,
+      });
     await settle();
 
     expect(el.querySelector('.ai-badge')?.textContent).toContain('non validata');
@@ -163,7 +172,9 @@ describe('ChatComponent', () => {
     expect((el.querySelector('textarea') as HTMLTextAreaElement).value).toBe(
       'Testo lungo da non perdere',
     );
-    expect(el.querySelector('.send-error')?.textContent).toContain('Il messaggio non è valido (422).');
+    expect(el.querySelector('.send-error')?.textContent).toContain(
+      'Il messaggio non è valido (422).',
+    );
     expect(el.querySelectorAll('[data-role=user]').length).toBe(0);
   });
 
@@ -185,7 +196,10 @@ describe('ChatComponent', () => {
     expect(second.request.body.clientMessageId).toBe(id);
     expect(second.request.body.text).toBe('Messaggio');
     // 200: replay identico, stesso messaggio e stesso turno.
-    second.flush({ message: userMessage({ text: 'Messaggio' }), chatTurnId: 't-1' }, { status: 200, statusText: 'OK' });
+    second.flush(
+      { message: userMessage({ text: 'Messaggio' }), chatTurnId: 't-1' },
+      { status: 200, statusText: 'OK' },
+    );
     await settle();
     http.expectOne(`/api/projects/${P}/chat-turns/t-1`).flush(turn());
     await settle();
@@ -201,14 +215,18 @@ describe('ChatComponent', () => {
       .expectOne((r) => r.method === 'POST')
       .flush({ message: userMessage(), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
     await settle();
-    http.expectOne(`/api/projects/${P}/chat-turns/t-1`).flush(
-      turn({ status: 'Failed', error: { code: 'llm_unavailable', message: null } }),
-    );
+    http
+      .expectOne(`/api/projects/${P}/chat-turns/t-1`)
+      .flush(turn({ status: 'Failed', error: { code: 'llm_unavailable', message: null } }));
     await settle();
 
     expect(el.querySelector('.saved-badge')).toBeTruthy();
-    expect(el.querySelector('.turn-error')?.textContent).toContain('modello AI non è al momento raggiungibile');
-    expect(el.querySelector('.turn-error')?.textContent).toContain('non verrà reinviato automaticamente');
+    expect(el.querySelector('.turn-error')?.textContent).toContain(
+      'modello AI non è al momento raggiungibile',
+    );
+    expect(el.querySelector('.turn-error')?.textContent).toContain(
+      'non verrà reinviato automaticamente',
+    );
     // Nessun POST né ulteriore richiesta automatica: http.verify() in afterEach lo garantisce.
   });
 
@@ -223,7 +241,10 @@ describe('ChatComponent', () => {
     await submit();
     const second = http.expectOne((r) => r.method === 'POST');
     expect(second.request.body.clientMessageId).not.toBe(first.request.body.clientMessageId);
-    second.flush({ message: userMessage({ text: 'A' }), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
+    second.flush(
+      { message: userMessage({ text: 'A' }), chatTurnId: 't-1' },
+      { status: 201, statusText: 'Created' },
+    );
     await settle();
     http.expectOne(`/api/projects/${P}/chat-turns/t-1`).flush(turn());
   });

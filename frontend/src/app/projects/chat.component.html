@@ -48,6 +48,16 @@
         </article>
       }
     }
+    @for (item of streamingItems(); track item.id) {
+      <article class="msg msg-ai msg-streaming" data-role="assistant-streaming">
+        <header>
+          <strong>Assistente</strong>
+          <span class="badge text-bg-warning ai-badge">AI — non validata</span>
+          <span class="badge text-bg-secondary">Risposta in corso (provvisoria)</span>
+        </header>
+        <p class="msg-text">{{ item.text }}</p>
+      </article>
+    }
   </div>
 
   <form class="chat-form" (ngSubmit)="send()" novalidate>
