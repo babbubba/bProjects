@@ -45,6 +45,11 @@ builder.Services.AddSingleton(sp =>
         AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model), model.CreateChatOptions(temperature: 0.2f));
 });
 builder.Services.AddScoped<IChatTurnCommitter, ChatTurnCompletion>();
+builder.Services.AddScoped<bProjects.App.Analysis.IAnalysisRunStore, bProjects.App.Analysis.AnalysisRunCompletion>();
+builder.Services.AddSingleton(sp => new AnalysisWorkflow(
+    sp.GetRequiredService<IServiceScopeFactory>(),
+    sp.GetRequiredService<ConversationalAgent>(),
+    sp.GetRequiredService<InternalModelClient>().CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
 builder.Services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
 builder.Services.AddHostedService<AiDispatchService>();
 

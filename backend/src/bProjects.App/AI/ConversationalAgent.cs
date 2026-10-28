@@ -98,10 +98,43 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
         return new(reply, agent, restored.Session, restored, conversation, turn, ChatConfigVersion);
     }
 
-    private static string LoadPrompt()
+    /// <summary>Id stabile dell'agente di consolidamento nel grafo project-analysis-v2 (identità richiesta dal resume).</summary>
+    public const string ConsolidationAgentId = "consolidation";
+
+    public const string ConsolidationPromptVersion = "analysis-v1";
+
+    private static readonly Lazy<string> AnalysisPrompt = new(() => LoadPrompt("analysis.md"));
+
+    /// <summary>Istruzioni della modalità consolidamento (AI/Prompts/analysis.md, risorsa incorporata).</summary>
+    public static string ConsolidationInstructions => AnalysisPrompt.Value;
+
+    /// <summary>
+    /// Lo stesso ConversationalAgent in modalità consolidamento (T029): prompt, opzioni di output strutturato e sessione
+    /// propri, separati dal dialogo. Nessun ChatHistoryProvider applicativo: la conversazione arriva come messaggi del
+    /// grafo (LoadDialog) e la sessione appartiene al checkpoint del workflow. Compattazione nativa sul client.
+    /// </summary>
+    public async Task<ChatClientAgent> CreateConsolidationAgentAsync(ChatOptions analysisOptions, CancellationToken ct)
     {
-        using var stream = typeof(ConversationalAgent).Assembly.GetManifestResourceStream("Prompts.conversation.md")
-            ?? throw new InvalidOperationException("Prompt conversation.md non incorporato nell'assembly.");
+        var options = new ChatOptions
+        {
+            ModelId = analysisOptions.ModelId,
+            MaxOutputTokens = analysisOptions.MaxOutputTokens,
+            Temperature = analysisOptions.Temperature,
+            RawRepresentationFactory = analysisOptions.RawRepresentationFactory,
+            ResponseFormat = analysisOptions.ResponseFormat,
+            Instructions = ConsolidationInstructions,
+        };
+        return new ChatClientAgent(
+            await factory.CreateCompactingClientAsync(ConsolidationInstructions, ct),
+            new ChatClientAgentOptions { Id = ConsolidationAgentId, Name = AgentName, ChatOptions = options });
+    }
+
+    private static string LoadPrompt() => LoadPrompt("conversation.md");
+
+    private static string LoadPrompt(string file)
+    {
+        using var stream = typeof(ConversationalAgent).Assembly.GetManifestResourceStream("Prompts." + file)
+            ?? throw new InvalidOperationException($"Prompt {file} non incorporato nell'assembly.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd().Trim();
     }

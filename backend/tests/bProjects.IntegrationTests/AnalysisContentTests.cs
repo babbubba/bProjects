@@ -2,7 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace bProjects.IntegrationTests;
 
@@ -10,14 +12,12 @@ namespace bProjects.IntegrationTests;
 /// T024 — contenuto AnalysisContent 1.0.0 (contracts/ai-workflow.md §4): schema, fonti e regole semantiche,
 /// con lo stesso verdetto nelle due modalità di output strutturato (JsonSchema e ValidatedTextJson).
 /// Nessuna prova invoca il DGX: il modello è un testo fisso o un IChatClient finto.
-/// Test-first: le prove che dipendono dal validatore (T027) o dal workflow (T029) sono Skipped con motivo esplicito
-/// e diventano verdi con quei task; le prove sulle fixture rispetto allo schema normativo sono già verdi e
-/// dimostrano che ogni caso invalido viola davvero ciò che dichiara (struttura oppure sola semantica).
+/// Le prove sulle fixture rispetto allo schema normativo dimostrano che ogni caso invalido viola davvero ciò che
+/// dichiara (struttura oppure sola semantica); quelle sul validatore (T027) e sul workflow nativo project-analysis-v2
+/// (T029, con IChatClient finto e store in memoria) usano il codice di produzione.
 /// </summary>
 public sealed class AnalysisContentTests
 {
-    public const string PendingT029 = "In attesa di T029: project-analysis-v2 non esiste ancora.";
-
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     public static TheoryData<StructuredOutputMode> Modes => new() { StructuredOutputMode.JsonSchema, StructuredOutputMode.ValidatedTextJson };
@@ -225,7 +225,7 @@ public sealed class AnalysisContentTests
 
     // ============================================================ workflow con IChatClient finto (T029)
 
-    [Theory(Skip = PendingT029)]
+    [Theory]
     [MemberData(nameof(Modes))]
     public async Task The_analysis_run_requests_the_json_schema_only_in_the_native_mode_and_yields_the_same_result(StructuredOutputMode mode)
     {
@@ -247,7 +247,7 @@ public sealed class AnalysisContentTests
         }
     }
 
-    [Theory(Skip = PendingT029)]
+    [Theory]
     [MemberData(nameof(Modes))]
     public async Task A_model_output_that_fails_validation_is_a_failure_not_a_preview(StructuredOutputMode mode)
     {
@@ -307,9 +307,8 @@ internal sealed record TrustedInput(Guid ProjectId, Guid AnalysisId, long Cutoff
 internal sealed record AnalysisOutcome(bool Accepted, string? Code, IReadOnlyList<string> Violations, string? Repaired);
 
 /// <summary>
-/// Unico punto da collegare al codice reale: T027 sostituisce <see cref="Validate"/> con AnalysisContentValidator,
-/// T029 sostituisce <see cref="RunAnalysisAsync"/> con project-analysis-v2. Finché non esistono, le prove che lo
-/// usano sono Skipped con motivo e questi metodi falliscono in modo esplicito.
+/// Ponte verso il codice reale: la validazione usa AnalysisContentValidator (T027) e il consolidamento esegue il vero
+/// grafo project-analysis-v2 (T029) con un client finto.
 /// </summary>
 internal static class AnalysisGateway
 {
@@ -341,9 +340,78 @@ internal static class AnalysisGateway
 
     private static AnalysisOutcome ToOutcome(AnalysisValidationResult result) => new(result.Accepted, result.Code, result.Violations, null);
 
-    /// <summary>Esegue la fase di consolidamento con il client dato e valida il risultato come farà il workflow.</summary>
-    public static Task<AnalysisOutcome> RunAnalysisAsync(IChatClient model, StructuredOutputMode mode, TrustedInput trusted, CancellationToken ct) =>
-        throw new NotImplementedException(AnalysisContentTests.PendingT029);
+    /// <summary>
+    /// Esegue il vero grafo project-analysis-v2 (LoadDialog → ConversationalAgent → ValidatePersistAnalysis) con il client
+    /// dato e uno store in memoria: nessuna riparazione, una sola chiamata al modello, Failed con codice se l'output non è valido.
+    /// </summary>
+    public static async Task<AnalysisOutcome> RunAnalysisAsync(IChatClient model, StructuredOutputMode mode, TrustedInput trusted, CancellationToken ct)
+    {
+        var store = new InMemoryAnalysisStore(trusted);
+        var services = new ServiceCollection().AddSingleton<IAnalysisRunStore>(store).BuildServiceProvider();
+        using var client = new InternalModelClient(new AiOptions { Endpoint = "http://localhost:1/v1/", ModelId = "fake", ApiKey = "non-usata", StructuredOutputMode = mode });
+        var agent = new ConversationalAgent(
+            new AgentFactory(new AiOptions { ContextWindowTokens = 32768 }, model, (t, _) => new(t.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length)),
+            new ChatOptions { ModelId = "fake" });
+        var workflow = new AnalysisWorkflow(
+            services.GetRequiredService<IServiceScopeFactory>(), agent, client.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0));
+
+        var built = await workflow.BuildAsync(new AnalysisRunClaim(trusted.AnalysisId, "test", 1), ct);
+        await using var run = await InProcessExecution.RunStreamingAsync(built, new TurnToken(emitEvents: false), cancellationToken: ct);
+        Exception? failure = null;
+        await foreach (var evt in run.WatchStreamAsync(ct))
+        {
+            if (evt is WorkflowErrorEvent error)
+            {
+                failure ??= error.Exception;
+            }
+        }
+
+        if (failure is not null)
+        {
+            throw failure;
+        }
+
+        return store.Failure is { } failed
+            ? new AnalysisOutcome(false, failed.Code, [failed.Message], null)
+            : new AnalysisOutcome(store.Committed is not null, store.Committed is null ? "nessun_risultato" : null, [], null);
+    }
+}
+
+/// <summary>Store in memoria del run: registra il commit o il Failed, senza alcun database.</summary>
+internal sealed class InMemoryAnalysisStore(TrustedInput trusted) : IAnalysisRunStore
+{
+    public AnalysisContent? Committed { get; private set; }
+
+    public (string Code, string Message)? Failure { get; private set; }
+
+    public List<string> Stages { get; } = [];
+
+    public Task<AnalysisRunInput> LoadInputAsync(Guid runId, CancellationToken ct) => Task.FromResult(new AnalysisRunInput(
+        trusted.ProjectId,
+        trusted.AnalysisId,
+        trusted.Cutoff,
+        [.. trusted.Messages
+            .Where(m => m.ProjectId == trusted.ProjectId && m.Sequence <= trusted.Cutoff)
+            .OrderBy(m => m.Sequence)
+            .Select(m => new AnalysisDialogMessage(m.Id, m.Role == "user" ? AnalysisMessageRole.User : AnalysisMessageRole.Assistant, m.Sequence, $"Messaggio {m.Sequence}"))]));
+
+    public Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct)
+    {
+        Committed = content;
+        return Task.FromResult(new AnalysisCommitResult(AnalysisCommitOutcome.Committed, Guid.NewGuid()));
+    }
+
+    public Task<bool> FailAsync(AnalysisRunClaim claim, string errorCode, string errorMessage, CancellationToken ct)
+    {
+        Failure = (errorCode, errorMessage);
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> RecordStageAsync(AnalysisRunClaim claim, string stage, CancellationToken ct)
+    {
+        Stages.Add(stage);
+        return Task.FromResult(true);
+    }
 }
 
 // ================================================================ fixture

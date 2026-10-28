@@ -139,7 +139,8 @@ public sealed class PostgresCheckpointStore(AppDbContext db, CheckpointWriter wr
         var payload = await command.ExecuteScalarAsync() as string
             ?? throw new KeyNotFoundException($"Checkpoint {key.CheckpointId} non trovato per il run {writer.ProcessingRunId}.");
         using var document = JsonDocument.Parse(payload);
-        return document.RootElement.Clone();
+        // jsonb non conserva l'ordine delle proprietà, ma il polimorfismo di MAF richiede "$type" come prima proprietà.
+        return PostgresChatHistoryProvider.WithMetadataFirst(document.RootElement);
     }
 
     private static void Json(NpgsqlCommand command, string name, string? json) =>
