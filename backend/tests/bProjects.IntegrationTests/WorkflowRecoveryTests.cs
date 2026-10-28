@@ -736,7 +736,7 @@ public sealed class WorkflowRecoveryTests : IAsyncLifetime
     /// <summary>Costruisce una risposta valida dai soli dati della richiesta, come farebbe il modello (id fidati e fonti del dialogo).</summary>
     private static Func<string, string> Reply(Graph graph) => graph == Graph.Analysis ? AnalysisReply : DocumentReply;
 
-    private static string AnalysisReply(string request)
+    internal static string AnalysisReply(string request)
     {
         string Match(string pattern) => Regex.Match(request, pattern).Groups[1].Value;
         var message = Regex.Match(request, @"\[messaggio id=([0-9a-f-]{36}) sequenza=(\d+)\]");
@@ -774,7 +774,7 @@ public sealed class WorkflowRecoveryTests : IAsyncLifetime
         }.ToJsonString();
     }
 
-    private static string DocumentReply(string request)
+    internal static string DocumentReply(string request)
     {
         var json = DocumentContractTests.DocumentModel.EmbeddedJson(request);
         var source = json["sources"]![0]!["id"]!.GetValue<string>();
