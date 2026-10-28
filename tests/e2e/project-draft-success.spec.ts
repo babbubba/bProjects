@@ -1,5 +1,8 @@
 import { execSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { acceptanceCases, checkAnalysis, checkDraft, matches, norm, type Content, type ProjectCase, type UserIndex } from './support/acceptance';
 
 // T043: primo percorso completo con servizi reali (Angular + API + PostgreSQL + modello DGX):
 // login -> creazione -> chat con streaming -> Analizza -> anteprima corretta e salvata -> conferma -> Genera -> bozza;
@@ -10,6 +13,9 @@ import { expect, test, type Page } from '@playwright/test';
 //   E2E_BASE_URL, E2E_USER, E2E_PASSWORD   stack di prova con account PM;
 //   E2E_MODEL_MODE=real                    conferma che lo stack usa il modello reale;
 //   E2E_RESTART_COMMAND                    riavvia lo stack conservando il volume PostgreSQL (obbligatoria per questa prova).
+//   E2E_ACCEPTANCE_EXPORT_DIR              (facoltativa, solo T052) cartella in cui esportare dialogo, analisi e bozza per la revisione umana.
+// T052: i cinque casi nominali (fondo del file) non richiedono E2E_RESTART_COMMAND; il verificatore e' provato senza stack in
+// acceptance-checker.spec.ts. Questi test NON attestano T052: la revisione umana (due PM, un tecnico) e' documentata a parte.
 // Un errore o un timeout in qualunque fase fa fallire la prova: nessun fallimento e' trattato come successo.
 const user = process.env['E2E_USER'];
 const password = process.env['E2E_PASSWORD'];
@@ -227,6 +233,191 @@ test('percorso completo con modello reale: chat, Analizza, correzione, conferma,
   expect(view.activeProcessingRunId).toBeNull();
   expect(after.id).toBe(draft.id);
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// T052 - cinque casi nominali (frammenti, negazioni, lacune, conflitti, progetti distinti) con cinque messaggi PM preparati, una
+// correzione d'anteprima, conferma e generazione, su stack reale con modello reale. I casi sono quelli di AcceptanceFixtures.cs
+// (support/acceptance-cases.json); le attese sono verificate da support/acceptance.ts. Un errore o un timeout in qualunque fase
+// FALLISCE la prova (un errore ben presentato non e' un caso nominale superato). Il confronto lessicale e' necessario, non
+// sufficiente: la comprensibilita' per un tecnico estraneo e l'utilita' per i PM restano alla revisione umana (acceptance/).
+// Variabile facoltativa: E2E_ACCEPTANCE_EXPORT_DIR esporta dialogo, analisi, bozza ed esito di ogni progetto per la revisione.
+// I progetti di uno stesso caso sono eseguiti uno dopo l'altro (l'alternanza dei messaggi e' provata nel backend).
+// ---------------------------------------------------------------------------------------------------------------------------------
+for (const nominal of acceptanceCases) {
+  test(`T052 ${nominal.id}: ${nominal.title}`, async ({ page, request }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'Prova eseguita una sola volta (desktop).');
+    test.setTimeout(60 * 60_000);
+
+    const writes: string[] = [];
+    page.on('request', (r) => {
+      if (r.method() !== 'GET' && new URL(r.url()).pathname.startsWith('/api/')) {
+        writes.push(`${r.method()} ${new URL(r.url()).pathname.replace(/[0-9a-f-]{36}/g, ':id')}`);
+      }
+    });
+    const count = (re: RegExp) => writes.filter((w) => re.test(w)).length;
+    const token = async () => {
+      const response = await request.post('/api/auth/login', { data: { username: user, password } });
+      expect(response.ok()).toBe(true);
+      return ((await response.json()) as { accessToken: string }).accessToken;
+    };
+    const get = async (path: string) => request.get(path, { headers: { Authorization: `Bearer ${await token()}` } });
+    const getJson = async <T>(path: string) => {
+      const response = await get(path);
+      expect(response.status(), path).toBe(200);
+      return (await response.json()) as T;
+    };
+
+    await login(page);
+    const analyses: { project: string; analysis: string }[] = [];
+
+    for (const p of nominal.projects) {
+      const failures: string[] = [];
+      const name = `${p.name} ${unique()}`;
+      const timings = { chat: [] as number[], analysis: 0, draft: 0 };
+      writes.length = 0;
+      await createProject(page, name);
+      const projectId = /\/projects\/([0-9a-f-]{36})/.exec(page.url())![1];
+
+      // --- cinque scambi di chat con streaming reale, ciascuno entro 180s, al piu' una domanda per turno
+      const replies: string[] = [];
+      for (const [i, text] of p.messages.entries()) {
+        await page.evaluate(() => {
+          (window as unknown as { __streamSeen: boolean }).__streamSeen = false;
+          new MutationObserver(() => {
+            if (document.querySelector('article[data-role="assistant-streaming"] .msg-text')?.textContent?.trim()) {
+              (window as unknown as { __streamSeen: boolean }).__streamSeen = true;
+            }
+          }).observe(document.body, { childList: true, subtree: true, characterData: true });
+        });
+        const started = Date.now();
+        await send(page, text);
+        await expect(page.locator('article[data-role="user"] .saved-badge')).toHaveCount(i + 1, { timeout: 10_000 });
+        await expect(page.locator('article[data-role="assistant"]')).toHaveCount(i + 1, { timeout: BUDGET });
+        timings.chat.push((Date.now() - started) / 1000);
+        if (Date.now() - started > BUDGET) failures.push(`chat ${i + 1}: oltre i 180s`);
+        if (!(await page.evaluate(() => (window as unknown as { __streamSeen: boolean }).__streamSeen))) failures.push(`chat ${i + 1}: streaming non osservato`);
+        const reply = ((await page.locator('article[data-role="assistant"] .msg-text').last().textContent()) ?? '').trim();
+        if ((reply.match(/\?/g) ?? []).length > 1) failures.push(`chat ${i + 1}: piu' di una domanda nello stesso turno`);
+        replies.push(reply);
+      }
+      const questions = replies.map((r) => /[^.!?\n]*\?/.exec(r)?.[0].trim().toLowerCase()).filter(Boolean);
+      if (new Set(questions).size !== questions.length) failures.push('chat: domanda ripetuta');
+      expect(count(/\/analyses|document-generations/), 'la chat non deve avviare elaborazioni formali').toBe(0);
+      await expect(page.getByTestId('preview')).toHaveCount(0);
+
+      // --- Analizza: un solo comando, anteprima entro 180s, nessun errore
+      const analyzeStart = Date.now();
+      await page.getByTestId('analyze').click();
+      await expect(page.getByTestId('run-error')).toHaveCount(0);
+      await expect(page.getByTestId('preview')).toBeVisible({ timeout: BUDGET });
+      timings.analysis = (Date.now() - analyzeStart) / 1000;
+      if (Date.now() - analyzeStart > BUDGET) failures.push('analisi oltre i 180s');
+      await expect(page.getByTestId('run-error')).toHaveCount(0);
+      await expect(page.getByTestId('generate')).toHaveCount(0); // niente Genera prima della conferma
+      expect(count(/POST \/api\/projects\/:id\/analyses$/)).toBe(1);
+
+      const messages = (await getJson<{ items: { id: string; role: string; text: string }[] }>(`/api/projects/${projectId}/messages`)).items;
+      const userMessages = messages.filter((m) => m.role === 'user');
+      if (JSON.stringify(userMessages.map((m) => m.text)) !== JSON.stringify(p.messages)) failures.push('originali PM non identici ai messaggi inviati');
+      const userIndex: UserIndex = new Map(userMessages.map((m, n) => [m.id, n + 1]));
+      const project = await getJson<{ currentAnalysisId: string }>(`/api/projects/${projectId}`);
+      analyses.push({ project: projectId, analysis: project.currentAnalysisId });
+      const aiView = await getJson<{ content: Content }>(`/api/projects/${projectId}/analyses/${project.currentAnalysisId}`);
+      failures.push(...checkAnalysis(p, aiView.content, userIndex));
+
+      // --- correzione e salvataggio (nuova revisione PM), poi conferma esplicita
+      const form = (section: string) => page.locator(`[data-section=${section}] [data-testid=item-text]`);
+      const edit = p.facts.find((f) => f.key === p.correction.editKey)!;
+      let edited = false;
+      for (const section of edit.accept) {
+        const fields = form(section);
+        for (let n = 0; n < (await fields.count()); n++) {
+          if (matches(norm(await fields.nth(n).inputValue()), edit.match)) {
+            await fields.nth(n).fill(p.correction.editedText);
+            edited = true;
+            break;
+          }
+        }
+        if (edited) break;
+      }
+      if (!edited) failures.push(`correzione non applicabile: «${edit.key}» non e' nell'anteprima`);
+      for (const add of p.correction.additions) {
+        await page.getByTestId(`add-${add.section}`).click();
+        await form(add.section).last().fill(add.text);
+      }
+      const resolve = p.correction.resolve;
+      if (resolve) {
+        const spec = p.conflicts.find((k) => k.key === resolve.conflictKey)!;
+        const conflicts = page.getByTestId('conflict');
+        let done = false;
+        for (let n = 0; n < (await conflicts.count()) && !done; n++) {
+          const alts = conflicts.nth(n).getByTestId('alt-text');
+          const texts: string[] = [];
+          for (let a = 0; a < (await alts.count()); a++) texts.push(norm(await alts.nth(a).inputValue()));
+          const chosen = texts.findIndex((t) => matches(t, [spec.altMatch[resolve.alternative]]));
+          if (texts.some((t) => matches(t, [spec.altMatch[0]])) && chosen >= 0) {
+            await conflicts.nth(n).getByTestId('alt-choice').nth(chosen).check();
+            await conflicts.nth(n).getByTestId('resolution-reason').fill(resolve.reason);
+            await conflicts.nth(n).getByTestId('resolve-conflict').click();
+            await expect(conflicts.nth(n).getByTestId('conflict-status')).toHaveText('Risolto');
+            done = true;
+          }
+        }
+        if (!done) failures.push(`correzione non applicabile: il conflitto «${resolve.conflictKey}» non e' nell'anteprima`);
+      }
+      await page.getByTestId('save').click();
+      await expect(page.getByTestId('revision-info')).toContainText('modificata dal PM');
+      await expect(page.getByTestId('dirty-badge')).toHaveCount(0);
+      await page.getByTestId('confirm').click();
+      await expect(page.getByTestId('confirmed-badge')).toBeVisible();
+      await expect(page.getByTestId('generate')).toBeEnabled();
+      expect(count(/document-generations/), 'la conferma non deve generare').toBe(0);
+
+      // --- Genera: bozza entro 180s dal proprio comando
+      const generateStart = Date.now();
+      await page.getByTestId('generate').click();
+      await expect(page.getByTestId('generation-error')).toHaveCount(0);
+      await expect(page.getByTestId('draft')).toBeVisible({ timeout: BUDGET });
+      timings.draft = (Date.now() - generateStart) / 1000;
+      if (Date.now() - generateStart > BUDGET) failures.push('generazione oltre i 180s');
+      await expect(page.getByTestId('generation-error')).toHaveCount(0);
+      await expect(page.getByTestId('draft-status')).toHaveText('Proposta / non approvata');
+      expect(count(/POST \/api\/projects\/:id\/analyses\/:id\/document-generations$/)).toBe(1);
+
+      // --- bozza legata alla revisione confermata e attese rispettate
+      const draft = await getJson<{ markdown: string; analysisRevisionId: string; status: string; approvalStatus: string }>(`/api/projects/${projectId}/draft`);
+      const confirmedView = await getJson<{ currentRevisionId: string; content: Content }>(`/api/projects/${projectId}/analyses/${project.currentAnalysisId}`);
+      if (draft.status !== 'Proposed' || draft.approvalStatus !== 'NotApproved') failures.push('bozza non Proposed/NotApproved');
+      if (draft.analysisRevisionId !== confirmedView.currentRevisionId || confirmedView.content.validationState !== 'PmConfirmed') failures.push('bozza non legata alla revisione confermata');
+      failures.push(...checkDraft(p, draft.markdown, new Set(confirmedView.content.sources.map((s) => s.id)), true));
+
+      const summary = `${p.key}: chat=${timings.chat.map((s) => s.toFixed(1)).join('/')}s analisi=${timings.analysis.toFixed(1)}s generazione=${timings.draft.toFixed(1)}s fallimenti=${failures.length}`;
+      exportProject(nominal.id, p, replies, aiView.content, confirmedView.content, draft.markdown, failures, summary);
+      info.annotations.push({ type: 'esito-automatico', description: summary });
+      expect(failures, `${nominal.id}/${p.key}: ${failures.join('; ')}`).toEqual([]);
+    }
+
+    // --- isolamento: l'analisi di un progetto non e' raggiungibile dall'altro
+    for (const a of analyses) {
+      for (const b of analyses.filter((x) => x !== a)) {
+        expect((await get(`/api/projects/${a.project}/analyses/${b.analysis}`)).status(), 'analisi di un altro progetto').toBe(404);
+      }
+    }
+  });
+}
+
+function exportProject(caseId: string, p: ProjectCase, replies: string[], ai: Content, confirmed: Content, markdown: string, failures: string[], summary: string) {
+  const root = process.env['E2E_ACCEPTANCE_EXPORT_DIR'];
+  if (!root) return;
+  const dir = join(root, caseId, p.key);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'messaggi-pm.md'), p.messages.map((m, i) => `${i + 1}. ${m}`).join('\n\n'));
+  writeFileSync(join(dir, 'risposte-assistente.md'), replies.map((m, i) => `${i + 1}. ${m}`).join('\n\n'));
+  writeFileSync(join(dir, 'analisi-ai-v1.json'), JSON.stringify(ai, null, 2));
+  writeFileSync(join(dir, 'analisi-confermata.json'), JSON.stringify(confirmed, null, 2));
+  writeFileSync(join(dir, 'bozza.md'), markdown);
+  writeFileSync(join(dir, 'esito-automatico.txt'), `${summary}\n\nFallimenti:\n${failures.map((f) => `- ${f}`).join('\n')}\n\nL'esito automatico NON e' il giudizio di accettazione (SC-006): serve la revisione umana.\n`);
+}
 });
 
 test.describe('Analizza con modello offline (prova d\'errore, non e\' successo)', () => {

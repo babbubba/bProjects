@@ -988,6 +988,7 @@ internal static class AcceptanceE2eData
                         ["key"] = f.Key,
                         ["section"] = Key(f.Section),
                         ["accept"] = Strings(f.Accept.Select(Key)),
+                        ["text"] = f.Text,
                         ["declared"] = f.Class == AnalysisClassification.Declared,
                         ["from"] = new JsonArray(f.From.Select(i => (JsonNode)JsonValue.Create(i)!).ToArray()),
                         ["match"] = Strings(f.Match),
@@ -995,6 +996,9 @@ internal static class AcceptanceE2eData
                     ["conflicts"] = new JsonArray(p.Conflicts.Select(k => (JsonNode)new JsonObject
                     {
                         ["key"] = k.Key,
+                        ["description"] = k.Description,
+                        ["altText"] = Strings(k.AltText),
+                        ["altFrom"] = new JsonArray(k.AltFrom.Select(a => (JsonNode)new JsonArray(a.Select(i => (JsonNode)JsonValue.Create(i)!).ToArray())).ToArray()),
                         ["altMatch"] = Strings(k.AltMatch),
                     }).ToArray()),
                     ["forbids"] = new JsonArray(p.Forbids.Select(x => (JsonNode)new JsonObject
@@ -1002,6 +1006,7 @@ internal static class AcceptanceE2eData
                         ["key"] = x.Key,
                         ["pattern"] = x.Pattern,
                         ["mode"] = x.Mode == ForbidMode.Anywhere ? "anywhere" : "affirmed",
+                        ["sample"] = x.Sample,
                         ["conflictKey"] = x.ConflictKey,
                     }).ToArray()),
                     ["correction"] = new JsonObject
@@ -1013,6 +1018,7 @@ internal static class AcceptanceE2eData
                             ["key"] = a.Key,
                             ["section"] = Key(a.Section),
                             ["text"] = a.Text,
+                            ["assumed"] = a.Class == AnalysisClassification.Assumed,
                             ["match"] = Strings(a.Match),
                         }).ToArray()),
                         ["resolve"] = p.Correction.Resolve is { } r

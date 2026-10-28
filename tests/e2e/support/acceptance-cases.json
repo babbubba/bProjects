@@ -23,6 +23,7 @@
                 "goals",
                 "overview"
               ],
+              "text": "Realizzare un portale per prenotare gli interventi in officina",
               "declared": true,
               "from": [
                 1
@@ -38,6 +39,7 @@
               "accept": [
                 "requirements"
               ],
+              "text": "Il cliente sceglie il tipo di intervento: tagliando, gomme o revisione",
               "declared": true,
               "from": [
                 1
@@ -56,6 +58,7 @@
                 "flows",
                 "included"
               ],
+              "text": "Il cliente vede gli slot liberi",
               "declared": true,
               "from": [
                 1
@@ -71,6 +74,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "Gli slot hanno durata di 30 minuti",
               "declared": true,
               "from": [
                 2
@@ -86,6 +90,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "L'officina ha 4 ponti: al massimo 4 interventi in parallelo",
               "declared": true,
               "from": [
                 2
@@ -101,6 +106,7 @@
               "accept": [
                 "requirements"
               ],
+              "text": "Il cliente riceve una conferma via email",
               "declared": true,
               "from": [
                 2
@@ -116,6 +122,7 @@
               "accept": [
                 "requirements"
               ],
+              "text": "Il giorno prima il cliente riceve un promemoria",
               "declared": true,
               "from": [
                 2
@@ -131,6 +138,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "Il cliente si registra con email e password",
               "declared": true,
               "from": [
                 3
@@ -147,6 +155,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Il login con i social network non è previsto",
               "declared": true,
               "from": [
                 3
@@ -162,6 +171,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "L'operatore vede l'agenda del giorno",
               "declared": true,
               "from": [
                 3
@@ -177,6 +187,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "L'operatore può spostare o annullare un appuntamento",
               "declared": true,
               "from": [
                 3
@@ -192,6 +203,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "I pagamenti online sono esclusi: si paga in sede",
               "declared": true,
               "from": [
                 4
@@ -207,6 +219,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "Il portale deve funzionare bene da smartphone",
               "declared": true,
               "from": [
                 4
@@ -223,6 +236,7 @@
                 "requirements",
                 "included"
               ],
+              "text": "Integrazione in sola lettura con OffiGest per l'anagrafica clienti",
               "declared": true,
               "from": [
                 5
@@ -239,6 +253,7 @@
                 "constraints",
                 "goals"
               ],
+              "text": "Messa online desiderata prima della stagione delle gomme invernali, a metà ottobre",
               "declared": true,
               "from": [
                 5
@@ -254,24 +269,28 @@
               "key": "social",
               "pattern": "social",
               "mode": "affirmed",
+              "sample": "Il portale prevede il login con i social network",
               "conflictKey": null
             },
             {
               "key": "pagamenti",
               "pattern": "pagament",
               "mode": "affirmed",
+              "sample": "Il cliente effettua il pagamento online",
               "conflictKey": null
             },
             {
               "key": "canali-inventati",
               "pattern": "\\b(sms|whatsapp|push)\\b",
               "mode": "anywhere",
+              "sample": "Promemoria anche via SMS e WhatsApp",
               "conflictKey": null
             },
             {
               "key": "tecnologie-inventate",
               "pattern": "\\b(react|angular|java|python|postgres\\w*|sql|aws|azure)\\b",
               "mode": "anywhere",
+              "sample": "Realizzato con Angular e PostgreSQL",
               "conflictKey": null
             }
           ],
@@ -283,6 +302,7 @@
                 "key": "pm-annulla",
                 "section": "constraints",
                 "text": "Il cliente può annullare la propria prenotazione fino a 24 ore prima",
+                "assumed": false,
                 "match": [
                   "annull",
                   "24"
@@ -292,6 +312,7 @@
                 "key": "pm-browser",
                 "section": "assumptions",
                 "text": "Si assume che i clienti usino un browser aggiornato su smartphone",
+                "assumed": true,
                 "match": [
                   "browser"
                 ]
@@ -324,6 +345,7 @@
                 "goals",
                 "overview"
               ],
+              "text": "Sostituire il foglio Excel di gestione di ferie e permessi dell'ufficio personale",
               "declared": true,
               "from": [
                 1
@@ -340,6 +362,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "Il dipendente invia una richiesta e il responsabile la approva o la rifiuta",
               "declared": true,
               "from": [
                 1
@@ -359,6 +382,7 @@
                 "requirements",
                 "included"
               ],
+              "text": "Il portale serve circa 120 dipendenti",
               "declared": true,
               "from": [
                 1
@@ -373,6 +397,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Il calcolo delle buste paga non è previsto: resta nel software paghe",
               "declared": true,
               "from": [
                 2
@@ -387,6 +412,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Il calcolo dei ratei di ferie maturati non è previsto",
               "declared": true,
               "from": [
                 2
@@ -401,6 +427,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Le trasferte restano fuori dal portale",
               "declared": true,
               "from": [
                 2
@@ -416,6 +443,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Le richieste sono approvate solo dal responsabile diretto",
               "declared": true,
               "from": [
                 3
@@ -432,6 +460,7 @@
                 "constraints",
                 "included"
               ],
+              "text": "L'ufficio personale non approva: vede soltanto il riepilogo",
               "declared": true,
               "from": [
                 3
@@ -447,6 +476,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "L'app mobile nativa non è prevista",
               "declared": true,
               "from": [
                 4
@@ -463,6 +493,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "Il sito deve essere ben utilizzabile da telefono",
               "declared": true,
               "from": [
                 4
@@ -477,6 +508,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Le notifiche push non sono previste",
               "declared": true,
               "from": [
                 4
@@ -492,6 +524,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Le notifiche avvengono solo via email",
               "declared": true,
               "from": [
                 4
@@ -507,6 +540,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Le assenze per malattia non si gestiscono nel portale: il certificato resta fuori dal sistema",
               "declared": true,
               "from": [
                 5
@@ -522,6 +556,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "Le ferie vanno richieste con almeno 5 giorni lavorativi di anticipo",
               "declared": true,
               "from": [
                 5
@@ -539,6 +574,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Le urgenze, su decisione del responsabile, fanno eccezione all'anticipo minimo",
               "declared": true,
               "from": [
                 5
@@ -554,48 +590,56 @@
               "key": "paghe",
               "pattern": "buste paga|paghe",
               "mode": "affirmed",
+              "sample": "Il portale calcola le buste paga dei dipendenti",
               "conflictKey": null
             },
             {
               "key": "ratei",
               "pattern": "ratei",
               "mode": "affirmed",
+              "sample": "Il portale calcola i ratei di ferie maturati",
               "conflictKey": null
             },
             {
               "key": "trasferte",
               "pattern": "trasfert",
               "mode": "affirmed",
+              "sample": "Il portale gestisce le trasferte",
               "conflictKey": null
             },
             {
               "key": "nativa",
               "pattern": "nativ",
               "mode": "affirmed",
+              "sample": "È prevista un'app mobile nativa",
               "conflictKey": null
             },
             {
               "key": "push",
               "pattern": "\\bpush\\b",
               "mode": "affirmed",
+              "sample": "Il portale invia notifiche push",
               "conflictKey": null
             },
             {
               "key": "malattia",
               "pattern": "malattia",
               "mode": "affirmed",
+              "sample": "Il portale gestisce le assenze per malattia e i certificati",
               "conflictKey": null
             },
             {
               "key": "ufficio-approva",
               "pattern": "ufficio personale.{0,30}approv",
               "mode": "affirmed",
+              "sample": "L'ufficio personale approva le richieste",
               "conflictKey": null
             },
             {
               "key": "sms-inventato",
               "pattern": "\\b(sms|whatsapp)\\b",
               "mode": "anywhere",
+              "sample": "Notifiche anche via SMS",
               "conflictKey": null
             }
           ],
@@ -607,6 +651,7 @@
                 "key": "pm-annulla",
                 "section": "requirements",
                 "text": "Il dipendente può annullare una richiesta non ancora approvata",
+                "assumed": false,
                 "match": [
                   "annull",
                   "non ancora approvat"
@@ -616,6 +661,7 @@
                 "key": "pm-censito",
                 "section": "assumptions",
                 "text": "Si assume che ogni dipendente abbia un responsabile diretto censito",
+                "assumed": true,
                 "match": [
                   "responsabile diretto",
                   "censit"
@@ -649,6 +695,7 @@
                 "goals",
                 "overview"
               ],
+              "text": "Gestire le scorte del magazzino ricambi",
               "declared": true,
               "from": [
                 1
@@ -665,6 +712,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "I magazzinieri registrano carichi e scarichi con un lettore di codici a barre",
               "declared": true,
               "from": [
                 1
@@ -681,6 +729,7 @@
                 "questions",
                 "assumptions"
               ],
+              "text": "Quanti magazzini sono coinvolti: uno solo a Brescia oppure due, con quello di Verona?",
               "declared": false,
               "from": [
                 2
@@ -700,6 +749,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "L'anagrafica dei ricambi esiste già nel gestionale",
               "declared": true,
               "from": [
                 3
@@ -716,6 +766,7 @@
                 "questions",
                 "assumptions"
               ],
+              "text": "In quale formato si può esportare l'anagrafica dei ricambi? Da chiedere al fornitore del gestionale",
               "declared": false,
               "from": [
                 3
@@ -731,6 +782,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "L'app segnala quando la giacenza di un articolo scende sotto il minimo",
               "declared": true,
               "from": [
                 4
@@ -747,6 +799,7 @@
                 "questions",
                 "assumptions"
               ],
+              "text": "I valori minimi per articolo non sono disponibili: li deve fornire il responsabile acquisti",
               "declared": false,
               "from": [
                 4
@@ -763,6 +816,7 @@
                 "questions",
                 "assumptions"
               ],
+              "text": "Budget e data di consegna non sono definiti",
               "declared": false,
               "from": [
                 5
@@ -778,6 +832,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Ogni scarico richiede sempre il codice commessa",
               "declared": true,
               "from": [
                 5
@@ -794,36 +849,42 @@
               "key": "magazzini-inventati",
               "pattern": "(un solo|uno solo|due|2|tre|3) magazzin",
               "mode": "affirmed",
+              "sample": "Il sistema gestisce due magazzini",
               "conflictKey": null
             },
             {
               "key": "sedi-decise",
               "pattern": "brescia|verona",
               "mode": "affirmed",
+              "sample": "Il magazzino principale è a Brescia",
               "conflictKey": null
             },
             {
               "key": "formato-inventato",
               "pattern": "\\b(csv|xml|json|rest|sql|excel)\\b",
               "mode": "anywhere",
+              "sample": "L'anagrafica viene esportata in CSV",
               "conflictKey": null
             },
             {
               "key": "importi-inventati",
               "pattern": "€|\\beuro\\b|\\b\\d+ ?(k|mila)\\b",
               "mode": "anywhere",
+              "sample": "Budget di 50 mila euro",
               "conflictKey": null
             },
             {
               "key": "tecnologie-inventate",
               "pattern": "\\b(java|python|angular|react|azure|aws)\\b",
               "mode": "anywhere",
+              "sample": "Sviluppato in Java",
               "conflictKey": null
             },
             {
               "key": "date-inventate",
               "pattern": "\\b(entro|a|per) (gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\\b",
               "mode": "anywhere",
+              "sample": "Consegna entro marzo",
               "conflictKey": null
             }
           ],
@@ -835,6 +896,7 @@
                 "key": "pm-usb",
                 "section": "constraints",
                 "text": "Il lettore di codici a barre è collegato via USB alla postazione",
+                "assumed": false,
                 "match": [
                   "usb"
                 ]
@@ -843,6 +905,7 @@
                 "key": "pm-avvio",
                 "section": "assumptions",
                 "text": "Si assume che il formato sia noto prima dell'avvio dello sviluppo",
+                "assumed": true,
                 "match": [
                   "avvio",
                   "svilupp"
@@ -876,6 +939,7 @@
                 "goals",
                 "overview"
               ],
+              "text": "Qualificare e censire i nuovi fornitori",
               "declared": true,
               "from": [
                 1
@@ -892,6 +956,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "Il fornitore compila un questionario",
               "declared": true,
               "from": [
                 1
@@ -907,6 +972,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "Il fornitore carica le certificazioni (ISO 9001, DURC)",
               "declared": true,
               "from": [
                 1
@@ -923,6 +989,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "I dati dei fornitori non escono dall'Italia: hosting in un data center italiano",
               "declared": true,
               "from": [
                 5
@@ -938,6 +1005,7 @@
                 "constraints",
                 "requirements"
               ],
+              "text": "I documenti caricati sono conservati per 10 anni",
               "declared": true,
               "from": [
                 5
@@ -950,6 +1018,19 @@
           "conflicts": [
             {
               "key": "tempi",
+              "description": "Entro quanti giorni lavorativi va approvata la qualifica: 5 (acquisti) o 10 (qualità)?",
+              "altText": [
+                "La qualifica va approvata entro 5 giorni lavorativi dall'invio (acquisti)",
+                "La qualifica richiede 10 giorni lavorativi per la verifica manuale delle certificazioni (qualità)"
+              ],
+              "altFrom": [
+                [
+                  2
+                ],
+                [
+                  3
+                ]
+              ],
               "altMatch": [
                 "\\b(5|cinque) giorni",
                 "\\b(10|dieci) giorni"
@@ -957,6 +1038,19 @@
             },
             {
               "key": "accesso",
+              "description": "Quale accesso per i fornitori esterni: SSO aziendale oppure email e password?",
+              "altText": [
+                "L'IT chiede il login con SSO aziendale per tutti",
+                "Gli acquisti chiedono che i fornitori esterni entrino con email e password"
+              ],
+              "altFrom": [
+                [
+                  4
+                ],
+                [
+                  4
+                ]
+              ],
               "altMatch": [
                 "\\bsso\\b",
                 "email.*password|password"
@@ -968,18 +1062,21 @@
               "key": "tempi-5",
               "pattern": "\\b(5|cinque) giorni|\\b(10|dieci) giorni",
               "mode": "affirmed",
+              "sample": "La qualifica va approvata entro 5 giorni lavorativi",
               "conflictKey": "tempi"
             },
             {
               "key": "accesso-scelto",
               "pattern": "\\bsso\\b|email e password",
               "mode": "affirmed",
+              "sample": "I fornitori accedono con email e password",
               "conflictKey": "accesso"
             },
             {
               "key": "idp-inventati",
               "pattern": "\\b(entra|okta|azure|keycloak)\\b",
               "mode": "anywhere",
+              "sample": "Accesso tramite Entra ID",
               "conflictKey": null
             }
           ],
@@ -991,6 +1088,7 @@
                 "key": "pm-scadute",
                 "section": "constraints",
                 "text": "Le certificazioni scadute bloccano la qualifica",
+                "assumed": false,
                 "match": [
                   "scadut"
                 ]
@@ -999,6 +1097,7 @@
                 "key": "pm-pdf",
                 "section": "assumptions",
                 "text": "Si assume che le certificazioni siano caricate in formato PDF",
+                "assumed": true,
                 "match": [
                   "pdf"
                 ]
@@ -1036,6 +1135,7 @@
                 "goals",
                 "overview"
               ],
+              "text": "Portale clienti per l'assistenza tecnica di Meccanica Verdi",
               "declared": true,
               "from": [
                 1
@@ -1052,6 +1152,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "I clienti aprono ticket e ne vedono lo stato",
               "declared": true,
               "from": [
                 1
@@ -1068,6 +1169,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Le notifiche sono inviate solo via email",
               "declared": true,
               "from": [
                 2
@@ -1083,6 +1185,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Le notifiche via SMS sono escluse dal primo rilascio",
               "declared": true,
               "from": [
                 2
@@ -1097,6 +1200,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "L'integrazione con il gestionale è esclusa per ora: i ticket restano solo nel portale",
               "declared": true,
               "from": [
                 3
@@ -1113,6 +1217,7 @@
                 "questions",
                 "assumptions"
               ],
+              "text": "L'integrazione con il gestionale servirà più avanti?",
               "declared": false,
               "from": [
                 3
@@ -1130,6 +1235,7 @@
                 "flows",
                 "constraints"
               ],
+              "text": "Accesso con email e password, un utente per ogni azienda cliente",
               "declared": true,
               "from": [
                 4
@@ -1146,6 +1252,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Gli agenti vedono tutti i ticket; ogni cliente vede solo i propri",
               "declared": true,
               "from": [
                 5
@@ -1162,6 +1269,7 @@
                 "constraints",
                 "goals"
               ],
+              "text": "Messa online prevista a giugno",
               "declared": true,
               "from": [
                 5
@@ -1177,18 +1285,21 @@
               "key": "sms",
               "pattern": "\\bsms\\b",
               "mode": "affirmed",
+              "sample": "Le notifiche arrivano anche via SMS",
               "conflictKey": null
             },
             {
               "key": "integrazione",
               "pattern": "integrazion.{0,40}gestionale|gestionale.{0,40}integrazion",
               "mode": "affirmed",
+              "sample": "Integrazione obbligatoria con il gestionale",
               "conflictKey": null
             },
             {
               "key": "progetto-boreale",
               "pattern": "boreale|bianchi|colorweb|ordini|spedizion|consegna|settembre|\\bsso\\b|listino",
               "mode": "anywhere",
+              "sample": "Integrazione in tempo reale con Colorweb",
               "conflictKey": null
             }
           ],
@@ -1200,6 +1311,7 @@
                 "key": "pm-allegati",
                 "section": "requirements",
                 "text": "Il cliente può allegare un file a un ticket",
+                "assumed": false,
                 "match": [
                   "allegar"
                 ]
@@ -1208,6 +1320,7 @@
                 "key": "pm-referente",
                 "section": "assumptions",
                 "text": "Si assume che ogni azienda cliente abbia un referente",
+                "assumed": true,
                 "match": [
                   "referente"
                 ]
@@ -1234,6 +1347,7 @@
                 "goals",
                 "overview"
               ],
+              "text": "Portale clienti per gli ordini del Colorificio Bianchi",
               "declared": true,
               "from": [
                 1
@@ -1250,6 +1364,7 @@
                 "requirements",
                 "flows"
               ],
+              "text": "I clienti inseriscono gli ordini e ne seguono la spedizione",
               "declared": true,
               "from": [
                 1
@@ -1266,6 +1381,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "Le notifiche arrivano via SMS e via email, a scelta del cliente",
               "declared": true,
               "from": [
                 2
@@ -1283,6 +1399,7 @@
                 "constraints",
                 "flows"
               ],
+              "text": "Gli SMS servono per l'avviso di consegna",
               "declared": true,
               "from": [
                 2
@@ -1300,6 +1417,7 @@
                 "requirements",
                 "included"
               ],
+              "text": "Integrazione obbligatoria in tempo reale con il gestionale ordini Colorweb",
               "declared": true,
               "from": [
                 3
@@ -1317,6 +1435,7 @@
                 "constraints",
                 "flows"
               ],
+              "text": "Accesso con SSO aziendale del cliente, senza password locali",
               "declared": true,
               "from": [
                 4
@@ -1332,6 +1451,7 @@
                 "requirements",
                 "constraints"
               ],
+              "text": "I clienti vedono solo i propri ordini",
               "declared": true,
               "from": [
                 5
@@ -1348,6 +1468,7 @@
                 "constraints",
                 "goals"
               ],
+              "text": "Messa online prevista a settembre",
               "declared": true,
               "from": [
                 5
@@ -1362,6 +1483,7 @@
               "accept": [
                 "excluded"
               ],
+              "text": "Il listino prezzi è gestito altrove e non entra nel portale",
               "declared": true,
               "from": [
                 5
@@ -1377,18 +1499,21 @@
               "key": "listino",
               "pattern": "listino",
               "mode": "affirmed",
+              "sample": "Il portale gestisce il listino prezzi",
               "conflictKey": null
             },
             {
               "key": "password-locali",
               "pattern": "password",
               "mode": "affirmed",
+              "sample": "Accesso con email e password",
               "conflictKey": null
             },
             {
               "key": "progetto-aurora",
               "pattern": "aurora|verdi|ticket|assistenza|giugno|agenti",
               "mode": "anywhere",
+              "sample": "I ticket dell'assistenza",
               "conflictKey": null
             }
           ],
@@ -1400,6 +1525,7 @@
                 "key": "pm-storico",
                 "section": "requirements",
                 "text": "Il cliente consulta lo storico dei propri ordini",
+                "assumed": false,
                 "match": [
                   "storico"
                 ]
@@ -1408,6 +1534,7 @@
                 "key": "pm-sso",
                 "section": "assumptions",
                 "text": "Si assume che ogni cliente disponga dell'SSO aziendale",
+                "assumed": true,
                 "match": [
                   "dispong",
                   "sso"
