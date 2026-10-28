@@ -15,6 +15,10 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
     {
         switch (exception)
         {
+            case ContextOverflowException overflow:
+                return new(false, overflow.Code, null);
+            case CompactionFailedException failed:
+                return new(false, failed.Code, null);
             case ClientResultException { Status: 0 }:
                 // Nessuna risposta HTTP: l'SDK incapsula guasti di trasporto e timeout.
                 return new(true, "model_unreachable", null);
