@@ -27,7 +27,8 @@ public static class ConversationEndpoints
         string? AuthorDisplayName,
         string? AgentId,
         Guid? ChatTurnId,
-        Guid? ReplyToMessageId);
+        Guid? ReplyToMessageId,
+        InferenceMetricsView? Metrics = null);
 
     public sealed record PostMessageResponse(MessageView Message, Guid ChatTurnId);
 
@@ -206,7 +207,13 @@ public static class ConversationEndpoints
         var ids = items.Select(i => i.Message.Id).ToList();
         var turnIds = await db.ChatTurns.AsNoTracking().Where(t => ids.Contains(t.TriggerMessageId))
             .ToDictionaryAsync(t => t.TriggerMessageId, t => t.Id, ct);
-        var views = items.Select(i => ToView(i.Message, i.AuthorName, turnIds.GetValueOrDefault(i.Message.Id))).ToList();
+        // Metriche dei soli messaggi assistant, dal tentativo vincente del loro turno (null = record senza telemetria).
+        var answered = items.Where(i => i.Message.ChatTurnId is not null).Select(i => i.Message.ChatTurnId!.Value).ToList();
+        var metrics = await InferenceMetrics.ForTurnsAsync(db, projectId, answered, ct);
+        var views = items.Select(i => ToView(i.Message, i.AuthorName, turnIds.GetValueOrDefault(i.Message.Id)) with
+        {
+            Metrics = i.Message.ChatTurnId is { } turn ? metrics.GetValueOrDefault(turn) : null,
+        }).ToList();
         return Results.Ok(new MessagePage(views, views.Count > 0 ? views[^1].Sequence : null));
     }
 

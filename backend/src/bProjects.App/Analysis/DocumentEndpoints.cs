@@ -23,7 +23,8 @@ public sealed record DraftView(
     string ApprovalStatus,
     bool HasNewNotes,
     bool HasNewRevision,
-    string Label);
+    string Label,
+    InferenceMetricsView? Metrics = null);
 
 /// <summary>
 /// Generazione esplicita del documento e lettura dell'ultima bozza (contracts/http-api.md, «Generazione esplicita del documento»).
@@ -100,7 +101,7 @@ public static class DocumentEndpoints
                     return Problem(StatusCodes.Status409Conflict, "La stessa Idempotency-Key è già stata usata con un input diverso", "idempotency_conflict", existing.Id);
                 }
 
-                var replay = AnalysisEndpoints.ToView(existing);
+                var replay = await AnalysisEndpoints.ViewAsync(db, existing, ct);
                 return existing.Status is ProcessingRunStatus.Queued or ProcessingRunStatus.Running
                     ? Results.Accepted(LocationOf(projectId, existing.Id), replay)
                     : Results.Ok(replay);
@@ -164,7 +165,7 @@ public static class DocumentEndpoints
                 DeadlineAt = now + policy.RunDeadline,
                 WorkflowDefinitionVersion = ProcessingRun.DocumentWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
-                AgentConfig = AnalysisEndpoints.FrozenConfig(ai.Value, policy),
+                AgentConfig = AnalysisEndpoints.FrozenConfig(ai.Value, policy, AiPhase.Document),
                 PromptVersions = JsonSerializer.Serialize(new { document = DocumentAgent.PromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
@@ -230,7 +231,9 @@ public static class DocumentEndpoints
             draft.ApprovalStatus.ToString(),
             hasNewNotes,
             HasNewRevision: latestRevisionId != source.Id,
-            DraftLabel));
+            DraftLabel,
+            // Metriche del run Document che ha generato la bozza, rilette dopo il reload insieme al Markdown.
+            await InferenceMetrics.ForRunAsync(db, projectId, draft.ProcessingRunId, ct)));
     }
 
     private static async Task<Guid?> ActiveRunAsync(AppDbContext db, Guid projectId, CancellationToken ct) =>

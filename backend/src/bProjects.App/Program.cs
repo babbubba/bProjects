@@ -165,8 +165,9 @@ app.UseStatusCodePages();
 
 var ai = app.Services.GetRequiredService<IOptions<AiOptions>>().Value;
 app.Logger.LogInformation(
-    "Modello interno configurato: host {Host}, modello {ModelId}, finestra {Window}, budget input {Budget}, output strutturato {Mode}",
-    new Uri(ai.Endpoint).Host, ai.ModelId, ai.ContextWindowTokens, ai.InputBudgetTokens, ai.StructuredOutputMode);
+    "Modello interno configurato: host {Host}, modello {ModelId}, finestra {Window}, budget input chat/analisi/documento/compattazione {Chat}/{Analysis}/{Document}/{Compaction}, output strutturato {Mode}",
+    new Uri(ai.Endpoint).Host, ai.ModelId, ai.ContextWindowTokens, ai.ForPhase(AiPhase.Chat).InputBudgetTokens, ai.ForPhase(AiPhase.Analysis).InputBudgetTokens,
+    ai.ForPhase(AiPhase.Document).InputBudgetTokens, ai.ForPhase(AiPhase.Compaction).InputBudgetTokens, ai.StructuredOutputMode);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -178,6 +179,7 @@ app.MapConversationEndpoints();
 app.MapAnalysisEndpoints();
 app.MapDocumentEndpoints();
 app.MapProjectEventsEndpoint();
+app.MapContextUsageEndpoint();
 
 app.Run();
 

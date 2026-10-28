@@ -30,7 +30,8 @@ public sealed record ProcessingRunView(
     string? LastObservedStage,
     Guid? ResultRevisionId,
     Guid? DraftId,
-    RunError? Error);
+    RunError? Error,
+    InferenceMetricsView? Metrics = null);
 
 /// <summary>Revisione dell'anteprima con provenienza e conferma (GET .../revisions/{v}).</summary>
 public sealed record RevisionView(
@@ -67,7 +68,8 @@ public sealed record AnalysisView(
     bool HasNewNotes,
     bool CanEdit,
     bool CanConfirm,
-    bool CanGenerate);
+    bool CanGenerate,
+    InferenceMetricsView? Metrics = null);
 
 /// <summary>
 /// Comando Analizza e letture di run e anteprima (contracts/http-api.md, «Richiesta di analisi formale»).
@@ -134,7 +136,7 @@ public static class AnalysisEndpoints
             {
                 // Replay (contracts/http-api.md, Idempotenza): il POST non ha corpo, quindi stessa chiave = stessa richiesta
                 // e torna sempre il run originale (202 se attivo, 200 se terminale), anche se il cutoff dei messaggi PM è avanzato.
-                var replay = ToView(existing);
+                var replay = await ViewAsync(db, existing, ct);
                 return existing.Status is ProcessingRunStatus.Queued or ProcessingRunStatus.Running
                     ? Results.Accepted(LocationOf(projectId, existing.Id), replay)
                     : Results.Ok(replay);
@@ -169,7 +171,7 @@ public static class AnalysisEndpoints
                 DeadlineAt = now + policy.RunDeadline,
                 WorkflowDefinitionVersion = ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
-                AgentConfig = FrozenConfig(ai.Value, policy),
+                AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
                 PromptVersions = JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
@@ -197,8 +199,12 @@ public static class AnalysisEndpoints
     private static async Task<IResult> GetRun(Guid projectId, Guid runId, AppDbContext db, CancellationToken ct)
     {
         var run = await db.ProcessingRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId && r.ProjectId == projectId, ct);
-        return run is null ? Results.NotFound() : Results.Ok(ToView(run));
+        return run is null ? Results.NotFound() : Results.Ok(await ViewAsync(db, run, ct));
     }
+
+    /// <summary>ProcessingRunView con le metriche del risultato logico: solo per un run Completed (un Failed non ha metriche).</summary>
+    public static async Task<ProcessingRunView> ViewAsync(AppDbContext db, ProcessingRun run, CancellationToken ct) =>
+        ToView(run, run.Status == ProcessingRunStatus.Completed ? await InferenceMetrics.ForRunAsync(db, run.ProjectId, run.Id, ct) : null);
 
     private static async Task<IResult> GetAnalysis(Guid projectId, Guid analysisId, HttpContext http, AppDbContext db, CancellationToken ct)
     {
@@ -273,7 +279,9 @@ public static class AnalysisEndpoints
             hasNewNotes,
             canEdit,
             CanConfirm: canEdit && isLatest && revision.ValidationState == AnalysisValidationState.Unvalidated,
-            CanGenerate: canEdit && isLatest && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed), run);
+            CanGenerate: canEdit && isLatest && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed,
+            // Metriche del run che ha prodotto l'analisi (non della revisione): rilette dopo il reload insieme al risultato.
+            await InferenceMetrics.ForRunAsync(db, projectId, analysisId, ct)), run);
     }
 
     private static async Task<IResult> GetRevision(Guid projectId, Guid analysisId, string version, HttpContext http, AppDbContext db, CancellationToken ct)
@@ -325,7 +333,7 @@ public static class AnalysisEndpoints
             revision.ConfirmedAt));
     }
 
-    public static ProcessingRunView ToView(ProcessingRun run) => new(
+    public static ProcessingRunView ToView(ProcessingRun run, InferenceMetricsView? metrics = null) => new(
         run.Id,
         run.Kind.ToString(),
         run.AnalysisId,
@@ -342,7 +350,8 @@ public static class AnalysisEndpoints
         run.LastObservedStage,
         run.ResultRevisionId,
         run.DraftId,
-        run.ErrorCode is null ? null : new RunError(run.ErrorCode, run.ErrorMessage));
+        run.ErrorCode is null ? null : new RunError(run.ErrorCode, run.ErrorMessage),
+        metrics);
 
     private static string LocationOf(Guid projectId, Guid runId) => $"/api/projects/{projectId}/processing-runs/{runId}";
 
@@ -358,26 +367,34 @@ public static class AnalysisEndpoints
         return await db.Users.AsNoTracking().Where(u => wanted.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.UserName, ct);
     }
 
-    /// <summary>Configurazione risolta del run, congelata alla richiesta: nessun endpoint né credenziale, soltanto parametri.</summary>
-    internal static string FrozenConfig(AiOptions ai, ExecutionOptions policy) => JsonSerializer.Serialize(new
+    /// <summary>
+    /// Configurazione risolta del run, congelata alla richiesta: nessun endpoint né credenziale, soltanto parametri. Output, ragionamento
+    /// e budget sono quelli della fase del run (<see cref="AiOptions.ForPhase"/>), non i globali che <c>Ai:Phases</c> può sostituire.
+    /// </summary>
+    internal static string FrozenConfig(AiOptions ai, ExecutionOptions policy, AiPhase phase)
     {
-        modelId = ai.ModelId,
-        structuredOutputMode = ai.StructuredOutputMode.ToString(),
-        contextWindowTokens = ai.ContextWindowTokens,
-        maxOutputTokens = ai.MaxOutputTokens,
-        safetyMarginTokens = ai.SafetyMarginTokens,
-        inputBudgetTokens = ai.InputBudgetTokens,
-        compactionTriggerTokens = ai.EffectiveCompactionTriggerTokens,
-        enableThinking = ai.EnableThinking,
-        temperature = 0,
-        requestTimeoutSeconds = ai.RequestTimeoutSeconds,
-        leaseSeconds = policy.LeaseDurationSeconds,
-        renewSeconds = policy.RenewIntervalSeconds,
-        maxAttempts = policy.MaxAttempts,
-        retryBaseDelaySeconds = policy.RetryBaseDelaySeconds,
-        retryMaxDelaySeconds = policy.RetryMaxDelaySeconds,
-        runDeadlineSeconds = policy.RunDeadlineSeconds,
-    });
+        var settings = ai.ForPhase(phase);
+        return JsonSerializer.Serialize(new
+        {
+            modelId = ai.ModelId,
+            phase = InferenceMetrics.PhaseName(phase),
+            structuredOutputMode = ai.StructuredOutputMode.ToString(),
+            contextWindowTokens = ai.ContextWindowTokens,
+            maxOutputTokens = settings.MaxOutputTokens,
+            safetyMarginTokens = ai.SafetyMarginTokens,
+            inputBudgetTokens = settings.InputBudgetTokens,
+            compactionTriggerTokens = ai.CompactionTriggerTokens > 0 ? ai.CompactionTriggerTokens : settings.InputBudgetTokens,
+            enableThinking = settings.EnableThinking,
+            temperature = 0,
+            requestTimeoutSeconds = ai.RequestTimeoutSeconds,
+            leaseSeconds = policy.LeaseDurationSeconds,
+            renewSeconds = policy.RenewIntervalSeconds,
+            maxAttempts = policy.MaxAttempts,
+            retryBaseDelaySeconds = policy.RetryBaseDelaySeconds,
+            retryMaxDelaySeconds = policy.RetryMaxDelaySeconds,
+            runDeadlineSeconds = policy.RunDeadlineSeconds,
+        });
+    }
 
     private static IResult Problem(int status, string title, string code, Guid? processingRunId = null) => Results.Problem(
         statusCode: status,
@@ -404,7 +421,7 @@ public sealed class ProcessingRunEvents(ProjectEventHub hub, IServiceScopeFactor
             var run = await db.ProcessingRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId);
             if (run is not null)
             {
-                hub.Publish(run.ProjectId, ProjectEventHub.ProcessingState, AnalysisEndpoints.ToView(run));
+                hub.Publish(run.ProjectId, ProjectEventHub.ProcessingState, await AnalysisEndpoints.ViewAsync(db, run, CancellationToken.None));
             }
         }
         catch (Exception ex)
