@@ -92,7 +92,7 @@ Riesame documentale dopo il consolidamento; i riferimenti di evidenza sono nella
 | V. LLM interni | Endpoint esplicito autorizzato, nessun fallback esterno |
 | VI. Slice complete | Chat → anteprima correggibile/confermata → generazione → lettura |
 | VII. Autorizzazione | Conferma PM e generazione sono atti distinti; nessuna pubblicazione esterna |
-| VIII. Integrazioni reali | Gate tecnici identificati nel quickstart, ancora da eseguire |
+| VIII. Integrazioni reali | Gate tecnici nel quickstart. Verificati senza DGX il 2026-10-28 (Integration su PostgreSQL 18, Docker, E2E, riavvio; vedi quickstart); MafReal e prove con DGX reale ancora da eseguire (SKIP, non PASS) |
 | IX. ADR proporzionati | Decisioni approvate documentate qui; nessuna ADR nuova |
 
 Non sono richieste deroghe costituzionali; disponibilità runtime e qualità del

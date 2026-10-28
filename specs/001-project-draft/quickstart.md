@@ -1,9 +1,10 @@
 # Quickstart di validazione — consolidamento finale
 
 **Updated**: 2026-10-28.
-Guida per l'implementazione successiva: solution, frontend e Compose non sono ancora
-implementati. I comandi indicano il percorso da rendere disponibile, non prove eseguite.
-Controlli documentali e verifiche runtime sono distinti nella checklist canonica.
+Solution, frontend e Compose sono implementati. Le verifiche tecniche non dipendenti dal
+DGX sono state eseguite il 2026-10-28 (sezione "Esito verifica tecnica T053"); le prove con
+DGX reale (MafReal ed E2E reale) e la revisione umana restano da eseguire. Controlli
+documentali e verifiche runtime sono distinti nella checklist canonica.
 
 ## Prerequisiti e configurazione
 
@@ -21,9 +22,11 @@ I valori risolti sono fissati nella richiesta; segreti fuori da repo/prompt/log.
 DB/configurazioni/volumi di test distinti da produzione; non eliminare i volumi
 durante le prove di riavvio.
 
-## Percorso di avvio previsto
+## Percorso di avvio
 
-Dalla root, soltanto dopo l'implementazione:
+Node >= 22.22.3 oppure >= 24.15 (Angular 22); verificato con Node 24.22.1/npm 11.19.1 e
+.NET SDK 10.0.401. Con nvm-windows, Node 24.22.1 e' stato messo nel PATH della shell
+(cartella `nvm\v24.22.1`) senza `nvm use`. Dalla root:
 
 ```powershell
 dotnet restore backend/bProjects.sln --locked-mode
@@ -33,22 +36,72 @@ npm --prefix frontend run build
 docker compose -f infra/compose.yaml up -d --build
 ```
 
+Compose legge `infra/.env` (non versionato; modello in `infra/.env.example`) e richiede
+POSTGRES_PASSWORD, AUTH_SIGNING_KEY, AI_ENDPOINT, AI_MODEL_ID, AI_API_KEY. L'avvio non
+richiede il DGX raggiungibile: per prove senza DGX usare un env-file di prova con valori
+finti (`--env-file <file>`, endpoint su porta chiusa, WEB_PORT diverso) e `-p <progetto>`
+per un volume dedicato. Poi, esplicitamente:
+
+```powershell
+docker compose -f infra/compose.yaml run --rm app migrate
+docker compose -f infra/compose.yaml run --rm -e Bootstrap__Accounts__0__UserName=<pm> -e Bootstrap__Accounts__0__Password=<password-12+> app bootstrap-accounts
+```
+
 Migrazioni e bootstrap account devono essere operazioni esplicite e non distruttive.
 Mantenere MAF core/OpenAI/Workflows 1.26.0 nel lock effettivo. La compilazione iniziale
 deve includere primitive concrete, binding .NET e store JSON; niente framework alternativo.
 
-Comandi di test previsti, non eseguiti qui; categorie/script da fornire nell'implementazione:
+Comandi di test (Microsoft.Testing.Platform: `--solution` e `--filter-trait`, non `--filter`):
 
 ```powershell
-dotnet test backend/bProjects.sln --no-build --filter Category=Integration
-dotnet test backend/bProjects.sln --no-build --filter Category=MafReal
+dotnet test --solution backend/bProjects.sln --no-build
+dotnet test --solution backend/bProjects.sln --no-build --filter-trait "Category=Integration"   # BPROJECTS_TEST_POSTGRES
+dotnet test --solution backend/bProjects.sln --no-build --filter-trait "Category=MafReal"       # BPROJECTS_TEST_DGX_ENDPOINT
 npm --prefix frontend run test:ci
 npm --prefix frontend run test:e2e
 ```
 
+Variabili di test: `BPROJECTS_TEST_POSTGRES` (connection string di un PostgreSQL 18 di
+prova, es. `Host=localhost;Port=55432;Username=postgres;Password=<test>`); senza, i test
+Integration risultano ignorati, mai superati. MafReal richiede `BPROJECTS_TEST_DGX_ENDPOINT`
+(piu' modello/chiave); senza, risulta ignorato. E2E: `E2E_BASE_URL` (stack avviato),
+`E2E_USER`/`E2E_PASSWORD` (account da bootstrap), `E2E_MODEL_MODE=offline|real`,
+`E2E_DB_COMMAND` (psql -At sul DB dello stack di prova, SQL da stdin) e
+`E2E_RESTART_COMMAND` (`down` senza `-v`, poi `up -d --wait`). Il comando di riavvio gira
+con cwd `tests/e2e` e, su Windows, in cmd: usare percorsi assoluti con lettera di unita'
+(`C:/...`) per `-f` ed `--env-file`.
+
 Integration usa PostgreSQL reale per commit, concorrenza e serializzazione.
 MafReal usa anche endpoint DGX e grafi MAF effettivi; mock non sostituiscono le prove
 critiche. Registrare versioni, ID, conteggi, token/durate ed esiti, non contenuti integrali.
+
+## Esito verifica tecnica T053 (2026-10-28, senza DGX)
+
+Eseguita sul branch `feature/001-project-draft`, working tree pulito. Il DGX risponde 401:
+nessuna prova con modello reale; `infra/.env` non e' stato usato (env-file di prova finto).
+Non ripetere, salvo modifiche al codice.
+
+| Verifica | Esito |
+| --- | --- |
+| `dotnet restore --locked-mode` e `dotnet build` | PASS, 0 errori, 0 avvisi |
+| Suite backend senza PostgreSQL | PASS 423, 0 falliti, 444 ignorati (PostgreSQL non impostato) |
+| Integration su PostgreSQL 18 (container `bprojects-test-pg18`) | PASS 477/477, 0 ignorati (circa 2m42s) |
+| Intera suite con PostgreSQL, senza DGX | PASS 840, 0 falliti, 27 ignorati (tutti MafReal) |
+| MafReal | SKIP 27 su 28: `BPROJECTS_TEST_DGX_ENDPOINT` non impostata. Non e' un PASS (il 28esimo non usa il DGX ed e' passato) |
+| `npm ci`, `npm run build` | PASS; avviso: budget del bundle iniziale superato (607,35 kB contro 600 kB), non bloccante |
+| `npm run test:ci` (Vitest 5.0.5) | PASS 83/83 in 9 file |
+| `npm run test:e2e` (Playwright 1.60.0, desktop-1440 e mobile-390, stack Docker, `E2E_MODEL_MODE=offline`) | 120 PASS, 0 falliti, 18 SKIP: 7 percorsi con modello reale per ciascun viewport (14) e 4 prove limitate al solo desktop (chat offline, Analizza offline, due riavvii) sul mobile |
+| Docker Compose `up -d --build --wait`, `migrate`, `bootstrap-accounts` | PASS: db, app e web healthy, UI 200, API non autenticata 401 |
+| Riavvio `down` senza `-v` e `up --wait` (E2E) | PASS: progetti, sessione (refresh), revisioni 1-4, conferma, conflitti risolti e date sopravvivono |
+| `kill app` e `up -d app` (volume intatto) | PASS: conteggi invariati (44 progetti, 10 messaggi, 10 ChatTurn, 6 run, 16 revisioni, 109 RefreshSessions, 1 account), `/health` 200, login 200 |
+
+Limiti: la tabella WorkflowCheckpoints era vuota nello stack senza modello (nessun run MAF
+reale), quindi resume da checkpoint dopo il riavvio e compattazione MAF reale (T047) non
+sono verificati in Docker; restano coperti solo dai test Integration su PostgreSQL.
+Nella prima esecuzione E2E 2 prove di riavvio sono fallite solo per il comando di riavvio
+di prova (percorso `../infra` errato per la cwd, percorso MSYS in cmd), corretto nella
+variabile e non nel prodotto; nelle esecuzioni successive 0 fallimenti, nessuna
+instabilita' osservata. Stack di prova fermato; volume `bprojects-t053_pgdata` conservato.
 
 ## Prove nominali separate — successo richiesto
 
