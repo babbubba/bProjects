@@ -15,6 +15,9 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
     {
         switch (exception)
         {
+            case ClientResultException { Status: 0 }:
+                // Nessuna risposta HTTP: l'SDK incapsula guasti di trasporto e timeout.
+                return new(true, "model_unreachable", null);
             case ClientResultException { Status: var status } cre:
                 return FromStatus(status, RetryAfterOf(cre));
             case HttpRequestException { StatusCode: { } code } hre:

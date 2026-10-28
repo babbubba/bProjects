@@ -1,8 +1,11 @@
 using System.Text;
+using bProjects.App.AI;
 using bProjects.App.Identity;
 using bProjects.App.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -18,7 +21,20 @@ if (authOptions.SigningKey.Length < 32)
 
 builder.Services.Configure<AuthOptions>(authSection);
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("AppDb")));
+
+// Configurazione AI ed esecuzione: validata all'avvio (struttura, budget, allowlist), mai la raggiungibilità
+// del DGX. Il client è creato al primo uso e non contatta la rete in costruzione.
+builder.Services.AddSingleton<IValidateOptions<AiOptions>, AiOptionsValidator>();
+builder.Services.AddSingleton<IValidateOptions<ExecutionOptions>, ExecutionOptionsValidator>();
+builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(AiOptions.SectionName)).ValidateOnStart();
+builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSection(ExecutionOptions.SectionName)).ValidateOnStart();
+builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
+builder.Services.AddProblemDetails();
+
+// Il middleware del framework registrerebbe il messaggio dell'eccezione (può contenere contenuti dei progetti):
+// il log degli errori non gestiti è quello sicuro dell'handler sotto.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", LogLevel.None);
 
 builder.Services
     .AddIdentityCore<IdentityUser<Guid>>(options =>
@@ -65,6 +81,40 @@ if (args.Contains("bootstrap-accounts"))
     Console.WriteLine($"Account PM creati: {created}");
     return;
 }
+
+// Errori non gestiti: Problem Details senza messaggi o contenuti; il log riporta solo tipo e classe di errore.
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+    if (context.RequestAborted.IsCancellationRequested)
+    {
+        return; // il browser ha chiuso la connessione: non è un guasto del modello né dell'app
+    }
+
+    var failure = error is null ? default : ModelFailure.Classify(error);
+    var transient = error is not null && failure.IsTransient;
+    var status = transient ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status500InternalServerError;
+    var code = transient ? failure.Code : "internal_error";
+    app.Logger.LogError("Richiesta fallita: {ExceptionType}, codice {Code}", error?.GetType().Name ?? "unknown", code);
+
+    context.Response.StatusCode = status;
+    await context.RequestServices.GetRequiredService<IProblemDetailsService>().WriteAsync(new ProblemDetailsContext
+    {
+        HttpContext = context,
+        ProblemDetails =
+        {
+            Status = status,
+            Title = transient ? "Servizio temporaneamente non disponibile" : "Errore interno",
+            Extensions = { ["code"] = code },
+        },
+    });
+}));
+app.UseStatusCodePages();
+
+var ai = app.Services.GetRequiredService<IOptions<AiOptions>>().Value;
+app.Logger.LogInformation(
+    "Modello interno configurato: host {Host}, modello {ModelId}, finestra {Window}, budget input {Budget}, output strutturato {Mode}",
+    new Uri(ai.Endpoint).Host, ai.ModelId, ai.ContextWindowTokens, ai.InputBudgetTokens, ai.StructuredOutputMode);
 
 app.UseAuthentication();
 app.UseAuthorization();

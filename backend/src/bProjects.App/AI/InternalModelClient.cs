@@ -28,7 +28,10 @@ public sealed class InternalModelClient : IDisposable
         var endpoint = new Uri(options.Endpoint.TrimEnd('/') + "/", UriKind.Absolute);
         _serverRoot = new Uri(endpoint, "/");
 
-        _http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
+        // Niente redirect né proxy di sistema: la chiave viaggia solo verso l'host configurato e validato.
+        _http = handler is null
+            ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false })
+            : new HttpClient(handler, disposeHandler: false);
         _http.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
 

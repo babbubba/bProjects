@@ -25,7 +25,12 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Auth__SigningKey: ${AUTH_SIGNING_KEY:?impostare AUTH_SIGNING_KEY in infra/.env}
-      ConnectionStrings__Default: Host=db;Port=5432;Database=bprojects;Username=bprojects;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__AppDb: Host=db;Port=5432;Database=bprojects;Username=bprojects;Password=${POSTGRES_PASSWORD}
+      # Modello interno (DGX): valori in infra/.env. L'avvio non richiede il DGX raggiungibile.
+      Ai__Endpoint: ${AI_ENDPOINT:?impostare AI_ENDPOINT in infra/.env}
+      Ai__ModelId: ${AI_MODEL_ID:?impostare AI_MODEL_ID in infra/.env}
+      Ai__ApiKey: ${AI_API_KEY:?impostare AI_API_KEY in infra/.env}
+      Ai__ContextWindowTokens: ${AI_CONTEXT_WINDOW_TOKENS:-32768}
     depends_on:
       db:
         condition: service_healthy

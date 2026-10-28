@@ -51,6 +51,19 @@ public sealed class InternalModelClientOfflineTests
     }
 
     [Fact]
+    public async Task Connection_failure_through_the_client_is_transient_and_sent_once()
+    {
+        var handler = new StubHandler(_ => throw new HttpRequestException("connessione rifiutata"));
+        using var client = new InternalModelClient(Options(), handler);
+
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() =>
+            client.ChatClient.GetResponseAsync("ciao", cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.True(ModelFailure.Classify(ex).IsTransient, ex.GetType().Name);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public void Transport_errors_and_timeouts_are_transient_and_unknown_errors_permanent()
     {
         Assert.True(ModelFailure.Classify(new HttpRequestException("down")).IsTransient);
