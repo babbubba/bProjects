@@ -1,0 +1,1423 @@
+{
+  "note": "Generato da AcceptanceFixtures.cs (AcceptanceE2eData). Non modificare a mano: BPROJECTS_ACCEPTANCE_REGENERATE=1 dotnet test --filter-method *e2e_data*",
+  "cases": [
+    {
+      "id": "N1-frammenti",
+      "title": "Note frammentarie dopo una call",
+      "projects": [
+        {
+          "key": "officina",
+          "name": "Prenotazioni officina Rossi Auto",
+          "messages": [
+            "Appunti veloci dopo la call con Rossi Auto. Vogliono un portale per prenotare gli interventi in officina: il cliente sceglie il tipo di intervento (tagliando, gomme, revisione) e vede gli slot liberi.",
+            "Slot da 30 minuti. L'officina ha 4 ponti, quindi massimo 4 interventi in parallelo. Al cliente arriva una conferma via email e un promemoria il giorno prima.",
+            "Accessi: il cliente si registra con email e password, niente login con i social. L'operatore dell'officina vede l'agenda del giorno e può spostare o annullare un appuntamento.",
+            "Pagamenti online no: si paga in sede, il portale non li gestisce. Deve funzionare bene da smartphone, perché i clienti prenotano dal telefono.",
+            "Integrazione con OffiGest, il gestionale dell'officina: serve solo leggere l'anagrafica clienti, in sola lettura. Vorrebbero andare online prima della stagione delle gomme invernali, a metà ottobre."
+          ],
+          "facts": [
+            {
+              "key": "goal",
+              "section": "goals",
+              "accept": [
+                "goals",
+                "overview"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "portale",
+                "prenot"
+              ]
+            },
+            {
+              "key": "tipi",
+              "section": "requirements",
+              "accept": [
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "tagliando",
+                "gomme",
+                "revisione"
+              ]
+            },
+            {
+              "key": "slot-liberi",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows",
+                "included"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "slot.*(liber|disponibil)|(liber|disponibil).*slot"
+              ]
+            },
+            {
+              "key": "slot-30",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "30 ?min"
+              ]
+            },
+            {
+              "key": "ponti-4",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "\\b(4|quattro)\\b",
+                "ponti|paralle"
+              ]
+            },
+            {
+              "key": "conferma-email",
+              "section": "requirements",
+              "accept": [
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "conferma",
+                "email"
+              ]
+            },
+            {
+              "key": "promemoria",
+              "section": "requirements",
+              "accept": [
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "promemoria"
+              ]
+            },
+            {
+              "key": "registrazione",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "registr",
+                "email",
+                "password"
+              ]
+            },
+            {
+              "key": "no-social",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "social"
+              ]
+            },
+            {
+              "key": "agenda",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "agenda"
+              ]
+            },
+            {
+              "key": "sposta",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "sposta",
+                "annull"
+              ]
+            },
+            {
+              "key": "no-pagamenti",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "pagament"
+              ]
+            },
+            {
+              "key": "mobile",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "smartphone|telefono|mobile"
+              ]
+            },
+            {
+              "key": "offigest",
+              "section": "dependencies",
+              "accept": [
+                "dependencies",
+                "requirements",
+                "included"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "offigest",
+                "anagrafica"
+              ]
+            },
+            {
+              "key": "ottobre",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "goals"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "ottobre"
+              ]
+            }
+          ],
+          "conflicts": [],
+          "forbids": [
+            {
+              "key": "social",
+              "pattern": "social",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "pagamenti",
+              "pattern": "pagament",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "canali-inventati",
+              "pattern": "\\b(sms|whatsapp|push)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            },
+            {
+              "key": "tecnologie-inventate",
+              "pattern": "\\b(react|angular|java|python|postgres\\w*|sql|aws|azure)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            }
+          ],
+          "correction": {
+            "editKey": "slot-30",
+            "editedText": "Ogni slot di prenotazione dura 30 minuti",
+            "additions": [
+              {
+                "key": "pm-annulla",
+                "section": "constraints",
+                "text": "Il cliente può annullare la propria prenotazione fino a 24 ore prima",
+                "match": [
+                  "annull",
+                  "24"
+                ]
+              },
+              {
+                "key": "pm-browser",
+                "section": "assumptions",
+                "text": "Si assume che i clienti usino un browser aggiornato su smartphone",
+                "match": [
+                  "browser"
+                ]
+              }
+            ],
+            "resolve": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "N2-negazioni",
+      "title": "Esclusioni e negazioni esplicite",
+      "projects": [
+        {
+          "key": "ferie",
+          "name": "Gestione ferie e permessi",
+          "messages": [
+            "Dobbiamo sostituire il foglio Excel con cui l'ufficio personale gestisce ferie e permessi di circa 120 dipendenti: il dipendente invia la richiesta e il suo responsabile la approva o la rifiuta.",
+            "Attenzione: il portale NON calcola le buste paga né i ratei di ferie maturati, quello resta nel software paghe. Anche le trasferte restano fuori.",
+            "Le richieste le approva solo il responsabile diretto, non l'ufficio personale. L'ufficio personale non approva niente, vede soltanto il riepilogo.",
+            "Non serve un'app mobile nativa: basta che il sito si usi bene da telefono. E niente notifiche push, solo email.",
+            "Le assenze per malattia non si gestiscono qui, il certificato resta fuori dal sistema. Le ferie vanno richieste con almeno 5 giorni lavorativi di anticipo, salvo urgenze che decide il responsabile."
+          ],
+          "facts": [
+            {
+              "key": "goal",
+              "section": "goals",
+              "accept": [
+                "goals",
+                "overview"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "excel",
+                "ferie"
+              ]
+            },
+            {
+              "key": "richiesta",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "richiest",
+                "approva",
+                "rifiut"
+              ]
+            },
+            {
+              "key": "dipendenti",
+              "section": "overview",
+              "accept": [
+                "overview",
+                "constraints",
+                "requirements",
+                "included"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "120"
+              ]
+            },
+            {
+              "key": "no-paghe",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "buste paga|paghe"
+              ]
+            },
+            {
+              "key": "no-ratei",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "ratei"
+              ]
+            },
+            {
+              "key": "no-trasferte",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "trasfert"
+              ]
+            },
+            {
+              "key": "solo-responsabile",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "responsabile diretto"
+              ]
+            },
+            {
+              "key": "ufficio-riepilogo",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints",
+                "included"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "ufficio personale",
+                "riepilogo"
+              ]
+            },
+            {
+              "key": "no-app",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "\\bapp\\b",
+                "nativ|mobile"
+              ]
+            },
+            {
+              "key": "sito-mobile",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "telefono|mobile|smartphone"
+              ]
+            },
+            {
+              "key": "no-push",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "push"
+              ]
+            },
+            {
+              "key": "solo-email",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "notific",
+                "email"
+              ]
+            },
+            {
+              "key": "no-malattia",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "malattia"
+              ]
+            },
+            {
+              "key": "anticipo",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "\\b(5|cinque)\\b",
+                "giorni",
+                "anticip"
+              ]
+            },
+            {
+              "key": "urgenze",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "urgen"
+              ]
+            }
+          ],
+          "conflicts": [],
+          "forbids": [
+            {
+              "key": "paghe",
+              "pattern": "buste paga|paghe",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "ratei",
+              "pattern": "ratei",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "trasferte",
+              "pattern": "trasfert",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "nativa",
+              "pattern": "nativ",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "push",
+              "pattern": "\\bpush\\b",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "malattia",
+              "pattern": "malattia",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "ufficio-approva",
+              "pattern": "ufficio personale.{0,30}approv",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "sms-inventato",
+              "pattern": "\\b(sms|whatsapp)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            }
+          ],
+          "correction": {
+            "editKey": "solo-responsabile",
+            "editedText": "Le richieste di ferie e permessi sono approvate esclusivamente dal responsabile diretto del dipendente",
+            "additions": [
+              {
+                "key": "pm-annulla",
+                "section": "requirements",
+                "text": "Il dipendente può annullare una richiesta non ancora approvata",
+                "match": [
+                  "annull",
+                  "non ancora approvat"
+                ]
+              },
+              {
+                "key": "pm-censito",
+                "section": "assumptions",
+                "text": "Si assume che ogni dipendente abbia un responsabile diretto censito",
+                "match": [
+                  "responsabile diretto",
+                  "censit"
+                ]
+              }
+            ],
+            "resolve": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "N3-lacune",
+      "title": "Informazioni mancanti dichiarate dal PM",
+      "projects": [
+        {
+          "key": "magazzino",
+          "name": "Magazzino ricambi",
+          "messages": [
+            "Progetto: gestire le scorte del magazzino ricambi con un lettore di codici a barre. Lo usano i magazzinieri per registrare carichi e scarichi.",
+            "Non so ancora quanti magazzini siano: forse uno solo a Brescia, forse due con quello di Verona. Lo chiarisco con il direttore operativo la prossima settimana.",
+            "L'anagrafica dei ricambi esiste già nel gestionale, ma non so in che formato si possa esportare. Devo chiederlo al fornitore del gestionale.",
+            "Quando la giacenza di un articolo scende sotto il minimo, l'app deve segnalarlo. I valori minimi per articolo però non li ho ancora: li deve dare il responsabile acquisti.",
+            "Budget e data di consegna: per ora nessuna informazione. L'unica cosa certa è che ogni scarico deve richiedere sempre il codice commessa."
+          ],
+          "facts": [
+            {
+              "key": "goal",
+              "section": "goals",
+              "accept": [
+                "goals",
+                "overview"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "scort",
+                "ricambi"
+              ]
+            },
+            {
+              "key": "barcode",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "barre",
+                "scaric"
+              ]
+            },
+            {
+              "key": "gap-magazzini",
+              "section": "questions",
+              "accept": [
+                "questions",
+                "assumptions"
+              ],
+              "declared": false,
+              "from": [
+                2
+              ],
+              "match": [
+                "magazzin",
+                "quanti|numer|uno|due"
+              ]
+            },
+            {
+              "key": "anagrafica",
+              "section": "dependencies",
+              "accept": [
+                "dependencies",
+                "overview",
+                "included",
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "anagrafica",
+                "gestionale"
+              ]
+            },
+            {
+              "key": "gap-formato",
+              "section": "questions",
+              "accept": [
+                "questions",
+                "assumptions"
+              ],
+              "declared": false,
+              "from": [
+                3
+              ],
+              "match": [
+                "formato"
+              ]
+            },
+            {
+              "key": "soglia",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "giacenza",
+                "minim"
+              ]
+            },
+            {
+              "key": "gap-minimi",
+              "section": "questions",
+              "accept": [
+                "questions",
+                "assumptions"
+              ],
+              "declared": false,
+              "from": [
+                4
+              ],
+              "match": [
+                "minim",
+                "acquist"
+              ]
+            },
+            {
+              "key": "gap-budget",
+              "section": "questions",
+              "accept": [
+                "questions",
+                "assumptions"
+              ],
+              "declared": false,
+              "from": [
+                5
+              ],
+              "match": [
+                "budget"
+              ]
+            },
+            {
+              "key": "commessa",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "scaric",
+                "commessa"
+              ]
+            }
+          ],
+          "conflicts": [],
+          "forbids": [
+            {
+              "key": "magazzini-inventati",
+              "pattern": "(un solo|uno solo|due|2|tre|3) magazzin",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "sedi-decise",
+              "pattern": "brescia|verona",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "formato-inventato",
+              "pattern": "\\b(csv|xml|json|rest|sql|excel)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            },
+            {
+              "key": "importi-inventati",
+              "pattern": "€|\\beuro\\b|\\b\\d+ ?(k|mila)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            },
+            {
+              "key": "tecnologie-inventate",
+              "pattern": "\\b(java|python|angular|react|azure|aws)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            },
+            {
+              "key": "date-inventate",
+              "pattern": "\\b(entro|a|per) (gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            }
+          ],
+          "correction": {
+            "editKey": "commessa",
+            "editedText": "Ogni scarico richiede obbligatoriamente il codice commessa",
+            "additions": [
+              {
+                "key": "pm-usb",
+                "section": "constraints",
+                "text": "Il lettore di codici a barre è collegato via USB alla postazione",
+                "match": [
+                  "usb"
+                ]
+              },
+              {
+                "key": "pm-avvio",
+                "section": "assumptions",
+                "text": "Si assume che il formato sia noto prima dell'avvio dello sviluppo",
+                "match": [
+                  "avvio",
+                  "svilupp"
+                ]
+              }
+            ],
+            "resolve": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "N4-conflitti",
+      "title": "Affermazioni incompatibili tra reparti",
+      "projects": [
+        {
+          "key": "fornitori",
+          "name": "Portale fornitori",
+          "messages": [
+            "Portale fornitori per la qualifica e il censimento dei nuovi fornitori: il fornitore compila un questionario e carica le certificazioni (ISO 9001, DURC).",
+            "Gli acquisti dicono che la qualifica deve essere approvata entro 5 giorni lavorativi dall'invio.",
+            "Il reparto qualità invece vuole 10 giorni lavorativi, perché le certificazioni le verificano a mano. Non c'è ancora una decisione.",
+            "Sull'accesso: l'IT vuole il login con SSO aziendale per tutti. Gli acquisti dicono che i fornitori esterni devono entrare con email e password, perché non hanno account aziendali.",
+            "Una cosa è certa: i dati dei fornitori non devono uscire dall'Italia, quindi hosting in un data center italiano. I documenti caricati vanno conservati per 10 anni."
+          ],
+          "facts": [
+            {
+              "key": "goal",
+              "section": "goals",
+              "accept": [
+                "goals",
+                "overview"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "qualific",
+                "censi"
+              ]
+            },
+            {
+              "key": "questionario",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "questionario"
+              ]
+            },
+            {
+              "key": "certificazioni",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "certificazion",
+                "durc"
+              ]
+            },
+            {
+              "key": "hosting",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "ital"
+              ]
+            },
+            {
+              "key": "conservazione",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "requirements"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "\\b(10|dieci) anni"
+              ]
+            }
+          ],
+          "conflicts": [
+            {
+              "key": "tempi",
+              "altMatch": [
+                "\\b(5|cinque) giorni",
+                "\\b(10|dieci) giorni"
+              ]
+            },
+            {
+              "key": "accesso",
+              "altMatch": [
+                "\\bsso\\b",
+                "email.*password|password"
+              ]
+            }
+          ],
+          "forbids": [
+            {
+              "key": "tempi-5",
+              "pattern": "\\b(5|cinque) giorni|\\b(10|dieci) giorni",
+              "mode": "affirmed",
+              "conflictKey": "tempi"
+            },
+            {
+              "key": "accesso-scelto",
+              "pattern": "\\bsso\\b|email e password",
+              "mode": "affirmed",
+              "conflictKey": "accesso"
+            },
+            {
+              "key": "idp-inventati",
+              "pattern": "\\b(entra|okta|azure|keycloak)\\b",
+              "mode": "anywhere",
+              "conflictKey": null
+            }
+          ],
+          "correction": {
+            "editKey": "questionario",
+            "editedText": "Il fornitore compila online un questionario di qualifica",
+            "additions": [
+              {
+                "key": "pm-scadute",
+                "section": "constraints",
+                "text": "Le certificazioni scadute bloccano la qualifica",
+                "match": [
+                  "scadut"
+                ]
+              },
+              {
+                "key": "pm-pdf",
+                "section": "assumptions",
+                "text": "Si assume che le certificazioni siano caricate in formato PDF",
+                "match": [
+                  "pdf"
+                ]
+              }
+            ],
+            "resolve": {
+              "conflictKey": "tempi",
+              "alternative": 1,
+              "reason": "Decisione del responsabile qualità: servono 10 giorni lavorativi per la verifica manuale delle certificazioni",
+              "reasonMatch": "verifica manuale"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "N5-progetti-distinti",
+      "title": "Due progetti simili, decisioni opposte",
+      "projects": [
+        {
+          "key": "aurora",
+          "name": "Aurora assistenza tecnica",
+          "messages": [
+            "Progetto Aurora: portale clienti per l'assistenza tecnica di Meccanica Verdi. I clienti aprono ticket e ne vedono lo stato.",
+            "Notifiche solo via email: gli SMS sono esclusi dal primo rilascio.",
+            "Integrazione con il gestionale: esclusa per ora, i ticket restano solo nel portale. Non so ancora se servirà più avanti.",
+            "Accesso con email e password, un utente per ogni azienda cliente.",
+            "Gli agenti vedono tutti i ticket, mentre ogni cliente vede solo i propri. Messa online a giugno."
+          ],
+          "facts": [
+            {
+              "key": "goal",
+              "section": "goals",
+              "accept": [
+                "goals",
+                "overview"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "portale",
+                "assistenza"
+              ]
+            },
+            {
+              "key": "ticket",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "ticket",
+                "stato"
+              ]
+            },
+            {
+              "key": "solo-email",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "notific",
+                "email"
+              ]
+            },
+            {
+              "key": "no-sms",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "sms"
+              ]
+            },
+            {
+              "key": "no-integrazione",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "integrazion",
+                "gestionale"
+              ]
+            },
+            {
+              "key": "gap-futuro",
+              "section": "questions",
+              "accept": [
+                "questions",
+                "assumptions"
+              ],
+              "declared": false,
+              "from": [
+                3
+              ],
+              "match": [
+                "integrazion|gestionale",
+                "futur|avanti|serv"
+              ]
+            },
+            {
+              "key": "login",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "email",
+                "password"
+              ]
+            },
+            {
+              "key": "ruoli",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "agenti",
+                "propri"
+              ]
+            },
+            {
+              "key": "giugno",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "goals"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "giugno"
+              ]
+            }
+          ],
+          "conflicts": [],
+          "forbids": [
+            {
+              "key": "sms",
+              "pattern": "\\bsms\\b",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "integrazione",
+              "pattern": "integrazion.{0,40}gestionale|gestionale.{0,40}integrazion",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "progetto-boreale",
+              "pattern": "boreale|bianchi|colorweb|ordini|spedizion|consegna|settembre|\\bsso\\b|listino",
+              "mode": "anywhere",
+              "conflictKey": null
+            }
+          ],
+          "correction": {
+            "editKey": "login",
+            "editedText": "Accesso con email e password, con un utente per ogni azienda cliente",
+            "additions": [
+              {
+                "key": "pm-allegati",
+                "section": "requirements",
+                "text": "Il cliente può allegare un file a un ticket",
+                "match": [
+                  "allegar"
+                ]
+              },
+              {
+                "key": "pm-referente",
+                "section": "assumptions",
+                "text": "Si assume che ogni azienda cliente abbia un referente",
+                "match": [
+                  "referente"
+                ]
+              }
+            ],
+            "resolve": null
+          }
+        },
+        {
+          "key": "boreale",
+          "name": "Boreale ordini clienti",
+          "messages": [
+            "Progetto Boreale: portale clienti per gli ordini del Colorificio Bianchi. I clienti inseriscono gli ordini e ne seguono la spedizione.",
+            "Notifiche via SMS e via email, sceglie il cliente. Gli SMS servono per l'avviso di consegna.",
+            "Integrazione con il gestionale ordini Colorweb: obbligatoria, gli ordini devono arrivare in tempo reale al gestionale.",
+            "Accesso con SSO aziendale del cliente, niente password locali.",
+            "I clienti vedono solo i propri ordini. Messa online a settembre. Il listino prezzi è gestito altrove e non entra nel portale."
+          ],
+          "facts": [
+            {
+              "key": "goal",
+              "section": "goals",
+              "accept": [
+                "goals",
+                "overview"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "portale",
+                "ordini"
+              ]
+            },
+            {
+              "key": "ordini",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                1
+              ],
+              "match": [
+                "ordini",
+                "spedizion"
+              ]
+            },
+            {
+              "key": "notifiche",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "sms",
+                "email"
+              ]
+            },
+            {
+              "key": "sms-consegna",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                2
+              ],
+              "match": [
+                "sms",
+                "consegna"
+              ]
+            },
+            {
+              "key": "integrazione",
+              "section": "dependencies",
+              "accept": [
+                "dependencies",
+                "requirements",
+                "included"
+              ],
+              "declared": true,
+              "from": [
+                3
+              ],
+              "match": [
+                "colorweb",
+                "tempo reale"
+              ]
+            },
+            {
+              "key": "sso",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints",
+                "flows"
+              ],
+              "declared": true,
+              "from": [
+                4
+              ],
+              "match": [
+                "\\bsso\\b"
+              ]
+            },
+            {
+              "key": "propri",
+              "section": "requirements",
+              "accept": [
+                "requirements",
+                "constraints"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "propri",
+                "ordini"
+              ]
+            },
+            {
+              "key": "settembre",
+              "section": "constraints",
+              "accept": [
+                "constraints",
+                "goals"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "settembre"
+              ]
+            },
+            {
+              "key": "no-listino",
+              "section": "excluded",
+              "accept": [
+                "excluded"
+              ],
+              "declared": true,
+              "from": [
+                5
+              ],
+              "match": [
+                "listino"
+              ]
+            }
+          ],
+          "conflicts": [],
+          "forbids": [
+            {
+              "key": "listino",
+              "pattern": "listino",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "password-locali",
+              "pattern": "password",
+              "mode": "affirmed",
+              "conflictKey": null
+            },
+            {
+              "key": "progetto-aurora",
+              "pattern": "aurora|verdi|ticket|assistenza|giugno|agenti",
+              "mode": "anywhere",
+              "conflictKey": null
+            }
+          ],
+          "correction": {
+            "editKey": "propri",
+            "editedText": "I clienti vedono esclusivamente i propri ordini",
+            "additions": [
+              {
+                "key": "pm-storico",
+                "section": "requirements",
+                "text": "Il cliente consulta lo storico dei propri ordini",
+                "match": [
+                  "storico"
+                ]
+              },
+              {
+                "key": "pm-sso",
+                "section": "assumptions",
+                "text": "Si assume che ogni cliente disponga dell'SSO aziendale",
+                "match": [
+                  "dispong",
+                  "sso"
+                ]
+              }
+            ],
+            "resolve": null
+          }
+        }
+      ]
+    }
+  ]
+}
