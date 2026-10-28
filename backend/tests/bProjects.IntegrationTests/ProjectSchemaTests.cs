@@ -169,6 +169,46 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
         }
     }
 
+    [Fact]
+    public async Task Database_enforces_append_only_unique_and_role_rules_on_messages()
+    {
+        TestEnvironment.RequirePostgres();
+        var user = (await Query("SELECT \"Id\"::text FROM \"AspNetUsers\" LIMIT 1", database.ConnectionString)).Single();
+        var project = Guid.NewGuid();
+        var conversation = Guid.NewGuid();
+        var message = Guid.NewGuid();
+        var connectionString = database.ConnectionString;
+
+        await Execute($"""
+            INSERT INTO "Projects" ("Id","Name","CreatedBy","CreatedAt") VALUES ('{project}','Vincoli','{user}', now());
+            INSERT INTO "Conversations" ("Id","ProjectId","CreatedAt","LastSequence","MafVersion","ContextThroughSequence","ChatSessionRevision")
+                VALUES ('{conversation}','{project}', now(), 0, '1.26.0', 0, 0);
+            INSERT INTO "ConversationMessages" ("Id","ConversationId","Sequence","Role","Body","CreatedAt","ClientMessageId","AuthorId")
+                VALUES ('{message}','{conversation}', 1, 'User', 'originale', now(), '{Guid.NewGuid()}', '{user}');
+            """, connectionString);
+
+        string UserMessage(long sequence, string clientId, string body = "x") =>
+            $"INSERT INTO \"ConversationMessages\" (\"Id\",\"ConversationId\",\"Sequence\",\"Role\",\"Body\",\"CreatedAt\",\"ClientMessageId\",\"AuthorId\") VALUES ('{Guid.NewGuid()}','{conversation}',{sequence},'User','{body}',now(),'{clientId}','{user}')";
+
+        // originali append-only
+        Assert.Equal("23001", (await Assert.ThrowsAsync<PostgresException>(() => Execute($"UPDATE \"ConversationMessages\" SET \"Body\" = 'modificato' WHERE \"Id\" = '{message}'", connectionString))).SqlState);
+        Assert.Equal("23001", (await Assert.ThrowsAsync<PostgresException>(() => Execute($"DELETE FROM \"ConversationMessages\" WHERE \"Id\" = '{message}'", connectionString))).SqlState);
+        // unicità (ConversationId, Sequence) e (ConversationId, ClientMessageId)
+        Assert.Equal("23505", (await Assert.ThrowsAsync<PostgresException>(() => Execute(UserMessage(1, Guid.NewGuid().ToString()), connectionString))).SqlState);
+        var reused = Guid.NewGuid().ToString();
+        await Execute(UserMessage(2, reused), connectionString);
+        Assert.Equal("23505", (await Assert.ThrowsAsync<PostgresException>(() => Execute(UserMessage(3, reused), connectionString))).SqlState);
+        // testo non whitespace e campi coerenti col ruolo
+        Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => Execute(UserMessage(4, Guid.NewGuid().ToString(), body: "  "), connectionString))).SqlState);
+        Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => Execute(
+            $"INSERT INTO \"ConversationMessages\" (\"Id\",\"ConversationId\",\"Sequence\",\"Role\",\"Body\",\"CreatedAt\") VALUES ('{Guid.NewGuid()}','{conversation}',5,'User','senza autore',now())", connectionString))).SqlState);
+        // una sola conversazione per progetto; nome progetto non whitespace
+        Assert.Equal("23505", (await Assert.ThrowsAsync<PostgresException>(() => Execute(
+            $"INSERT INTO \"Conversations\" (\"Id\",\"ProjectId\",\"CreatedAt\",\"LastSequence\",\"MafVersion\",\"ContextThroughSequence\",\"ChatSessionRevision\") VALUES ('{Guid.NewGuid()}','{project}',now(),0,'1.26.0',0,0)", connectionString))).SqlState);
+        Assert.Equal("23514", (await Assert.ThrowsAsync<PostgresException>(() => Execute(
+            $"INSERT INTO \"Projects\" (\"Id\",\"Name\",\"CreatedBy\",\"CreatedAt\") VALUES ('{Guid.NewGuid()}','   ','{user}',now())", connectionString))).SqlState);
+    }
+
     private static Task Bootstrap(ApiHarness harness) =>
         bProjects.App.Identity.AccountBootstrap.RunAsync(harness.Services, harness.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>());
 
