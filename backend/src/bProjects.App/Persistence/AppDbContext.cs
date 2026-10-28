@@ -90,6 +90,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             turn.Property(t => t.PromptVersion).HasMaxLength(64);
             turn.Property(t => t.AgentConfig).HasColumnType("jsonb");
             turn.HasIndex(t => t.TriggerMessageId).IsUnique();
+            // Dispatch (T014): al più un turno Running per conversazione (un solo progetto per conversazione),
+            // e un indice parziale sui soli turni aperti per la verifica FIFO del claim.
+            turn.HasIndex(t => t.ConversationId).IsUnique().HasFilter("\"Status\" = 'Running'").HasDatabaseName("IX_ChatTurns_OneRunningPerConversation");
+            turn.HasIndex(t => new { t.ConversationId, t.SourceCutoffSequence }).HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("IX_ChatTurns_Open_Fifo");
             turn.HasOne<Conversation>().WithMany().HasForeignKey(t => t.ConversationId).OnDelete(DeleteBehavior.Restrict);
             turn.HasOne<ConversationMessage>().WithMany().HasForeignKey(t => t.TriggerMessageId).OnDelete(DeleteBehavior.Restrict);
             turn.HasOne<ConversationMessage>().WithMany().HasForeignKey(t => t.ResultMessageId).OnDelete(DeleteBehavior.Restrict);

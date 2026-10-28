@@ -34,6 +34,10 @@ builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSe
 builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
 builder.Services.AddProblemDetails();
 
+// Dispatch dei ChatTurn (T014). Finché non esiste un IChatTurnExecutor (ConversationalAgent, T017) il servizio non fa nulla.
+builder.Services.AddScoped<ExecutionLeaseStore>();
+builder.Services.AddHostedService<AiDispatchService>();
+
 // Il middleware del framework registrerebbe il messaggio dell'eccezione (può contenere contenuti dei progetti):
 // il log degli errori non gestiti è quello sicuro dell'handler sotto.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", LogLevel.None);

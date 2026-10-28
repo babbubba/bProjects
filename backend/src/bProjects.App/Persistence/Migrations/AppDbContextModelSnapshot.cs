@@ -291,12 +291,19 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConversationId");
+                    b.HasIndex("ConversationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ChatTurns_OneRunningPerConversation")
+                        .HasFilter("\"Status\" = 'Running'");
 
                     b.HasIndex("ResultMessageId");
 
                     b.HasIndex("TriggerMessageId")
                         .IsUnique();
+
+                    b.HasIndex("ConversationId", "SourceCutoffSequence")
+                        .HasDatabaseName("IX_ChatTurns_Open_Fifo")
+                        .HasFilter("\"Status\" IN ('Queued', 'Running')");
 
                     b.ToTable("ChatTurns", t =>
                         {
