@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using bProjects.App.AI;
+using bProjects.App.Analysis;
 using Microsoft.Extensions.AI;
 
 namespace bProjects.IntegrationTests;
@@ -15,7 +16,6 @@ namespace bProjects.IntegrationTests;
 /// </summary>
 public sealed class AnalysisContentTests
 {
-    public const string PendingT027 = "In attesa di T026/T027: DTO e AnalysisContentValidator non esistono ancora.";
     public const string PendingT029 = "In attesa di T029: project-analysis-v2 non esiste ancora.";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -96,7 +96,7 @@ public sealed class AnalysisContentTests
 
     // ============================================================ casi nominali (validatore, T027)
 
-    [Theory(Skip = PendingT027)]
+    [Theory]
     [MemberData(nameof(Modes))]
     public async Task Nominal_ai_output_is_accepted_in_both_output_modes(StructuredOutputMode mode)
     {
@@ -111,7 +111,7 @@ public sealed class AnalysisContentTests
         }
     }
 
-    [Fact(Skip = PendingT027)]
+    [Fact]
     public void Ai_output_may_hold_assistant_context_inference_assumptions_and_open_conflicts()
     {
         var world = AnalysisFixtures.World();
@@ -123,7 +123,7 @@ public sealed class AnalysisContentTests
         Assert.True(AnalysisGateway.Validate(content, world.Trusted, AnalysisActor.Ai).Accepted);
     }
 
-    [Fact(Skip = PendingT027)]
+    [Fact]
     public void A_pm_edit_adds_a_pm_revision_source_and_the_pm_may_resolve_a_conflict_with_a_reason()
     {
         var world = AnalysisFixtures.World();
@@ -132,7 +132,7 @@ public sealed class AnalysisContentTests
         Assert.True(AnalysisGateway.Validate(AnalysisFixtures.PmResolvesConflict(world), world.Trusted, AnalysisActor.PmEdit).Accepted);
     }
 
-    [Fact(Skip = PendingT027)]
+    [Fact]
     public void Confirm_may_only_change_the_validation_state_and_is_allowed_with_open_conflicts()
     {
         var world = AnalysisFixtures.World();
@@ -143,7 +143,7 @@ public sealed class AnalysisContentTests
 
     // ============================================================ fallimenti (validatore, T027)
 
-    [Theory(Skip = PendingT027)]
+    [Theory]
     [MemberData(nameof(AiInvalidCasesByMode))]
     public async Task Invalid_ai_output_is_rejected_identically_in_both_modes_without_repair(StructuredOutputMode mode, string name)
     {
@@ -158,7 +158,7 @@ public sealed class AnalysisContentTests
         Assert.Null(outcome.Repaired); // nessuna riparazione AI: né ritocco né nuovo tentativo di correzione
     }
 
-    [Theory(Skip = PendingT027)]
+    [Theory]
     [MemberData(nameof(PmEditInvalidCases))]
     public void Invalid_pm_edits_are_rejected_with_preview_invalid(string name)
     {
@@ -171,7 +171,7 @@ public sealed class AnalysisContentTests
         Assert.Equal("preview_invalid", outcome.Code);
     }
 
-    [Fact(Skip = PendingT027)]
+    [Fact]
     public void Pm_privileges_are_not_the_ai_privileges_for_the_same_content()
     {
         var world = AnalysisFixtures.World();
@@ -182,7 +182,7 @@ public sealed class AnalysisContentTests
         Assert.False(AnalysisGateway.Validate(resolved, world.Trusted, AnalysisActor.Ai).Accepted);
     }
 
-    [Fact(Skip = PendingT027)]
+    [Fact]
     public void Confirm_rejects_any_change_beyond_the_validation_state()
     {
         var world = AnalysisFixtures.World();
@@ -195,7 +195,7 @@ public sealed class AnalysisContentTests
 
     // ============================================================ nessun Markdown, solo JSON (T027/T029)
 
-    [Theory(Skip = PendingT027)]
+    [Theory]
     [MemberData(nameof(Modes))]
     public async Task Output_that_is_not_pure_json_is_rejected_in_both_modes(StructuredOutputMode mode)
     {
@@ -211,7 +211,7 @@ public sealed class AnalysisContentTests
         }
     }
 
-    [Fact(Skip = PendingT027)]
+    [Fact]
     public async Task A_markdown_property_is_not_part_of_the_content_and_is_rejected()
     {
         var world = AnalysisFixtures.World();
@@ -315,11 +315,31 @@ internal static class AnalysisGateway
 {
     /// <summary>Validazione tipizzata e semantica; <paramref name="current"/> è la revisione corrente per la conferma.</summary>
     public static AnalysisOutcome Validate(JsonObject content, TrustedInput trusted, AnalysisActor actor, JsonObject? current = null) =>
-        throw new NotImplementedException(AnalysisContentTests.PendingT027);
+        ToOutcome(AnalysisContentValidator.ValidateText(content.ToJsonString(), ToContext(trusted), ToKind(actor), current?.ToJsonString()));
 
     /// <summary>Testo del modello → JSON → validazione, secondo la modalità; mai riparazione dell'output.</summary>
-    public static Task<AnalysisOutcome> ProcessModelOutputAsync(StructuredOutputMode mode, string modelText, TrustedInput trusted, CancellationToken ct) =>
-        throw new NotImplementedException(AnalysisContentTests.PendingT027);
+    public static Task<AnalysisOutcome> ProcessModelOutputAsync(StructuredOutputMode mode, string modelText, TrustedInput trusted, CancellationToken ct)
+    {
+        // Le due modalità differiscono solo nella richiesta al modello: il verdetto sul testo è lo stesso.
+        Assert.True(Enum.IsDefined(mode));
+        return Task.FromResult(ToOutcome(AnalysisContentValidator.ValidateText(modelText, ToContext(trusted), AnalysisActorKind.Ai)));
+    }
+
+    private static AnalysisActorKind ToKind(AnalysisActor actor) => actor switch
+    {
+        AnalysisActor.Ai => AnalysisActorKind.Ai,
+        AnalysisActor.PmEdit => AnalysisActorKind.PmEdit,
+        _ => AnalysisActorKind.PmConfirm,
+    };
+
+    private static AnalysisValidationContext ToContext(TrustedInput trusted) => new(
+        trusted.ProjectId,
+        trusted.AnalysisId,
+        trusted.Cutoff,
+        [.. trusted.Messages.Select(m => new AnalysisMessageRef(m.Id, m.ProjectId, m.Role == "user" ? AnalysisMessageRole.User : AnalysisMessageRole.Assistant, m.Sequence))],
+        trusted.PmRevisionIds);
+
+    private static AnalysisOutcome ToOutcome(AnalysisValidationResult result) => new(result.Accepted, result.Code, result.Violations, null);
 
     /// <summary>Esegue la fase di consolidamento con il client dato e valida il risultato come farà il workflow.</summary>
     public static Task<AnalysisOutcome> RunAnalysisAsync(IChatClient model, StructuredOutputMode mode, TrustedInput trusted, CancellationToken ct) =>
