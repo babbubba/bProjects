@@ -693,16 +693,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
 
         var run = await Json(await Generate(client, s, Guid.NewGuid(), s.Revision));
         Assert.True(await Dispatcher(new DocumentModel()).RunOnceAsync(Ct));
-        await Task.Delay(300, Ct); // le notifiche di fase sono effimere e non bloccano il grafo
-
-        var states = new List<JsonElement>();
-        while (subscription.Reader.TryRead(out var evt))
-        {
-            if (evt.Name == ProjectEventHub.ProcessingState)
-            {
-                states.Add(JsonDocument.Parse(evt.Data).RootElement.Clone());
-            }
-        }
+        var states = await ProcessingStateEvents.UntilTerminalAsync(subscription, Ct); // attende il terminale, nessuno sleep
 
         Assert.Equal("Queued", states[0].GetProperty("status").GetString()); // alla richiesta, post-commit
         Assert.Equal("Document", states[0].GetProperty("kind").GetString());

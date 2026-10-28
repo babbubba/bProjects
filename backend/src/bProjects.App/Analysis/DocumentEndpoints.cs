@@ -170,7 +170,7 @@ public static class DocumentEndpoints
             await transaction.CommitAsync(ct);
             runId = run.Id;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_ProcessingRuns_OneActivePerProject" })
         {
             // Un altro comando formale ha vinto la gara sull'indice «uno attivo per progetto»: stessa risposta del controllo esplicito.
             return Problem(StatusCodes.Status409Conflict, "Un'elaborazione formale è già attiva", "processing_active", await ActiveRunAsync(db, projectId, ct));

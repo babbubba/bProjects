@@ -12,7 +12,9 @@ namespace bProjects.App.Conversations;
 public sealed class ChatTurnEvents(ProjectEventHub hub, IServiceScopeFactory scopes, ILogger<ChatTurnEvents> logger)
 {
     /// <summary>Pubblica chat.state con la vista corrente del turno (da chiamare dopo il commit della transizione).</summary>
-    public async Task PublishStateAsync(Guid turnId)
+    private readonly KeyedSerializer<Guid> _serializer = new();
+
+    public Task PublishStateAsync(Guid turnId) => _serializer.RunAsync(turnId, async () =>
     {
         try
         {
@@ -32,7 +34,7 @@ public sealed class ChatTurnEvents(ProjectEventHub hub, IServiceScopeFactory sco
         {
             logger.LogWarning("Notifica chat.state non pubblicata: {ExceptionType}", ex.GetType().Name);
         }
-    }
+    });
 
     /// <summary>
     /// Sink dei delta di testo di un tentativo (deltaIndex da 0). Ogni delta verifica owner/fencing/lease sul database:

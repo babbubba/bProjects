@@ -72,7 +72,7 @@ public sealed class AnalysisDispatchTests : IAsyncLifetime
         using var subscription = App.Services.GetRequiredService<ProjectEventHub>().Subscribe(project);
 
         Assert.True(await Dispatcher(new ReplyModel()).RunOnceAsync(Ct));
-        await Task.Delay(300, Ct); // le notifiche di fase sono effimere e non bloccano il grafo
+        var states = await ProcessingStateEvents.UntilTerminalAsync(subscription, Ct); // attende il terminale, nessuno sleep
 
         var done = await Json(await client.GetAsync($"/api/projects/{project}/processing-runs/{runId}", Ct));
         Assert.Equal("Completed", done.GetProperty("status").GetString());
@@ -127,17 +127,6 @@ public sealed class AnalysisDispatchTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/projects/{project}/analyses/{runId}/revisions/xyz", Ct)).StatusCode);
 
         // processing.state: Queued (alla richiesta, prima della sottoscrizione = assente), poi Running, poi Completed con le sole fasi reali.
-        var states = new List<JsonElement>();
-        while (subscription.Reader.TryRead(out var evt))
-        {
-            if (evt.Name != ProjectEventHub.ProcessingState)
-            {
-                continue; // chat.state della nota PM postata sopra
-            }
-
-            states.Add(JsonDocument.Parse(evt.Data).RootElement.Clone());
-        }
-
         Assert.Equal("Running", states[0].GetProperty("status").GetString());
         Assert.Equal("Completed", states[^1].GetProperty("status").GetString());
         Assert.Equal(revisionId, states[^1].GetProperty("resultRevisionId").GetGuid());

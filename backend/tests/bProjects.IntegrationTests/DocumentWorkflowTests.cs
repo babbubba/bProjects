@@ -341,6 +341,59 @@ public sealed class DocumentWorkflowTests : IAsyncLifetime
         Assert.False(DocumentDraftValidator.Validate($"# Titolo [fonte:{cited}] [x](javascript:alert(1))", context).Accepted);
     }
 
+    [Theory]
+    [InlineData("![x][r]\n\n[r]: https://evil.test/p.png")]
+    [InlineData("![x]\n\n[x]: https://evil.test/p.png")]
+    [InlineData("![a [b]](https://evil.test/p.png)")]
+    [InlineData("![a](https://evil.test/p.png)")]
+    [InlineData("! [a](https://evil.test/p.png)")]
+    [InlineData("[click][r]\n\n[r]: javascript:alert(1)")]
+    [InlineData("[click]\n\n[click]: JaVaScRiPt:alert(1)")]
+    [InlineData("[click][r]\n\n   [r]: <data:text/html;base64,PHNjcmlwdD4=>")]
+    [InlineData("[click][r]\n\n[r]:\n  vbscript:msgbox(1)")]
+    [InlineData("[a [b]](javascript:alert(1))")]
+    [InlineData("[a](  JAVASCRIPT:alert(1))")]
+    [InlineData("[a](<javascript:alert(1)>)")]
+    [InlineData("[a](java\tscript:alert(1))")]
+    [InlineData("[a](&#106;avascript:alert(1))")]
+    [InlineData("[a](&#x6A;avascript:alert(1))")]
+    [InlineData("[a](javascript&colon;alert(1))")]
+    [InlineData("[a](%6Aavascript:alert(1))")]
+    [InlineData("[a](data:text/html,x)")]
+    [InlineData("Vedi <javascript:alert(1)>")]
+    [InlineData("Vedi <data:text/html;base64,AAAA>")]
+    [InlineData("Vedi <VBScript:msgbox(1)>")]
+    [InlineData("Vedi <a href=\"https://x.test\">x</a>")]
+    public void The_validator_rejects_reference_style_images_script_schemes_and_encoded_variants(string body)
+    {
+        var cited = Guid.NewGuid();
+        var context = new DocumentValidationContext(new HashSet<Guid> { cited });
+        Assert.False(DocumentDraftValidator.Validate($"# Titolo [fonte:{cited}]\n\n{body}", context).Accepted, body);
+    }
+
+    [Fact]
+    public void The_validator_still_accepts_ordinary_markdown_with_http_links_tables_and_source_markers()
+    {
+        var cited = Guid.NewGuid();
+        var context = new DocumentValidationContext(new HashSet<Guid> { cited });
+        var markdown = $"""
+            # Titolo
+
+            - elemento con [link](https://example.test/doc?a=1&b=2) e [relativo](/percorso) e [ancora](#sezione)
+            - altro [fonte:{cited}] molto importante![fonte:{cited}]
+
+            | a | b |
+            |---|---|
+            | 1 | 2 |
+
+            Vedi <https://example.test/auto> e [rif][r].
+
+            [r]: https://example.test/rif "Titolo"
+            """;
+        var result = DocumentDraftValidator.Validate(markdown, context);
+        Assert.True(result.Accepted, string.Join("; ", result.Violations));
+    }
+
     // ---------------------------------------------------------------- supporto
 
     private sealed record Seeded(Guid ProjectId, Guid AnalysisId, Guid Revision, JsonObject Content, DocumentRunClaim Claim);

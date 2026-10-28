@@ -179,7 +179,7 @@ public static class AnalysisEndpoints
             await transaction.CommitAsync(ct);
             runId = run.Id;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_ProcessingRuns_OneActivePerProject" })
         {
             // Un altro comando formale ha vinto la gara sull'indice «uno attivo per progetto»: stessa risposta del controllo esplicito.
             var other = await db.ProcessingRuns.AsNoTracking()
@@ -385,7 +385,10 @@ public static class AnalysisEndpoints
 /// </summary>
 public sealed class ProcessingRunEvents(ProjectEventHub hub, IServiceScopeFactory scopes, ILogger<ProcessingRunEvents> logger)
 {
-    public async Task PublishStateAsync(Guid runId)
+    private readonly KeyedSerializer<Guid> _serializer = new();
+
+    /// <summary>Lettura + pubblicazione serializzate per run: uno stato vecchio non può arrivare dopo uno più recente.</summary>
+    public Task PublishStateAsync(Guid runId) => _serializer.RunAsync(runId, async () =>
     {
         try
         {
@@ -401,5 +404,5 @@ public sealed class ProcessingRunEvents(ProjectEventHub hub, IServiceScopeFactor
         {
             logger.LogWarning("Notifica processing.state non pubblicata: {ExceptionType}", ex.GetType().Name);
         }
-    }
+    });
 }
