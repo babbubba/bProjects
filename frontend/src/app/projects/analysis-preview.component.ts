@@ -20,6 +20,7 @@ import {
   ProjectApiService,
 } from './project-api.service';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
+import type { CurrentRevision } from './document-view.component';
 
 /** Intervallo (ms) di riconciliazione del run formale attivo (fallback se SSE non arriva); 0 disattiva il polling. */
 export const ANALYSIS_POLL_MS = new InjectionToken<number>('ANALYSIS_POLL_MS', {
@@ -294,7 +295,8 @@ export class AnalysisPreviewComponent {
       view.canGenerate &&
       !this.dirty() &&
       !this.active() &&
-      !this.busy()
+      !this.busy() &&
+      !this.generationBusy()
     );
   });
   protected readonly primaryAction = computed<'save' | 'confirm' | 'generate' | null>(() => {
@@ -308,8 +310,12 @@ export class AnalysisPreviewComponent {
       new Map((this.analysis()?.content.sources ?? []).map((s, i) => [s.id, `F${i + 1}`] as const)),
   );
 
-  /** Richiesta di generazione del documento sulla revisione confermata (il collegamento al backend è T042). */
+  /** Richiesta esplicita di generazione sulla revisione confermata: il comando è eseguito dalla vista documento (T042). */
   readonly generateRequested = output<string>();
+  /** Una generazione è in invio o in corso (stato reale dalla vista documento): Genera resta disabilitato. */
+  readonly generationBusy = input(false);
+  /** Revisione corrente e conferma (null senza analisi): permette alla bozza di riconoscere revisioni più recenti. */
+  readonly viewChanged = output<CurrentRevision | null>();
 
   private idempotencyKey: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -323,6 +329,15 @@ export class AnalysisPreviewComponent {
     effect(() => {
       const id = this.projectId();
       untracked(() => void this.reset(id));
+    });
+    effect(() => {
+      const view = this.analysis();
+      const confirmed = !!view && view.validationState === 'PmConfirmed' && !this.dirty();
+      this.viewChanged.emit(
+        view
+          ? { analysisId: view.analysisId, revisionId: view.currentRevisionId, confirmed }
+          : null,
+      );
     });
     // processing.state dal flusso SSE del progetto; il polling resta il fallback e la riconciliazione.
     effect((onCleanup) => {
@@ -588,7 +603,7 @@ export class AnalysisPreviewComponent {
     }
   }
 
-  /** Richiesta di generazione: solo sulla revisione confermata; la chiamata al backend è collegata in T042. */
+  /** Richiesta di generazione: solo sulla revisione confermata; il POST è eseguito dalla vista documento. */
   protected generate(): void {
     const view = this.analysis();
     if (view && this.canGenerate()) this.generateRequested.emit(view.currentRevisionId);

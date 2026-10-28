@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
@@ -159,6 +159,33 @@ export interface AnalysisView {
   canGenerate: boolean;
 }
 
+/** DraftView del contratto HTTP: bozza Markdown proposta, mai approvata, con la revisione usata. */
+export interface DraftView {
+  id: string;
+  projectId: string;
+  processingRunId: string;
+  analysisId: string;
+  analysisRevisionId: string;
+  analysisVersion: number;
+  markdown: string;
+  createdAt: string;
+  status: string;
+  approvalStatus: string;
+  hasNewNotes: boolean;
+  hasNewRevision: boolean;
+  label: string;
+}
+
+/** RevisionView del contratto HTTP (sottoinsieme): revisione specifica con le fonti del suo contenuto. */
+export interface RevisionView {
+  analysisId: string;
+  revisionId: string;
+  version: number;
+  isCurrent: boolean;
+  content: AnalysisContent;
+  validationState: 'Unvalidated' | 'PmConfirmed';
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProjectApiService {
   private readonly http = inject(HttpClient);
@@ -266,6 +293,46 @@ export class ProjectApiService {
         `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}/preview`,
         content,
         { headers: { 'If-Match': `"${revisionId}"` } },
+      ),
+    );
+  }
+
+  /**
+   * Comando esplicito Genera documento sulla revisione confermata: la stessa Idempotency-Key ripete la richiesta
+   * senza creare un secondo run (202 run attivo, 200 replay terminale).
+   */
+  async generateDocument(
+    projectId: string,
+    analysisId: string,
+    revisionId: string,
+    idempotencyKey: string,
+  ): Promise<AnalyzeResult> {
+    const response = await firstValueFrom(
+      this.http.post<ProcessingRunView>(
+        `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}/document-generations`,
+        { revisionId },
+        { headers: { 'Idempotency-Key': idempotencyKey }, observe: 'response' },
+      ),
+    );
+    return { run: response.body!, replayed: response.status === 200 };
+  }
+
+  /** Ultima bozza riuscita; null se il progetto non ne ha ancora (404 draft_not_available). */
+  async getDraft(projectId: string): Promise<DraftView | null> {
+    try {
+      return await firstValueFrom(
+        this.http.get<DraftView>(`/api/projects/${encodeURIComponent(projectId)}/draft`),
+      );
+    } catch (e) {
+      if (e instanceof HttpErrorResponse && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  getRevision(projectId: string, analysisId: string, version: number): Promise<RevisionView> {
+    return firstValueFrom(
+      this.http.get<RevisionView>(
+        `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}/revisions/${version}`,
       ),
     );
   }

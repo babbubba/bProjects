@@ -13,7 +13,7 @@
     }
     @for (message of messages(); track message.id) {
       @if (message.role === 'user') {
-        <article class="msg msg-user" data-role="user">
+        <article class="msg msg-user" data-role="user" [id]="'message-' + message.id">
           <header>
             <strong>{{ message.authorDisplayName || 'PM' }}</strong>
             <time class="text-secondary small">{{ formatTime(message.createdAt) }}</time>
@@ -38,7 +38,7 @@
           }
         </article>
       } @else {
-        <article class="msg msg-ai" data-role="assistant">
+        <article class="msg msg-ai" data-role="assistant" [id]="'message-' + message.id">
           <header>
             <strong>Assistente</strong>
             <span class="badge text-bg-warning ai-badge">AI — non validata</span>

@@ -46,3 +46,7 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+.msg[data-highlighted] {
+  outline: 3px solid var(--bs-warning, #ffc107);
+}

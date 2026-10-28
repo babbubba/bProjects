@@ -555,6 +555,16 @@ describe('AnalysisPreviewComponent', () => {
       // Nessuna chiamata di generazione né altra richiesta HTTP (verificato da http.verify in afterEach).
     });
 
+    it('Genera è disabilitato mentre una generazione è in corso e viewChanged riporta la revisione confermata', async () => {
+      const changes: unknown[] = [];
+      await open1({ validationState: 'PmConfirmed', canConfirm: false, canGenerate: true });
+      fixture.componentInstance.viewChanged.subscribe((v) => changes.push(v));
+      expect(tid('generate').disabled).toBe(false);
+      fixture.componentRef.setInput('generationBusy', true);
+      fixture.detectChanges();
+      expect(tid('generate').disabled).toBe(true);
+    });
+
     it('Genera è disabilitato se la revisione confermata non può generare', async () => {
       await open1({ validationState: 'PmConfirmed', canConfirm: false, canGenerate: false });
       expect(tid('generate').disabled).toBe(true);

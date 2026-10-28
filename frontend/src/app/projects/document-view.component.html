@@ -1,0 +1,244 @@
+<ng-template #inline let-nodes>
+  @for (n of nodes; track $index) {
+    @switch (n.t) {
+      @case ('text') {
+        <ng-container>{{ n.v }}</ng-container>
+      }
+      @case ('code') {
+        <code>{{ n.v }}</code>
+      }
+      @case ('strong') {
+        <strong><ng-container *ngTemplateOutlet="inline; context: { $implicit: n.c }" /></strong>
+      }
+      @case ('em') {
+        <em><ng-container *ngTemplateOutlet="inline; context: { $implicit: n.c }" /></em>
+      }
+      @case ('link') {
+        <a [href]="n.href" target="_blank" rel="noopener noreferrer nofollow" data-testid="md-link"
+          ><ng-container *ngTemplateOutlet="inline; context: { $implicit: n.c }"
+        /></a>
+      }
+      @case ('source') {
+        @if (sourceKnown(n.id)) {
+          <button
+            type="button"
+            class="source-chip"
+            data-testid="source-chip"
+            [attr.aria-label]="'Apri la fonte ' + sourceLabel(n.id)"
+            (click)="openSource(n.id)"
+          >
+            {{ sourceLabel(n.id) }}
+          </button>
+        } @else {
+          <span class="source-chip source-chip-unknown" data-testid="source-chip-unknown"
+            >fonte non disponibile</span
+          >
+        }
+      }
+    }
+  }
+</ng-template>
+
+<section class="document" aria-labelledby="document-title">
+  <header class="document-head">
+    <h2 id="document-title" class="h5 mb-0">Documento</h2>
+  </header>
+
+  <p class="text-secondary small mb-0">
+    La bozza è una proposta dell'AI generata solo quando premi «Genera» su un'analisi confermata. È
+    in sola lettura e non è approvata.
+  </p>
+
+  @if (loading()) {
+    <p class="text-secondary small" role="status">Caricamento della bozza…</p>
+  }
+  @if (loadError()) {
+    <div class="alert alert-warning py-2" role="alert" data-testid="draft-load-error">
+      {{ loadError() }}
+    </div>
+  }
+  @if (commandError()) {
+    <div class="alert alert-warning py-2" role="alert" data-testid="generate-error">
+      {{ commandError() }}
+      @if (generateState() === 'uncertain') {
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-dark ms-2"
+          data-testid="generate-retry"
+          (click)="retryUncertain()"
+        >
+          Verifica e riprova
+        </button>
+      }
+    </div>
+  }
+
+  @if (active()) {
+    <p class="run-state" role="status" data-testid="generation-state">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      {{ stageLabel() }}
+      @if (run()!.attemptCount > 1) {
+        <span class="text-secondary"
+          >· tentativo {{ run()!.attemptCount }} di {{ run()!.maxAttempts }}</span
+        >
+      }
+    </p>
+  }
+  @if (failed()) {
+    <div class="alert alert-danger py-2" role="alert" data-testid="generation-error">
+      <strong>Generazione non riuscita.</strong> {{ runError() }}
+      @if (draft()) {
+        <span> L'ultima bozza valida resta quella mostrata sotto.</span>
+      }
+    </div>
+  }
+
+  @if (draft(); as d) {
+    <article class="draft" data-testid="draft" aria-label="Bozza del documento">
+      <div class="draft-meta">
+        <span class="badge text-bg-warning" data-testid="draft-status"
+          >Proposta / non approvata</span
+        >
+        <span class="small text-secondary" data-testid="draft-info">
+          Basata sulla revisione {{ d.analysisVersion }} dell'analisi ·
+          {{ formatTime(d.createdAt) }}
+        </span>
+      </div>
+      <p class="small text-secondary mb-2" data-testid="draft-label">{{ d.label }}</p>
+
+      @if (stale()) {
+        <p class="alert alert-warning py-2" role="status" data-testid="stale-banner">
+          Questa bozza si basa su una vecchia revisione dell'analisi: non include le modifiche più
+          recenti. Genera di nuovo per aggiornarla.
+        </p>
+      }
+      @if (needsReconfirm()) {
+        <p class="alert alert-info py-2" role="status" data-testid="reconfirm-banner">
+          Nuova conferma richiesta: l'analisi è stata modificata, conferma la revisione prima di
+          generare una nuova bozza. La bozza qui sotto resta l'ultima disponibile.
+        </p>
+      }
+      @if (d.hasNewNotes) {
+        <p class="alert alert-info py-2" role="status" data-testid="draft-new-notes">
+          Ci sono nuove note del PM successive all'analisi da cui nasce questa bozza.
+        </p>
+      }
+
+      <div class="markdown" data-testid="markdown">
+        @for (b of blocks(); track $index) {
+          @switch (b.t) {
+            @case ('heading') {
+              @switch (b.level) {
+                @case (1) {
+                  <h3 class="h5">
+                    <ng-container *ngTemplateOutlet="inline; context: { $implicit: b.c }" />
+                  </h3>
+                }
+                @case (2) {
+                  <h4 class="h6">
+                    <ng-container *ngTemplateOutlet="inline; context: { $implicit: b.c }" />
+                  </h4>
+                }
+                @default {
+                  <h5 class="h6">
+                    <ng-container *ngTemplateOutlet="inline; context: { $implicit: b.c }" />
+                  </h5>
+                }
+              }
+            }
+            @case ('paragraph') {
+              <p><ng-container *ngTemplateOutlet="inline; context: { $implicit: b.c }" /></p>
+            }
+            @case ('quote') {
+              <blockquote>
+                <ng-container *ngTemplateOutlet="inline; context: { $implicit: b.c }" />
+              </blockquote>
+            }
+            @case ('code') {
+              <pre><code>{{ b.v }}</code></pre>
+            }
+            @case ('hr') {
+              <hr />
+            }
+            @case ('list') {
+              @if (b.ordered) {
+                <ol>
+                  @for (item of b.items; track $index) {
+                    <li [style.margin-left.rem]="item.level * 1.25">
+                      <ng-container *ngTemplateOutlet="inline; context: { $implicit: item.c }" />
+                    </li>
+                  }
+                </ol>
+              } @else {
+                <ul>
+                  @for (item of b.items; track $index) {
+                    <li [style.margin-left.rem]="item.level * 1.25">
+                      <ng-container *ngTemplateOutlet="inline; context: { $implicit: item.c }" />
+                    </li>
+                  }
+                </ul>
+              }
+            }
+            @case ('table') {
+              <div class="table-wrap">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      @for (cell of b.table.head; track $index) {
+                        <th scope="col">
+                          <ng-container *ngTemplateOutlet="inline; context: { $implicit: cell }" />
+                        </th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of b.table.rows; track $index) {
+                      <tr>
+                        @for (cell of row; track $index) {
+                          <td>
+                            <ng-container
+                              *ngTemplateOutlet="inline; context: { $implicit: cell }"
+                            />
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+      </div>
+
+      @if (sourceNotice()) {
+        <p class="small text-secondary" role="status" data-testid="source-notice">
+          {{ sourceNotice() }}
+        </p>
+      }
+      @if (sources().length) {
+        <section data-testid="draft-sources" aria-label="Fonti della bozza">
+          <h3 class="h6">Fonti</h3>
+          <ul class="small list-unstyled">
+            @for (source of sources(); track source.id; let i = $index) {
+              <li>
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm p-0"
+                  data-testid="source-link"
+                  (click)="openSource(source.id)"
+                >
+                  {{ sourceDescription(source, i) }}
+                </button>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    </article>
+  } @else if (!loading() && !active() && !failed()) {
+    <p class="text-secondary" data-testid="draft-empty">
+      Nessuna bozza ancora: conferma l'analisi e premi «Genera».
+    </p>
+  }
+</section>

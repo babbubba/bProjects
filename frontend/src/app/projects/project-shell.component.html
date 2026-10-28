@@ -114,7 +114,13 @@
           <p class="project-description">{{ project.description }}</p>
         }
         <app-chat [projectId]="project.id" />
-        <app-analysis-preview [projectId]="project.id" />
+        <app-analysis-preview
+          [projectId]="project.id"
+          [generationBusy]="doc.busy()"
+          (generateRequested)="doc.generate($event)"
+          (viewChanged)="current.set($event)"
+        />
+        <app-document-view #doc [projectId]="project.id" [current]="current()" />
       </article>
     } @else if (detailError()) {
       <div class="alert alert-warning" role="alert">{{ detailError() }}</div>

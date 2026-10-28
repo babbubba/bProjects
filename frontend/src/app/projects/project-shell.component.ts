@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { AnalysisPreviewComponent } from './analysis-preview.component';
+import { CurrentRevision, DocumentViewComponent } from './document-view.component';
 import { ChatComponent } from './chat.component';
 import { ProjectApiService, ProjectView } from './project-api.service';
 
@@ -12,7 +13,7 @@ const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeS
 /** Shell dell'applicazione: sidebar con il catalogo dei progetti e area del progetto aperto. */
 @Component({
   selector: 'app-project-shell',
-  imports: [AnalysisPreviewComponent, ChatComponent, FormsModule, RouterLink],
+  imports: [AnalysisPreviewComponent, ChatComponent, DocumentViewComponent, FormsModule, RouterLink],
   templateUrl: './project-shell.component.html',
   styleUrl: './project-shell.component.scss',
 })
@@ -30,6 +31,7 @@ export class ProjectShellComponent {
   protected readonly listError = signal('');
 
   protected readonly selected = signal<ProjectView | null>(null);
+  protected readonly current = signal<CurrentRevision | null>(null);
   protected readonly detailError = signal('');
 
   protected readonly sidebarOpen = signal(false);
