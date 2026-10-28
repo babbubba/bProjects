@@ -84,6 +84,7 @@ public static class AnalysisEndpoints
         group.MapGet("/analyses/{analysisId:guid}", GetAnalysis);
         // {version}: numero di versione o ID della revisione; il parsing è nel gestore, così un valore malformato è 404 e non un'assenza di rotta.
         group.MapGet("/analyses/{analysisId:guid}/revisions/{version}", GetRevision);
+        group.MapPreviewEndpoints();
         return app;
     }
 
@@ -201,32 +202,54 @@ public static class AnalysisEndpoints
 
     private static async Task<IResult> GetAnalysis(Guid projectId, Guid analysisId, HttpContext http, AppDbContext db, CancellationToken ct)
     {
-        var run = await db.ProcessingRuns.AsNoTracking().SingleOrDefaultAsync(
-            r => r.Id == analysisId && r.ProjectId == projectId && r.Kind == ProcessingRunKind.Analysis, ct);
-        if (run is null)
+        var view = await BuildViewAsync(db, projectId, analysisId, ct);
+        if (view is null)
         {
             return Results.NotFound();
         }
 
-        var revision = await db.AnalysisRevisions.AsNoTracking().Where(r => r.AnalysisId == analysisId).OrderByDescending(r => r.Version).FirstOrDefaultAsync(ct);
-        if (revision is null)
+        if (view.Value.View is not { } analysis)
         {
             // Nessun JSON riuscito inventato: stato ed errore restano nel ProcessingRun.
             return Problem(StatusCodes.Status404NotFound, "Anteprima non disponibile", "preview_not_available", analysisId);
         }
 
+        http.Response.Headers.ETag = $"\"{analysis.CurrentRevisionId}\"";
+        return Results.Ok(analysis);
+    }
+
+    /// <summary>
+    /// AnalysisView della revisione corrente. Null se l'analisi non esiste nel progetto; View nulla se non ha ancora una revisione.
+    /// Modifica/conferma: solo sull'analisi corrente e mai durante una nuova Analysis attiva (un Document attivo non le blocca,
+    /// il suo input è congelato); generare richiede inoltre nessun run formale attivo e la revisione confermata.
+    /// </summary>
+    internal static async Task<(AnalysisView? View, ProcessingRun Run)?> BuildViewAsync(AppDbContext db, Guid projectId, Guid analysisId, CancellationToken ct)
+    {
+        var run = await db.ProcessingRuns.AsNoTracking().SingleOrDefaultAsync(
+            r => r.Id == analysisId && r.ProjectId == projectId && r.Kind == ProcessingRunKind.Analysis, ct);
+        if (run is null)
+        {
+            return null;
+        }
+
+        var revision = await db.AnalysisRevisions.AsNoTracking().Where(r => r.AnalysisId == analysisId).OrderByDescending(r => r.Version).FirstOrDefaultAsync(ct);
+        if (revision is null)
+        {
+            return (null, run);
+        }
+
         var project = await db.Projects.AsNoTracking().SingleAsync(p => p.Id == projectId, ct);
-        var formalActive = await db.ProcessingRuns.AsNoTracking()
-            .AnyAsync(r => r.ProjectId == projectId && (r.Status == ProcessingRunStatus.Queued || r.Status == ProcessingRunStatus.Running), ct);
+        var active = await db.ProcessingRuns.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && (r.Status == ProcessingRunStatus.Queued || r.Status == ProcessingRunStatus.Running))
+            .Select(r => r.Kind)
+            .ToListAsync(ct);
         // Solo i messaggi PM oltre il cutoff contano: una risposta dell'assistente da sola non attiva l'indicatore.
         var hasNewNotes = await db.ConversationMessages.AsNoTracking()
             .AnyAsync(m => m.ConversationId == run.ConversationId && m.Role == MessageRole.User && m.Sequence > run.SourceCutoffSequence, ct);
 
-        // Modifica/conferma: soltanto sull'analisi corrente e mai durante un'elaborazione formale attiva.
-        var canEdit = project.CurrentAnalysisId == analysisId && !formalActive;
+        var canEdit = project.CurrentAnalysisId == analysisId && !active.Contains(ProcessingRunKind.Analysis);
         var names = await UserNames(db, [revision.CreatedBy, revision.ConfirmedBy], ct);
-        http.Response.Headers.ETag = $"\"{revision.Id}\"";
-        return Results.Ok(new AnalysisView(
+        return (new AnalysisView(
             analysisId,
             projectId,
             revision.Id,
@@ -243,7 +266,7 @@ public static class AnalysisEndpoints
             hasNewNotes,
             canEdit,
             CanConfirm: canEdit && revision.ValidationState == AnalysisValidationState.Unvalidated,
-            CanGenerate: canEdit && revision.ValidationState == AnalysisValidationState.PmConfirmed));
+            CanGenerate: canEdit && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed), run);
     }
 
     private static async Task<IResult> GetRevision(Guid projectId, Guid analysisId, string version, HttpContext http, AppDbContext db, CancellationToken ct)

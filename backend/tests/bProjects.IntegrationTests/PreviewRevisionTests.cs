@@ -43,14 +43,10 @@ public sealed class PreviewRevisionTests : IAsyncLifetime
         await _database.DisposeAsync();
     }
 
-    // Rimosso da T034, quando PUT preview e POST confirm esistono.
-    private static readonly string? PendingReason = "PendingT033/T034: PUT preview e POST confirm non ancora implementati.";
-
     private ApiHarness App
     {
         get
         {
-            Assert.SkipWhen(PendingReason is not null, PendingReason ?? string.Empty);
             TestEnvironment.RequirePostgres();
             return _app!;
         }
