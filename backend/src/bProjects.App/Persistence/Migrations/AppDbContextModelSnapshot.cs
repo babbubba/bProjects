@@ -217,6 +217,73 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("bProjects.App.AI.WorkflowCheckpoint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CheckpointInfo")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("CheckpointKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("CommitSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MafVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ParentCheckpointKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ParentInfo")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ProcessingRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WorkflowDefinitionVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("WorkflowSessionId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessingRunId", "CommitSequence")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkflowCheckpoints_OldestFirst");
+
+                    b.HasIndex("ProcessingRunId", "WorkflowSessionId", "CheckpointKey")
+                        .IsUnique();
+
+                    b.HasIndex("ProcessingRunId", "WorkflowSessionId", "ParentCheckpointKey");
+
+                    b.ToTable("WorkflowCheckpoints", t =>
+                        {
+                            t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Analysis.AnalysisRevision", b =>
                 {
                     b.Property<Guid>("Id")
@@ -764,6 +831,21 @@ namespace bProjects.App.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.WorkflowCheckpoint", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessingRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.AI.WorkflowCheckpoint", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessingRunId", "WorkflowSessionId", "ParentCheckpointKey")
+                        .HasPrincipalKey("ProcessingRunId", "WorkflowSessionId", "CheckpointKey")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("bProjects.App.Analysis.AnalysisRevision", b =>

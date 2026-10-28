@@ -1,3 +1,4 @@
+using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
 using bProjects.App.Identity;
@@ -18,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<ChatTurn> ChatTurns => Set<ChatTurn>();
     public DbSet<ProcessingRun> ProcessingRuns => Set<ProcessingRun>();
     public DbSet<AnalysisRevision> AnalysisRevisions => Set<AnalysisRevision>();
+    public DbSet<WorkflowCheckpoint> WorkflowCheckpoints => Set<WorkflowCheckpoint>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -25,6 +27,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureProjects(builder);
         ConfigureConversations(builder);
         ConfigureAnalysis(builder);
+        ConfigureCheckpoints(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -122,6 +125,32 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                     "CK_AnalysisRevisions_Confirmation",
                     "(\"ValidationState\" = 'Unvalidated' AND \"ConfirmedBy\" IS NULL AND \"ConfirmedAt\" IS NULL) OR (\"ValidationState\" = 'PmConfirmed' AND \"ConfirmedBy\" IS NOT NULL AND \"ConfirmedAt\" IS NOT NULL)");
             });
+        });
+    }
+
+    private static void ConfigureCheckpoints(ModelBuilder builder)
+    {
+        builder.Entity<WorkflowCheckpoint>(checkpoint =>
+        {
+            checkpoint.HasKey(c => c.Id);
+            checkpoint.Property(c => c.WorkflowSessionId).HasMaxLength(128);
+            checkpoint.Property(c => c.CheckpointKey).HasMaxLength(128);
+            checkpoint.Property(c => c.ParentCheckpointKey).HasMaxLength(128);
+            checkpoint.Property(c => c.CheckpointInfo).HasColumnType("jsonb");
+            checkpoint.Property(c => c.ParentInfo).HasColumnType("jsonb");
+            checkpoint.Property(c => c.Payload).HasColumnType("jsonb");
+            checkpoint.Property(c => c.MafVersion).HasMaxLength(32);
+            checkpoint.Property(c => c.WorkflowDefinitionVersion).HasMaxLength(64);
+            // Unicità V28 e indice oldest-first: l'ordine di scrittura è CommitSequence, univoco per run.
+            checkpoint.HasIndex(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
+            checkpoint.HasIndex(c => new { c.ProcessingRunId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_OldestFirst");
+            checkpoint.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
+            // Il parent è un checkpoint già scritto dello stesso run e della stessa sessione.
+            checkpoint.HasOne<WorkflowCheckpoint>().WithMany()
+                .HasForeignKey(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.ParentCheckpointKey })
+                .HasPrincipalKey(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.CheckpointKey })
+                .OnDelete(DeleteBehavior.Restrict);
+            checkpoint.ToTable(t => t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1"));
         });
     }
 

@@ -57,8 +57,9 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
 
         Assert.Contains("ProcessingRuns", tables);
         Assert.Contains("AnalysisRevisions", tables);
+        Assert.Contains("WorkflowCheckpoints", tables); // T028: unica tabella di workflow, nessuna tabella per step/executor
         Assert.DoesNotContain(tables, t => t.Contains("Draft", StringComparison.OrdinalIgnoreCase)
-            || t.Contains("Checkpoint", StringComparison.OrdinalIgnoreCase)
+            || (t.Contains("Checkpoint", StringComparison.OrdinalIgnoreCase) && t != "WorkflowCheckpoints")
             || t.Contains("Step", StringComparison.OrdinalIgnoreCase)
             || t.Contains("Knowledge", StringComparison.OrdinalIgnoreCase));
     }
