@@ -1,5 +1,6 @@
 using System.Text;
 using bProjects.App.AI;
+using bProjects.App.Conversations;
 using bProjects.App.Identity;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
@@ -135,6 +136,7 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapAuthEndpoints();
 app.MapProjectEndpoints();
+app.MapConversationEndpoints();
 
 app.Run();
 

@@ -8,12 +8,11 @@ namespace bProjects.IntegrationTests;
 /// <summary>
 /// T010 — contratto HTTP di progetti e conversazioni su PostgreSQL reale (nessun mock del database).
 /// Le prove del catalogo progetti (T012) sono eseguibili subito; quelle di messaggi e turni chat
-/// dipendono da T013 e restano esplicitamente in attesa fino ad allora.
+/// sono verdi dopo T013 (messaggi, turni, replay); nessuna prova qui invoca il modello.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
 public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) : IClassFixture<PostgresDatabaseFixture>, IAsyncLifetime
 {
-    private const string PendingT013 = "T013: salvataggio e lettura del dialogo non ancora implementati.";
     private const int MaxMessageLength = 65_536;
 
     private ApiHarness? _app;
@@ -116,7 +115,8 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal("con descrizione", view.GetProperty("description").GetString());
         Assert.Equal(created.ConversationId, view.GetProperty("conversationId").GetGuid());
         AssertEmptyProjectState(view);
-        Assert.Equal(0, await Count("SELECT count(*) FROM \"ChatTurns\""));
+        // Il database è condiviso dai test della classe: si verifica la conversazione di questo progetto.
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"ChatTurns\" WHERE \"ConversationId\" = @c", ("c", created.ConversationId)));
     }
 
     [Fact]
@@ -315,7 +315,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
 
     // ---------------------------------------------------------------- messaggi (T013)
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Pm_message_is_saved_exactly_with_server_side_role_and_author_while_the_model_is_offline()
     {
         using var client = await App.LoginAsync();
@@ -336,7 +336,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(text, await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"ClientMessageId\" = @c", ("c", clientMessageId)));
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Saving_a_message_queues_exactly_one_chat_turn_with_the_cutoff_of_the_trigger()
     {
         using var client = await App.LoginAsync();
@@ -356,7 +356,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(2, await Count("SELECT count(*) FROM \"ChatTurns\" WHERE \"ConversationId\" = @c", ("c", project.ConversationId)));
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Replaying_the_same_client_message_id_returns_the_same_message_and_turn_without_enqueueing()
     {
         using var client = await App.LoginAsync();
@@ -376,7 +376,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ChatTurns\" WHERE \"ConversationId\" = @c", ("c", project.ConversationId)));
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Same_client_message_id_with_different_text_is_an_idempotency_conflict()
     {
         using var client = await App.LoginAsync();
@@ -386,12 +386,12 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
 
         var conflict = await PostMessage(client, project.Id, clientMessageId, "testo diverso");
 
-        await AssertProblem(conflict, HttpStatusCode.Conflict);
-        Assert.Equal("idempotency_conflict", (await Json(conflict)).GetProperty("code").GetString());
+        var problem = await AssertProblem(conflict, HttpStatusCode.Conflict);
+        Assert.Equal("idempotency_conflict", problem.GetProperty("code").GetString());
         Assert.Equal("originale", await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"ClientMessageId\" = @c", ("c", clientMessageId)));
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Concurrent_posts_of_the_same_client_message_id_create_a_single_message()
     {
         using var client = await App.LoginAsync();
@@ -406,7 +406,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ChatTurns\" WHERE \"ConversationId\" = @c", ("c", project.ConversationId)));
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Message_validation_rejects_blank_oversized_and_unidentified_input()
     {
         using var client = await App.LoginAsync();
@@ -421,7 +421,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(HttpStatusCode.Created, atLimit.StatusCode);
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task Messages_are_listed_in_order_with_cursors_and_only_for_their_own_project()
     {
         using var client = await App.LoginAsync();
@@ -446,7 +446,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(["solo b"], other.GetProperty("items").EnumerateArray().Select(m => m.GetProperty("text").GetString()).ToArray());
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task A_chat_turn_is_not_readable_through_another_project()
     {
         using var client = await App.LoginAsync();
@@ -458,7 +458,7 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/projects/{b.Id}/chat-turns/{turnId}", Ct)).StatusCode);
     }
 
-    [Fact(Skip = PendingT013)]
+    [Fact]
     public async Task A_dialogue_message_never_starts_a_formal_command()
     {
         using var client = await App.LoginAsync();
@@ -475,6 +475,106 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
         Assert.Equal(JsonValueKind.Null, view.GetProperty("latestAnalysisRunId").ValueKind);
         Assert.Equal(JsonValueKind.Null, view.GetProperty("latestDraftId").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/projects/{project.Id}/draft", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Concurrent_posts_with_different_client_message_ids_get_unique_contiguous_sequences()
+    {
+        using var client = await App.LoginAsync();
+        var project = await CreateProject(client, $"Sequenze {Guid.NewGuid():N}");
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 12).Select(i => PostMessage(client, project.Id, Guid.NewGuid(), $"m{i}")));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.Created, r.StatusCode));
+        var sequences = (await Task.WhenAll(responses.Select(async r => (await Json(r)).GetProperty("message").GetProperty("sequence").GetInt64())))
+            .Order().ToArray();
+        Assert.Equal(Enumerable.Range(1, 12).Select(i => (long)i).ToArray(), sequences);
+        Assert.Equal(12, await Scalar<long>("SELECT \"LastSequence\" FROM \"Conversations\" WHERE \"Id\" = @c", ("c", project.ConversationId)));
+        // Ogni turno ha come cutoff la sequenza del proprio trigger, anche con invii simultanei.
+        Assert.Equal(0, await Count(
+            "SELECT count(*) FROM \"ChatTurns\" t JOIN \"ConversationMessages\" m ON m.\"Id\" = t.\"TriggerMessageId\" WHERE t.\"ConversationId\" = @c AND t.\"SourceCutoffSequence\" <> m.\"Sequence\"",
+            ("c", project.ConversationId)));
+    }
+
+    [Fact]
+    public async Task A_turn_cutoff_does_not_move_when_later_messages_arrive()
+    {
+        using var client = await App.LoginAsync();
+        var project = await CreateProject(client, $"Cutoff {Guid.NewGuid():N}");
+        var first = await Json(await PostMessage(client, project.Id, Guid.NewGuid(), "uno"));
+        await PostMessage(client, project.Id, Guid.NewGuid(), "due");
+        await PostMessage(client, project.Id, Guid.NewGuid(), "tre");
+
+        var turn = await Json(await client.GetAsync($"/api/projects/{project.Id}/chat-turns/{first.GetProperty("chatTurnId").GetGuid()}", Ct));
+
+        Assert.Equal(1, turn.GetProperty("sourceCutoffSequence").GetInt64());
+    }
+
+    [Fact]
+    public async Task Message_endpoints_require_authentication_and_the_pm_role()
+    {
+        using var anonymous = App.Anonymous();
+        using var noRole = App.WithoutPmRole();
+        var id = Guid.NewGuid();
+        var body = new { clientMessageId = Guid.NewGuid(), text = "ciao" };
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync($"/api/projects/{id}/messages", body, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"/api/projects/{id}/chat-turns/{Guid.NewGuid()}", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noRole.PostAsJsonAsync($"/api/projects/{id}/messages", body, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noRole.GetAsync($"/api/projects/{id}/messages", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noRole.GetAsync($"/api/projects/{id}/chat-turns/{Guid.NewGuid()}", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Posting_to_an_unknown_project_is_not_found_and_persists_nothing()
+    {
+        using var client = await App.LoginAsync();
+        var before = await Count("SELECT count(*) FROM \"ConversationMessages\"");
+
+        var response = await PostMessage(client, Guid.NewGuid(), Guid.NewGuid(), "nessun progetto");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(before, await Count("SELECT count(*) FROM \"ConversationMessages\""));
+    }
+
+    [Fact]
+    public async Task Another_pm_can_read_the_dialogue_and_the_author_is_the_sender()
+    {
+        using var first = await App.LoginAsync();
+        using var second = await App.LoginAsync(TestApp.SecondPmUser, TestApp.SecondPmPassword);
+        var project = await CreateProject(first, $"Autore {Guid.NewGuid():N}");
+        await PostMessage(first, project.Id, Guid.NewGuid(), "dal primo");
+        await PostMessage(second, project.Id, Guid.NewGuid(), "dal secondo");
+
+        var page = await Json(await second.GetAsync($"/api/projects/{project.Id}/messages", Ct));
+
+        var authors = page.GetProperty("items").EnumerateArray().Select(m => m.GetProperty("authorDisplayName").GetString()).ToArray();
+        Assert.Equal([TestApp.PmUser, TestApp.SecondPmUser], authors);
+    }
+
+    [Fact]
+    public async Task Messages_and_turns_survive_an_application_restart_without_changing_state()
+    {
+        TestEnvironment.RequirePostgres();
+        Guid projectId;
+        Guid turnId;
+        var text = "  prima del riavvio \n";
+        await using (var first = await ApiHarness.StartAsync(database.ConnectionString))
+        {
+            using var client = await first.LoginAsync();
+            projectId = (await CreateProject(client, $"Riavvio chat {Guid.NewGuid():N}")).Id;
+            turnId = (await Json(await PostMessage(client, projectId, Guid.NewGuid(), text))).GetProperty("chatTurnId").GetGuid();
+        }
+
+        await using var restarted = await ApiHarness.StartAsync(database.ConnectionString, prepare: false);
+        using var reopened = await restarted.LoginAsync();
+        var messages = await Json(await reopened.GetAsync($"/api/projects/{projectId}/messages", Ct));
+        var turn = await Json(await reopened.GetAsync($"/api/projects/{projectId}/chat-turns/{turnId}", Ct));
+
+        Assert.Equal(text, messages.GetProperty("items")[0].GetProperty("text").GetString());
+        // Nessun worker AI registrato: il turno resta Queued, con zero tentativi consumati.
+        Assert.Equal("Queued", turn.GetProperty("status").GetString());
+        Assert.Equal(0, turn.GetProperty("attemptCount").GetInt32());
     }
 
     // ---------------------------------------------------------------- supporto
@@ -508,12 +608,13 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
     private static async Task<JsonElement> Json(HttpResponseMessage response) =>
         (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).Clone();
 
-    private static async Task AssertProblem(HttpResponseMessage response, HttpStatusCode status)
+    private static async Task<JsonElement> AssertProblem(HttpResponseMessage response, HttpStatusCode status)
     {
         Assert.Equal(status, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var body = await Json(response);
         Assert.Equal((int)status, body.GetProperty("status").GetInt32());
+        return body;
     }
 
     private static void AssertEmptyProjectState(JsonElement view)
