@@ -64,7 +64,7 @@ public sealed class PostgresChatHistoryProvider(AppDbContext db, Guid conversati
             var envelope = JsonSerializer.Deserialize<ChatSessionEnvelope>(conversation.MafChatSessionState!)!;
             try
             {
-                return new(await agent.DeserializeSessionAsync(envelope.Session, cancellationToken: ct), true, null);
+                return new(await agent.DeserializeSessionAsync(WithMetadataFirst(envelope.Session), cancellationToken: ct), true, null);
             }
             catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
             {
@@ -73,6 +73,56 @@ public sealed class PostgresChatHistoryProvider(AppDbContext db, Guid conversati
         }
 
         return new(await agent.CreateSessionAsync(ct), false, rebuildReason);
+    }
+
+    /// <summary>
+    /// jsonb non conserva l'ordine delle proprietà, ma il polimorfismo di System.Text.Json (es. lo stato della
+    /// compattazione) richiede "$type" come prima proprietà: lo si riporta in testa in ogni oggetto prima del restore.
+    /// </summary>
+    internal static JsonElement WithMetadataFirst(JsonElement element)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            Write(element, writer);
+        }
+
+        return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
+
+        static void Write(JsonElement e, Utf8JsonWriter w)
+        {
+            switch (e.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    w.WriteStartObject();
+                    foreach (var p in e.EnumerateObject().Where(p => p.Name == "$type"))
+                    {
+                        w.WritePropertyName(p.Name);
+                        Write(p.Value, w);
+                    }
+
+                    foreach (var p in e.EnumerateObject().Where(p => p.Name != "$type"))
+                    {
+                        w.WritePropertyName(p.Name);
+                        Write(p.Value, w);
+                    }
+
+                    w.WriteEndObject();
+                    break;
+                case JsonValueKind.Array:
+                    w.WriteStartArray();
+                    foreach (var item in e.EnumerateArray())
+                    {
+                        Write(item, w);
+                    }
+
+                    w.WriteEndArray();
+                    break;
+                default:
+                    e.WriteTo(w);
+                    break;
+            }
+        }
     }
 
     /// <summary>Snapshot da committare con la risposta (T018): riferimenti = originali &lt;= cutoff, trigger incluso, più la risposta.</summary>
