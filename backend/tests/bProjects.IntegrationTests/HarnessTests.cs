@@ -48,7 +48,9 @@ public sealed class DgxHarnessTests
     public async Task Internal_model_endpoint_lists_models()
     {
         var endpoint = TestEnvironment.RequireDgx();
+        Assert.SkipWhen(TestEnvironment.DgxApiKey is null, $"{TestEnvironment.DgxApiKeyVariable} non impostata.");
         using var client = new HttpClient { BaseAddress = endpoint, Timeout = TimeSpan.FromSeconds(30) };
+        client.DefaultRequestHeaders.Authorization = new("Bearer", TestEnvironment.DgxApiKey);
 
         var response = await client.GetAsync("models", TestContext.Current.CancellationToken);
 

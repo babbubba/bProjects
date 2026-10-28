@@ -1,3 +1,5 @@
+using bProjects.App.AI;
+
 namespace bProjects.IntegrationTests;
 
 /// <summary>Categorie (trait "Category") per filtrare i test con <c>dotnet test --filter</c>.</summary>
@@ -22,6 +24,28 @@ public static class TestEnvironment
 
     /// <summary>Base URL OpenAI-compatibile del modello interno su DGX Spark, es. http://host:8000/v1.</summary>
     public static string? DgxEndpoint => Read(DgxEndpointVariable);
+
+    public const string DgxApiKeyVariable = "BPROJECTS_TEST_DGX_API_KEY";
+    public const string DgxModelVariable = "BPROJECTS_TEST_DGX_MODEL";
+
+    /// <summary>Chiave del server interno: solo da variabile d'ambiente, mai stampata né salvata.</summary>
+    public static string? DgxApiKey => Read(DgxApiKeyVariable);
+
+    public static string? DgxModel => Read(DgxModelVariable);
+
+    /// <summary>Opzioni AI reali per i test MafReal; Skipped se endpoint, chiave o modello mancano.</summary>
+    public static AiOptions RequireDgxOptions()
+    {
+        var endpoint = RequireDgx();
+        Assert.SkipWhen(DgxApiKey is null, $"{DgxApiKeyVariable} non impostata.");
+        Assert.SkipWhen(DgxModel is null, $"{DgxModelVariable} non impostata.");
+        return new AiOptions
+        {
+            Endpoint = endpoint.ToString(),
+            ApiKey = DgxApiKey!,
+            ModelId = DgxModel!,
+        };
+    }
 
     public static string RequirePostgres()
     {
