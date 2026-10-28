@@ -155,6 +155,13 @@ public sealed class ConversationalTurnExecutor(
         // Un commit rifiutato (lease perso, revisione cambiata) o già riconciliato non modifica nulla: il dispatcher
         // tenta Failed solo con owner/fencing, quindi un vecchio worker non cambia mai l'esito.
         var result = await scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>().CommitAsync(claim, reply, ct);
+        if (result is { Outcome: ChatTurnCommitOutcome.Rejected, Reason: "lease_lost" })
+        {
+            // Come per i run formali: non è un errore del modello né un turno concluso. Il turno non è più dell'owner (lease o
+            // deadline esauriti) e lo decidono lo sweep o il reclaim: mai un Failed(processing_failed) deciso da chi ha perso il lease.
+            throw new LeaseLostException("Commit della risposta rifiutato (lease_lost): il lease non è più valido.");
+        }
+
         if (events is not null && result.Outcome != ChatTurnCommitOutcome.Rejected)
         {
             await events.PublishStateAsync(claim.TurnId); // post-commit: Completed rimanda al resultMessageId persistito

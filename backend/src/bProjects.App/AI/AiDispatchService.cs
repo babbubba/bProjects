@@ -128,6 +128,12 @@ public sealed class AiDispatchService(
         {
             logger.LogWarning("Lease perso durante l'esecuzione del turno {TurnId}: il risultato non verrà committato.", claim.TurnId);
         }
+        catch (Exception ex) when (IsLeaseLost(ex))
+        {
+            // Commit rifiutato per lease non più valido: il turno non è più nostro, non si rilascia né si classifica.
+            // Scadenza del lease + sweep/reclaim decidono (nuovo tentativo, deadline_exceeded o attempts_exhausted).
+            logger.LogWarning("Turno {TurnId}: lease non più valido, nessun rilascio (decide sweep/reclaim).", claim.TurnId);
+        }
         catch (Exception ex)
         {
             var failure = ModelFailure.Classify(ex);
