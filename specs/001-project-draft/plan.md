@@ -308,6 +308,74 @@ conflitti e lacune. Docling nell'ingestion prima dell'indicizzazione.
 ReviewAgent, pubblicazione Jira/GitHub e human-in-the-loop esteso restano futuri.
 Nessun adapter placeholder, schema KB o infrastruttura viene introdotto ora.
 
+### Osservazioni dal primo test manuale — 2026-10-28
+
+Il percorso reale con 10 messaggi PM (circa 185.000 caratteri complessivi, stima
+45–60 mila token) ha prodotto `context_overflow` su chat e analisi con modello
+configurato a 32.768 token. Questa prova esplorativa non dimostra da sola se la
+compattazione nativa si sia attivata, sia fallita o non possa gestire un singolo
+messaggio molto esteso. L'originale PM resta persistito; non è accettabile eliminare
+o troncare contenuti per nascondere l'errore.
+
+Interventi **nell'ambito della slice attuale**, senza creare nuovi task o alterare
+i contratti:
+- **T047 (obbligatorio):** aggiungere la riproduzione con contesto grande e
+  diagnostica di token input/budget, trigger ed esito della compattazione per chat
+  e Analysis, distinguendo errore inevitabile da regressione; non registrare
+  contenuti o segreti nei log. Controllare singolo messaggio oltre budget,
+  storico compattabile e negazioni/fonti preservate.
+- **T050 (UX guasti):** rappresentare `context_overflow` con messaggio specifico e
+  azione praticabile, senza descriverlo genericamente come rifiuto del modello.
+  Esporre valori di token e superamento soltanto se misurati e disponibili in
+  forma sicura nel contratto; nessuna percentuale o diagnosi inventata.
+- **T052 (accettazione):** includere il caso esplorativo come prova di limite
+  separata dai cinque casi nominali richiesti. Un errore gestito non è
+  un successo nominale e non certifica gestione di documenti lunghi.
+
+### Backlog funzionale successivo alla prima vertical slice (DEFERRED)
+
+Queste voci sono **decisioni di roadmap**, non T054+ e non condizioni aggiuntive
+di completamento di T044–T053. Prima di implementarle serviranno specifica,
+contratti, criteri di accettazione e task separati. Ordine proposto:
+
+1. **P1 — Allegati come fonti autonome.** Caricamento PDF, Markdown e testo, con
+   file originale conservato, hash/versione, metadati, autore e appartenenza al
+   progetto. Estrazione tracciabile (Docling dove appropriato), segmenti/pagine
+   indirizzabili, errori di parsing espliciti e fonti navigabili. Non incollare il
+   contenuto nell'ordinaria cronologia chat; nessuna KB implicita.
+2. **P1 — Analisi di materiale oltre la finestra del modello.** Elaborazione per
+   segmenti e consolidamento gerarchico verificabile con provenienza fino al
+   documento e alle posizioni originali; mantenere esclusioni, vincoli, negazioni,
+   evidenze e conflitti. Rilevare omissioni e copertura insufficiente anziché
+   presentare un risultato parziale come completo. Distinguere ingestion,
+   estrazione, consolidamento e successiva generazione dalla normale compattazione
+   conversazionale. Non introdurre un semplice riassunto lossy come sostituzione
+   dell'analisi strutturata.
+3. **P2 — Indicatori di capienza del contesto.** Informazioni consultabili su
+   budget e utilizzo del contesto realmente stimato/misurato, considerando
+   istruzioni, output riservato, sintesi, singolo messaggio e operazione; avvisi
+   progressivi solo con semantica verificabile. Non indicare una percentuale
+   esatta se il contenuto effettivamente inviato è soggetto a compattazione.
+4. **P2 — Avviso sugli incollaggi estesi.** Avvertire prima di inviare un messaggio
+   potenzialmente superiore al budget; non abbassare automaticamente il limite di
+   trasporto di 65.536 caratteri, non troncare e non impedire senza motivo
+   documenti che potrebbero essere elaborati dalla pipeline di ingestion.
+5. **P2 — Profili di modello e contesto.** Valutare configurazioni DGX a 64k/131k
+   soltanto con modello ID, `ctx-size` effettivo, tokenizer, budget e risorse
+   coerenti. Benchmark di latenza, completezza, provenienza e qualità sullo
+   stesso insieme di casi prima di modificare il modello di riferimento;
+   una finestra maggiore da sola non garantisce affidabilità.
+6. **P3 — Ottimizzazione degli snapshot di sessione.** Misurare dimensioni,
+   latenza e contenuto serializzato MAF prima di ottimizzare; conservare originali
+   e provenienza in PostgreSQL, mantenendo restore compatibile e nessuna
+   perdita silenziosa. Non usare la dimensione di 138 KB del primo snapshot come
+   prova sufficiente di un problema prestazionale.
+
+La prossima milestone funzionale prioritaria è **allegati + ingestion tracciabile
++ analisi gerarchica**, prima di KB/RAG generale, ricerca web o pubblicazioni.
+I test di crash, idempotenza, sicurezza e compattazione della slice corrente
+rimangono prioritari per stabilire una baseline affidabile.
+
 ## Phase 0 — Research
 
 [research.md](research.md) riporta verifica documentale della versione 1.26.0, primitive
