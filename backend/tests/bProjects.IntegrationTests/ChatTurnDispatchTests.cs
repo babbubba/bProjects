@@ -207,6 +207,83 @@ public sealed class ChatTurnDispatchTests : IAsyncLifetime
     // ---------------------------------------------------------------- reclaim e fencing
 
     [Fact]
+    public async Task A_claim_waiting_on_the_row_lock_does_not_resurrect_a_turn_completed_meanwhile()
+    {
+        var turn = (await SeedProject(1))[0];
+        var first = (await ClaimAs("old-owner"))!;
+        await ExpireLease(turn);
+        var result = await InsertAssistantMessage(turn);
+
+        var claimTask = await ClaimWhileRowIsLocked(turn, async (connection, transaction) =>
+        {
+            await using var complete = new NpgsqlCommand(
+                "UPDATE \"ChatTurns\" SET \"Status\" = 'Completed', \"ResultMessageId\" = @r, \"CompletedAt\" = clock_timestamp(), \"LeaseOwner\" = NULL, \"LeaseUntil\" = NULL WHERE \"Id\" = @t",
+                connection, transaction);
+            complete.Parameters.AddWithValue("r", result);
+            complete.Parameters.AddWithValue("t", turn);
+            await complete.ExecuteNonQueryAsync(Ct);
+        });
+
+        Assert.Null(await claimTask);
+        Assert.Equal("Completed", await TurnStatus(turn));
+        Assert.Equal(result, await Scalar<Guid>("SELECT \"ResultMessageId\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+        Assert.Equal(first.AttemptCount, await Scalar<int>("SELECT \"AttemptCount\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+        Assert.Equal(first.FencingToken, await Scalar<long>("SELECT \"FencingToken\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+    }
+
+    [Fact]
+    public async Task A_claim_waiting_on_the_row_lock_does_not_override_a_lease_renewed_meanwhile()
+    {
+        var turn = (await SeedProject(1))[0];
+        var first = (await ClaimAs("old-owner"))!;
+        await ExpireLease(turn);
+
+        var claimTask = await ClaimWhileRowIsLocked(turn, async (connection, transaction) =>
+        {
+            await using var renew = new NpgsqlCommand(
+                "UPDATE \"ChatTurns\" SET \"LeaseUntil\" = clock_timestamp() + interval '30 seconds' WHERE \"Id\" = @t", connection, transaction);
+            renew.Parameters.AddWithValue("t", turn);
+            await renew.ExecuteNonQueryAsync(Ct);
+        });
+
+        Assert.Null(await claimTask);
+        Assert.Equal("old-owner", await Scalar<string>("SELECT \"LeaseOwner\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+        Assert.Equal(first.FencingToken, await Scalar<long>("SELECT \"FencingToken\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+        Assert.Equal(1, await Scalar<int>("SELECT \"AttemptCount\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+    }
+
+    /// <summary>
+    /// Blocca la riga del turno in una transazione, avvia un claim, attende che sia davvero in attesa sul lock
+    /// (pg_stat_activity), applica <paramref name="mutate"/> e committa: il claim rivaluta la riga aggiornata.
+    /// </summary>
+    private async Task<Task<ChatTurnClaim?>> ClaimWhileRowIsLocked(Guid turn, Func<NpgsqlConnection, NpgsqlTransaction, Task> mutate)
+    {
+        await using var holder = new NpgsqlConnection(_database.ConnectionString);
+        await holder.OpenAsync(Ct);
+        await using var transaction = await holder.BeginTransactionAsync(Ct);
+        await using (var lockRow = new NpgsqlCommand("SELECT 1 FROM \"ChatTurns\" WHERE \"Id\" = @t FOR UPDATE", holder, transaction))
+        {
+            lockRow.Parameters.AddWithValue("t", turn);
+            await lockRow.ExecuteScalarAsync(Ct);
+        }
+
+        var claimTask = Task.Run(() => ClaimAs("new-owner"), Ct);
+
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (await Count(
+                   "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'WITH clk%UPDATE \"ChatTurns\" t SET%'") == 0)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "Il claim non è entrato in attesa sul lock di riga.");
+            Assert.False(claimTask.IsCompleted, "Il claim non doveva completarsi mentre la riga è bloccata.");
+            await Task.Delay(50, Ct);
+        }
+
+        await mutate(holder, transaction);
+        await transaction.CommitAsync(Ct);
+        return claimTask;
+    }
+
+    [Fact]
     public async Task An_expired_lease_is_reclaimed_with_a_new_owner_fence_and_attempt()
     {
         var turn = (await SeedProject(1))[0];

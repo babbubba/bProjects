@@ -112,6 +112,12 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                 "SessionRevisionAtStart" = (SELECT v."ChatSessionRevision" FROM "Conversations" v WHERE v."Id" = t."ConversationId")
             FROM candidate, clk
             WHERE t."Id" = candidate."Id"
+              -- Rivalutazione dopo l'attesa sul lock di riga (READ COMMITTED): solo l'Id verrebbe ricontrollato,
+              -- quindi un turno nel frattempo Completed/rinnovato verrebbe riportato a Running. Stessa idoneità del candidato.
+              AND ((t."Status" = 'Queued' AND (t."NextAttemptAt" IS NULL OR t."NextAttemptAt" <= clk.t))
+                   OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
+              AND t."AttemptCount" < t."MaxAttempts"
+              AND t."DeadlineAt" > clk.t
             RETURNING t."Id", t."ConversationId", t."TriggerMessageId", t."SourceCutoffSequence",
                       t."FencingToken", t."AttemptCount", t."LeaseUntil", t."DeadlineAt"
             """,
