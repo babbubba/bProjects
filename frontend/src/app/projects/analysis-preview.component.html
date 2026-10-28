@@ -1,0 +1,139 @@
+<section class="analysis" aria-labelledby="analysis-title">
+  <header class="analysis-head">
+    <h2 id="analysis-title" class="h5 mb-0">Analisi iniziale</h2>
+    <button
+      type="button"
+      class="btn btn-primary"
+      data-testid="analyze"
+      [disabled]="!canAnalyze()"
+      (click)="analyze()"
+    >
+      {{ analyzeState() === 'sending' ? 'Invio…' : analysis() ? 'Analizza di nuovo' : 'Analizza' }}
+    </button>
+  </header>
+
+  <p class="text-secondary small mb-0">
+    L'analisi è un comando esplicito: viene eseguita solo quando premi il pulsante e produce
+    un'anteprima strutturata, non un documento.
+  </p>
+
+  @if (loading()) {
+    <p class="text-secondary small" role="status">Caricamento dello stato dell'analisi…</p>
+  }
+  @if (loadError()) {
+    <div class="alert alert-warning py-2" role="alert" data-testid="load-error">
+      {{ loadError() }}
+    </div>
+  }
+  @if (commandError()) {
+    <div class="alert alert-warning py-2" role="alert" data-testid="command-error">
+      {{ commandError() }}
+    </div>
+  }
+
+  @if (active()) {
+    <p class="run-state" role="status" data-testid="run-state">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      {{ stageLabel() }}
+      @if (run()!.attemptCount > 1) {
+        <span class="text-secondary">· tentativo {{ run()!.attemptCount }} di {{ run()!.maxAttempts }}</span>
+      }
+    </p>
+  }
+
+  @if (failed()) {
+    <div class="alert alert-danger py-2" role="alert" data-testid="run-error">
+      <strong>Analisi non riuscita.</strong> {{ runError() }}
+      @if (analysis()) {
+        <span> L'ultima anteprima valida resta quella mostrata sotto.</span>
+      }
+    </div>
+  }
+
+  @if (analysis(); as view) {
+    <article class="preview" data-testid="preview" aria-label="Anteprima dell'analisi">
+      <div class="preview-meta">
+        <span
+          class="badge text-bg-warning"
+          data-testid="validation-badge"
+          [hidden]="view.validationState !== 'Unvalidated'"
+          >Non validata / in attesa del PM</span
+        >
+        <span
+          class="badge text-bg-success"
+          [hidden]="view.validationState !== 'PmConfirmed'"
+          >Confermata dal PM</span
+        >
+        <span class="text-secondary small">
+          Versione {{ view.version }} · {{ view.origin === 'Ai' ? 'generata dall\'AI' : 'modificata dal PM' }}
+          · {{ formatTime(view.createdAt) }}
+        </span>
+      </div>
+      @if (view.hasNewNotes) {
+        <p class="alert alert-info py-2" role="status" data-testid="new-notes">
+          Ci sono nuove note del PM successive a questa analisi. Premi «Analizza di nuovo» per
+          includerle.
+        </p>
+      }
+      @if (previewError()) {
+        <p class="alert alert-warning py-2" role="alert">{{ previewError() }}</p>
+      }
+
+      @for (section of sections(); track section.key) {
+        <section [attr.data-section]="section.key">
+          <h3 class="h6">{{ section.title }}</h3>
+          <ul>
+            @for (item of section.items; track item.id) {
+              <li>
+                {{ item.text }}
+                <span class="badge text-bg-light border">{{ classification(item) }}</span>
+                @if (item.evidenceRefs.length) {
+                  <span class="text-secondary small">({{ refs(item) }})</span>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      @if (view.content.conflicts.length) {
+        <section data-section="conflicts">
+          <h3 class="h6">Conflitti</h3>
+          <ul>
+            @for (conflict of view.content.conflicts; track conflict.id) {
+              <li>
+                {{ conflict.description }}
+                <span class="badge text-bg-light border">{{
+                  conflict.status === 'Open' ? 'Aperto' : 'Risolto'
+                }}</span>
+                <ul>
+                  @for (alt of conflict.alternatives; track alt.id) {
+                    <li>{{ alt.text }} <span class="text-secondary small">({{ refs(alt) }})</span></li>
+                  }
+                </ul>
+                @if (conflict.resolution; as resolution) {
+                  <p class="small mb-0">Motivazione: {{ resolution.reason }}</p>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      @if (view.content.sources.length) {
+        <section data-section="sources">
+          <h3 class="h6">Fonti</h3>
+          <ul class="small text-secondary">
+            @for (source of view.content.sources; track source.id; let i = $index) {
+              <li>{{ sourceLabel(i, source.kind, source.messageRole) }}</li>
+            }
+          </ul>
+        </section>
+      }
+    </article>
+  } @else if (!loading() && !active() && !failed()) {
+    <p class="text-secondary" data-testid="empty">
+      Nessuna analisi ancora: scrivi le tue note nella chat e premi Analizza.
+    </p>
+  }
+</section>

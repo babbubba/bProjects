@@ -114,6 +114,7 @@
           <p class="project-description">{{ project.description }}</p>
         }
         <app-chat [projectId]="project.id" />
+        <app-analysis-preview [projectId]="project.id" />
       </article>
     } @else if (detailError()) {
       <div class="alert alert-warning" role="alert">{{ detailError() }}</div>

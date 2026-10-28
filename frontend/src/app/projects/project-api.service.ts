@@ -10,6 +10,12 @@ export interface ProjectView {
   description: string | null;
   createdAt: string;
   createdBy: string;
+  /** Stato formale (opzionale per compatibilità): run attivo, ultima analisi e revisione corrente. */
+  activeProcessingRunId?: string | null;
+  latestAnalysisRunId?: string | null;
+  currentAnalysisId?: string | null;
+  currentRevisionId?: string | null;
+  validationState?: string | null;
 }
 
 export interface ProjectPage {
@@ -58,6 +64,99 @@ export interface ChatTurnView {
   nextAttemptAt: string | null;
   resultMessageId: string | null;
   error: { code: string; message: string | null } | null;
+}
+
+export type ProcessingRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed';
+
+/** ProcessingRunView del contratto HTTP: stato del run formale, mai un risultato parziale. */
+export interface ProcessingRunView {
+  id: string;
+  kind: 'Analysis' | 'Document';
+  analysisId: string | null;
+  sourceCutoffSequence: number | null;
+  status: ProcessingRunStatus;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  deadlineAt: string;
+  attemptCount: number;
+  maxAttempts: number;
+  nextAttemptAt: string | null;
+  lastObservedStage: string | null;
+  resultRevisionId: string | null;
+  draftId: string | null;
+  error: { code: string; message: string | null } | null;
+}
+
+export interface AnalyzeResult {
+  run: ProcessingRunView;
+  /** true se il server ha riconosciuto la stessa Idempotency-Key (replay) invece di creare un run. */
+  replayed: boolean;
+}
+
+export type AnalysisClassification = 'Declared' | 'Inferred' | 'Assumed';
+
+export interface AnalysisItem {
+  id: string;
+  text: string;
+  classification: AnalysisClassification;
+  evidenceRefs: string[];
+}
+
+export interface AnalysisSource {
+  id: string;
+  kind: 'Message' | 'PmRevision';
+  messageId: string | null;
+  messageRole: 'user' | 'assistant' | null;
+  revisionId: string | null;
+}
+
+export interface AnalysisConflict {
+  id: string;
+  description: string;
+  status: 'Open' | 'Resolved';
+  alternatives: AnalysisItem[];
+  resolution: { selectedAlternativeIds: string[]; reason: string; evidenceRefs: string[] } | null;
+}
+
+/** AnalysisContent 1.0.0 (contracts/ai-workflow.md §4), solo lettura in questa fase. */
+export interface AnalysisContent {
+  schemaVersion: string;
+  analysisId: string;
+  projectId: string;
+  sourceCutoffSequence: number;
+  validationState: 'Unvalidated' | 'PmConfirmed';
+  sources: AnalysisSource[];
+  goals: AnalysisItem[];
+  contextAndScope: { overview: AnalysisItem[]; included: AnalysisItem[]; excluded: AnalysisItem[] };
+  requirements: AnalysisItem[];
+  operationalFlows: AnalysisItem[];
+  constraints: AnalysisItem[];
+  dependencies: AnalysisItem[];
+  assumptions: AnalysisItem[];
+  openQuestions: AnalysisItem[];
+  conflicts: AnalysisConflict[];
+}
+
+/** AnalysisView del contratto HTTP: anteprima e revisione corrente. */
+export interface AnalysisView {
+  analysisId: string;
+  projectId: string;
+  currentRevisionId: string;
+  version: number;
+  schemaVersion: string;
+  content: AnalysisContent;
+  validationState: 'Unvalidated' | 'PmConfirmed';
+  origin: string;
+  createdBy: string | null;
+  createdAt: string;
+  confirmedBy: string | null;
+  confirmedAt: string | null;
+  sourceCutoffSequence: number;
+  hasNewNotes: boolean;
+  canEdit: boolean;
+  canConfirm: boolean;
+  canGenerate: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -123,6 +222,34 @@ export class ProjectApiService {
     return firstValueFrom(
       this.http.get<ChatTurnView>(
         `/api/projects/${encodeURIComponent(projectId)}/chat-turns/${encodeURIComponent(turnId)}`,
+      ),
+    );
+  }
+
+  /** Comando esplicito Analizza: la stessa Idempotency-Key ripete la richiesta senza creare un secondo run. */
+  async analyze(projectId: string, idempotencyKey: string): Promise<AnalyzeResult> {
+    const response = await firstValueFrom(
+      this.http.post<ProcessingRunView>(
+        `/api/projects/${encodeURIComponent(projectId)}/analyses`,
+        null,
+        { headers: { 'Idempotency-Key': idempotencyKey }, observe: 'response' },
+      ),
+    );
+    return { run: response.body!, replayed: response.status === 200 };
+  }
+
+  getRun(projectId: string, runId: string): Promise<ProcessingRunView> {
+    return firstValueFrom(
+      this.http.get<ProcessingRunView>(
+        `/api/projects/${encodeURIComponent(projectId)}/processing-runs/${encodeURIComponent(runId)}`,
+      ),
+    );
+  }
+
+  getAnalysis(projectId: string, analysisId: string): Promise<AnalysisView> {
+    return firstValueFrom(
+      this.http.get<AnalysisView>(
+        `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}`,
       ),
     );
   }
