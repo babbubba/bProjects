@@ -217,6 +217,223 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("bProjects.App.Analysis.AnalysisRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AnalysisId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("ParentRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ValidationState")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnalysisId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AnalysisRevisions_OneAiPerAnalysis")
+                        .HasFilter("\"Origin\" = 'Ai'");
+
+                    b.HasIndex("ConfirmedBy");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ParentRevisionId");
+
+                    b.HasIndex("AnalysisId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("AnalysisRevisions", t =>
+                        {
+                            t.HasCheckConstraint("CK_AnalysisRevisions_Confirmation", "(\"ValidationState\" = 'Unvalidated' AND \"ConfirmedBy\" IS NULL AND \"ConfirmedAt\" IS NULL) OR (\"ValidationState\" = 'PmConfirmed' AND \"ConfirmedBy\" IS NOT NULL AND \"ConfirmedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_AnalysisRevisions_Origin_Fields", "(\"Origin\" = 'Ai' AND \"Version\" = 1 AND \"ParentRevisionId\" IS NULL) OR (\"Origin\" = 'PmEdit' AND \"Version\" >= 2 AND \"ParentRevisionId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_AnalysisRevisions_Version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Analysis.ProcessingRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentConfig")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("AnalysisId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<long>("FencingToken")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("InputRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LastObservedStage")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MafVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PromptVersions")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("RequestKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ResultRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("SourceCutoffSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkflowDefinitionVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("WorkflowSessionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnalysisId");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("InputRevisionId");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcessingRuns_OneActivePerProject")
+                        .HasFilter("\"Status\" IN ('Queued', 'Running')");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("ResultRevisionId");
+
+                    b.HasIndex("RequestedAt", "Id")
+                        .HasDatabaseName("IX_ProcessingRuns_Open_Fifo")
+                        .HasFilter("\"Status\" IN ('Queued', 'Running')");
+
+                    b.HasIndex("ProjectId", "Kind", "RequestKey")
+                        .IsUnique();
+
+                    b.ToTable("ProcessingRuns", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProcessingRuns_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Completed_Result", "\"Status\" <> 'Completed' OR (\"Kind\" = 'Analysis' AND \"ResultRevisionId\" IS NOT NULL) OR (\"Kind\" = 'Document' AND \"DraftId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Kind_Fields", "(\"Kind\" = 'Analysis' AND \"ConversationId\" IS NOT NULL AND \"SourceCutoffSequence\" IS NOT NULL AND \"SourceCutoffSequence\" >= 0 AND \"AnalysisId\" IS NULL AND \"InputRevisionId\" IS NULL AND \"DraftId\" IS NULL) OR (\"Kind\" = 'Document' AND \"AnalysisId\" IS NOT NULL AND \"InputRevisionId\" IS NOT NULL AND \"ResultRevisionId\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Conversations.ChatTurn", b =>
                 {
                     b.Property<Guid>("Id")
@@ -487,6 +704,8 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("CreatedBy");
 
+                    b.HasIndex("CurrentAnalysisId");
+
                     b.HasIndex("CreatedAt", "Id")
                         .IsDescending();
 
@@ -545,6 +764,66 @@ namespace bProjects.App.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Analysis.AnalysisRevision", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("AnalysisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.AnalysisRevision", null)
+                        .WithMany()
+                        .HasForeignKey("ParentRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Analysis.ProcessingRun", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("AnalysisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Conversations.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Analysis.AnalysisRevision", null)
+                        .WithMany()
+                        .HasForeignKey("InputRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.AnalysisRevision", null)
+                        .WithMany()
+                        .HasForeignKey("ResultRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("bProjects.App.Conversations.ChatTurn", b =>
@@ -621,6 +900,11 @@ namespace bProjects.App.Persistence.Migrations
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("CurrentAnalysisId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 #pragma warning restore 612, 618
         }

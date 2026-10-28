@@ -11,8 +11,8 @@ public sealed class Project
     public Guid CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
-    // Riferimenti a risultati futuri: semplici UUID nullable, senza FK né navigazioni finché le tabelle
-    // non esistono (vincoli aggiunti da T025 per l'analisi e da T038 per la bozza).
+    // CurrentAnalysisId: FK verso ProcessingRun (T025). LatestDraftId: UUID nullable senza FK né navigazioni finché la tabella
+    // non esiste (vincolo aggiunto da T038).
     public Guid? CurrentAnalysisId { get; set; }
     public Guid? LatestDraftId { get; set; }
 }

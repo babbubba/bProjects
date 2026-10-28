@@ -49,16 +49,17 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
     }
 
     [Fact]
-    public async Task No_table_of_future_features_is_created()
+    public async Task Analysis_tables_exist_and_no_table_of_later_features_is_created()
     {
         TestEnvironment.RequirePostgres();
 
         var tables = await Query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", database.ConnectionString);
 
-        Assert.DoesNotContain(tables, t => t.Contains("Analys", StringComparison.OrdinalIgnoreCase)
-            || t.Contains("Draft", StringComparison.OrdinalIgnoreCase)
-            || t.Contains("ProcessingRun", StringComparison.OrdinalIgnoreCase)
+        Assert.Contains("ProcessingRuns", tables);
+        Assert.Contains("AnalysisRevisions", tables);
+        Assert.DoesNotContain(tables, t => t.Contains("Draft", StringComparison.OrdinalIgnoreCase)
             || t.Contains("Checkpoint", StringComparison.OrdinalIgnoreCase)
+            || t.Contains("Step", StringComparison.OrdinalIgnoreCase)
             || t.Contains("Knowledge", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -78,7 +79,7 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
     }
 
     [Fact]
-    public async Task Project_references_to_future_tables_are_nullable_uuid_columns_without_foreign_keys()
+    public async Task Project_references_are_nullable_uuid_columns_and_only_CurrentAnalysisId_has_a_foreign_key()
     {
         TestEnvironment.RequirePostgres();
 
@@ -95,7 +96,7 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
             database.ConnectionString);
 
         Assert.Equivalent(new[] { "CurrentAnalysisId:uuid:YES", "LatestDraftId:uuid:YES" }, columns);
-        Assert.DoesNotContain("CurrentAnalysisId", foreignKeyColumns);
+        Assert.Contains("CurrentAnalysisId", foreignKeyColumns);
         Assert.DoesNotContain("LatestDraftId", foreignKeyColumns);
     }
 
