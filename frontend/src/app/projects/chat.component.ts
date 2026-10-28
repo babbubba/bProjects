@@ -45,6 +45,8 @@ const errorLabels: Record<string, string> = {
   llm_unavailable: 'Il modello AI non è al momento raggiungibile.',
   context_overflow: 'La conversazione supera il contesto gestibile dal modello.',
   compaction_failed: 'Non è stato possibile condensare la conversazione.',
+  context_window_mismatch:
+    "La finestra di contesto del modello è inferiore a quella configurata: nessuna richiesta è stata inviata. Contatta l'amministratore per allinearla.",
   invalid_agent_output: 'La risposta del modello non era utilizzabile.',
   deadline_exceeded: 'Il tempo massimo per la risposta è scaduto.',
   attempts_exhausted: 'I tentativi disponibili per rispondere sono esauriti.',
@@ -81,8 +83,13 @@ export class ChatComponent {
     Object.entries(this.streams())
       .filter(([id, b]) => {
         const turn = this.turns()[id];
-        const open = turn !== undefined && (!turn || turn.status === 'Queued' || turn.status === 'Running');
-        return open && b.text.length > 0 && !this.messages().some((m) => m.role === 'assistant' && m.chatTurnId === id);
+        const open =
+          turn !== undefined && (!turn || turn.status === 'Queued' || turn.status === 'Running');
+        return (
+          open &&
+          b.text.length > 0 &&
+          !this.messages().some((m) => m.role === 'assistant' && m.chatTurnId === id)
+        );
       })
       .map(([id, b]) => ({ id, text: b.text })),
   );
@@ -311,7 +318,8 @@ export class ChatComponent {
     const data = event.data as Record<string, unknown> | null;
     if (!data || typeof data !== 'object') return;
     if (event.name === 'chat.delta') this.applyDelta(data);
-    else if (event.name === 'chat.state') this.applyState(data as unknown as ChatTurnView, projectId);
+    else if (event.name === 'chat.state')
+      this.applyState(data as unknown as ChatTurnView, projectId);
   }
 
   /** Delta provvisorio: tentativo più vecchio, duplicato o fuori ordine vengono ignorati; uno più nuovo azzera il buffer. */
@@ -322,7 +330,8 @@ export class ChatComponent {
     this.streams.update((all) => {
       let buffer = all[chatTurnId];
       if (buffer && attemptCount < buffer.attempt) return all;
-      if (!buffer || attemptCount > buffer.attempt) buffer = { attempt: attemptCount, next: 0, text: '' };
+      if (!buffer || attemptCount > buffer.attempt)
+        buffer = { attempt: attemptCount, next: 0, text: '' };
       if (deltaIndex !== buffer.next) return { ...all, [chatTurnId]: buffer };
       return {
         ...all,

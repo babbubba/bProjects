@@ -54,7 +54,9 @@ export class InferenceMetricsComponent {
     const ctx = metrics?.contextWindowTokens ?? known?.runtime.contextWindowTokens;
     const max =
       metrics?.maxOutputTokens ??
-      (known ? { value: known.limits.phases[this.phase()].maxOutputTokens, confirmed: false } : null);
+      (known
+        ? { value: known.limits.phases[this.phase()].maxOutputTokens, confirmed: false }
+        : null);
     const figures = [this.ctx(ctx), this.max(max)];
     if (!running) figures.push(this.generated(metrics!.completionTokens));
     return {

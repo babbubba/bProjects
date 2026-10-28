@@ -84,9 +84,9 @@
       }
     </p>
   }
-  @if (showMetrics()) {
+  @if (metricsView(); as m) {
     <div class="run-metrics" data-testid="run-metrics">
-      <app-inference-metrics [metrics]="run()!.metrics" phase="document" />
+      <app-inference-metrics [metrics]="m.metrics" phase="document" />
     </div>
   }
   @if (failed()) {

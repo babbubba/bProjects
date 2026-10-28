@@ -1,7 +1,13 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { calculated, contextUsage, estimated, metrics, unavailable } from './context-usage.fixtures';
+import {
+  calculated,
+  contextUsage,
+  estimated,
+  metrics,
+  unavailable,
+} from './context-usage.fixtures';
 import { ContextUsageStore } from './context-usage.store';
 import { InferenceMetrics, InferencePhase } from './project-api.service';
 import { InferenceMetricsComponent } from './inference-metrics.component';
@@ -26,12 +32,16 @@ describe('InferenceMetricsComponent', () => {
     el.querySelector(`[data-testid=${id}] [aria-hidden=true]`)?.textContent?.trim();
   const line = () =>
     [...el.querySelectorAll('.inference-metrics > *')]
-      .map((n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim())
+      .map(
+        (n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim(),
+      )
       .join(' ')
       .replace(/\s+/g, ' ');
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
     fixture = TestBed.createComponent(InferenceMetricsComponent);
     el = fixture.nativeElement;
   });
@@ -51,49 +61,71 @@ describe('InferenceMetricsComponent', () => {
 
     const ctx = el.querySelector<HTMLElement>('[data-testid=metric-ctx]')!;
     expect(ctx.title).toContain('Capacità contestuale reale dello slot');
-    expect(ctx.querySelector('.visually-hidden')?.textContent).toBe('Capacità contestuale: 49.152 token');
+    expect(ctx.querySelector('.visually-hidden')?.textContent).toBe(
+      'Capacità contestuale: 49.152 token',
+    );
     expect(el.querySelector('[data-testid=metric-max] .visually-hidden')?.textContent).toBe(
       'Massimo di output: 8.192 token',
     );
     const gen = el.querySelector<HTMLElement>('[data-testid=metric-gen]')!;
     expect(gen.title).toContain('inclusi quelli consumati dal ragionamento');
     expect(gen.querySelector('.visually-hidden')?.textContent).toBe('Token generati: 1.347 token');
-    expect(el.querySelector('[role=group]')?.getAttribute('aria-label')).toBe('Metriche della richiesta AI');
+    expect(el.querySelector('[role=group]')?.getAttribute('aria-label')).toBe(
+      'Metriche della richiesta AI',
+    );
   });
 
   it('etichetta come «limite richiesto» un massimo di output non confermato', () => {
     render({ metrics: metrics({ maxOutputTokens: { value: 4096, confirmed: false } }) });
 
     expect(shown('metric-max')).toBe('Max output 4.096 (limite richiesto)');
-    expect(el.querySelector<HTMLElement>('[data-testid=metric-max]')!.title).toContain('non verificato sul server');
+    expect(el.querySelector<HTMLElement>('[data-testid=metric-max]')!.title).toContain(
+      'non verificato sul server',
+    );
   });
 
   it('un valore calcolato è mostrato normalmente', () => {
     render({ metrics: metrics({ completionTokens: calculated(900) }) });
 
     expect(shown('metric-gen')).toBe('Generati 900 token');
-    expect(el.querySelector('[data-testid=metric-gen]')!.getAttribute('data-source')).toBe('calculated');
+    expect(el.querySelector('[data-testid=metric-gen]')!.getAttribute('data-source')).toBe(
+      'calculated',
+    );
     expect(el.querySelector<HTMLElement>('[data-testid=metric-gen]')!.title).toContain('calcolato');
   });
 
   it('un valore stimato ha il prefisso «≈» e la dicitura «stima»', () => {
-    render({ metrics: metrics({ contextWindowTokens: estimated(32768), completionTokens: estimated(1200) }) });
+    render({
+      metrics: metrics({
+        contextWindowTokens: estimated(32768),
+        completionTokens: estimated(1200),
+      }),
+    });
 
     expect(shown('metric-ctx')).toBe('CTX ≈ 32.768');
     expect(el.querySelector<HTMLElement>('[data-testid=metric-ctx]')!.title).toContain('(stima)');
-    expect(el.querySelector('[data-testid=metric-ctx] .visually-hidden')?.textContent).toContain('(stima)');
+    expect(el.querySelector('[data-testid=metric-ctx] .visually-hidden')?.textContent).toContain(
+      '(stima)',
+    );
     expect(shown('metric-gen')).toBe('Generati ≈ 1.200 token');
   });
 
   it('un valore non disponibile mostra «n/d» senza cifre inventate', () => {
-    render({ metrics: metrics({ contextWindowTokens: unavailable, completionTokens: { value: null, source: 'measured' } }) });
+    render({
+      metrics: metrics({
+        contextWindowTokens: unavailable,
+        completionTokens: { value: null, source: 'measured' },
+      }),
+    });
 
     expect(shown('metric-ctx')).toBe('CTX n/d');
     expect(shown('metric-gen')).toBe('Generati n/d');
     expect(el.querySelector('[data-testid=metric-ctx] .visually-hidden')?.textContent).toBe(
       'Capacità contestuale: non disponibile',
     );
-    expect(el.querySelector<HTMLElement>('[data-testid=metric-ctx]')!.title).toContain('non disponibile');
+    expect(el.querySelector<HTMLElement>('[data-testid=metric-ctx]')!.title).toContain(
+      'non disponibile',
+    );
   });
 
   it('segnala una risposta troncata dal limite di output (finishReason length)', () => {
@@ -107,7 +139,9 @@ describe('InferenceMetricsComponent', () => {
   it('metrics null (storico) mostra «Metriche non disponibili» senza cifre', () => {
     render({ metrics: null });
 
-    expect(el.querySelector('[data-testid=metrics-unavailable]')?.textContent).toBe('Metriche non disponibili');
+    expect(el.querySelector('[data-testid=metrics-unavailable]')?.textContent).toBe(
+      'Metriche non disponibili',
+    );
     expect(el.querySelector('[data-testid=metric-ctx]')).toBeNull();
     expect(el.textContent).not.toMatch(/\d/);
   });
@@ -146,7 +180,10 @@ describe('InferenceMetricsComponent', () => {
   });
 
   it('non espone mai il contenuto del ragionamento', () => {
-    const withReasoning = { ...metrics(), reasoningContent: 'PENSIERO-SEGRETO' } as InferenceMetrics;
+    const withReasoning = {
+      ...metrics(),
+      reasoningContent: 'PENSIERO-SEGRETO',
+    } as InferenceMetrics;
     render({ metrics: withReasoning });
 
     expect(el.innerHTML).not.toContain('PENSIERO-SEGRETO');

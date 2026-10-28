@@ -84,11 +84,16 @@ describe('ChatComponent metriche di inferenza', () => {
 
   const line = (selector: string) =>
     [...el.querySelectorAll(`${selector} app-inference-metrics .inference-metrics > *`)]
-      .map((n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim())
+      .map(
+        (n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim(),
+      )
       .join(' ')
       .replace(/\s+/g, ' ');
 
-  async function setup(messages: MessageView[], state: ChatTurnView = turn({ status: 'Completed' })) {
+  async function setup(
+    messages: MessageView[],
+    state: ChatTurnView = turn({ status: 'Completed' }),
+  ) {
     open.mockReset();
     open.mockImplementation((_id: string, h: ProjectStreamHandlers) => {
       handlers = h;
@@ -124,25 +129,33 @@ describe('ChatComponent metriche di inferenza', () => {
 
     expect(el.querySelectorAll('[data-role=assistant] app-inference-metrics')).toHaveLength(1);
     expect(el.querySelector('[data-role=user] app-inference-metrics')).toBeNull();
-    expect(line('[data-role=assistant]')).toBe('CTX 49.152 · Max output 8.192 · Generati 1.347 token');
+    expect(line('[data-role=assistant]')).toBe(
+      'CTX 49.152 · Max output 8.192 · Generati 1.347 token',
+    );
   });
 
   it('un messaggio storico con metrics null dichiara «Metriche non disponibili»', async () => {
     await setup([user, reply(null)]);
 
-    expect(el.querySelector('[data-role=assistant] [data-testid=metrics-unavailable]')).not.toBeNull();
+    expect(
+      el.querySelector('[data-role=assistant] [data-testid=metrics-unavailable]'),
+    ).not.toBeNull();
     expect(el.querySelector('[data-role=assistant]')!.textContent).not.toMatch(/Generati/);
   });
 
   it('un messaggio senza il campo metrics (record storico) è trattato allo stesso modo', async () => {
     await setup([user, reply(undefined)]);
 
-    expect(el.querySelector('[data-role=assistant] [data-testid=metrics-unavailable]')).not.toBeNull();
+    expect(
+      el.querySelector('[data-role=assistant] [data-testid=metrics-unavailable]'),
+    ).not.toBeNull();
   });
 
   it('segnala la risposta troncata dal limite di output', async () => {
     await setup([user, reply(metrics({ finishReason: 'length' }))]);
-    expect(el.querySelector('[data-role=assistant] [data-testid=metrics-truncated]')).not.toBeNull();
+    expect(
+      el.querySelector('[data-role=assistant] [data-testid=metrics-truncated]'),
+    ).not.toBeNull();
   });
 
   it('la risposta in streaming mostra la configurazione nota e «generazione in corso…»; poi le metriche definitive', async () => {
@@ -159,7 +172,10 @@ describe('ChatComponent metriche di inferenza', () => {
     );
     expect(el.querySelector('[data-role=assistant-streaming] [data-testid=metric-gen]')).toBeNull();
 
-    persisted = [user, reply(metrics({ contextWindowTokens: { value: 32768, source: 'measured' } }))];
+    persisted = [
+      user,
+      reply(metrics({ contextWindowTokens: { value: 32768, source: 'measured' } })),
+    ];
     handlers.onEvent({
       name: 'chat.state',
       data: turn({ status: 'Completed', resultMessageId: 'm-2' }),
@@ -168,7 +184,9 @@ describe('ChatComponent metriche di inferenza', () => {
     await drain();
 
     expect(el.querySelector('[data-role=assistant-streaming]')).toBeNull();
-    expect(line('[data-role=assistant]')).toBe('CTX 32.768 · Max output 8.192 · Generati 1.347 token');
+    expect(line('[data-role=assistant]')).toBe(
+      'CTX 32.768 · Max output 8.192 · Generati 1.347 token',
+    );
   });
 
   it('un turno fallito non ha messaggio né metriche attribuite', async () => {
@@ -181,7 +199,7 @@ describe('ChatComponent metriche di inferenza', () => {
     expect(el.querySelector('app-inference-metrics')).toBeNull();
   });
 
-  it('chiede un nuovo monitor del contesto dopo l\'invio e a turno terminato', async () => {
+  it("chiede un nuovo monitor del contesto dopo l'invio e a turno terminato", async () => {
     await setup([user], turn({ status: 'Completed' }));
     const refresh = vi.spyOn(store, 'refresh');
 
@@ -192,10 +210,12 @@ describe('ChatComponent metriche di inferenza', () => {
     el.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
     await Promise.resolve();
     await settle();
-    http.expectOne((r) => r.method === 'POST').flush(
-      { message: { ...user, id: 'm-3', sequence: 3, chatTurnId: 't-2' }, chatTurnId: 't-2' },
-      { status: 201, statusText: 'Created' },
-    );
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(
+        { message: { ...user, id: 'm-3', sequence: 3, chatTurnId: 't-2' }, chatTurnId: 't-2' },
+        { status: 201, statusText: 'Created' },
+      );
     await settle();
     expect(refresh).toHaveBeenCalledTimes(1); // subito dopo l'invio
 

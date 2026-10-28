@@ -369,7 +369,10 @@ describe('DocumentViewComponent', () => {
   describe('metriche di inferenza del run', () => {
     const line = () =>
       [...el.querySelectorAll('[data-testid=run-metrics] .inference-metrics > *')]
-        .map((n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim())
+        .map(
+          (n) =>
+            n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim(),
+        )
         .join(' ')
         .replace(/\s+/g, ' ');
 
@@ -424,6 +427,39 @@ describe('DocumentViewComponent', () => {
       await settle();
 
       expect(q('run-metrics')!.querySelector('[data-testid=metrics-unavailable]')).not.toBeNull();
+    });
+
+    it('dopo un riavvio senza run noto usa le metriche del DraftView già letto, senza GET aggiuntivi', async () => {
+      await setup({
+        draft: draft({ metrics: metrics({ phase: 'document', completionTokens: measured(2100) }) }),
+      });
+
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 · Generati 2.100 token');
+    });
+
+    it('una bozza storica senza metriche dichiara «Metriche non disponibili»', async () => {
+      await setup({ draft: draft({ metrics: null }) });
+
+      expect(q('run-metrics')!.querySelector('[data-testid=metrics-unavailable]')).not.toBeNull();
+    });
+
+    it('context_window_mismatch e compaction_failed hanno un testo in italiano senza cifre', async () => {
+      await generate();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Failed',
+          error: {
+            code: 'context_window_mismatch',
+            message:
+              'La finestra di contesto del runtime del modello (16384 token) è inferiore a quella configurata (32768 token).',
+          },
+        }),
+      });
+      await settle();
+      const text = q('generation-error')!.textContent ?? '';
+      expect(text).toContain('finestra di contesto del modello è inferiore a quella configurata');
+      expect(text).not.toMatch(/[0-9]{3,}/);
     });
 
     it('run fallito: nessuna metrica attribuita', async () => {

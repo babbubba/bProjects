@@ -66,7 +66,9 @@ export class ContextUsagePanelComponent {
     const ctx = hasValue(ctxToken) ? ctxToken.value : null;
     const percent = last.usedPercent;
     const percentText =
-      percent === null ? 'n/d' : `${prompt.source === 'estimated' ? '≈ ' : ''}${formatPercent(percent)}`;
+      percent === null
+        ? 'n/d'
+        : `${prompt.source === 'estimated' ? '≈ ' : ''}${formatPercent(percent)}`;
     const raw: Pick<Segment, 'id' | 'label' | 'tokens'>[] = [
       { id: 'prompt', label: 'Prompt effettivo', tokens: hasValue(prompt) ? prompt.value : null },
       { id: 'reserved', label: 'Output riservato', tokens: last.outputReservedTokens },

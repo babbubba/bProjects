@@ -375,6 +375,37 @@ describe('AnalysisPreviewComponent', () => {
     expect(el.querySelector('[data-testid=preview]')).toBeNull();
   });
 
+  describe.each([
+    [
+      'context_window_mismatch',
+      'finestra di contesto del modello è inferiore a quella configurata',
+    ],
+    ['compaction_failed', 'Non è stato possibile condensare la conversazione'],
+  ])('%s', (code, expected) => {
+    it('ha un testo in italiano senza cifre oltre a quelle del messaggio server', async () => {
+      await setup();
+      await click();
+      http
+        .expectOne((r) => r.method === 'POST')
+        .flush(run(), { status: 202, statusText: 'Accepted' });
+      await settle();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Failed',
+          error: {
+            code,
+            message: 'La finestra (16384 token) è inferiore a quella configurata (32768 token).',
+          },
+        }),
+      });
+      await settle();
+      const text = el.querySelector('[data-testid=run-error]')?.textContent ?? '';
+      expect(text).toContain(expected);
+      expect(text).not.toMatch(/[0-9]{3,}/);
+    });
+  });
+
   it('context_overflow senza valori nei dati: nessun numero inventato', async () => {
     await setup();
     await click();
@@ -819,7 +850,10 @@ describe('AnalysisPreviewComponent', () => {
   describe('metriche di inferenza del run', () => {
     const line = () =>
       [...el.querySelectorAll('[data-testid=run-metrics] .inference-metrics > *')]
-        .map((n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim())
+        .map(
+          (n) =>
+            n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim(),
+        )
         .join(' ')
         .replace(/\s+/g, ' ');
 
@@ -840,12 +874,18 @@ describe('AnalysisPreviewComponent', () => {
         name: 'processing.state',
         data: run({
           status: 'Running',
-          metrics: metrics({ state: 'running', phase: 'analysis', maxOutputTokens: { value: 8192, confirmed: false } }),
+          metrics: metrics({
+            state: 'running',
+            phase: 'analysis',
+            maxOutputTokens: { value: 8192, confirmed: false },
+          }),
         }),
       });
       await settle();
 
-      expect(line()).toBe('CTX 49.152 · Max output 8.192 (limite richiesto) · generazione in corso…');
+      expect(line()).toBe(
+        'CTX 49.152 · Max output 8.192 (limite richiesto) · generazione in corso…',
+      );
     });
 
     it('run completato: mostra le metriche definitive del run (stessa riga della chat)', async () => {
@@ -855,7 +895,11 @@ describe('AnalysisPreviewComponent', () => {
         data: run({
           status: 'Completed',
           analysisId: 'r-1',
-          metrics: metrics({ phase: 'analysis', completionTokens: measured(2650), finishReason: 'length' }),
+          metrics: metrics({
+            phase: 'analysis',
+            completionTokens: measured(2650),
+            finishReason: 'length',
+          }),
         }),
       });
       await settle();
@@ -865,7 +909,9 @@ describe('AnalysisPreviewComponent', () => {
       expect(line()).toBe(
         'CTX 49.152 · Max output 8.192 · Generati 2.650 token Risposta troncata dal limite di output',
       );
-      expect(el.querySelector('[data-testid=run-metrics] [data-testid=metrics-truncated]')).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid=run-metrics] [data-testid=metrics-truncated]'),
+      ).not.toBeNull();
     });
 
     it('run completato senza telemetria (storico): «Metriche non disponibili»', async () => {
@@ -878,7 +924,31 @@ describe('AnalysisPreviewComponent', () => {
       http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
       await settle();
 
-      expect(el.querySelector('[data-testid=run-metrics] [data-testid=metrics-unavailable]')).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid=run-metrics] [data-testid=metrics-unavailable]'),
+      ).not.toBeNull();
+    });
+
+    it("dopo un riavvio (nessun run noto) usa le metriche dell'AnalysisView già letta", async () => {
+      await setup({
+        project: project({ currentAnalysisId: 'r-1', latestAnalysisRunId: 'r-1' }),
+        analysis: analysis({
+          metrics: metrics({ phase: 'analysis', completionTokens: measured(1890) }),
+        }),
+      });
+
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 · Generati 1.890 token');
+    });
+
+    it("un'analisi storica senza metriche dichiara «Metriche non disponibili»", async () => {
+      await setup({
+        project: project({ currentAnalysisId: 'r-1', latestAnalysisRunId: 'r-1' }),
+        analysis: analysis({ metrics: null }),
+      });
+
+      expect(
+        el.querySelector('[data-testid=run-metrics] [data-testid=metrics-unavailable]'),
+      ).not.toBeNull();
     });
 
     it('run fallito: nessuna metrica attribuita', async () => {

@@ -250,6 +250,8 @@ export interface AnalysisView {
   canEdit: boolean;
   canConfirm: boolean;
   canGenerate: boolean;
+  /** Metriche del run di analisi che l'ha prodotta; assente o null = record storico senza telemetria. */
+  metrics?: InferenceMetrics | null;
 }
 
 /** DraftView del contratto HTTP: bozza Markdown proposta, mai approvata, con la revisione usata. */
@@ -267,6 +269,8 @@ export interface DraftView {
   hasNewNotes: boolean;
   hasNewRevision: boolean;
   label: string;
+  /** Metriche del run Document che l'ha generata; assente o null = record storico senza telemetria. */
+  metrics?: InferenceMetrics | null;
 }
 
 /** RevisionView del contratto HTTP (sottoinsieme): revisione specifica con le fonti del suo contenuto. */

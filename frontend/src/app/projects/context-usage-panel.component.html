@@ -5,8 +5,8 @@
     @if (usage()) {
       @if (snapshot(); as note) {
         <p class="alert alert-warning py-2 mb-2" data-testid="usage-snapshot">
-          {{ note }} I valori mostrati sono le ultime metriche persistite, non lo stato corrente
-          del server.
+          {{ note }} I valori mostrati sono le ultime metriche persistite, non lo stato corrente del
+          server.
         </p>
       }
       @if (summary(); as s) {
@@ -22,8 +22,8 @@
         }
         @if (s.stale) {
           <p class="small text-secondary mb-2" data-testid="usage-stale">
-            La misura si riferisce all'ultima inferenza completata: ci sono messaggi più recenti
-            non ancora inviati al modello.
+            La misura si riferisce all'ultima inferenza completata: ci sono messaggi più recenti non
+            ancora inviati al modello.
           </p>
         }
       }

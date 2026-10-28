@@ -63,10 +63,30 @@ export function contextUsage(over: Partial<ContextUsage> = {}): ContextUsage {
     composition: {
       promptTokens: measured(21256),
       items: [
-        { key: 'system_instructions', label: 'Istruzioni di sistema', tokens: measured(1200), messageCount: null },
-        { key: 'user_messages', label: 'Messaggi del PM', tokens: measured(9800), messageCount: 12 },
-        { key: 'assistant_messages', label: "Risposte dell'assistente", tokens: measured(8000), messageCount: 11 },
-        { key: 'derived_summary', label: 'Riassunto derivato', tokens: estimated(1500), messageCount: 40 },
+        {
+          key: 'system_instructions',
+          label: 'Istruzioni di sistema',
+          tokens: measured(1200),
+          messageCount: null,
+        },
+        {
+          key: 'user_messages',
+          label: 'Messaggi del PM',
+          tokens: measured(9800),
+          messageCount: 12,
+        },
+        {
+          key: 'assistant_messages',
+          label: "Risposte dell'assistente",
+          tokens: measured(8000),
+          messageCount: 11,
+        },
+        {
+          key: 'derived_summary',
+          label: 'Riassunto derivato',
+          tokens: estimated(1500),
+          messageCount: 40,
+        },
       ],
       attributedTokens: 20500,
       unattributedTokens: calculated(756),

@@ -258,6 +258,54 @@ describe('ChatComponent', () => {
     expect(text).not.toContain('%');
   });
 
+  it('context_window_mismatch: testo in italiano senza cifre', async () => {
+    await type('Ciao');
+    await submit();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush({ message: userMessage(), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
+    await settle();
+    http.expectOne(`/api/projects/${P}/chat-turns/t-1`).flush(
+      turn({
+        status: 'Failed',
+        error: {
+          code: 'context_window_mismatch',
+          message:
+            'La finestra di contesto del runtime del modello (16384 token) è inferiore a quella configurata (32768 token).',
+        },
+      }),
+    );
+    await settle();
+
+    const text = el.querySelector('.turn-error')?.textContent ?? '';
+    expect(text).toContain('finestra di contesto del modello è inferiore a quella configurata');
+    expect(text).toContain('nessuna richiesta è stata inviata');
+    expect(text).not.toMatch(/[0-9]{3,}/);
+  });
+
+  it('compaction_failed: testo in italiano senza cifre', async () => {
+    await type('Ciao');
+    await submit();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush({ message: userMessage(), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
+    await settle();
+    http.expectOne(`/api/projects/${P}/chat-turns/t-1`).flush(
+      turn({
+        status: 'Failed',
+        error: {
+          code: 'compaction_failed',
+          message: 'Sintesi non riuscita. Gli originali non sono stati modificati.',
+        },
+      }),
+    );
+    await settle();
+
+    const text = el.querySelector('.turn-error')?.textContent ?? '';
+    expect(text).toContain('Non è stato possibile condensare la conversazione');
+    expect(text).not.toMatch(/[0-9]/);
+  });
+
   it('explains a server-side idempotency conflict and uses a new id on the next send', async () => {
     await type('A');
     await submit();

@@ -17,6 +17,7 @@ import { MdBlock, parseMarkdown } from './markdown';
 import {
   AnalysisSource,
   DraftView,
+  InferenceMetrics,
   ProcessingRunView,
   ProjectApiService,
 } from './project-api.service';
@@ -29,6 +30,9 @@ const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeSt
 const errorLabels: Record<string, string> = {
   llm_unavailable: 'Il modello AI non è al momento raggiungibile.',
   context_overflow: "L'analisi supera il contesto gestibile dal modello.",
+  compaction_failed: 'Non è stato possibile condensare il contenuto da elaborare.',
+  context_window_mismatch:
+    "La finestra di contesto del modello è inferiore a quella configurata: nessuna richiesta è stata inviata. Contatta l'amministratore per allinearla.",
   invalid_agent_output:
     'Il risultato del modello non era un documento valido e non è stato salvato.',
   deadline_exceeded: 'Il tempo massimo per la generazione è scaduto.',
@@ -86,10 +90,21 @@ export class DocumentViewComponent {
   });
   readonly busy = computed(() => this.active() || this.generateState() === 'sending');
   protected readonly failed = computed(() => this.run()?.status === 'Failed');
-  /** Metriche del run: a run completato (anche storico, senza telemetria) o in corso se già note; mai per un run fallito. */
-  protected readonly showMetrics = computed(() => {
+  /**
+   * Metriche mostrate: del run in corso se già note, del run completato (con ripiego sulla bozza che ha prodotto) oppure,
+   * dopo un riavvio senza run noto, quelle del DraftView già letto al ripristino; mai per un run fallito.
+   */
+  protected readonly metricsView = computed<{
+    metrics: InferenceMetrics | null | undefined;
+  } | null>(() => {
     const run = this.run();
-    return run?.status === 'Completed' || (this.active() && !!run?.metrics);
+    const draft = this.draft();
+    if (!run) return draft ? { metrics: draft.metrics } : null;
+    if (run.status === 'Completed') {
+      const own = draft && draft.processingRunId === run.id ? draft.metrics : null;
+      return { metrics: run.metrics ?? own };
+    }
+    return this.active() && run.metrics ? { metrics: run.metrics } : null;
   });
   protected readonly blocks = computed<MdBlock[]>(() =>
     parseMarkdown(this.draft()?.markdown ?? ''),

@@ -107,7 +107,9 @@ describe('ContextUsagePanelComponent', () => {
       'Margine tecnico 512',
       'Residuo 2.808',
     ]);
-    const widths = [...bar.querySelectorAll<HTMLElement>('.progress')].map((p) => parseFloat(p.style.width));
+    const widths = [...bar.querySelectorAll<HTMLElement>('.progress')].map((p) =>
+      parseFloat(p.style.width),
+    );
     expect(widths).toHaveLength(4);
     expect(widths[0]).toBeCloseTo(64.9, 0);
     expect(widths.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(100.0001);
@@ -123,8 +125,8 @@ describe('ContextUsagePanelComponent', () => {
     });
     await load(usage);
 
-    const widths = [...el.querySelectorAll<HTMLElement>('[data-testid=usage-bar] .progress')].map((p) =>
-      parseFloat(p.style.width),
+    const widths = [...el.querySelectorAll<HTMLElement>('[data-testid=usage-bar] .progress')].map(
+      (p) => parseFloat(p.style.width),
     );
     expect(widths.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(100.0001);
     expect(q('usage-bar')!.getAttribute('aria-valuenow')).toBe('100');
@@ -133,14 +135,24 @@ describe('ContextUsagePanelComponent', () => {
   });
 
   it('un prompt stimato è dichiarato come stima, con «≈»', async () => {
-    await load(withLast({ metrics: metrics({ promptTokens: estimated(21256), contextWindowTokens: measured(32768) }) }));
+    await load(
+      withLast({
+        metrics: metrics({ promptTokens: estimated(21256), contextWindowTokens: measured(32768) }),
+      }),
+    );
 
     expect(text('usage-headline')).toBe('Contesto: ≈ 21.256 / 32.768 token — ≈ 64,9%');
     expect(text('usage-provenance')).toContain('Prompt stima');
   });
 
   it('un prompt non disponibile mostra n/d senza cifre né percentuale inventate', async () => {
-    await load(withLast({ metrics: metrics({ promptTokens: unavailable, contextWindowTokens: measured(32768) }), usedPercent: null, remainingTokens: unavailable }));
+    await load(
+      withLast({
+        metrics: metrics({ promptTokens: unavailable, contextWindowTokens: measured(32768) }),
+        usedPercent: null,
+        remainingTokens: unavailable,
+      }),
+    );
 
     expect(text('usage-headline')).toBe('Contesto: n/d / 32.768 token — n/d');
     expect(q('usage-bar')!.hasAttribute('aria-valuenow')).toBe(false);
@@ -170,10 +182,10 @@ describe('ContextUsagePanelComponent', () => {
     expect(q('usage-notes')!.contains(q('usage-alert'))).toBe(true);
   });
 
-  it('indica che la misura è dell\'ultima inferenza se ci sono messaggi più recenti', async () => {
+  it("indica che la misura è dell'ultima inferenza se ci sono messaggi più recenti", async () => {
     await load(withLast({ staleReason: 'newer_messages' }));
 
-    expect(text('usage-stale')).toContain("ultima inferenza completata");
+    expect(text('usage-stale')).toContain('ultima inferenza completata');
     expect(text('usage-headline')).toContain('21.256');
   });
 
@@ -192,7 +204,9 @@ describe('ContextUsagePanelComponent', () => {
 
     handlers.onConnected();
     await settle();
-    http.expectOne(url('p-1')).flush({ ...base, runtime: { ...base.runtime, status: 'unverified' } });
+    http
+      .expectOne(url('p-1'))
+      .flush({ ...base, runtime: { ...base.runtime, status: 'unverified' } });
     await settle();
     expect(text('usage-snapshot')).toContain('non è stato verificato');
   });
@@ -276,22 +290,40 @@ describe('ContextUsagePanelComponent', () => {
           ...base.composition!,
           items: [
             ...base.composition!.items,
-            { key: 'knowledge_base', label: 'Knowledge base', tokens: measured(3300), messageCount: null },
-            { key: 'document_pdf', label: 'Documento PDF', tokens: unavailable, messageCount: null },
+            {
+              key: 'knowledge_base',
+              label: 'Knowledge base',
+              tokens: measured(3300),
+              messageCount: null,
+            },
+            {
+              key: 'document_pdf',
+              label: 'Documento PDF',
+              tokens: unavailable,
+              messageCount: null,
+            },
           ],
         },
       });
 
-      expect(q('composition')!.querySelector('[data-key=knowledge_base]')!.textContent).toContain('Knowledge base');
-      expect(q('composition')!.querySelector('[data-key=knowledge_base]')!.textContent).toContain('3.300');
-      expect(q('composition')!.querySelector('[data-key=document_pdf]')!.textContent).toContain('n/d');
+      expect(q('composition')!.querySelector('[data-key=knowledge_base]')!.textContent).toContain(
+        'Knowledge base',
+      );
+      expect(q('composition')!.querySelector('[data-key=knowledge_base]')!.textContent).toContain(
+        '3.300',
+      );
+      expect(q('composition')!.querySelector('[data-key=document_pdf]')!.textContent).toContain(
+        'n/d',
+      );
     });
 
     it('non inventa righe fisse: senza voci restano solo quota non attribuita e totale', async () => {
       const base = contextUsage();
       await load({ ...base, composition: { ...base.composition!, items: [] } });
 
-      const keys = [...q('composition')!.querySelectorAll('[data-key]')].map((r) => r.getAttribute('data-key'));
+      const keys = [...q('composition')!.querySelectorAll('[data-key]')].map((r) =>
+        r.getAttribute('data-key'),
+      );
       expect(keys).toEqual(['unattributed', 'total']);
       expect(q('composition')!.textContent).not.toMatch(/PDF|Markdown|knowledge/i);
     });
@@ -317,7 +349,7 @@ describe('ContextUsagePanelComponent', () => {
       expect(text('usage-history')).toBe('3 messaggi conservati');
     });
 
-    it('mostra l\'ultima compattazione con prima/dopo/risparmiati', async () => {
+    it("mostra l'ultima compattazione con prima/dopo/risparmiati", async () => {
       await load(contextUsage());
 
       const compaction = text('usage-compaction')!;
@@ -331,7 +363,12 @@ describe('ContextUsagePanelComponent', () => {
       const base = contextUsage();
       await load({
         ...base,
-        compaction: { ...base.compaction!, tokensBefore: unavailable, tokensAfter: unavailable, tokensSaved: calculated(500) },
+        compaction: {
+          ...base.compaction!,
+          tokensBefore: unavailable,
+          tokensAfter: unavailable,
+          tokensSaved: calculated(500),
+        },
       });
 
       const compaction = text('usage-compaction')!;
@@ -396,7 +433,9 @@ describe('ContextUsagePanelComponent', () => {
 
       handlers.onEvent({ name: 'chat.state', data: { status: 'Completed' } });
       await settle();
-      http.expectOne(url('p-1')).flush(withLast({ usedPercent: 70, metrics: metrics({ promptTokens: measured(22938) }) }));
+      http
+        .expectOne(url('p-1'))
+        .flush(withLast({ usedPercent: 70, metrics: metrics({ promptTokens: measured(22938) }) }));
       await settle();
       expect(text('usage-headline')).toBe('Contesto: 22.938 / 49.152 token — 70,0%');
 
@@ -446,7 +485,9 @@ describe('ContextUsagePanelComponent', () => {
       expect(text('usage-error')).toContain('Monitor del contesto non disponibile');
       expect(q('usage-headline')).toBeNull();
       expect(q('usage-bar')).toBeNull();
-      expect(el.querySelector('[data-testid=context-usage-panel]')!.textContent).not.toMatch(/\d{2,}/);
+      expect(el.querySelector('[data-testid=context-usage-panel]')!.textContent).not.toMatch(
+        /\d{2,}/,
+      );
     });
 
     it('dopo un errore i vecchi numeri non restano e il pannello si riprende', async () => {

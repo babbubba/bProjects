@@ -16,6 +16,7 @@ import {
   AnalysisContent,
   AnalysisItem,
   AnalysisView,
+  InferenceMetrics,
   ProcessingRunView,
   ProjectApiService,
 } from './project-api.service';
@@ -36,6 +37,8 @@ const errorLabels: Record<string, string> = {
   llm_unavailable: 'Il modello AI non è al momento raggiungibile.',
   context_overflow: 'La conversazione supera il contesto gestibile dal modello.',
   compaction_failed: 'Non è stato possibile condensare la conversazione.',
+  context_window_mismatch:
+    "La finestra di contesto del modello è inferiore a quella configurata: nessuna richiesta è stata inviata. Contatta l'amministratore per allinearla.",
   invalid_agent_output: "Il risultato del modello non era un'analisi valida e non è stato salvato.",
   deadline_exceeded: "Il tempo massimo per l'analisi è scaduto.",
   attempts_exhausted: "I tentativi disponibili per l'analisi sono esauriti.",
@@ -211,10 +214,21 @@ export class AnalysisPreviewComponent {
     return status === 'Queued' || status === 'Running';
   });
   protected readonly failed = computed(() => this.run()?.status === 'Failed');
-  /** Metriche del run: a run completato (anche storico, senza telemetria) o in corso se già note; mai per un run fallito. */
-  protected readonly showMetrics = computed(() => {
+  /**
+   * Metriche mostrate: del run in corso se già note, del run completato (con ripiego sull'analisi che l'ha prodotto) oppure,
+   * dopo un riavvio senza run noto, quelle dell'AnalysisView già letta al ripristino; mai per un run fallito.
+   */
+  protected readonly metricsView = computed<{
+    metrics: InferenceMetrics | null | undefined;
+  } | null>(() => {
     const run = this.run();
-    return run?.status === 'Completed' || (this.active() && !!run?.metrics);
+    const view = this.analysis();
+    if (!run) return view ? { metrics: view.metrics } : null;
+    if (run.status === 'Completed') {
+      const own = view && view.analysisId === (run.analysisId ?? run.id) ? view.metrics : null;
+      return { metrics: run.metrics ?? own };
+    }
+    return this.active() && run.metrics ? { metrics: run.metrics } : null;
   });
   protected readonly canAnalyze = computed(
     () =>
