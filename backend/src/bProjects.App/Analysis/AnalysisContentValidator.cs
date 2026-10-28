@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace bProjects.App.Analysis;
 
@@ -109,11 +110,33 @@ public static class AnalysisContentValidator
         }
         catch (JsonException ex)
         {
-            // Il messaggio del serializzatore descrive percorso e tipo, non riporta il testo del modello.
-            error = "JSON non valido per AnalysisContent 1.0.0: " + ex.Message;
+            // Il messaggio del serializzatore può riportare nomi di proprietà o caratteri scelti dal modello (output non validato,
+            // che non deve raggiungere il browser attraverso l'errore del run): si indicano solo percorso redatto e posizione.
+            var position = ex.LineNumber is { } line && ex.BytePositionInLine is { } column ? $" (riga {line + 1}, posizione {column + 1})" : "";
+            error = $"JSON non valido per AnalysisContent 1.0.0 al percorso {RedactedPath(ex.Path)}{position}.";
             return false;
         }
     }
+
+    private static readonly Regex PlainPath = new(@"^\$(?:\.[A-Za-z][A-Za-z0-9]*|\[\d+\])*$", RegexOptions.CultureInvariant);
+
+    private static readonly Regex PathName = new(@"\.([A-Za-z][A-Za-z0-9]*)", RegexOptions.CultureInvariant);
+
+    /// <summary>Nomi dei campi dello schema: gli unici segmenti di percorso che un errore di parsing può riportare.</summary>
+    private static readonly HashSet<string> SchemaNames =
+    [
+        .. new[]
+        {
+            typeof(AnalysisContent), typeof(AnalysisContextAndScope), typeof(AnalysisItem),
+            typeof(AnalysisSource), typeof(AnalysisConflict), typeof(AnalysisConflictResolution),
+        }.SelectMany(t => t.GetProperties()).Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name)),
+    ];
+
+    /// <summary>Percorso JSON dell'errore con i soli campi dello schema; un nome sconosciuto (scelto dal modello) diventa «?».</summary>
+    private static string RedactedPath(string? path) =>
+        path is null || !PlainPath.IsMatch(path)
+            ? "$"
+            : PathName.Replace(path, m => SchemaNames.Contains(m.Groups[1].Value) ? m.Value : ".?");
 
     private static void CheckConfirmOnlyChangesState(AnalysisContent content, AnalysisContent current, List<string> violations)
     {
