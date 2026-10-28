@@ -10,6 +10,56 @@ public enum StructuredOutputMode
     ValidatedTextJson,
 }
 
+/// <summary>Fase di lavoro del modello: ognuna può avere tetto di output e ragionamento propri (<c>Ai:Phases</c>).</summary>
+public enum AiPhase
+{
+    /// <summary>Dialogo con il PM.</summary>
+    Chat,
+
+    /// <summary>Consolidamento/analisi strutturata.</summary>
+    Analysis,
+
+    /// <summary>Generazione del documento.</summary>
+    Document,
+
+    /// <summary>Sintesi nativa della compattazione.</summary>
+    Compaction,
+}
+
+/// <summary>Override di una fase; <c>null</c> = eredita il valore globale di <c>Ai</c> (una stringa vuota nella configurazione vale null).</summary>
+public sealed class AiPhaseOptions
+{
+    public int? MaxOutputTokens { get; set; }
+
+    public bool? EnableThinking { get; set; }
+
+    // ReasoningBudgetTokens non è previsto: il supporto del runtime interno (llama.cpp su DGX) non è stato verificato.
+}
+
+/// <summary>Impostazioni risolte di una fase (<see cref="AiOptions.ForPhase"/>): override di fase oppure valori globali.</summary>
+public sealed record AiPhaseSettings(AiPhase Phase, int MaxOutputTokens, bool EnableThinking, int InputBudgetTokens);
+
+/// <summary>Sezione <c>Ai:Phases</c>: un override opzionale per fase.</summary>
+public sealed class AiPhasesOptions
+{
+    public AiPhaseOptions Chat { get; set; } = new();
+
+    public AiPhaseOptions Analysis { get; set; } = new();
+
+    public AiPhaseOptions Document { get; set; } = new();
+
+    public AiPhaseOptions Compaction { get; set; } = new();
+
+    public AiPhaseOptions Of(AiPhase phase) => phase switch
+    {
+        AiPhase.Chat => Chat,
+        AiPhase.Analysis => Analysis,
+        AiPhase.Document => Document,
+        AiPhase.Compaction => Compaction,
+        _ => throw new ArgumentOutOfRangeException(nameof(phase)),
+    };
+}
+
 /// <summary>
 /// Configurazione del modello interno (sezione <c>Ai</c>, variabili <c>Ai__*</c>). Endpoint, modello e
 /// credenziale restano lato server; i valori di finestra provengono da misure sul runtime reale.
@@ -47,10 +97,24 @@ public sealed class AiOptions
     /// <summary>Host aggiuntivi ammessi oltre a loopback/reti private (nomi interni risolti da DNS aziendale).</summary>
     public string[] AllowedHosts { get; set; } = [];
 
-    /// <summary>ContextWindowTokens - MaxOutputTokens - SafetyMarginTokens (contracts/ai-workflow.md §7).</summary>
+    /// <summary>Validità in secondi dello stato verificato del runtime (<see cref="ModelRuntimeMonitor"/>).</summary>
+    public int RuntimeCheckSeconds { get; set; } = 60;
+
+    /// <summary>Override per fase (<c>Ai:Phases:{Chat,Analysis,Document,Compaction}</c>); le fasi senza override ereditano i valori globali.</summary>
+    public AiPhasesOptions Phases { get; set; } = new();
+
+    /// <summary>ContextWindowTokens - MaxOutputTokens - SafetyMarginTokens con i soli valori globali (contracts/ai-workflow.md §7); per fase usare <see cref="ForPhase"/>.</summary>
     public int InputBudgetTokens => ContextWindowTokens - MaxOutputTokens - SafetyMarginTokens;
 
     public int EffectiveCompactionTriggerTokens => CompactionTriggerTokens > 0 ? CompactionTriggerTokens : InputBudgetTokens;
+
+    /// <summary>Tetto di output, ragionamento e budget di input (finestra - output di fase - margine) della fase.</summary>
+    public AiPhaseSettings ForPhase(AiPhase phase)
+    {
+        var overrides = Phases.Of(phase);
+        var maxOutput = overrides.MaxOutputTokens ?? MaxOutputTokens;
+        return new(phase, maxOutput, overrides.EnableThinking ?? EnableThinking, ContextWindowTokens - maxOutput - SafetyMarginTokens);
+    }
 }
 
 /// <summary>
@@ -98,9 +162,38 @@ public sealed class AiOptionsValidator : Microsoft.Extensions.Options.IValidateO
         {
             errors.Add("Ai: ContextWindowTokens deve superare MaxOutputTokens + SafetyMarginTokens (budget di input non positivo).");
         }
-        else if (o.CompactionTriggerTokens != 0 && (o.CompactionTriggerTokens < 1 || o.CompactionTriggerTokens > o.InputBudgetTokens))
+        else
         {
-            errors.Add("Ai:CompactionTriggerTokens deve essere fra 1 e il budget di input (ContextWindowTokens - MaxOutputTokens - SafetyMarginTokens).");
+            // Una fase senza override ha già il budget globale, verificato sopra: qui solo quelle con un tetto proprio.
+            var phasesValid = true;
+            foreach (var phase in Enum.GetValues<AiPhase>())
+            {
+                if (o.Phases.Of(phase).MaxOutputTokens is not { } phaseOutput)
+                {
+                    continue;
+                }
+
+                if (phaseOutput <= 0)
+                {
+                    errors.Add($"Ai:Phases:{phase}:MaxOutputTokens deve essere positivo.");
+                    phasesValid = false;
+                }
+                else if (o.ForPhase(phase).InputBudgetTokens <= 0)
+                {
+                    errors.Add($"Ai:Phases:{phase}:MaxOutputTokens: ContextWindowTokens deve superare l'output di fase + SafetyMarginTokens (budget di input non positivo).");
+                    phasesValid = false;
+                }
+            }
+
+            // La soglia vale per chat e analisi (le sole fasi che compattano): deve stare nel budget della più stretta.
+            if (phasesValid && o.CompactionTriggerTokens != 0)
+            {
+                var tightest = Math.Min(o.ForPhase(AiPhase.Chat).InputBudgetTokens, o.ForPhase(AiPhase.Analysis).InputBudgetTokens);
+                if (o.CompactionTriggerTokens < 1 || o.CompactionTriggerTokens > tightest)
+                {
+                    errors.Add($"Ai:CompactionTriggerTokens deve essere fra 1 e il budget di input della fase chat/analisi più stretta ({tightest}).");
+                }
+            }
         }
 
         if (!Enum.IsDefined(o.StructuredOutputMode))
@@ -111,6 +204,11 @@ public sealed class AiOptionsValidator : Microsoft.Extensions.Options.IValidateO
         if (o.RequestTimeoutSeconds <= 0)
         {
             errors.Add("Ai:RequestTimeoutSeconds deve essere positivo.");
+        }
+
+        if (o.RuntimeCheckSeconds <= 0)
+        {
+            errors.Add("Ai:RuntimeCheckSeconds deve essere positivo.");
         }
 
         return errors.Count == 0

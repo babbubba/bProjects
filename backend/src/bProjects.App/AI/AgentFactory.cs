@@ -18,24 +18,31 @@ public sealed class AgentFactory
     private readonly TokenCounter _count;
     private readonly ChatOptions? _summarizerOptions;
 
-    public AgentFactory(AiOptions options, IChatClient model, TokenCounter count, ChatOptions? summarizerOptions = null)
+    /// <summary>Con <paramref name="runtime"/> ogni chiamata al modello (anche la sintesi) passa dal controllo di coerenza della finestra.</summary>
+    public AgentFactory(
+        AiOptions options, IChatClient model, TokenCounter count, ChatOptions? summarizerOptions = null, ModelRuntimeMonitor? runtime = null)
     {
         _options = options;
-        _model = model;
+        _model = runtime is null ? model : new ModelRuntimeGuardChatClient(model, runtime);
         _count = count;
         _summarizerOptions = summarizerOptions;
     }
 
-    public static AgentFactory Create(AiOptions options, InternalModelClient client) =>
-        new(options, client.ChatClient, async (text, ct) => await client.CountTokensAsync(text, ct), client.CreateChatOptions(temperature: 0));
+    public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null) =>
+        new(options, client.ChatClient, async (text, ct) => await client.CountTokensAsync(text, ct),
+            client.CreateChatOptions(temperature: 0, phase: AiPhase.Compaction), runtime);
+
+    /// <summary>Client per la chat (budget della fase Chat).</summary>
+    public Task<IChatClient> CreateCompactingClientAsync(string instructions, CancellationToken cancellationToken = default) =>
+        CreateCompactingClientAsync(instructions, AiPhase.Chat, cancellationToken);
 
     /// <summary>
-    /// Client per chat e analisi. La soglia della strategia sottrae i token delle istruzioni; la history originale
-    /// non è mai modificata: la sintesi vive solo nel contesto della chiamata.
+    /// Client per chat e analisi con il budget della <paramref name="phase"/>. La soglia della strategia sottrae i token delle
+    /// istruzioni; la history originale non è mai modificata: la sintesi vive solo nel contesto della chiamata.
     /// </summary>
-    public async Task<IChatClient> CreateCompactingClientAsync(string instructions, CancellationToken cancellationToken = default)
+    public async Task<IChatClient> CreateCompactingClientAsync(string instructions, AiPhase phase, CancellationToken cancellationToken = default)
     {
-        var budget = ContextBudget.From(_options);
+        var budget = ContextBudget.From(_options, phase);
         var instructionTokens = await _count(instructions, cancellationToken);
         var monitor = new CompactionMonitor();
         var measured = new MeasuredTokens(_count);
@@ -46,7 +53,9 @@ public sealed class AgentFactory
         // del framework (8 gruppi) renderebbe incomprimibile una conversazione di pochi messaggi molto lunghi.
         // La strategia smette di riassumere quando il trigger non scatta più, ma la sintesi si aggiunge dopo: si lascia
         // sotto soglia lo spazio della sintesi (il suo tetto di output) perché il contesto finale resti entro il budget.
-        var reserve = Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, _options.MaxOutputTokens), messageTrigger / 2));
+        // Il tetto di output della sintesi è quello della fase Compaction, lo stesso che MonitoredSummarizerClient impone alla richiesta.
+        var summaryOutput = _options.ForPhase(AiPhase.Compaction).MaxOutputTokens;
+        var reserve = Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, summaryOutput), messageTrigger / 2));
         var strategy = new SummarizationCompactionStrategy(
             new MonitoredSummarizerClient(_model, monitor, _summarizerOptions, reserve),
             index => measured.Included(index) > messageTrigger,
@@ -82,12 +91,12 @@ public sealed class AgentFactory
     /// <summary>Client del DocumentAgent: nessuna compattazione, fallisce con context_overflow prima della chiamata.</summary>
     public IChatClient CreateDocumentClient() =>
         new ChatClientBuilder(_model)
-            .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options), _count, monitor: null))
+            .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options, AiPhase.Document), _count, monitor: null))
             .Build();
 
-    /// <summary>Preflight del DocumentAgent: istruzioni e messaggi dentro il budget di input, altrimenti context_overflow prima della chiamata.</summary>
+    /// <summary>Preflight del DocumentAgent: istruzioni e messaggi dentro il budget di input della fase Document, altrimenti context_overflow prima della chiamata.</summary>
     public ValueTask EnsureDocumentWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>
-        ContextBudget.From(_options).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
+        ContextBudget.From(_options, AiPhase.Document).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
 
     public async Task<ChatClientAgent> CreateCompactingAgentAsync(
         string name, string instructions, CancellationToken cancellationToken = default) =>

@@ -36,10 +36,15 @@ public sealed class CompactionFailedException(string reason, Exception? inner = 
 /// <summary>
 /// Budget in token del modello (contracts/ai-workflow.md §7): input = finestra - output - margine, con soglia di
 /// attivazione della compattazione fra 1 e il budget. Le istruzioni contano come qualunque altro payload.
+/// Il budget è quello della fase (<see cref="AiOptions.ForPhase"/>): il tetto di output di fase riduce l'input.
 /// </summary>
 public readonly record struct ContextBudget(int InputBudgetTokens, int TriggerTokens)
 {
-    public static ContextBudget From(AiOptions options) => new(options.InputBudgetTokens, options.EffectiveCompactionTriggerTokens);
+    public static ContextBudget From(AiOptions options, AiPhase phase = AiPhase.Chat)
+    {
+        var input = options.ForPhase(phase).InputBudgetTokens;
+        return new(input, options.CompactionTriggerTokens > 0 ? options.CompactionTriggerTokens : input);
+    }
 
     /// <summary>Soglia per i soli messaggi, tolti i token delle istruzioni già riservati nell'input.</summary>
     public int MessageTriggerTokens(int instructionTokens) => Math.Max(1, TriggerTokens - instructionTokens);
@@ -89,7 +94,7 @@ public sealed class CompactionMonitor
             return;
         }
 
-        if (failure is CompactionFailedException || ModelFailure.Classify(failure).IsTransient)
+        if (failure is CompactionFailedException or ContextWindowMismatchException || ModelFailure.Classify(failure).IsTransient)
         {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }

@@ -33,6 +33,12 @@ builder.Services.AddSingleton<IValidateOptions<ExecutionOptions>, ExecutionOptio
 builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(AiOptions.SectionName)).ValidateOnStart();
 builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSection(ExecutionOptions.SectionName)).ValidateOnStart();
 builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
+// Stato verificato del runtime (cache a TTL, sonda lazy alla prima lettura): non blocca mai l'avvio né i progetti con il DGX offline.
+builder.Services.AddSingleton(sp => new ModelRuntimeMonitor(
+    sp.GetRequiredService<InternalModelClient>(),
+    sp.GetRequiredService<IOptions<AiOptions>>().Value,
+    sp.GetRequiredService<ILogger<ModelRuntimeMonitor>>(),
+    sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddProblemDetails();
 
 // Dispatch dei ChatTurn (T014) con ConversationalAgent (T017) e commit atomico della risposta (T018).
@@ -44,7 +50,8 @@ builder.Services.AddSingleton(sp =>
 {
     var model = sp.GetRequiredService<InternalModelClient>();
     return new ConversationalAgent(
-        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model), model.CreateChatOptions(temperature: 0.2f));
+        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>()),
+        model.CreateChatOptions(temperature: 0.2f, phase: AiPhase.Chat));
 });
 builder.Services.AddScoped<IChatTurnCommitter, ChatTurnCompletion>();
 builder.Services.AddScoped<bProjects.App.Analysis.IAnalysisRunStore, bProjects.App.Analysis.AnalysisRunCompletion>();
@@ -52,13 +59,14 @@ builder.Services.AddScoped<bProjects.App.Analysis.PreviewRevisionService>();
 builder.Services.AddSingleton(sp => new AnalysisWorkflow(
     sp.GetRequiredService<IServiceScopeFactory>(),
     sp.GetRequiredService<ConversationalAgent>(),
-    sp.GetRequiredService<InternalModelClient>().CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
+    sp.GetRequiredService<InternalModelClient>().CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis)));
 builder.Services.AddScoped<bProjects.App.Analysis.IDocumentRunStore, bProjects.App.Analysis.DocumentRunCompletion>();
 builder.Services.AddSingleton(sp =>
 {
     var model = sp.GetRequiredService<InternalModelClient>();
     return new DocumentAgent(
-        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model), model.CreateChatOptions(temperature: 0.2f));
+        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>()),
+        model.CreateChatOptions(temperature: 0.2f, phase: AiPhase.Document));
 });
 builder.Services.AddSingleton(sp => new DocumentWorkflow(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentAgent>()));
 builder.Services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();

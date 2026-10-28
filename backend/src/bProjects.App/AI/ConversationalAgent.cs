@@ -111,7 +111,8 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
     /// <summary>
     /// Lo stesso ConversationalAgent in modalità consolidamento (T029): prompt, opzioni di output strutturato e sessione
     /// propri, separati dal dialogo. Nessun ChatHistoryProvider applicativo: la conversazione arriva come messaggi del
-    /// grafo (LoadDialog) e la sessione appartiene al checkpoint del workflow. Compattazione nativa sul client.
+    /// grafo (LoadDialog) e la sessione appartiene al checkpoint del workflow. Compattazione nativa sul client, con il budget
+    /// della fase Analysis (le <paramref name="analysisOptions"/> vanno create con la stessa fase).
     /// </summary>
     public async Task<ChatClientAgent> CreateConsolidationAgentAsync(ChatOptions analysisOptions, CancellationToken ct)
     {
@@ -125,7 +126,7 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
             Instructions = ConsolidationInstructions,
         };
         return new ChatClientAgent(
-            await factory.CreateCompactingClientAsync(ConsolidationInstructions, ct),
+            await factory.CreateCompactingClientAsync(ConsolidationInstructions, AiPhase.Analysis, ct),
             new ChatClientAgentOptions { Id = ConsolidationAgentId, Name = AgentName, ChatOptions = options });
     }
 

@@ -8,8 +8,17 @@ using OpenAI.Chat;
 
 namespace bProjects.App.AI;
 
-/// <summary>Modello esposto dall'endpoint interno (GET /v1/models).</summary>
-public sealed record ModelInfo(string Id, string? Status, int? ConfiguredContextTokens);
+/// <summary>
+/// Modello esposto dall'endpoint interno (GET /v1/models). In router mode <c>Status</c> è <c>status.value</c> (loaded/unloaded/...)
+/// e gli argomenti di avvio danno <c>--ctx-size</c> e, solo se presente, <c>--n-predict</c>; altrove sono null.
+/// </summary>
+public sealed record ModelInfo(string Id, string? Status, int? ConfiguredContextTokens, int? ConfiguredNPredict = null);
+
+/// <summary>GET /props: <c>default_generation_settings.n_ctx</c> (per slot), <c>params.n_predict</c> e <c>total_slots</c>; un campo assente è null.</summary>
+public sealed record ServerProps(int? ContextTokensPerSlot, int? DefaultNPredict, int? TotalSlots);
+
+/// <summary>Slot di GET /slots: <c>n_ctx</c> se presente.</summary>
+public sealed record ServerSlot(int? ContextTokens);
 
 /// <summary>
 /// Client del solo modello interno (DGX Spark, llama.cpp OpenAI-compatibile). Costruisce un unico
@@ -50,18 +59,20 @@ public sealed class InternalModelClient : IDisposable
     public IChatClient ChatClient { get; }
 
     /// <summary>
-    /// Opzioni di richiesta coerenti con la configurazione: output massimo, ragionamento nascosto spento e,
-    /// se è fornito uno schema e la modalità è JsonSchema, <c>response_format json_schema</c> nativo.
-    /// In ValidatedTextJson non si invia alcun vincolo: la validazione tipizzata è del backend.
+    /// Opzioni di richiesta coerenti con la configurazione della fase (<see cref="AiOptions.ForPhase"/>): output massimo,
+    /// ragionamento nascosto (spento di default) e, se è fornito uno schema e la modalità è JsonSchema,
+    /// <c>response_format json_schema</c> nativo. In ValidatedTextJson non si invia alcun vincolo: la validazione tipizzata è del backend.
     /// </summary>
-    public ChatOptions CreateChatOptions(JsonElement? schema = null, string schemaName = "result", float? temperature = null)
+    public ChatOptions CreateChatOptions(
+        JsonElement? schema = null, string schemaName = "result", float? temperature = null, AiPhase phase = AiPhase.Chat)
     {
+        var settings = _options.ForPhase(phase);
         var options = new ChatOptions
         {
             ModelId = _options.ModelId,
-            MaxOutputTokens = _options.MaxOutputTokens,
+            MaxOutputTokens = settings.MaxOutputTokens,
             Temperature = temperature,
-            RawRepresentationFactory = _ => CreateRawOptions(_options.EnableThinking),
+            RawRepresentationFactory = _ => CreateRawOptions(settings.EnableThinking),
         };
 
         if (schema is { } s && _options.StructuredOutputMode == StructuredOutputMode.JsonSchema)
@@ -80,29 +91,81 @@ public sealed class InternalModelClient : IDisposable
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
 
         var models = new List<ModelInfo>();
-        foreach (var item in json.RootElement.GetProperty("data").EnumerateArray())
+        if (!json.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
         {
+            return models;
+        }
+
+        foreach (var item in data.EnumerateArray())
+        {
+            if (!item.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
             string? status = null;
             int? ctx = null;
-            if (item.TryGetProperty("status", out var st))
+            int? nPredict = null;
+            if (item.TryGetProperty("status", out var st) && st.ValueKind == JsonValueKind.Object)
             {
-                status = st.TryGetProperty("value", out var v) ? v.GetString() : null;
+                status = st.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
                 if (st.TryGetProperty("args", out var args) && args.ValueKind == JsonValueKind.Array)
                 {
-                    var list = args.EnumerateArray().Select(a => a.GetString()).ToList();
-                    var i = list.IndexOf("--ctx-size");
-                    if (i >= 0 && i + 1 < list.Count && int.TryParse(list[i + 1], out var parsed))
-                    {
-                        ctx = parsed;
-                    }
+                    var list = args.EnumerateArray().Select(a => a.ValueKind == JsonValueKind.String ? a.GetString() : null).ToList();
+                    ctx = ArgValue(list, "--ctx-size", "-c");
+                    nPredict = ArgValue(list, "--n-predict", "--predict", "-n");
                 }
             }
 
-            models.Add(new ModelInfo(item.GetProperty("id").GetString()!, status, ctx));
+            models.Add(new ModelInfo(id.GetString()!, status, ctx, nPredict));
         }
 
         return models;
     }
+
+    private static int? ArgValue(List<string?> args, params string[] names)
+    {
+        var i = args.FindIndex(a => a is not null && names.Contains(a));
+        return i >= 0 && i + 1 < args.Count && int.TryParse(args[i + 1], out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
+    /// GET /props?model=: finestra per slot e n_predict di default come riportati dal server. Ogni campo assente o non numerico è
+    /// null: nulla è dedotto. Un errore HTTP lancia <see cref="HttpRequestException"/> (con lo StatusCode).
+    /// </summary>
+    public async Task<ServerProps> GetServerPropsAsync(CancellationToken cancellationToken = default)
+    {
+        var uri = new Uri(_serverRoot, $"props?model={Uri.EscapeDataString(_options.ModelId)}");
+        using var response = await _http.GetAsync(uri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+
+        var root = json.RootElement;
+        var totalSlots = Int(root, "total_slots");
+        if (!root.TryGetProperty("default_generation_settings", out var defaults) || defaults.ValueKind != JsonValueKind.Object)
+        {
+            return new ServerProps(null, null, totalSlots);
+        }
+
+        var nPredict = defaults.TryGetProperty("params", out var p) && p.ValueKind == JsonValueKind.Object ? Int(p, "n_predict") : null;
+        return new ServerProps(Int(defaults, "n_ctx"), nPredict ?? Int(defaults, "n_predict"), totalSlots);
+    }
+
+    /// <summary>GET /slots?model=: <c>n_ctx</c> di ogni slot. Disabilitato/non supportato (404/501...) lancia <see cref="HttpRequestException"/>: il chiamante lo tollera.</summary>
+    public async Task<IReadOnlyList<ServerSlot>> GetSlotsAsync(CancellationToken cancellationToken = default)
+    {
+        var uri = new Uri(_serverRoot, $"slots?model={Uri.EscapeDataString(_options.ModelId)}");
+        using var response = await _http.GetAsync(uri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+
+        return json.RootElement.ValueKind == JsonValueKind.Array
+            ? json.RootElement.EnumerateArray().Where(s => s.ValueKind == JsonValueKind.Object).Select(s => new ServerSlot(Int(s, "n_ctx"))).ToList()
+            : [];
+    }
+
+    private static int? Int(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : null;
 
     /// <summary>Finestra effettivamente allocata dal runtime per il modello configurato (GET /props, n_ctx).</summary>
     public async Task<int> GetRuntimeContextTokensAsync(CancellationToken cancellationToken = default)
