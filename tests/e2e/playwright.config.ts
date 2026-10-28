@@ -7,6 +7,8 @@ const baseURL = process.env['E2E_BASE_URL'];
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
+  // Gli artefatti dei test stanno in una sottocartella: gli screenshot in test-results/screens non vengono cancellati a ogni esecuzione.
+  outputDir: './test-results/artifacts',
   fullyParallel: false,
   workers: 1, // i test condividono lo stesso stack e uno di essi lo riavvia
   forbidOnly: !!process.env['CI'],

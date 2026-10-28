@@ -71,6 +71,12 @@ Integration risultano ignorati, mai superati. MafReal richiede `BPROJECTS_TEST_D
 con cwd `tests/e2e` e, su Windows, in cmd: usare percorsi assoluti con lettera di unita'
 (`C:/...`) per `-f` ed `--env-file`.
 
+Metriche di inferenza e monitor del contesto (UI): `context-monitor.spec.ts` usa lo stack finto (nessun DGX);
+`context-monitor-real.spec.ts` richiede `E2E_MODEL_MODE=real`, uno stack con `AI_COMPACTION_TRIGGER_TOKENS` basso (es. 3000)
+e, facoltative, `E2E_APP_RESTART_COMMAND` (`restart app`), `E2E_DGX_ENDPOINT`/`E2E_DGX_API_KEY`/`E2E_DGX_MODEL` (chiamata diretta di
+confronto) ed `E2E_API_KEY_NEEDLE` (chiave da non trovare in DOM e risposte; mai stampata). Gli screenshot vanno in
+`tests/e2e/test-results/screens` (`E2E_SCREENSHOT_DIR`).
+
 Integration usa PostgreSQL reale per commit, concorrenza e serializzazione.
 MafReal usa anche endpoint DGX e grafi MAF effettivi; mock non sostituiscono le prove
 critiche. Registrare versioni, ID, conteggi, token/durate ed esiti, non contenuti integrali.

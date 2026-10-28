@@ -330,8 +330,9 @@ test.describe('pannello sticky e layout', () => {
     await expect(page.locator('article[data-role="assistant"]')).toHaveCount(24);
     await expect(page.getByTestId('usage-headline')).toBeVisible();
 
-    const panel = page.getByTestId('context-usage-panel');
+    // La colonna sticky e' l'host: il contenuto interno scorre dentro il suo max-height.
     const host = page.locator('app-context-usage-panel');
+    const panel = host;
     expect(await host.evaluate((el) => getComputedStyle(el).position)).toBe('sticky');
     const doc = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, vh: window.innerHeight }));
     expect(doc.height, 'la conversazione deve richiedere lo scroll').toBeGreaterThan(doc.vh * 3);
