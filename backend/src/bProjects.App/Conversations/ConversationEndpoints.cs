@@ -202,7 +202,11 @@ public static class ConversationEndpoints
             .Take(pageSize)
             .ToListAsync(ct);
 
-        var views = items.Select(i => ToView(i.Message, i.AuthorName)).ToList();
+        // Per un messaggio PM il chatTurnId e' il turno che ha come trigger quel messaggio (uno solo, indice univoco).
+        var ids = items.Select(i => i.Message.Id).ToList();
+        var turnIds = await db.ChatTurns.AsNoTracking().Where(t => ids.Contains(t.TriggerMessageId))
+            .ToDictionaryAsync(t => t.TriggerMessageId, t => t.Id, ct);
+        var views = items.Select(i => ToView(i.Message, i.AuthorName, turnIds.GetValueOrDefault(i.Message.Id))).ToList();
         return Results.Ok(new MessagePage(views, views.Count > 0 ? views[^1].Sequence : null));
     }
 
@@ -237,10 +241,11 @@ public static class ConversationEndpoints
         var authorName = message.AuthorId is { } id
             ? await db.Users.Where(u => u.Id == id).Select(u => u.UserName).SingleOrDefaultAsync(ct)
             : null;
-        return ToView(message, authorName);
+        var triggeredTurn = await db.ChatTurns.AsNoTracking().Where(t => t.TriggerMessageId == message.Id).Select(t => (Guid?)t.Id).SingleOrDefaultAsync(ct);
+        return ToView(message, authorName, triggeredTurn);
     }
 
-    private static MessageView ToView(ConversationMessage m, string? authorName) => new(
+    private static MessageView ToView(ConversationMessage m, string? authorName, Guid? triggeredTurnId) => new(
         m.Id,
         m.Sequence,
         m.Role == MessageRole.User ? "user" : "assistant",
@@ -249,7 +254,7 @@ public static class ConversationEndpoints
         m.AuthorId,
         authorName,
         m.AgentId,
-        m.ChatTurnId,
+        m.ChatTurnId ?? triggeredTurnId,
         m.ReplyToMessageId);
 
     internal static ChatTurnView ToView(ChatTurn t) => new(

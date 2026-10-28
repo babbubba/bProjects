@@ -357,6 +357,19 @@ public sealed class ProjectChatContractTests(PostgresDatabaseFixture database) :
     }
 
     [Fact]
+    public async Task A_pm_message_exposes_the_chat_turn_it_triggered_both_on_save_and_on_listing()
+    {
+        using var client = await App.LoginAsync();
+        var project = await CreateProject(client, $"Collegamento {Guid.NewGuid():N}");
+        var body = await Json(await PostMessage(client, project.Id, Guid.NewGuid(), "uno"));
+        var turnId = body.GetProperty("chatTurnId").GetGuid();
+
+        Assert.Equal(turnId, body.GetProperty("message").GetProperty("chatTurnId").GetGuid());
+        var page = await Json(await client.GetAsync($"/api/projects/{project.Id}/messages", Ct));
+        Assert.Equal(turnId, page.GetProperty("items")[0].GetProperty("chatTurnId").GetGuid());
+    }
+
+    [Fact]
     public async Task Replaying_the_same_client_message_id_returns_the_same_message_and_turn_without_enqueueing()
     {
         using var client = await App.LoginAsync();
