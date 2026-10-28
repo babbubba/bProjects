@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace bProjects.App.Analysis;
 
 /// <summary>Esecuzione di Analysis presa in carico: owner e fencing token del lease del ProcessingRun.</summary>
-public sealed record AnalysisRunClaim(Guid RunId, string LeaseOwner, long FencingToken);
+public sealed record AnalysisRunClaim(Guid RunId, string LeaseOwner, long FencingToken, int AttemptCount = 0);
 
 public enum AnalysisCommitOutcome
 {

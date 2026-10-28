@@ -9,15 +9,13 @@ namespace bProjects.IntegrationTests;
 /// T024 — contratto HTTP del comando Analizza (contracts/http-api.md, «Richiesta di analisi formale») su PostgreSQL
 /// reale: cutoff fissato sotto lock, chiave di idempotenza, no_pm_input, nessuna bozza Markdown. Nessuna prova
 /// invoca il modello: l'harness non registra né esecutore chat né worker, quindi i run restano Queued.
-/// Test-first (convenzione T010): le prove sono Skipped con motivo finché l'endpoint non esiste e diventano verdi con
+/// Test-first (convenzione T010): scritte prima dell'implementazione, sono verdi con
 /// T025 (ProcessingRun) e T030 (comandi/letture analisi). I casi nominali (202/200, run Queued, cutoff) sono tenuti
 /// distinti da quelli di fallimento (422/409/400/404/401/403).
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
 public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IClassFixture<PostgresDatabaseFixture>, IAsyncLifetime
 {
-    private const string PendingT030 = "In attesa di T025/T030: POST /analyses e ProcessingRun non esistono ancora.";
-
     private ApiHarness? _app;
 
     public async ValueTask InitializeAsync()
@@ -47,7 +45,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
 
     // ================================================================ nominali
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Analyze_returns_202_location_and_a_queued_analysis_run_fixed_at_the_last_pm_message()
     {
         using var client = await App.LoginAsync();
@@ -68,7 +66,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(JsonValueKind.Null, run.GetProperty("error").ValueKind);
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Analyze_does_not_wait_for_pending_chat_turns_and_does_not_include_later_messages()
     {
         using var client = await App.LoginAsync();
@@ -84,7 +82,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(before.Sequence, reread.GetProperty("sourceCutoffSequence").GetInt64()); // il cutoff è immutabile
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task The_same_key_and_input_replays_the_same_run_without_creating_another()
     {
         using var client = await App.LoginAsync();
@@ -101,7 +99,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"ProjectId\" = @p AND \"Kind\" = 'Analysis'", ("p", project)));
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task A_terminal_run_replayed_with_the_same_key_returns_200_and_the_same_run()
     {
         using var client = await App.LoginAsync();
@@ -119,7 +117,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal("Failed", view.GetProperty("status").GetString()); // un Failed non si presenta come successo
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task After_a_failed_run_a_new_key_starts_a_new_run_and_the_old_run_stays_readable()
     {
         using var client = await App.LoginAsync();
@@ -137,7 +135,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal("Failed", (await Json(old)).GetProperty("status").GetString());
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Analyze_creates_no_markdown_draft_and_no_analysis_result()
     {
         using var client = await App.LoginAsync();
@@ -157,7 +155,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"ProjectId\" = @p AND \"Kind\" = 'Document'", ("p", project)));
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task The_preview_is_not_available_before_the_first_valid_revision()
     {
         using var client = await App.LoginAsync();
@@ -171,7 +169,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal("preview_not_available", problem.GetProperty("code").GetString());
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Another_pm_can_read_the_run_of_a_shared_project()
     {
         using var first = await App.LoginAsync();
@@ -187,7 +185,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
 
     // ================================================================ fallimenti
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Analyze_without_any_pm_message_is_422_no_pm_input_and_creates_no_run()
     {
         using var client = await App.LoginAsync();
@@ -201,7 +199,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(JsonValueKind.Null, view.GetProperty("activeProcessingRunId").ValueKind);
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task The_same_key_with_a_different_cutoff_is_409_idempotency_conflict()
     {
         using var client = await App.LoginAsync();
@@ -219,7 +217,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
             (await Json(await client.GetAsync($"/api/projects/{project}/processing-runs/{first.GetProperty("id").GetGuid()}", Ct))).GetProperty("sourceCutoffSequence").GetInt64());
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Another_key_while_a_formal_run_is_active_is_409_processing_active_pointing_to_the_existing_run()
     {
         using var client = await App.LoginAsync();
@@ -235,7 +233,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"ProjectId\" = @p AND \"Kind\" = 'Analysis'", ("p", project)));
     }
 
-    [Theory(Skip = PendingT030)]
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("non-un-uuid")]
@@ -257,7 +255,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"ProjectId\" = @p", ("p", project)));
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Analyze_on_an_unknown_project_is_404()
     {
         using var client = await App.LoginAsync();
@@ -265,7 +263,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         await AssertProblem(await Analyze(client, Guid.NewGuid(), Guid.NewGuid()), HttpStatusCode.NotFound);
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task Analysis_endpoints_require_authentication_and_the_pm_role()
     {
         var project = Guid.NewGuid();
@@ -283,7 +281,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
         }
     }
 
-    [Fact(Skip = PendingT030)]
+    [Fact]
     public async Task A_run_of_another_project_is_not_readable_through_this_project()
     {
         using var client = await App.LoginAsync();
@@ -336,7 +334,7 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
     }
 
     private async Task SetRunStatus(Guid runId, string status) =>
-        await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = @s, \"CompletedAt\" = now() WHERE \"Id\" = @r", ("s", status), ("r", runId));
+        await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = @s, \"CompletedAt\" = now(), \"ErrorCode\" = CASE WHEN @s = 'Failed' THEN 'processing_failed' END WHERE \"Id\" = @r", ("s", status), ("r", runId));
 
     private async Task<long> Count(string sql, params (string Name, object Value)[] parameters)
     {

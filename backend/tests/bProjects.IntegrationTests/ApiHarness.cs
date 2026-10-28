@@ -34,6 +34,7 @@ public sealed class ApiHarness : IAsyncDisposable
             // Senza richiesta esplicita il dispatcher resta inattivo: le prove di progetti e conversazioni non
             // devono far eseguire i turni accodati. Chi vuole l'esecuzione reale la registra con <paramref name="configure"/>.
             services.RemoveAll<IChatTurnExecutor>();
+            services.RemoveAll<bProjects.App.AI.AnalysisWorkflow>(); // dipende dal client AI, che qui non deve esistere
             configure?.Invoke(services);
         }));
     }

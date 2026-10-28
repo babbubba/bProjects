@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using bProjects.App.Analysis;
 using bProjects.App.Conversations;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -99,7 +100,7 @@ public static class ProjectEndpoints
         await db.SaveChangesAsync();
 
         var row = await Rows(db, db.Projects.Where(p => p.Id == project.Id)).SingleAsync();
-        return Results.Created($"/api/projects/{project.Id}", ToView(row, await LoadActivity(db, [row.ConversationId])));
+        return Results.Created($"/api/projects/{project.Id}", ToView(row, await LoadActivity(db, [row])));
     }
 
     private static async Task<IResult> List(AppDbContext db, string? cursor, int? limit)
@@ -132,14 +133,14 @@ public static class ProjectEndpoints
         var byId = (await Rows(db, db.Projects.Where(p => pageIds.Contains(p.Id))).ToListAsync()).ToDictionary(r => r.Project.Id);
         var page = pageIds.Select(id => byId[id]).ToList();
         var next = ordered.Count > pageSize ? EncodeCursor(page[^1].Project) : null;
-        var activity = await LoadActivity(db, page.Select(r => r.ConversationId));
+        var activity = await LoadActivity(db, page);
         return Results.Ok(new ProjectPage(page.Select(r => ToView(r, activity)).ToList(), next));
     }
 
     private static async Task<IResult> Get(Guid projectId, AppDbContext db)
     {
         var row = await Rows(db, db.Projects.Where(p => p.Id == projectId)).SingleOrDefaultAsync();
-        return row is null ? Results.NotFound() : Results.Ok(ToView(row, await LoadActivity(db, [row.ConversationId])));
+        return row is null ? Results.NotFound() : Results.Ok(ToView(row, await LoadActivity(db, [row])));
     }
 
     private sealed record Row(
@@ -156,12 +157,45 @@ public static class ProjectEndpoints
             c.LastSequence,
             u.UserName);
 
-    /// <summary>Dati derivati dalla conversazione: turni pendenti (FIFO) e ultima sequenza PM.</summary>
-    private sealed record Activity(ILookup<Guid, Guid> PendingTurns, Dictionary<Guid, long> LatestUserSequence);
+    /// <summary>Stato dell'analisi corrente: ultima revisione (versione massima) di Project.CurrentAnalysisId.</summary>
+    private sealed record CurrentRevision(Guid AnalysisId, Guid Id, AnalysisValidationState ValidationState);
 
-    private static async Task<Activity> LoadActivity(AppDbContext db, IEnumerable<Guid> conversationIds)
+    /// <summary>
+    /// Dati derivati: turni pendenti (FIFO) e ultima sequenza PM per conversazione; run formale attivo, ultimo run di
+    /// Analysis e revisione corrente per progetto. Le liste restano vuote e i riferimenti null finché non esistono.
+    /// </summary>
+    private sealed record Activity(
+        ILookup<Guid, Guid> PendingTurns,
+        Dictionary<Guid, long> LatestUserSequence,
+        Dictionary<Guid, Guid> ActiveRuns,
+        Dictionary<Guid, Guid> LatestAnalysisRuns,
+        Dictionary<Guid, CurrentRevision> CurrentRevisions);
+
+    private static async Task<Activity> LoadActivity(AppDbContext db, IReadOnlyCollection<Row> rows)
     {
-        var ids = conversationIds.ToList();
+        var ids = rows.Select(r => r.ConversationId).ToList();
+        var projectIds = rows.Select(r => r.Project.Id).ToList();
+        var activeRuns = await db.ProcessingRuns.AsNoTracking()
+            .Where(r => projectIds.Contains(r.ProjectId) && (r.Status == ProcessingRunStatus.Queued || r.Status == ProcessingRunStatus.Running))
+            .Select(r => new { r.ProjectId, r.Id })
+            .ToDictionaryAsync(r => r.ProjectId, r => r.Id); // l'indice formale ne ammette uno solo per progetto
+        var latestRuns = (await db.ProcessingRuns.AsNoTracking()
+            .Where(r => projectIds.Contains(r.ProjectId) && r.Kind == ProcessingRunKind.Analysis)
+            .Select(r => new { r.ProjectId, r.Id, r.RequestedAt })
+            .ToListAsync())
+            .GroupBy(r => r.ProjectId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.RequestedAt).ThenByDescending(r => r.Id).First().Id);
+        var currentIds = rows.Select(r => r.Project.CurrentAnalysisId).OfType<Guid>().ToList();
+        var currentRevisions = (await db.AnalysisRevisions.AsNoTracking()
+            .Where(r => currentIds.Contains(r.AnalysisId))
+            .Select(r => new { r.AnalysisId, r.Id, r.Version, r.ValidationState })
+            .ToListAsync())
+            .GroupBy(r => r.AnalysisId)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var top = g.OrderByDescending(r => r.Version).First();
+                return new CurrentRevision(top.AnalysisId, top.Id, top.ValidationState);
+            });
         var turns = await db.ChatTurns
             .Where(t => ids.Contains(t.ConversationId) && (t.Status == ChatTurnStatus.Queued || t.Status == ChatTurnStatus.Running))
             .OrderBy(t => t.SourceCutoffSequence)
@@ -172,7 +206,7 @@ public static class ProjectEndpoints
             .GroupBy(m => m.ConversationId)
             .Select(g => new { ConversationId = g.Key, Sequence = g.Max(m => m.Sequence) })
             .ToDictionaryAsync(x => x.ConversationId, x => x.Sequence);
-        return new Activity(turns.ToLookup(t => t.ConversationId, t => t.Id), latestUser);
+        return new Activity(turns.ToLookup(t => t.ConversationId, t => t.Id), latestUser, activeRuns, latestRuns, currentRevisions);
     }
 
     private static ProjectView ToView(Row row, Activity activity) => new(
@@ -185,12 +219,15 @@ public static class ProjectEndpoints
         row.LastSequence,
         activity.LatestUserSequence.GetValueOrDefault(row.ConversationId),
         activity.PendingTurns[row.ConversationId].ToList(),
-        ActiveProcessingRunId: null,
-        LatestAnalysisRunId: null,
+        activity.ActiveRuns.TryGetValue(row.Project.Id, out var active) ? active : null,
+        activity.LatestAnalysisRuns.TryGetValue(row.Project.Id, out var latest) ? latest : null,
         row.Project.CurrentAnalysisId,
-        CurrentRevisionId: null,
-        ValidationState: null,
+        CurrentOf(row, activity)?.Id,
+        CurrentOf(row, activity)?.ValidationState.ToString(),
         row.Project.LatestDraftId);
+
+    private static CurrentRevision? CurrentOf(Row row, Activity activity) =>
+        row.Project.CurrentAnalysisId is { } id && activity.CurrentRevisions.TryGetValue(id, out var revision) ? revision : null;
 
     private static string EncodeCursor(Project last)
     {
