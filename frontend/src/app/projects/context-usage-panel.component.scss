@@ -107,7 +107,8 @@
     font-weight: 400;
   }
 
-  td {
+  td,
+  th.text-end {
     white-space: nowrap;
   }
 
