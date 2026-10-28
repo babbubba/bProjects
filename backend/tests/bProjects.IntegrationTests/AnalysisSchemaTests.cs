@@ -103,8 +103,9 @@ public sealed class AnalysisSchemaTests(PostgresDatabaseFixture database) : ICla
         Assert.Equal("23503", (await Assert.ThrowsAsync<PostgresException>(() => Execute(
             $"UPDATE \"Projects\" SET \"CurrentAnalysisId\" = '{Guid.NewGuid()}' WHERE \"Id\" = '{seed.Project}'", cs))).SqlState);
         await Execute($"UPDATE \"Projects\" SET \"CurrentAnalysisId\" = '{analysis}' WHERE \"Id\" = '{seed.Project}'", cs);
-        // LatestDraftId resta senza FK fino a T038
-        await Execute($"UPDATE \"Projects\" SET \"LatestDraftId\" = '{Guid.NewGuid()}' WHERE \"Id\" = '{seed.Project}'", cs);
+        // LatestDraftId ha la FK verso Drafts da T038: un riferimento inesistente è rifiutato (prove complete in DraftSchemaTests)
+        Assert.Equal("23503", (await Assert.ThrowsAsync<PostgresException>(() => Execute(
+            $"UPDATE \"Projects\" SET \"LatestDraftId\" = '{Guid.NewGuid()}' WHERE \"Id\" = '{seed.Project}'", cs))).SqlState);
     }
 
     [Fact]

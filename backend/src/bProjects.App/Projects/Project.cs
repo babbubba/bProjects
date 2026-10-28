@@ -11,8 +11,7 @@ public sealed class Project
     public Guid CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
-    // CurrentAnalysisId: FK verso ProcessingRun (T025). LatestDraftId: UUID nullable senza FK né navigazioni finché la tabella
-    // non esiste (vincolo aggiunto da T038).
+    // CurrentAnalysisId: FK verso ProcessingRun (T025). LatestDraftId: FK verso Draft (T038), cambia solo al commit di una bozza.
     public Guid? CurrentAnalysisId { get; set; }
     public Guid? LatestDraftId { get; set; }
 }

@@ -49,7 +49,7 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
     }
 
     [Fact]
-    public async Task Analysis_tables_exist_and_no_table_of_later_features_is_created()
+    public async Task Analysis_and_draft_tables_exist_and_no_table_of_later_features_is_created()
     {
         TestEnvironment.RequirePostgres();
 
@@ -58,7 +58,8 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
         Assert.Contains("ProcessingRuns", tables);
         Assert.Contains("AnalysisRevisions", tables);
         Assert.Contains("WorkflowCheckpoints", tables); // T028: unica tabella di workflow, nessuna tabella per step/executor
-        Assert.DoesNotContain(tables, t => t.Contains("Draft", StringComparison.OrdinalIgnoreCase)
+        Assert.Contains("Drafts", tables); // T038: una sola tabella per le bozze
+        Assert.DoesNotContain(tables, t => (t.Contains("Draft", StringComparison.OrdinalIgnoreCase) && t != "Drafts")
             || (t.Contains("Checkpoint", StringComparison.OrdinalIgnoreCase) && t != "WorkflowCheckpoints")
             || t.Contains("Step", StringComparison.OrdinalIgnoreCase)
             || t.Contains("Knowledge", StringComparison.OrdinalIgnoreCase));
@@ -80,7 +81,7 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
     }
 
     [Fact]
-    public async Task Project_references_are_nullable_uuid_columns_and_only_CurrentAnalysisId_has_a_foreign_key()
+    public async Task Project_references_are_nullable_uuid_columns_with_foreign_keys_to_the_analysis_run_and_the_draft()
     {
         TestEnvironment.RequirePostgres();
 
@@ -98,7 +99,7 @@ public sealed class ProjectSchemaTests(PostgresDatabaseFixture database) : IClas
 
         Assert.Equivalent(new[] { "CurrentAnalysisId:uuid:YES", "LatestDraftId:uuid:YES" }, columns);
         Assert.Contains("CurrentAnalysisId", foreignKeyColumns);
-        Assert.DoesNotContain("LatestDraftId", foreignKeyColumns);
+        Assert.Contains("LatestDraftId", foreignKeyColumns); // T038: FK verso Drafts
     }
 
     [Fact]

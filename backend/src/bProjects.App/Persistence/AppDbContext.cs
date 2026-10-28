@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<ChatTurn> ChatTurns => Set<ChatTurn>();
     public DbSet<ProcessingRun> ProcessingRuns => Set<ProcessingRun>();
     public DbSet<AnalysisRevision> AnalysisRevisions => Set<AnalysisRevision>();
+    public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<WorkflowCheckpoint> WorkflowCheckpoints => Set<WorkflowCheckpoint>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -27,6 +28,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureProjects(builder);
         ConfigureConversations(builder);
         ConfigureAnalysis(builder);
+        ConfigureDrafts(builder);
         ConfigureCheckpoints(builder);
 
         builder.Entity<RefreshSession>(session =>
@@ -50,7 +52,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             project.HasIndex(p => new { p.CreatedAt, p.Id }).IsDescending(true, true);
             project.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.CreatedBy).OnDelete(DeleteBehavior.Restrict);
             project.HasOne<ProcessingRun>().WithMany().HasForeignKey(p => p.CurrentAnalysisId).OnDelete(DeleteBehavior.Restrict);
-            // LatestDraftId: nessuna FK finché Draft non esiste (T038).
+            project.HasOne<Draft>().WithMany().HasForeignKey(p => p.LatestDraftId).OnDelete(DeleteBehavior.Restrict);
         });
 
     private static void ConfigureAnalysis(ModelBuilder builder)
@@ -85,7 +87,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             run.HasOne<AnalysisRevision>().WithMany().HasForeignKey(r => r.InputRevisionId).OnDelete(DeleteBehavior.Restrict);
             run.HasOne<AnalysisRevision>().WithMany().HasForeignKey(r => r.ResultRevisionId).OnDelete(DeleteBehavior.Restrict);
             run.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(r => r.RequestedBy).OnDelete(DeleteBehavior.Restrict);
-            // DraftId: UUID nullable senza FK né navigazione finché Draft non esiste (T038).
+            run.HasOne<Draft>().WithMany().HasForeignKey(r => r.DraftId).OnDelete(DeleteBehavior.Restrict);
+            run.HasIndex(r => r.DraftId);
+            // Bersagli delle chiavi esterne composte di Draft: la bozza appartiene al progetto del run e alla sua revisione di input.
+            run.HasAlternateKey(r => new { r.Id, r.ProjectId });
+            run.HasIndex(r => new { r.Id, r.InputRevisionId }).IsUnique().HasDatabaseName("UX_ProcessingRuns_Id_InputRevisionId");
             run.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_ProcessingRuns_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
@@ -127,6 +133,32 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             });
         });
     }
+
+    private static void ConfigureDrafts(ModelBuilder builder) =>
+        builder.Entity<Draft>(draft =>
+        {
+            draft.HasKey(d => d.Id);
+            draft.Property(d => d.Status).HasConversion<string>().HasMaxLength(16);
+            draft.Property(d => d.ApprovalStatus).HasConversion<string>().HasMaxLength(16);
+            // Una sola bozza per run Document: il replay del commit non ne crea una seconda.
+            draft.HasIndex(d => d.ProcessingRunId).IsUnique();
+            draft.HasIndex(d => new { d.ProjectId, d.CreatedAt });
+            draft.HasIndex(d => d.AnalysisRevisionId);
+            draft.HasOne<Project>().WithMany().HasForeignKey(d => d.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            // Il run esiste e appartiene allo stesso progetto della bozza.
+            draft.HasOne<ProcessingRun>().WithMany()
+                .HasForeignKey(d => new { d.ProcessingRunId, d.ProjectId })
+                .HasPrincipalKey(r => new { r.Id, r.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<AnalysisRevision>().WithMany().HasForeignKey(d => d.AnalysisRevisionId).OnDelete(DeleteBehavior.Restrict);
+            // La FK composita (ProcessingRunId, AnalysisRevisionId) → ProcessingRuns(Id, InputRevisionId), che impone Kind=Document e
+            // AnalysisRevisionId = InputRevisionId, è creata dalla migrazione: InputRevisionId è nullable e EF non lo ammette in una chiave.
+            draft.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Drafts_Markdown_NotBlank", "\"Markdown\" ~ '\\S'");
+                t.HasCheckConstraint("CK_Drafts_Status", "\"Status\" = 'Proposed' AND \"ApprovalStatus\" = 'NotApproved'");
+            });
+        });
 
     private static void ConfigureCheckpoints(ModelBuilder builder)
     {

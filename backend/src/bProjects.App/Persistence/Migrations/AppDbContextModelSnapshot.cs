@@ -356,6 +356,57 @@ namespace bProjects.App.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("bProjects.App.Analysis.Draft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AnalysisRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovalStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Markdown")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ProcessingRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnalysisRevisionId");
+
+                    b.HasIndex("ProcessingRunId")
+                        .IsUnique();
+
+                    b.HasIndex("ProcessingRunId", "ProjectId");
+
+                    b.HasIndex("ProjectId", "CreatedAt");
+
+                    b.ToTable("Drafts", t =>
+                        {
+                            t.HasCheckConstraint("CK_Drafts_Markdown_NotBlank", "\"Markdown\" ~ '\\S'");
+
+                            t.HasCheckConstraint("CK_Drafts_Status", "\"Status\" = 'Proposed' AND \"ApprovalStatus\" = 'NotApproved'");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Analysis.ProcessingRun", b =>
                 {
                     b.Property<Guid>("Id")
@@ -471,6 +522,8 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("ConversationId");
 
+                    b.HasIndex("DraftId");
+
                     b.HasIndex("InputRevisionId");
 
                     b.HasIndex("ProjectId")
@@ -481,6 +534,10 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasIndex("RequestedBy");
 
                     b.HasIndex("ResultRevisionId");
+
+                    b.HasIndex("Id", "InputRevisionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProcessingRuns_Id_InputRevisionId");
 
                     b.HasIndex("RequestedAt", "Id")
                         .HasDatabaseName("IX_ProcessingRuns_Open_Fifo")
@@ -773,6 +830,8 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("CurrentAnalysisId");
 
+                    b.HasIndex("LatestDraftId");
+
                     b.HasIndex("CreatedAt", "Id")
                         .IsDescending();
 
@@ -873,6 +932,28 @@ namespace bProjects.App.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("bProjects.App.Analysis.Draft", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.AnalysisRevision", null)
+                        .WithMany()
+                        .HasForeignKey("AnalysisRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessingRunId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("bProjects.App.Analysis.ProcessingRun", b =>
                 {
                     b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
@@ -883,6 +964,11 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.Conversation", null)
                         .WithMany()
                         .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Analysis.Draft", null)
+                        .WithMany()
+                        .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Analysis.AnalysisRevision", null)
@@ -986,6 +1072,11 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
                         .WithMany()
                         .HasForeignKey("CurrentAnalysisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Analysis.Draft", null)
+                        .WithMany()
+                        .HasForeignKey("LatestDraftId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 #pragma warning restore 612, 618

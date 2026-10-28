@@ -76,7 +76,7 @@ public sealed class ProcessingRun
     public string? LastObservedStage { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    // Esattamente il risultato pertinente a Kind. DraftId resta UUID senza FK fino a T038.
+    // Esattamente il risultato pertinente a Kind: ResultRevisionId per Analysis, DraftId (FK verso Draft, T038) per Document.
     public Guid? ResultRevisionId { get; set; }
     public Guid? DraftId { get; set; }
 
