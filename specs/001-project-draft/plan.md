@@ -332,6 +332,18 @@ i contratti:
   separata dai cinque casi nominali richiesti. Un errore gestito non è
   un successo nominale e non certifica gestione di documenti lunghi.
 
+**Esito dell'indagine T047 (deterministica; prova MafReal su DGX ancora da eseguire).**
+Il caso osservato era una regressione, non un limite: dieci messaggi da ~5k token
+sono uno storico compattabile, ma la strategia nativa preserva di default gli
+ultimi 8 gruppi (`MinimumPreservedGroups`) e la soglia era misurata dal provider con
+la stima byte/4 anziché col tokenizer del modello. Ora si preserva solo l'ultimo
+gruppo, la soglia legge i token reali e il prompt di sintesi nomina negazioni,
+esclusioni e identificativi di fonte. Restano limiti strutturali, esposti come
+errori espliciti con valori misurati: ultimo messaggio oltre il budget
+(`context_overflow`, possibile solo con finestra piccola: 65.536 caratteri sono
+~20k token) e gruppi da riassumere oltre n_ctx del runtime in una sola chiamata
+(`compaction_failed`, la sintesi nativa non è gerarchica).
+
 ### Backlog funzionale successivo alla prima vertical slice (DEFERRED)
 
 Queste voci sono **decisioni di roadmap**, non T054+ e non condizioni aggiuntive
