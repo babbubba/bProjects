@@ -192,3 +192,65 @@ Niente stack trace, contenuti completi, endpoint sensibili o segreti nei log/err
 Recovery dopo crash e retry transitorio sono interni e limitati come nel contratto AI;
 non esiste endpoint per pilotare executor, checkpoint o una fase di orchestrazione.
 Il PM può attendere la conferma per tempo indefinito: nessun run resta sospeso in memoria.
+
+## Metriche di inferenza e monitor del contesto
+
+Estensione autorizzata dopo la prima slice: telemetria tecnica *reale* delle richieste AI e monitor del contesto.
+Ogni valore numerico è un `TokenValue` con provenienza esplicita; nessuna cifra è mai ricavata da `lunghezza / 4`.
+
+```ts
+type Source = 'measured'      // restituito da llama.cpp (usage, /props, /tokenize)
+            | 'calculated'    // calcolato da valori misurati con formula esplicita
+            | 'estimated'     // stima dichiarata, mai presentata come misura
+            | 'unavailable';  // non ottenibile (value = null)
+interface TokenValue { value: number | null; source: Source; }
+
+interface InferenceMetrics {
+  state: 'running' | 'completed' | 'failed' | 'interrupted';
+  phase: 'chat' | 'analysis' | 'document' | 'compaction';
+  modelId: string;                       // modello effettivamente usato in quella richiesta (storico immutabile)
+  startedAt: string; durationMs: number | null;
+  contextWindowTokens: TokenValue;       // ctx-size per slot verificato sul runtime (/props n_ctx) al momento della richiesta
+  maxOutputTokens: { value: number; confirmed: boolean }; // max_tokens richiesto; confirmed=false: limite richiesto, non verificato sul server
+  serverDefaultNPredict: number | null;  // n-predict di default del server, valore distinto
+  reasoning: { requested: boolean; effective: 'on' | 'off' | 'unknown' }; // mai il contenuto del ragionamento
+  promptTokens: TokenValue; completionTokens: TokenValue; totalTokens: TokenValue; cachedTokens: TokenValue;
+  finishReason: string | null;
+  calls: number;                         // chiamate al modello del risultato logico (retry esclusi)
+  compaction: null | { summaryCalls: number; summaryPromptTokens: TokenValue; summaryCompletionTokens: TokenValue };
+}
+```
+
+* `Message` (ruolo assistant) e le viste `ProcessingRun` di analisi e documento includono `metrics: InferenceMetrics | null`.
+  `null` = record storico senza telemetria (mostrato come «non disponibile»). Una risposta fallita non ha messaggio né metriche.
+  I tentativi/retry sono righe distinte in `inference_calls`, ma il risultato logico espone solo quelle del tentativo vincente.
+* Nessun nuovo evento SSE: `chat.state` e `processing.state` (inizio/fine) e la riconnessione fanno rifare il GET del contesto.
+
+`GET /api/projects/{p}/context-usage` → 200 (isolato per progetto, stessa autorizzazione degli altri endpoint):
+
+```ts
+interface ContextUsage {
+  generatedAt: string;
+  runtime: { status: 'online' | 'offline' | 'unverified'; checkedAt: string | null; modelId: string;
+             contextWindowTokens: TokenValue;         // /props n_ctx per slot; unavailable se offline/non verificato
+             configuredContextWindowTokens: number;   // Ai:ContextWindowTokens
+             serverDefaultNPredict: number | null; windowMismatch: boolean };
+  limits: { safetyMarginTokens: number;
+            phases: Record<'chat' | 'analysis' | 'document' | 'compaction',
+                           { maxOutputTokens: number; enableThinking: boolean; inputBudgetTokens: number }> };
+  last: null | { kind: 'chat' | 'analysis' | 'document'; refId: string; at: string; metrics: InferenceMetrics;
+                 usedPercent: number | null;          // calculated: promptTokens / contextWindowTokens * 100, mai > 100 se la richiesta è rientrata
+                 outputReservedTokens: number; safetyMarginTokens: number;
+                 remainingTokens: TokenValue;         // calculated: ctx - prompt - outputReserved - margine
+                 staleReason: null | 'newer_messages' };  // note PM successive all'ultima inferenza completata
+  composition: null | { promptTokens: TokenValue;
+                        items: { key: string; label: string; tokens: TokenValue; messageCount: number | null }[];
+                        attributedTokens: number; unattributedTokens: TokenValue };  // template/token speciali: quota non attribuita, mai forzata
+  history: { messageCount: number; originalTokens: TokenValue };   // messaggi originali conservati, distinti dal contesto operativo
+  compaction: null | { at: string; tokensBefore: TokenValue; tokensAfter: TokenValue; tokensSaved: TokenValue; messagesSummarized: number };
+}
+```
+
+Chiavi di composizione oggi realmente supportate: `system_instructions`, `user_messages`, `assistant_messages`,
+`derived_summary`, `analysis_structured`. Le chiavi future (`document_markdown`, `document_pdf`, `knowledge_base`) si
+aggiungono solo quando esiste la sorgente; il pannello rende qualunque `items[]` senza codice per categoria.
