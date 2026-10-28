@@ -1,0 +1,85 @@
+<section class="chat" aria-label="Dialogo con l'assistente">
+  <div class="chat-log" role="log" aria-live="polite">
+    @if (loading()) {
+      <p class="text-secondary small" role="status">Caricamento del dialogo…</p>
+    }
+    @if (loadError()) {
+      <div class="alert alert-warning py-2" role="alert">{{ loadError() }}</div>
+    }
+    @if (!loading() && !loadError() && messages().length === 0) {
+      <p class="text-secondary small">
+        Descrivi il progetto: ogni messaggio viene salvato e l'assistente risponde in coda.
+      </p>
+    }
+    @for (message of messages(); track message.id) {
+      @if (message.role === 'user') {
+        <article class="msg msg-user" data-role="user">
+          <header>
+            <strong>{{ message.authorDisplayName || 'PM' }}</strong>
+            <time class="text-secondary small">{{ formatTime(message.createdAt) }}</time>
+          </header>
+          <p class="msg-text">{{ message.text }}</p>
+          <footer class="msg-status">
+            <span class="badge text-bg-success saved-badge">Salvato</span>
+            @if (turnLabel(message); as label) {
+              <span
+                class="badge turn-badge"
+                [class.text-bg-danger]="turnOf(message)?.status === 'Failed'"
+                [class.text-bg-secondary]="turnOf(message)?.status !== 'Failed'"
+                >{{ label }}</span
+              >
+            }
+          </footer>
+          @if (turnError(message); as error) {
+            <div class="alert alert-danger py-1 px-2 mt-2 mb-0 turn-error" role="alert">
+              {{ error }} Il messaggio resta salvato e non verrà reinviato automaticamente: puoi
+              inviare un nuovo messaggio.
+            </div>
+          }
+        </article>
+      } @else {
+        <article class="msg msg-ai" data-role="assistant">
+          <header>
+            <strong>Assistente</strong>
+            <span class="badge text-bg-warning ai-badge">AI — non validata</span>
+            <time class="text-secondary small">{{ formatTime(message.createdAt) }}</time>
+          </header>
+          <p class="msg-text">{{ message.text }}</p>
+        </article>
+      }
+    }
+  </div>
+
+  <form class="chat-form" (ngSubmit)="send()" novalidate>
+    <label for="chat-text" class="form-label">Messaggio per l'assistente</label>
+    <textarea
+      id="chat-text"
+      name="text"
+      class="form-control"
+      rows="3"
+      maxlength="65536"
+      [ngModel]="draft()"
+      (ngModelChange)="draft.set($event)"
+      (keydown)="onKeydown($event)"
+    ></textarea>
+    <div
+      class="alert py-2 mt-2 mb-0 send-error"
+      [class.alert-danger]="sendState() === 'failed'"
+      [class.alert-warning]="sendState() === 'uncertain'"
+      role="alert"
+      [hidden]="!sendError()"
+    >
+      {{ sendError() }}
+      @if (sendState() === 'uncertain') {
+        <button type="button" class="btn btn-sm btn-outline-dark ms-2" (click)="retryUncertain()">
+          Verifica e riprova
+        </button>
+      }
+    </div>
+    <div class="mt-2">
+      <button type="submit" class="btn btn-primary" [disabled]="!canSend()">
+        {{ sendState() === 'sending' ? 'Invio…' : 'Invia' }}
+      </button>
+    </div>
+  </form>
+</section>
