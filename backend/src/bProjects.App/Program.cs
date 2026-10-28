@@ -2,6 +2,7 @@ using System.Text;
 using bProjects.App.AI;
 using bProjects.App.Identity;
 using bProjects.App.Persistence;
+using bProjects.App.Projects;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
@@ -91,6 +92,18 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
         return; // il browser ha chiuso la connessione: non è un guasto del modello né dell'app
     }
 
+    if (error is BadHttpRequestException badRequest)
+    {
+        // Richiesta malformata (JSON non valido, parametro non convertibile): errore del client, non del servizio.
+        context.Response.StatusCode = badRequest.StatusCode;
+        await context.RequestServices.GetRequiredService<IProblemDetailsService>().WriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = context,
+            ProblemDetails = { Status = badRequest.StatusCode, Title = "Richiesta non valida", Extensions = { ["code"] = "malformed_request" } },
+        });
+        return;
+    }
+
     var failure = error is null ? default : ModelFailure.Classify(error);
     var transient = error is not null && failure.IsTransient;
     var status = transient ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status500InternalServerError;
@@ -121,6 +134,7 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapAuthEndpoints();
+app.MapProjectEndpoints();
 
 app.Run();
 
