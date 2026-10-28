@@ -277,12 +277,13 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"POST {p}/analyses/{{analysisId:guid}}/confirm",
             $"POST {p}/analyses/{{analysisId:guid}}/document-generations",
             $"GET {p}/draft",
+            $"GET {p}/context-usage",
         ];
         var actual = routes.Select(r => $"{r.Method} {r.Pattern}{(r.Anonymous ? " (anonimo)" : "")}").ToList();
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(15, protectedRoutes.Count);
+        Assert.Equal(16, protectedRoutes.Count);
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {
