@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
 import { FakeStack } from './support/fake-stack';
+import { metricsOf, tv, usageOf } from './support/context-usage';
 
 // T051: responsive e accessibilita' a 1440 e 390 px (progetti desktop-1440 / mobile-390 della configurazione).
 // Le prove automatiche (axe-core, regole WCAG 2.2 AA incluse contrasto e dimensione dei target) NON sostituiscono il
@@ -48,6 +49,9 @@ interface AxeWindow {
 }
 
 async function axeViolations(page: Page): Promise<string[]> {
+  // Il puntatore fermo sopra un pulsante e le transizioni hover in corso falsano il contrasto misurato: si attende lo stato a riposo.
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(400);
   await page.addScriptTag({ path: AXE_PATH });
   return page.evaluate(async (tags) => {
     const result = await (window as unknown as AxeWindow).axe.run(document, { runOnly: { type: 'tag', values: tags } });
@@ -86,6 +90,33 @@ test.describe('layout e axe-core', () => {
     await connected(page);
     await expect(page.getByTestId('preview')).toBeVisible();
     await openSidebar(page);
+    await noHorizontalScroll(page);
+    expect(await axeViolations(page)).toEqual([]);
+  });
+
+  test('progetto con metriche sotto le risposte e monitor del contesto aperto: senza scroll orizzontale e senza violazioni axe', async ({ page }) => {
+    const metrics = metricsOf({ prompt: 21256, completion: 1347, finishReason: 'length' });
+    const { turn } = fake.addPm(P, 'Voglio un portale clienti');
+    const done = fake.completeTurn(P, turn['id'] as string, 'Ho capito: portale clienti con ticket.', metrics);
+    const old = fake.addPm(P, 'Domanda storica');
+    fake.completeTurn(P, old.turn['id'] as string, 'Risposta storica senza telemetria', null);
+    fake.project().usage = usageOf({
+      metrics,
+      refId: done.message['id'] as string,
+      compaction: { at: '2030-01-01T10:04:00Z', tokensBefore: tv(24800), tokensAfter: tv(1700, 'calculated'), tokensSaved: tv(23100, 'calculated'), messagesSummarized: 40 },
+      items: [
+        { key: 'system_instructions', label: 'Istruzioni di sistema', tokens: tv(406), messageCount: null },
+        { key: 'derived_summary', label: 'Riassunto derivato', tokens: tv(1500, 'estimated'), messageCount: 40 },
+        { key: 'user_messages', label: 'Messaggi del PM', tokens: tv(9800), messageCount: 12 },
+      ],
+    });
+    await openProject(page);
+    await connected(page);
+    await expect(page.getByTestId('usage-headline')).toBeVisible();
+    if (isMobile(page)) await page.getByTestId('usage-toggle').click();
+    await page.getByTestId('composition-toggle').click();
+    await expect(page.getByTestId('composition')).toBeVisible();
+    await expect(page.getByRole('region', { name: "Dialogo con l'assistente" }).getByTestId('metrics-truncated')).toBeVisible();
     await noHorizontalScroll(page);
     expect(await axeViolations(page)).toEqual([]);
   });

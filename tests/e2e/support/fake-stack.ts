@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { emptyUsage } from './context-usage';
 
 // Stack finto per le prove d'errore (T050): API HTTP e flusso SSE sostituiti nel browser, cosi' i guasti
 // (POST incerto, stream caduto, run Failed, PUT rifiutato) sono provocati in modo deterministico, senza DGX e senza
@@ -32,6 +33,11 @@ export interface ProjectState {
   analysisId: string | null;
   draft: Json | null;
   keys: Map<string, string>;
+  /** Risposta di GET context-usage (null = monitor vuoto: nessuna richiesta AI ancora). */
+  usage: Json | null;
+  /** Ritardo (ms) e stato HTTP di errore opzionale di GET context-usage. */
+  usageDelayMs: number;
+  usageStatus: number | null;
 }
 
 const iso = (offsetSeconds = 0) => new Date(Date.UTC(2030, 0, 1, 10, 0, offsetSeconds)).toISOString();
@@ -73,7 +79,7 @@ export class FakeStack {
 
   addProject(id: string, name: string): ProjectState {
     const state: ProjectState = {
-      id, name, messages: [], turns: [], runs: [], revisions: [], analysisId: null, draft: null, keys: new Map(),
+      id, name, messages: [], turns: [], runs: [], revisions: [], analysisId: null, draft: null, keys: new Map(), usage: null, usageDelayMs: 0, usageStatus: null,
     };
     this.projects.set(id, state);
     return state;
@@ -124,13 +130,14 @@ export class FakeStack {
     return Object.assign(this.turn(projectId, id), patch);
   }
 
-  completeTurn(projectId: string, id: string, reply: string): { turn: Json; message: Json } {
+  completeTurn(projectId: string, id: string, reply: string, metrics?: Json | null): { turn: Json; message: Json } {
     const p = this.project(projectId);
     const turn = this.turn(projectId, id);
     const sequence = p.messages.length + 1;
     const message: Json = {
       id: `m-${sequence}`, sequence, role: 'assistant', text: reply, createdAt: iso(sequence), authorId: null,
       authorDisplayName: null, agentId: 'conversational', chatTurnId: id, replyToMessageId: turn['triggerMessageId'],
+      ...(metrics === undefined ? {} : { metrics }),
     };
     p.messages.push(message);
     Object.assign(turn, { status: 'Completed', completedAt: iso(sequence), resultMessageId: message['id'] });
@@ -272,6 +279,12 @@ export class FakeStack {
     const rest = m[2] ?? '';
 
     if (rest === '' && method === 'GET') return void (await json(200, this.projectView(p)));
+
+    if (rest === '/context-usage' && method === 'GET') {
+      if (p.usageDelayMs) await new Promise((resolve) => setTimeout(resolve, p.usageDelayMs));
+      if (p.usageStatus) return void (await problem(p.usageStatus, 'usage_fault'));
+      return void (await json(200, p.usage ?? emptyUsage()));
+    }
 
     if (rest === '/messages' && method === 'GET') {
       const after = Number(url.searchParams.get('afterSequence') ?? 0);
