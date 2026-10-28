@@ -53,6 +53,10 @@ public sealed class AgentFactory
             .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options), _count, monitor: null))
             .Build();
 
+    /// <summary>Preflight del DocumentAgent: istruzioni e messaggi dentro il budget di input, altrimenti context_overflow prima della chiamata.</summary>
+    public ValueTask EnsureDocumentWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>
+        ContextBudget.From(_options).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
+
     public async Task<ChatClientAgent> CreateCompactingAgentAsync(
         string name, string instructions, CancellationToken cancellationToken = default) =>
         new(await CreateCompactingClientAsync(instructions, cancellationToken), instructions: instructions, name: name);
