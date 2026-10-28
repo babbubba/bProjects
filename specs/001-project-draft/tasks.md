@@ -11,10 +11,10 @@
 
 Preparare soltanto i progetti e gli strumenti necessari; nessuna funzionalità futura.
 
-- [ ] T001 Creare solution e progetto ASP.NET Core/.NET 10 modulare in `backend/bProjects.sln` e `backend/src/bProjects.App/bProjects.App.csproj`; fissare MAF core/OpenAI/Workflows esattamente 1.26.0, EF/Identity 10 e Npgsql 10.0.3 con lockfile; verificare restore/build della struttura vuota.
-- [ ] T002 [P] Creare Angular 22 con Bootstrap 5.3.8 e SCSS/Dart Sass in `frontend/package.json`, `frontend/angular.json` e `frontend/src/styles.scss`; definire palette chiara, tipografia, spaziature/focus e script build/test:ci; nessuna libreria UI aggiuntiva (AdminLTE non necessario inizialmente).
-- [ ] T003 Predisporre xUnit e harness PostgreSQL/DGX in `backend/tests/bProjects.IntegrationTests/bProjects.IntegrationTests.csproj` e browser E2E Playwright in `tests/e2e/playwright.config.ts`; collegare `frontend/package.json` a test:e2e; dati/DB di test isolati, categorie Integration/MafReal e asserzioni reali senza mock sostitutivi. Dipende da T001, T002.
-- [ ] T004 Configurare soltanto web/app/db, volumi persistenti, build Angular e reverse proxy same-origin compatibile SSE senza buffering in `infra/compose.yaml`, `infra/web.conf`, `backend/Dockerfile` e `frontend/Dockerfile`; verificare avvio e conservazione del volume al restart, segreti fuori dal repository. Dipende da T001, T002.
+- [x] T001 Creare solution e progetto ASP.NET Core/.NET 10 modulare in `backend/bProjects.sln` e `backend/src/bProjects.App/bProjects.App.csproj`; fissare MAF core/OpenAI/Workflows esattamente 1.26.0, EF/Identity 10 e Npgsql 10.0.3 con lockfile; verificare restore/build della struttura vuota.
+- [x] T002 [P] Creare Angular 22 con Bootstrap 5.3.8 e SCSS/Dart Sass in `frontend/package.json`, `frontend/angular.json` e `frontend/src/styles.scss`; definire palette chiara, tipografia, spaziature/focus e script build/test:ci; nessuna libreria UI aggiuntiva (AdminLTE non necessario inizialmente).
+- [x] T003 Predisporre xUnit e harness PostgreSQL/DGX in `backend/tests/bProjects.IntegrationTests/bProjects.IntegrationTests.csproj` e browser E2E Playwright in `tests/e2e/playwright.config.ts`; collegare `frontend/package.json` a test:e2e; dati/DB di test isolati, categorie Integration/MafReal e asserzioni reali senza mock sostitutivi. Dipende da T001, T002.
+- [x] T004 Configurare soltanto web/app/db, volumi persistenti, build Angular e reverse proxy same-origin compatibile SSE senza buffering in `infra/compose.yaml`, `infra/web.conf`, `backend/Dockerfile` e `frontend/Dockerfile`; verificare avvio e conservazione del volume al restart, segreti fuori dal repository. Dipende da T001, T002.
 
 ## Phase 2 — Fondazioni e gate tecnici
 
