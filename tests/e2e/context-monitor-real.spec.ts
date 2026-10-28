@@ -159,6 +159,45 @@ async function expectCompositionMatches(page: Page, usage: Json, label: string) 
 
 type Session = { name: string; projectId: string; rows: Record<string, string> };
 /** Progetto della chat lunga con compattazione e progetto breve per analisi e documento (la conversazione lunga supera la capacita' di output dell'analisi). */
+/**
+ * Comando esplicito del PM (Analizza / Genera) con al piu' tre tentativi: l'output strutturato del modello reale puo' non essere valido
+ * (invalid_agent_output) e il run fallisce senza retry automatico. Ogni fallimento osservato e' registrato con codice e messaggio, ne' la UI
+ * ne' il monitor gli attribuiscono metriche, e il PM puo' ripetere il comando.
+ */
+async function commandWithRetry(
+  page: Page,
+  api: Api,
+  projectId: string,
+  c: { button: string; success: string; error: string; scope: string; label: string },
+): Promise<number> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.getByTestId(c.button).click();
+    await expect(page.getByTestId(c.error), 'errore del tentativo precedente rimosso all\'avvio del nuovo run').toHaveCount(0);
+    const outcome = await Promise.race([
+      page.getByTestId(c.success).waitFor({ state: 'visible', timeout: BUDGET }).then(() => 'ok' as const),
+      page.getByTestId(c.error).waitFor({ state: 'visible', timeout: BUDGET }).then(() => 'failed' as const),
+    ]);
+    if (outcome === 'ok') return attempt;
+    const project = await api.get('/api/projects/' + projectId);
+    const run = c.label === 'analisi' ? await api.get('/api/projects/' + projectId + '/processing-runs/' + project['latestAnalysisRunId']) : await latestDocumentRun(api, projectId);
+    log(c.label + ' fallita (tentativo ' + attempt + ')', { codice: run['error']?.code, messaggio: run['error']?.message, metrics: run['metrics'] });
+    expect(run['status']).toBe('Failed');
+    expect(run['error']?.code, 'unico esito di errore atteso').toBe('invalid_agent_output');
+    await expect(page.locator(c.scope + ' [data-testid=run-metrics]')).toHaveCount(0);
+    const text = ((await page.getByTestId(c.error).textContent()) ?? '').replace(/\s+/g, ' ');
+    expect(text).toMatch(/non riuscita/);
+    expect(text).not.toMatch(/Exception|AnalysisContent|\$\./);
+  }
+  throw new Error(c.label + ': tre tentativi consecutivi non riusciti');
+}
+
+/** Ultimo run Document del progetto (il suo ID non e' nella ProjectView quando il run e' gia' terminato): letto dal database di prova. */
+async function latestDocumentRun(api: Api, projectId: string): Promise<Json> {
+  expect(dbCommand, 'E2E_DB_COMMAND serve a leggere un run di documento fallito').toBeTruthy();
+  const id = sql('select "Id" from "ProcessingRuns" where "ProjectId"=\'' + projectId + '\' and "Kind"=\'Document\' order by "RequestedAt" desc limit 1');
+  return api.get('/api/projects/' + projectId + '/processing-runs/' + id);
+}
+
 const session: Session = { name: '', projectId: '', rows: {} };
 const docSession: Session = { name: '', projectId: '', rows: {} };
 const bodies: string[] = [];
@@ -466,10 +505,7 @@ test.describe('sessione reale: chat, compattazione, analisi, documento, riapertu
     }
     docSession.rows['chat'] = ((await page.locator('article[data-role="assistant"]').last().locator('[data-testid=inference-metrics]').first().textContent()) ?? '').replace(/\s+/g, ' ');
 
-    await page.getByTestId('analyze').click();
-    await expect(page.getByTestId('run-error')).toHaveCount(0);
-    await expect(page.getByTestId('preview')).toBeVisible({ timeout: BUDGET });
-    await expect(page.getByTestId('run-error')).toHaveCount(0);
+    await commandWithRetry(page, api, p, { button: 'analyze', success: 'preview', error: 'run-error', scope: 'app-analysis-preview', label: 'analisi' });
     const project = await api.get(`/api/projects/${p}`);
     const run = await api.get(`/api/projects/${p}/processing-runs/${project['latestAnalysisRunId']}`);
     expect(run['status']).toBe('Completed');
@@ -498,10 +534,7 @@ test.describe('sessione reale: chat, compattazione, analisi, documento, riapertu
     // Conferma e generazione del Markdown.
     await page.getByTestId('confirm').click();
     await expect(page.getByTestId('confirmed-badge')).toBeVisible();
-    await page.getByTestId('generate').click();
-    await expect(page.getByTestId('generation-error')).toHaveCount(0);
-    await expect(page.getByTestId('draft')).toBeVisible({ timeout: BUDGET });
-    await expect(page.getByTestId('generation-error')).toHaveCount(0);
+    await commandWithRetry(page, api, p, { button: 'generate', success: 'draft', error: 'generation-error', scope: 'app-document-view', label: 'documento' });
     const draft = await api.get(`/api/projects/${p}/draft`);
     const docRun = await api.get(`/api/projects/${p}/processing-runs/${draft['processingRunId']}`);
     expect(docRun['kind']).toBe('Document');
@@ -515,6 +548,7 @@ test.describe('sessione reale: chat, compattazione, analisi, documento, riapertu
     const draftAfter = (await (await draftResponse).json()) as Json;
     await expect(page.getByTestId('draft')).toBeVisible();
     await expectRowMatches(page.locator('app-document-view [data-testid=run-metrics]'), draftAfter['metrics'], 'documento dopo reload');
+    await expect(page.getByTestId('usage-headline')).toBeVisible();
     await page.getByTestId('context-usage-panel').screenshot({ path: `${SCREENSHOT_DIR}/real-panel-after-document-desktop-1440.png` });
 
     docSession.rows['analysis'] = ((await page.locator('app-analysis-preview [data-testid=run-metrics]').textContent()) ?? '').replace(/\s+/g, ' ').trim();
