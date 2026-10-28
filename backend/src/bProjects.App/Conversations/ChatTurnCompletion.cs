@@ -101,6 +101,10 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
         conversation.ChatConfigVersion = reply.ChatConfigVersion;
         conversation.ContextThroughSequence = message.Sequence; // include la risposta appena committata
         conversation.ChatSessionRevision++;
+
+        // Telemetria del tentativo vincente nella stessa transazione: rifiutata insieme alla risposta se il lease non è più valido.
+        var inference = InferenceScope.Current;
+        InferenceCallLog.Stage(db, inference, conversation.ProjectId, new(claim.TurnId, null, claim.AttemptCount, claim.FencingToken), result: true);
         await db.SaveChangesAsync(ct);
 
         if (!await leases.CompleteAsync(claim, message.Id, ct))
@@ -110,6 +114,7 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
         }
 
         await transaction.CommitAsync(ct);
+        inference?.MarkWritten();
         db.ChangeTracker.Clear();
         return new(ChatTurnCommitOutcome.Committed, message.Id);
     }

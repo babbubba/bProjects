@@ -1,3 +1,4 @@
+using bProjects.App.AI;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -147,21 +148,39 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
         run.LeaseUntil = null;
         run.ErrorCode = null;
         run.ErrorMessage = null;
+        // Telemetria del tentativo vincente nella stessa transazione del risultato (stesso controllo di lease/fencing).
+        var inference = InferenceScope.Current;
+        InferenceCallLog.Stage(db, inference, run.ProjectId, new(null, run.Id, claim.AttemptCount, claim.FencingToken), result: true);
         await db.SaveChangesAsync(ct);
 
         await db.Projects.Where(p => p.Id == run.ProjectId).ExecuteUpdateAsync(s => s.SetProperty(p => p.CurrentAnalysisId, run.Id), ct);
 
         await transaction.CommitAsync(ct);
+        inference?.MarkWritten();
         db.ChangeTracker.Clear();
         return new(AnalysisCommitOutcome.Committed, revision.Id);
     }
 
-    public async Task<bool> FailAsync(AnalysisRunClaim claim, string errorCode, string errorMessage, CancellationToken ct) =>
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
+    /// <summary>Failed deciso dall'owner; le chiamate del tentativo (es. output rifiutato dal validatore) si scrivono nella stessa transazione.</summary>
+    public async Task<bool> FailAsync(AnalysisRunClaim claim, string errorCode, string errorMessage, CancellationToken ct)
+    {
+        var inference = InferenceScope.Current;
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var failed = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE "ProcessingRuns" SET "Status" = 'Failed', "ErrorCode" = {errorCode}, "ErrorMessage" = {Truncate(errorMessage)},
                 "CompletedAt" = clock_timestamp(), "UpdatedAt" = clock_timestamp(), "LeaseOwner" = NULL, "LeaseUntil" = NULL
             WHERE "Id" = {claim.RunId} AND "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner} AND "FencingToken" = {claim.FencingToken}
             """, ct) == 1;
+        if (!failed)
+        {
+            return false;
+        }
+
+        await InferenceCallLog.AppendAttemptAsync(db, inference, new(null, claim.RunId, claim.AttemptCount, claim.FencingToken), ct);
+        await transaction.CommitAsync(ct);
+        inference?.MarkWritten();
+        return true;
+    }
 
     public async Task<bool> RecordStageAsync(AnalysisRunClaim claim, string stage, CancellationToken ct) =>
         await db.Database.ExecuteSqlInterpolatedAsync($"""

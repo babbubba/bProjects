@@ -217,6 +217,128 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("bProjects.App.AI.InferenceCall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CachedTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ChatTurnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Compaction")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("CompletionTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Composition")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Config")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("ContextWindowTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("FencingToken")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FinishReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("History")
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsFinal")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaxOutputTokensRequested")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ModelId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("ProcessingRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PromptTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReasoningEffective")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("ReasoningRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("ServerDefaultNPredict")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("TotalTokens")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatTurnId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InferenceCalls_OneFinalPerTurn")
+                        .HasFilter("\"IsFinal\"");
+
+                    b.HasIndex("ProcessingRunId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InferenceCalls_OneFinalPerRun")
+                        .HasFilter("\"IsFinal\"");
+
+                    b.HasIndex("ChatTurnId", "Attempt");
+
+                    b.HasIndex("ProcessingRunId", "Attempt");
+
+                    b.HasIndex("ProjectId", "StartedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_InferenceCalls_Project_LastFinal")
+                        .HasFilter("\"IsFinal\"");
+
+                    b.ToTable("InferenceCalls", t =>
+                        {
+                            t.HasCheckConstraint("CK_InferenceCalls_Final", "NOT \"IsFinal\" OR (\"State\" = 'Completed' AND \"Phase\" <> 'Compaction')");
+
+                            t.HasCheckConstraint("CK_InferenceCalls_Owner", "(\"ChatTurnId\" IS NULL) <> (\"ProcessingRunId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_InferenceCalls_Tokens", "(\"PromptTokens\" IS NULL OR \"PromptTokens\" >= 0) AND (\"CompletionTokens\" IS NULL OR \"CompletionTokens\" >= 0) AND (\"TotalTokens\" IS NULL OR \"TotalTokens\" >= 0) AND (\"CachedTokens\" IS NULL OR \"CachedTokens\" >= 0)");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.AI.WorkflowCheckpoint", b =>
                 {
                     b.Property<Guid>("Id")
@@ -889,6 +1011,25 @@ namespace bProjects.App.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.InferenceCall", b =>
+                {
+                    b.HasOne("bProjects.App.Conversations.ChatTurn", null)
+                        .WithMany()
+                        .HasForeignKey("ChatTurnId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessingRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

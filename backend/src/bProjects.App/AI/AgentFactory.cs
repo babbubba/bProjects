@@ -15,17 +15,29 @@ public sealed class AgentFactory
 {
     private readonly AiOptions _options;
     private readonly IChatClient _model;
+    private readonly ModelRuntimeMonitor? _runtime;
     private readonly TokenCounter _count;
     private readonly ChatOptions? _summarizerOptions;
 
-    /// <summary>Con <paramref name="runtime"/> ogni chiamata al modello (anche la sintesi) passa dal controllo di coerenza della finestra.</summary>
+    /// <summary>
+    /// Con <paramref name="runtime"/> ogni chiamata al modello (anche la sintesi) passa dal controllo di coerenza della finestra.
+    /// Sotto il controllo, ogni richiesta realmente inviata è registrata con la propria fase (<see cref="InferenceCaptureChatClient"/>).
+    /// </summary>
     public AgentFactory(
         AiOptions options, IChatClient model, TokenCounter count, ChatOptions? summarizerOptions = null, ModelRuntimeMonitor? runtime = null)
     {
         _options = options;
-        _model = runtime is null ? model : new ModelRuntimeGuardChatClient(model, runtime);
+        _model = model;
+        _runtime = runtime;
         _count = count;
         _summarizerOptions = summarizerOptions;
+    }
+
+    /// <summary>Modello per una fase: guardia della finestra (se c'è il monitor) sopra la cattura della telemetria, sopra il client reale.</summary>
+    private IChatClient Model(AiPhase phase, TokenCounter? count)
+    {
+        var capture = new InferenceCaptureChatClient(_model, phase, _options, _runtime, count);
+        return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime);
     }
 
     public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null) =>
@@ -57,13 +69,13 @@ public sealed class AgentFactory
         var summaryOutput = _options.ForPhase(AiPhase.Compaction).MaxOutputTokens;
         var reserve = Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, summaryOutput), messageTrigger / 2));
         var strategy = new SummarizationCompactionStrategy(
-            new MonitoredSummarizerClient(_model, monitor, _summarizerOptions, reserve),
+            new MonitoredSummarizerClient(Model(AiPhase.Compaction, count: null), monitor, _summarizerOptions, reserve),
             index => measured.Included(index) > messageTrigger,
             minimumPreservedGroups: PreservedGroups,
             summarizationPrompt: $"{SummarizationPrompt} Lunghezza massima: circa {Math.Max(1, reserve / 4)} parole.",
             target: index => measured.Included(index) <= messageTrigger - reserve);
 
-        return new ChatClientBuilder(_model)
+        return new ChatClientBuilder(Model(phase, measured.CountAsync))
             .Use(inner => new MeasuringChatClient(inner, measured))
             .UseAIContextProviders(new CompactionProvider(strategy))
             .Use(inner => new ContextBudgetChatClient(inner, budget, measured.CountAsync, monitor))
@@ -89,10 +101,14 @@ public sealed class AgentFactory
         + "Non aggiungere informazioni, interpretazioni o stime. Rispondi solo con la sintesi.";
 
     /// <summary>Client del DocumentAgent: nessuna compattazione, fallisce con context_overflow prima della chiamata.</summary>
-    public IChatClient CreateDocumentClient() =>
-        new ChatClientBuilder(_model)
-            .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options, AiPhase.Document), _count, monitor: null))
+    public IChatClient CreateDocumentClient()
+    {
+        // Stessa cache per il controllo finale e per la composizione della richiesta: ogni testo è contato una sola volta.
+        var measured = new MeasuredTokens(_count);
+        return new ChatClientBuilder(Model(AiPhase.Document, measured.CountAsync))
+            .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options, AiPhase.Document), measured.CountAsync, monitor: null))
             .Build();
+    }
 
     /// <summary>Preflight del DocumentAgent: istruzioni e messaggi dentro il budget di input della fase Document, altrimenti context_overflow prima della chiamata.</summary>
     public ValueTask EnsureDocumentWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>

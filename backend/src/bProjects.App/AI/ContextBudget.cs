@@ -139,6 +139,8 @@ internal sealed class MonitoredSummarizerClient(
                 throw cut;
             }
 
+            // Messaggi originali consegnati a una sintesi riuscita (il prompt di sistema della strategia non è un messaggio riassunto).
+            InferenceScope.Current?.ObserveSummarized(messages.Count(m => m.Role != ChatRole.System));
             return response;
         }
         catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -173,16 +175,26 @@ internal sealed class MeasuredTokens(TokenCounter count)
         return tokens;
     }
 
+    /// <summary>
+    /// Misura i messaggi in ingresso e, se c'è uno <see cref="InferenceScope"/>, vi registra lo storico originale (sintesi derivate
+    /// escluse): numero di messaggi e somma dei loro token reali, prima di qualunque compattazione.
+    /// </summary>
     public async ValueTask MeasureAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
     {
+        var originals = 0;
+        var tokens = 0;
         foreach (var message in messages)
         {
             var text = message.Text;
-            if (text.Length > 0)
+            var measured = text.Length > 0 ? await CountAsync(text, cancellationToken) : 0;
+            if (message.AdditionalProperties?.ContainsKey(CompactionMessageGroup.SummaryPropertyKey) != true)
             {
-                await CountAsync(text, cancellationToken);
+                originals++;
+                tokens += measured;
             }
         }
+
+        InferenceScope.Current?.ObserveHistory(new InferenceHistory(originals, tokens));
     }
 
     /// <summary>Token dei messaggi non esclusi dall'indice di compattazione.</summary>

@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AnalysisRevision> AnalysisRevisions => Set<AnalysisRevision>();
     public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<WorkflowCheckpoint> WorkflowCheckpoints => Set<WorkflowCheckpoint>();
+    public DbSet<InferenceCall> InferenceCalls => Set<InferenceCall>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -30,6 +31,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureAnalysis(builder);
         ConfigureDrafts(builder);
         ConfigureCheckpoints(builder);
+        ConfigureInferenceCalls(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -185,6 +187,41 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             checkpoint.ToTable(t => t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1"));
         });
     }
+
+    /// <summary>Telemetria tecnica delle richieste al modello: tabella additiva, nessun vincolo sulle tabelle esistenti.</summary>
+    private static void ConfigureInferenceCalls(ModelBuilder builder) =>
+        builder.Entity<InferenceCall>(call =>
+        {
+            call.HasKey(c => c.Id);
+            call.Property(c => c.Phase).HasConversion<string>().HasMaxLength(16);
+            call.Property(c => c.State).HasConversion<string>().HasMaxLength(16);
+            call.Property(c => c.ModelId).HasMaxLength(256);
+            call.Property(c => c.ReasoningEffective).HasMaxLength(16);
+            call.Property(c => c.FinishReason).HasMaxLength(32);
+            call.Property(c => c.Composition).HasColumnType("jsonb");
+            call.Property(c => c.History).HasColumnType("jsonb");
+            call.Property(c => c.Compaction).HasColumnType("jsonb");
+            call.Property(c => c.Config).HasColumnType("jsonb");
+            call.HasOne<Project>().WithMany().HasForeignKey(c => c.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            call.HasOne<ChatTurn>().WithMany().HasForeignKey(c => c.ChatTurnId).OnDelete(DeleteBehavior.Restrict);
+            call.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
+            // Letture del risultato logico: righe di un turno/run per tentativo.
+            call.HasIndex(c => new { c.ChatTurnId, c.Attempt });
+            call.HasIndex(c => new { c.ProcessingRunId, c.Attempt });
+            // Un solo risultato logico per turno e per run, anche fra tentativi diversi.
+            call.HasIndex(c => c.ChatTurnId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerTurn");
+            call.HasIndex(c => c.ProcessingRunId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerRun");
+            // Monitor del contesto: ultima inferenza finale del progetto.
+            call.HasIndex(c => new { c.ProjectId, c.StartedAt }).IsDescending(false, true).HasFilter("\"IsFinal\"").HasDatabaseName("IX_InferenceCalls_Project_LastFinal");
+            call.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_InferenceCalls_Owner", "(\"ChatTurnId\" IS NULL) <> (\"ProcessingRunId\" IS NULL)");
+                t.HasCheckConstraint("CK_InferenceCalls_Final", "NOT \"IsFinal\" OR (\"State\" = 'Completed' AND \"Phase\" <> 'Compaction')");
+                t.HasCheckConstraint("CK_InferenceCalls_Tokens",
+                    "(\"PromptTokens\" IS NULL OR \"PromptTokens\" >= 0) AND (\"CompletionTokens\" IS NULL OR \"CompletionTokens\" >= 0) " +
+                    "AND (\"TotalTokens\" IS NULL OR \"TotalTokens\" >= 0) AND (\"CachedTokens\" IS NULL OR \"CachedTokens\" >= 0)");
+            });
+        });
 
     private static void ConfigureConversations(ModelBuilder builder)
     {

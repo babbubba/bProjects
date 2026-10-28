@@ -111,6 +111,10 @@ public sealed class AiDispatchService(
     private async Task RunTurnAsync(ChatTurnClaim claim, CancellationToken ct)
     {
         await PublishState(claim.TurnId); // Running
+        // Uno scope di telemetria per tentativo: le chiamate al modello vi confluiscono e si scrivono con il commit o con il rilascio.
+        using var inferenceScope = InferenceScope.Begin();
+        var inference = InferenceScope.Current!;
+        var owner = new InferenceOwner(claim.TurnId, null, claim.AttemptCount, claim.FencingToken);
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync((store, c) => store.RenewAsync(claim, c), claim.TurnId, leaseLost, stopHeartbeat.Token);
@@ -139,8 +143,15 @@ public sealed class AiDispatchService(
             var failure = ModelFailure.Classify(ex);
             logger.LogWarning("Turno {TurnId} fallito: {ExceptionType}, codice {Code}, transitorio {Transient}",
                 claim.TurnId, ex.GetType().Name, failure.Code, failure.IsTransient);
-            await Finish(claim.TurnId, async (store, c) => (await store.ReleaseAfterFailureAsync(
-                claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c)).Outcome != TurnTransition.Rejected, ct);
+            if (await ReleaseAsync((store, c) => store.ReleaseAfterFailureAsync(
+                    claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c), inference, owner, ct) is null)
+            {
+                logger.LogInformation("Turno {TurnId}: transizione rifiutata (lease/fencing non più validi).", claim.TurnId);
+            }
+            else
+            {
+                await PublishState(claim.TurnId);
+            }
         }
         finally
         {
@@ -170,6 +181,7 @@ public sealed class AiDispatchService(
     private Task RunAnalysisAsync(AnalysisRunClaim claim, CancellationToken ct) => RunFormalAsync(
         "analisi",
         claim.RunId,
+        new InferenceOwner(null, claim.RunId, claim.AttemptCount, claim.FencingToken),
         (store, c) => store.RenewAsync(claim, c),
         // La fase osservata è già scritta dal workflow nella proiezione: qui si notifica soltanto, senza bloccare il grafo.
         c => workflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, c),
@@ -184,6 +196,7 @@ public sealed class AiDispatchService(
     private Task RunDocumentAsync(DocumentRunClaim claim, CancellationToken ct) => RunFormalAsync(
         "generazione del documento",
         claim.RunId,
+        new InferenceOwner(null, claim.RunId, claim.AttemptCount, claim.FencingToken),
         (store, c) => store.RenewAsync(claim, c),
         c => documentWorkflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, c),
         (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
@@ -192,12 +205,16 @@ public sealed class AiDispatchService(
     private async Task RunFormalAsync(
         string label,
         Guid runId,
+        InferenceOwner owner,
         Func<ExecutionLeaseStore, CancellationToken, Task<bool>> renew,
         Func<CancellationToken, Task> execute,
         Func<ExecutionLeaseStore, ModelFailure, CancellationToken, Task<TurnRelease>> release,
         CancellationToken ct)
     {
         await PublishRunState(runId); // Running
+        // Lo scope è ereditato dagli executor del workflow MAF: commit e Failed del validatore vi trovano le chiamate del tentativo.
+        using var inferenceScope = InferenceScope.Begin();
+        var inference = InferenceScope.Current!;
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync(renew, runId, leaseLost, stopHeartbeat.Token);
@@ -226,9 +243,7 @@ public sealed class AiDispatchService(
             var failure = ModelFailure.Classify(ex);
             logger.LogWarning("Run {RunId} ({Label}) fallito: {ExceptionType}, codice {Code}, transitorio {Transient}",
                 runId, label, ex.GetType().Name, failure.Code, failure.IsTransient);
-            using var scope = scopes.CreateScope();
-            var released = await release(scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>(), failure, ct);
-            if (released.Outcome == TurnTransition.Rejected)
+            if (await ReleaseAsync((store, c) => release(store, failure, c), inference, owner, ct) is null)
             {
                 logger.LogInformation("Run {RunId} ({Label}): transizione rifiutata (lease/fencing non più validi).", runId, label);
             }
@@ -250,6 +265,28 @@ public sealed class AiDispatchService(
     }
 
 
+    /// <summary>
+    /// Rilascio dopo un errore osservato dall'owner, nella stessa transazione delle righe di telemetria del tentativo (failed/interrupted,
+    /// mai token inventati): se owner/fencing non sono più validi non si scrive nulla. Null se la transizione è stata rifiutata.
+    /// </summary>
+    private async Task<TurnRelease?> ReleaseAsync(
+        Func<ExecutionLeaseStore, CancellationToken, Task<TurnRelease>> release, InferenceScope inference, InferenceOwner owner, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var released = await release(scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>(), ct);
+        if (released.Outcome == TurnTransition.Rejected)
+        {
+            return null;
+        }
+
+        await InferenceCallLog.AppendAttemptAsync(db, inference, owner, ct);
+        await transaction.CommitAsync(ct);
+        inference.MarkWritten();
+        return released;
+    }
+
     private static bool IsLeaseLost(Exception exception)
     {
         for (var e = exception; e is not null; e = e.InnerException)
@@ -261,18 +298,6 @@ public sealed class AiDispatchService(
         }
 
         return false;
-    }
-
-    private async Task Finish(Guid id, Func<ExecutionLeaseStore, CancellationToken, Task<bool>> transition, CancellationToken ct)
-    {
-        using var scope = scopes.CreateScope();
-        if (!await transition(scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>(), ct))
-        {
-            logger.LogInformation("Turno {TurnId}: transizione rifiutata (lease/fencing non più validi).", id);
-            return;
-        }
-
-        await PublishState(id);
     }
 
     private Task PublishState(Guid turnId) => events is null ? Task.CompletedTask : events.PublishStateAsync(turnId);
