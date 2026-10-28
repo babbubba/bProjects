@@ -48,6 +48,7 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddScoped<IChatTurnCommitter, ChatTurnCompletion>();
 builder.Services.AddScoped<bProjects.App.Analysis.IAnalysisRunStore, bProjects.App.Analysis.AnalysisRunCompletion>();
+builder.Services.AddScoped<bProjects.App.Analysis.PreviewRevisionService>();
 builder.Services.AddSingleton(sp => new AnalysisWorkflow(
     sp.GetRequiredService<IServiceScopeFactory>(),
     sp.GetRequiredService<ConversationalAgent>(),
