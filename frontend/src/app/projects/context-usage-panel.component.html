@@ -1,0 +1,225 @@
+<aside class="usage" aria-label="Monitor del contesto AI" data-testid="context-usage-panel">
+  <h2 class="h6 usage-title">Contesto AI</h2>
+
+  <div class="usage-notes" role="status" aria-live="polite" data-testid="usage-notes">
+    @if (usage()) {
+      @if (snapshot(); as note) {
+        <p class="alert alert-warning py-2 mb-2" data-testid="usage-snapshot">
+          {{ note }} I valori mostrati sono le ultime metriche persistite, non lo stato corrente
+          del server.
+        </p>
+      }
+      @if (summary(); as s) {
+        @if (s.level === 'critical') {
+          <p class="alert alert-danger py-2 mb-2" data-testid="usage-alert" data-level="critical">
+            Contesto quasi saturo (oltre il {{ criticalPercent }}%): la prossima richiesta potrebbe
+            richiedere una compattazione.
+          </p>
+        } @else if (s.level === 'warning') {
+          <p class="alert alert-warning py-2 mb-2" data-testid="usage-alert" data-level="warning">
+            Contesto in esaurimento (oltre il {{ warningPercent }}%).
+          </p>
+        }
+        @if (s.stale) {
+          <p class="small text-secondary mb-2" data-testid="usage-stale">
+            La misura si riferisce all'ultima inferenza completata: ci sono messaggi più recenti
+            non ancora inviati al modello.
+          </p>
+        }
+      }
+    }
+  </div>
+
+  @if (failed()) {
+    <p class="alert alert-secondary py-2 mb-0" data-testid="usage-error">
+      Monitor del contesto non disponibile: il server o il modello AI non rispondono. Nessun valore
+      è mostrato finché non tornano disponibili.
+    </p>
+  } @else if (usage()) {
+    @if (summary(); as s) {
+      <div class="usage-live" aria-live="polite" aria-atomic="true">
+        <p class="usage-headline mb-1" data-testid="usage-headline">
+          Contesto: {{ s.prompt }} / {{ s.ctx }} token — {{ s.percentText }}
+        </p>
+        <p class="small text-secondary mb-2" data-testid="usage-provenance">
+          Prompt {{ s.promptSource }} · {{ s.kind }}, {{ s.at }}
+        </p>
+      </div>
+
+      <div
+        class="progress-stacked usage-bar"
+        role="progressbar"
+        aria-label="Occupazione del contesto"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        data-testid="usage-bar"
+        [attr.aria-valuenow]="s.percentNow"
+        [attr.aria-valuetext]="s.valueText"
+      >
+        @for (seg of s.segments; track seg.id) {
+          @if (seg.width > 0) {
+            <div class="progress" [style.width.%]="seg.width" aria-hidden="true">
+              <div class="progress-bar" [class]="'seg-' + seg.id"></div>
+            </div>
+          }
+        }
+      </div>
+      <ul class="usage-legend list-unstyled small" data-testid="usage-legend">
+        @for (seg of s.segments; track seg.id) {
+          <li [attr.data-segment]="seg.id">
+            <span class="swatch" [class]="'seg-' + seg.id" aria-hidden="true"></span>
+            {{ seg.label }}
+            <span class="usage-count">{{ seg.text }}</span>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="small text-secondary mb-0" data-testid="usage-empty">
+        Nessuna richiesta AI ancora: il consumo del contesto sarà misurato dopo la prima risposta.
+      </p>
+    }
+
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-secondary usage-toggle"
+      aria-controls="context-usage-details"
+      data-testid="usage-toggle"
+      [attr.aria-expanded]="detailsOpen()"
+      (click)="toggleDetails()"
+    >
+      {{ detailsOpen() ? 'Nascondi dettagli' : 'Mostra dettagli' }}
+    </button>
+
+    <div
+      id="context-usage-details"
+      class="usage-details"
+      data-testid="usage-details"
+      [class.is-open]="detailsOpen()"
+    >
+      @if (summary(); as s) {
+        <section class="usage-section" aria-label="Ultima richiesta AI">
+          <h3 class="h6">Ultima richiesta AI</h3>
+          <app-inference-metrics [metrics]="s.metrics" />
+        </section>
+      }
+
+      <section class="usage-section" aria-label="Composizione del contesto">
+        <h3 class="h6">
+          <button
+            type="button"
+            class="usage-section-toggle"
+            aria-controls="context-usage-composition"
+            data-testid="composition-toggle"
+            [attr.aria-expanded]="compositionOpen()"
+            (click)="toggleComposition()"
+          >
+            Composizione del contesto
+          </button>
+        </h3>
+        <div id="context-usage-composition" [hidden]="!compositionOpen()" data-testid="composition">
+          @if (composition(); as c) {
+            <table class="table table-sm usage-table">
+              <caption class="small text-secondary">
+                Prompt dell'ultima richiesta, per voce. «Misurato» viene dal tokenizer del server,
+                «stima» è dichiarata e la quota non attribuita è il resto fino al totale.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Voce</th>
+                  <th scope="col" class="text-end">Token</th>
+                  <th scope="col">Natura</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of c.items; track item.key) {
+                  <tr [attr.data-key]="item.key">
+                    <th scope="row">
+                      {{ item.label }}
+                      @if (item.messages !== null) {
+                        <span class="text-secondary">· {{ item.messages }} messaggi</span>
+                      }
+                    </th>
+                    <td class="text-end">{{ item.text }}</td>
+                    <td>{{ item.source }}</td>
+                  </tr>
+                }
+                <tr data-key="unattributed">
+                  <th scope="row">Quota non attribuita</th>
+                  <td class="text-end">{{ c.unattributed.text }}</td>
+                  <td>{{ c.unattributed.source }}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr data-key="total">
+                  <th scope="row">Totale prompt</th>
+                  <td class="text-end">{{ c.total.text }}</td>
+                  <td>{{ c.total.source }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          } @else {
+            <p class="small text-secondary mb-0" data-testid="composition-empty">
+              Composizione non disponibile per l'ultima richiesta.
+            </p>
+          }
+        </div>
+      </section>
+
+      <section class="usage-section" aria-label="Storico originale">
+        <h3 class="h6">Storico originale</h3>
+        @if (history(); as h) {
+          <p class="small mb-1" data-testid="usage-history">
+            {{ h.count }} messaggi conservati
+            @if (h.hasTokens) {
+              · {{ h.tokens }} token ({{ h.source }})
+            }
+          </p>
+        }
+        <p class="small text-secondary mb-0">
+          Conservato integralmente: non è il contesto inviato al modello.
+        </p>
+      </section>
+
+      <section class="usage-section" aria-label="Compattazione">
+        <h3 class="h6">Compattazione</h3>
+        @if (compaction(); as k) {
+          <p class="small mb-0" data-testid="usage-compaction">
+            Ultima il {{ k.at }}: {{ k.messages }} messaggi riassunti
+            @for (p of k.parts; track p.label) {
+              · {{ p.label }} {{ p.text }} ({{ p.source }})
+            }
+          </p>
+        } @else {
+          <p class="small text-secondary mb-0" data-testid="usage-compaction-none">
+            Nessuna compattazione eseguita.
+          </p>
+        }
+      </section>
+
+      @if (runtime(); as r) {
+        <section class="usage-section" aria-label="Server AI">
+          <h3 class="h6">Server AI</h3>
+          <dl class="usage-runtime small mb-0" data-testid="usage-runtime">
+            <dt>Modello</dt>
+            <dd>{{ r.model }}</dd>
+            <dt>Stato</dt>
+            <dd>
+              {{ r.status }}
+              @if (r.checkedAt) {
+                <span class="text-secondary">(verificato {{ r.checkedAt }})</span>
+              }
+            </dd>
+            <dt>Finestra del server</dt>
+            <dd>{{ r.window }} token</dd>
+            <dt>Finestra configurata</dt>
+            <dd>{{ r.configured }} token</dd>
+          </dl>
+        </section>
+      }
+    </div>
+  } @else {
+    <p class="small text-secondary mb-0" role="status" data-testid="usage-loading">
+      Caricamento del monitor del contesto…
+    </p>
+  }
+</aside>

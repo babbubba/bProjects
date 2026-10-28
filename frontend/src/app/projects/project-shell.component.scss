@@ -73,6 +73,43 @@ $sidebar-width: 20rem;
   min-width: 0;
 }
 
+// Colonna destra del monitor del contesto: sticky rispetto alla finestra (nessun antenato con overflow).
+$usage-width: 22rem;
+$usage-offset: 1rem;
+
+.project-usage {
+  margin-top: 1rem;
+}
+
+@media (min-width: 1200px) {
+  .project-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) $usage-width;
+    grid-template-rows: auto 1fr;
+    column-gap: 1.5rem;
+    align-items: start;
+  }
+
+  .project-head {
+    grid-column: 1;
+  }
+
+  .project-body {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .project-usage {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    position: sticky;
+    top: $usage-offset;
+    margin-top: 0;
+    max-height: calc(100vh - 2 * #{$usage-offset});
+    overflow-y: auto;
+  }
+}
+
 .project-title,
 .project-description {
   overflow-wrap: anywhere;

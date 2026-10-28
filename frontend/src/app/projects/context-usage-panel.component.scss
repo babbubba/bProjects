@@ -1,0 +1,133 @@
+:host {
+  display: block;
+}
+
+.usage {
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  overflow-wrap: anywhere;
+}
+
+.usage-title {
+  margin-bottom: 0.5rem;
+}
+
+.usage-headline {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-bar {
+  height: 0.75rem;
+  background: var(--bs-gray-200);
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.seg-prompt {
+  background: var(--bs-primary);
+}
+
+.seg-reserved {
+  background: var(--bs-info);
+}
+
+.seg-margin {
+  background: var(--bs-secondary);
+}
+
+.seg-remaining {
+  background: var(--bs-gray-400);
+}
+
+.usage-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.125rem 0.75rem;
+  margin-bottom: 0.75rem;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.swatch {
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.125rem;
+}
+
+.usage-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-details {
+  display: none;
+  margin-top: 0.75rem;
+
+  &.is-open {
+    display: block;
+  }
+}
+
+.usage-section {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--bs-border-color-translucent);
+  margin-top: 0.75rem;
+}
+
+.usage-section-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bs-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.usage-table {
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+
+  caption {
+    caption-side: top;
+    padding-top: 0;
+  }
+
+  th[scope='row'] {
+    font-weight: 400;
+  }
+
+  tfoot th {
+    font-weight: 600;
+  }
+}
+
+.usage-runtime {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.125rem 0.75rem;
+
+  dd {
+    margin: 0;
+  }
+}
+
+@media (min-width: 1200px) {
+  .usage-toggle {
+    display: none;
+  }
+
+  .usage-details {
+    display: block;
+  }
+}

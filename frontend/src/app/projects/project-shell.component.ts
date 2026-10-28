@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import { AnalysisPreviewComponent } from './analysis-preview.component';
 import { CurrentRevision, DocumentViewComponent } from './document-view.component';
 import { ChatComponent } from './chat.component';
+import { ContextUsagePanelComponent } from './context-usage-panel.component';
 import { ProjectApiService, ProjectView } from './project-api.service';
 
 const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
@@ -13,7 +14,14 @@ const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeS
 /** Shell dell'applicazione: sidebar con il catalogo dei progetti e area del progetto aperto. */
 @Component({
   selector: 'app-project-shell',
-  imports: [AnalysisPreviewComponent, ChatComponent, DocumentViewComponent, FormsModule, RouterLink],
+  imports: [
+    AnalysisPreviewComponent,
+    ChatComponent,
+    ContextUsagePanelComponent,
+    DocumentViewComponent,
+    FormsModule,
+    RouterLink,
+  ],
   templateUrl: './project-shell.component.html',
   styleUrl: './project-shell.component.scss',
 })

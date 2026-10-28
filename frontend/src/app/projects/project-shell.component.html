@@ -105,22 +105,27 @@
 
   <section class="shell-main" aria-label="Progetto">
     @if (selected(); as project) {
-      <article>
-        <h1 class="h3 project-title">{{ project.name }}</h1>
-        <p class="text-secondary">
-          Creato il {{ formatDate(project.createdAt) }} da {{ project.createdBy }}
-        </p>
-        @if (project.description) {
-          <p class="project-description">{{ project.description }}</p>
-        }
-        <app-chat [projectId]="project.id" />
-        <app-analysis-preview
-          [projectId]="project.id"
-          [generationBusy]="doc.busy()"
-          (generateRequested)="doc.generate($event)"
-          (viewChanged)="current.set($event)"
-        />
-        <app-document-view #doc [projectId]="project.id" [current]="current()" />
+      <article class="project-layout">
+        <header class="project-head">
+          <h1 class="h3 project-title">{{ project.name }}</h1>
+          <p class="text-secondary">
+            Creato il {{ formatDate(project.createdAt) }} da {{ project.createdBy }}
+          </p>
+          @if (project.description) {
+            <p class="project-description">{{ project.description }}</p>
+          }
+        </header>
+        <app-context-usage-panel class="project-usage" [projectId]="project.id" />
+        <div class="project-body">
+          <app-chat [projectId]="project.id" />
+          <app-analysis-preview
+            [projectId]="project.id"
+            [generationBusy]="doc.busy()"
+            (generateRequested)="doc.generate($event)"
+            (viewChanged)="current.set($event)"
+          />
+          <app-document-view #doc [projectId]="project.id" [current]="current()" />
+        </div>
       </article>
     } @else if (detailError()) {
       <div class="alert alert-warning" role="alert">{{ detailError() }}</div>
