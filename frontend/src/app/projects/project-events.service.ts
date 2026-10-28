@@ -66,65 +66,108 @@ export class SseParser {
   }
 }
 
+interface SharedStream {
+  readonly controller: AbortController;
+  readonly subscribers: Set<ProjectStreamHandlers>;
+  connected: boolean;
+}
+
 /**
  * Stream SSE del progetto via fetch con bearer in memoria (mai EventSource né token nell'URL).
- * Una connessione per chiamata a open(); riconnette con backoff e non emette mai comandi (solo GET).
+ * Una sola connessione fisica per progetto, condivisa dai subscriber (ref-count): si chiude
+ * quando l'ultimo si disiscrive (cambio progetto/logout). Riconnette con backoff, solo GET.
  */
 @Injectable({ providedIn: 'root' })
 export class ProjectEventsService {
   private readonly auth = inject(AuthService);
   private readonly backoff = inject(SSE_BACKOFF_MS);
+  private readonly streams = new Map<string, SharedStream>();
 
-  /** Apre lo stream del progetto; restituisce la funzione di chiusura (idempotente). */
+  /** Si sottoscrive allo stream del progetto; restituisce la funzione di disiscrizione (idempotente). */
   open(projectId: string, handlers: ProjectStreamHandlers): () => void {
-    const controller = new AbortController();
-    void this.run(projectId, handlers, controller.signal);
-    return () => controller.abort();
+    let shared = this.streams.get(projectId);
+    if (!shared) {
+      shared = { controller: new AbortController(), subscribers: new Set(), connected: false };
+      this.streams.set(projectId, shared);
+      shared.subscribers.add(handlers);
+      void this.run(projectId, shared);
+    } else {
+      shared.subscribers.add(handlers);
+      // Stream già aperto: il nuovo subscriber riconcilia subito come dopo una (ri)connessione.
+      if (shared.connected) handlers.onConnected();
+    }
+    const current = shared;
+    return () => {
+      if (!current.subscribers.delete(handlers)) return;
+      if (current.subscribers.size === 0) {
+        current.controller.abort();
+        if (this.streams.get(projectId) === current) this.streams.delete(projectId);
+      }
+    };
   }
 
-  private async run(projectId: string, h: ProjectStreamHandlers, signal: AbortSignal) {
+  private async run(projectId: string, shared: SharedStream) {
+    const signal = shared.controller.signal;
+    const each = (fn: (h: ProjectStreamHandlers) => void) =>
+      [...shared.subscribers].forEach((h) => (signal.aborted ? undefined : fn(h)));
     let failures = 0;
-    while (!signal.aborted) {
-      let connected = false;
-      try {
-        const token = this.auth.accessToken();
-        if (!token) return;
-        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/events`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
-          cache: 'no-store',
-          signal,
-        });
-        if (response.status === 404) return;
-        if (response.status === 401 && !(await this.auth.refresh())) return;
-        if (response.ok && response.body) {
-          connected = true;
-          failures = 0;
-          if (!signal.aborted) h.onConnected();
-          await this.read(response.body, h, signal);
+    try {
+      while (!signal.aborted) {
+        let connected = false;
+        try {
+          const token = this.auth.accessToken();
+          if (!token) return;
+          const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/events`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+            cache: 'no-store',
+            signal,
+          });
+          if (response.status === 404) return;
+          if (response.status === 401 && !(await this.auth.refresh())) return;
+          if (response.ok && response.body) {
+            connected = true;
+            shared.connected = true;
+            failures = 0;
+            each((h) => h.onConnected());
+            await this.read(response.body, each, signal);
+          }
+        } catch {
+          // Errore di trasporto o chiusura: si riconnette (se non annullato) dopo il backoff.
         }
-      } catch {
-        // Errore di trasporto o chiusura: si riconnette (se non annullato) dopo il backoff.
+        shared.connected = false;
+        if (signal.aborted) return;
+        if (connected) each((h) => h.onDisconnected());
+        await this.sleep(this.delay(failures++), signal);
       }
-      if (signal.aborted) return;
-      if (connected) h.onDisconnected();
-      await this.sleep(this.delay(failures++), signal);
+    } finally {
+      // Uscita definitiva (no token, 404, refresh fallito): un nuovo open() potrà riaprire.
+      if (this.streams.get(projectId) === shared) this.streams.delete(projectId);
     }
   }
 
   private async read(
     body: ReadableStream<Uint8Array>,
-    h: ProjectStreamHandlers,
+    each: (fn: (h: ProjectStreamHandlers) => void) => void,
     signal: AbortSignal,
   ) {
     const decoder = new TextDecoder();
     const parser = new SseParser((frame) => {
       if (signal.aborted) return;
+      let event: ProjectStreamEvent;
       try {
-        h.onEvent({ name: frame.event, data: JSON.parse(frame.data) });
+        event = { name: frame.event, data: JSON.parse(frame.data) };
       } catch {
         // Frame non JSON: è solo una notifica effimera, la riconciliazione via GET copre il resto.
+        return;
       }
+      each((h) => {
+        try {
+          h.onEvent(event);
+        } catch {
+          // Un subscriber che fallisce non deve impedire la consegna agli altri.
+        }
+      });
     });
     const reader = body.getReader();
     const onAbort = () => void reader.cancel().catch(() => undefined);

@@ -158,4 +158,90 @@ describe('ProjectEventsService', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('shares one physical connection among three subscribers and closes at zero', async () => {
+    let aborted = false;
+    const fetchMock = vi.fn(async (_u: string, init: RequestInit) => {
+      init.signal!.addEventListener('abort', () => (aborted = true));
+      return hanging(init.signal!);
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const mk = () => ({ onConnected: vi.fn(), onEvent: vi.fn(), onDisconnected: vi.fn() });
+    const [a, b, c] = [mk(), mk(), mk()];
+    const closeA = service.open('p', a);
+    const closeB = service.open('p', b);
+    await wait();
+    const closeC = service.open('p', c); // già connesso: riconcilia subito
+    await wait();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    for (const h of [a, b, c]) expect(h.onConnected).toHaveBeenCalledTimes(1);
+
+    closeA();
+    closeA();
+    closeB();
+    await wait();
+    expect(aborted).toBe(false);
+    closeC();
+    await wait();
+    expect(aborted).toBe(true);
+
+    // Dopo la chiusura a zero subscriber un nuovo open() apre una nuova connessione.
+    const closeD = service.open('p', mk());
+    await wait();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    closeD();
+  });
+
+  it('distributes each event to every subscriber and keeps projects separate', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async (_u: string, init: RequestInit) => {
+        // Resta aperta dopo l'evento: l'evento arriva a connessione già condivisa.
+        const enc = new TextEncoder();
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              setTimeout(() => c.enqueue(enc.encode('event: chat.state\ndata: {"x":1}\n\n')), 10);
+              init.signal!.addEventListener('abort', () => c.error(new DOMException('a', 'AbortError')));
+            },
+          }),
+          { status: 200 },
+        );
+      })
+      .mockImplementation(async (_u: string, init: RequestInit) => hanging(init.signal!));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const mk = () => ({ onConnected: vi.fn(), onEvent: vi.fn(), onDisconnected: vi.fn() });
+    const [a, b, c, other] = [mk(), mk(), mk(), mk()];
+    const closers = [
+      service.open('p', a),
+      service.open('p', b),
+      service.open('p', c),
+      service.open('q', other),
+    ];
+    await wait();
+
+    for (const h of [a, b, c]) {
+      expect(h.onEvent).toHaveBeenCalledWith({ name: 'chat.state', data: { x: 1 } });
+    }
+    expect(other.onEvent).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2); // una per progetto
+    closers.forEach((close) => close());
+  });
+
+  it('reopens after a terminal exit (no token) once a token is available', async () => {
+    const fetchMock = vi.fn(async (_u: string, init: RequestInit) => hanging(init.signal!));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const h = { onConnected: vi.fn(), onEvent: vi.fn(), onDisconnected: vi.fn() };
+    token.set(null);
+    const close1 = service.open('p', h);
+    await wait();
+    expect(fetchMock).not.toHaveBeenCalled();
+    close1();
+    token.set('tok-2');
+    const close2 = service.open('p', h);
+    await wait();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    close2();
+  });
 });
