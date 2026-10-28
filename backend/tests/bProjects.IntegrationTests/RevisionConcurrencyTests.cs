@@ -33,6 +33,7 @@ public sealed class RevisionConcurrencyTests : IAsyncLifetime
     private readonly PostgresDatabaseFixture _database = new();
     private readonly FakeDgx _dgx = new();
     private readonly QueryHook _hook = new();
+    private readonly CommitHook _commitHook = new();
     private ApiHarness? _app;
     private AiDispatchService? _dispatcher;
     private int _texts;
@@ -96,7 +97,7 @@ public sealed class RevisionConcurrencyTests : IAsyncLifetime
             return new DocumentAgent(AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model), model.CreateChatOptions(temperature: 0.2f));
         });
         services.AddSingleton(sp => new DocumentWorkflow(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentAgent>()));
-        services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(_hook));
+        services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(_hook, _commitHook));
     }
 
     // ================================================================ PUT / confirm / generate simultanei
@@ -325,6 +326,50 @@ public sealed class RevisionConcurrencyTests : IAsyncLifetime
             Assert.Equal(after, await Revisions(s.Analysis)); // la nuova analisi non riscrive la vecchia anteprima
             Assert.Equal(run, await Scalar<Guid>("""SELECT "CurrentAnalysisId" FROM "Projects" WHERE "Id" = @p""", ("p", s.Project)));
             Assert.Single(await Revisions(run));
+        }
+    }
+
+    /// <summary>
+    /// Gara resa deterministica: un secondo comando committa subito DOPO il commit del primo e PRIMA che questo costruisca la risposta.
+    /// La risposta 200 descrive la revisione che il comando ha effettivamente scritto/confermato, non quella corrente al momento della lettura.
+    /// </summary>
+    [Theory]
+    [InlineData("confirm")]
+    [InlineData("put")]
+    public async Task A_successful_confirm_or_edit_describes_the_revision_it_committed_even_if_a_newer_one_lands_before_the_response(string command)
+    {
+        using var pm = await App.LoginAsync();
+        var s = await SeedAnalysis(pm);
+        var edit = await Content(pm, s);
+        edit["goals"]![0]!["text"] = "Primo edit";
+
+        HttpResponseMessage? follower = null;
+        _commitHook.After = async () =>
+        {
+            // Dopo il commit del comando in prova: subito un edit sulla revisione appena scritta (conferma) o sull'edit appena scritto (put).
+            var last = (await Revisions(s.Analysis))[^1];
+            var next = await Content(pm, s); // il contenuto corrente porta le fonti assegnate dal server all'edit appena scritto
+            next["goals"]![0]!["text"] = "Edit successivo";
+            follower = await Put(pm, s, last.Id, next);
+        };
+        var response = command == "confirm" ? await Confirm(pm, s, s.Revision) : await Put(pm, s, s.Revision, edit);
+
+        Assert.True(_commitHook.Fired, "la gara non e' stata innescata");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, follower!.StatusCode);
+        var history = await Revisions(s.Analysis);
+        var described = history[command == "confirm" ? 0 : 1];
+        Assert.Equal(command == "confirm" ? 2 : 3, history.Count);
+
+        var view = await Json(response);
+        Assert.Equal(described.Id, view.GetProperty("currentRevisionId").GetGuid());
+        Assert.Equal(described.Version, view.GetProperty("version").GetInt32());
+        Assert.Equal(described.State, view.GetProperty("validationState").GetString());
+        Assert.Equal($"\"{described.Id}\"", response.Headers.ETag!.Tag);
+        if (command == "confirm")
+        {
+            Assert.Equal("PmConfirmed", view.GetProperty("validationState").GetString());
+            Assert.Equal(described.ConfirmedAt, view.GetProperty("confirmedAt").GetDateTimeOffset());
         }
     }
 
@@ -994,6 +1039,24 @@ public sealed class RevisionConcurrencyTests : IAsyncLifetime
             }
 
             return result;
+        }
+    }
+
+    /// <summary>Esegue un'azione subito dopo il primo commit di transazione che avviene mentre e' armata (una sola volta).</summary>
+    private sealed class CommitHook : DbTransactionInterceptor
+    {
+        public Func<Task>? After { get; set; }
+
+        public bool Fired { get; private set; }
+
+        public override async Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            if (After is { } action)
+            {
+                After = null;
+                Fired = true;
+                await action();
+            }
         }
     }
 
