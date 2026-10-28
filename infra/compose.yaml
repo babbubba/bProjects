@@ -24,6 +24,7 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Auth__SigningKey: ${AUTH_SIGNING_KEY:?impostare AUTH_SIGNING_KEY in infra/.env}
       ConnectionStrings__Default: Host=db;Port=5432;Database=bprojects;Username=bprojects;Password=${POSTGRES_PASSWORD}
     depends_on:
       db:

@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Agents.AI" Version="[1.26.0]" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="[1.26.0]" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="[1.26.0]" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
       <PrivateAssets>all</PrivateAssets>

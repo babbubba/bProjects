@@ -1,19 +1,15 @@
-using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
 
 namespace bProjects.IntegrationTests;
 
 /// <summary>Verifica l'avvio dell'applicazione reale in processo, senza servizi esterni.</summary>
-public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class HealthEndpointTests
 {
-    private readonly WebApplicationFactory<Program> _factory;
-
-    public HealthEndpointTests(WebApplicationFactory<Program> factory) => _factory = factory;
-
     [Fact]
-    public async Task Health_returns_ok()
+    public async Task Health_returns_ok_without_authentication()
     {
-        using var client = _factory.CreateClient();
+        await using var app = new TestApp();
+        using var client = app.CreateClient();
 
         var response = await client.GetAsync("/health", TestContext.Current.CancellationToken);
 

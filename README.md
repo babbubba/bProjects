@@ -12,7 +12,7 @@ Assistente AI per trasformare il dialogo con un Project Manager in una bozza di 
 
 ## Stato
 
-Sviluppo spec-driven della feature `001-project-draft` (53 task). Completati i task di setup T001–T004 (solution, frontend, harness di test, Docker Compose); la feature non è ancora utilizzabile.
+Sviluppo spec-driven della feature `001-project-draft` (53 task). Completati T001–T005 (setup, harness di test, Docker Compose, prova API MAF) e T007–T008 (database, Identity, login/refresh/logout); la feature non è ancora utilizzabile. Prossimi: T006/T009 (client DGX, opzioni AI) e il primo incremento utente T010+.
 
 ## Struttura
 

@@ -39,7 +39,14 @@ npm --prefix frontend run test:ci
 npm --prefix frontend run test:e2e      # Playwright; E2E_BASE_URL per uno stack già avviato
 ```
 
-Stack Docker: copiare `infra/.env.example` in `infra/.env`, valorizzare `POSTGRES_PASSWORD`, poi `docker compose -f infra/compose.yaml up -d --build`.
+Operazioni esplicite sul database (mai all'avvio del server; `bootstrap-accounts` non tocca gli account esistenti):
+
+```bash
+docker compose -f infra/compose.yaml run --rm app migrate
+docker compose -f infra/compose.yaml run --rm -e Bootstrap__Accounts__0__UserName=<pm> -e Bootstrap__Accounts__0__Password=<password-12+> app bootstrap-accounts
+```
+
+Stack Docker: copiare `infra/.env.example` in `infra/.env`, valorizzare `POSTGRES_PASSWORD` e `AUTH_SIGNING_KEY`, poi `docker compose -f infra/compose.yaml up -d --build`.
 
 ## Commit
 
