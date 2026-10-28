@@ -226,6 +226,77 @@ public sealed class AnalysisDispatchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_commit_rejected_because_the_lease_expired_is_not_a_model_error_and_the_run_is_reclaimed()
+    {
+        using var client = await App.LoginAsync();
+        var project = await CreateProject(client);
+        await PostMessage(client, project, "Un messaggio PM.");
+        var run = (await Json(await Analyze(client, project, Guid.NewGuid()))).GetProperty("id").GetGuid();
+        // Come dopo un'interruzione del database più lunga del lease: lease scaduto, fencing invariato (nessun reclaim è avvenuto).
+        var model = new ReplyModel
+        {
+            BeforeReply = () => Execute("UPDATE \"ProcessingRuns\" SET \"LeaseUntil\" = clock_timestamp() - interval '1 second' WHERE \"Id\" = @r", ("r", run)).GetAwaiter().GetResult(),
+        };
+
+        Assert.True(await Dispatcher(model).RunOnceAsync(Ct));
+
+        // Né Failed(model_error) né revisione: il run non è più dell'owner e lo gestisce il reclaim.
+        Assert.Equal("Running", await RunStatus(run));
+        Assert.Null(await Scalar<object?>("SELECT \"ErrorCode\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        var reclaimed = (await ClaimWork("new", turns: false))!.Run!;
+        Assert.Equal(run, reclaimed.RunId);
+        Assert.Equal(2, reclaimed.AttemptCount);
+    }
+
+    [Fact]
+    public async Task A_commit_rejected_after_the_deadline_leaves_the_sweep_to_fail_the_run_as_deadline_exceeded()
+    {
+        using var client = await App.LoginAsync();
+        var project = await CreateProject(client);
+        await PostMessage(client, project, "Un messaggio PM.");
+        var run = (await Json(await Analyze(client, project, Guid.NewGuid()))).GetProperty("id").GetGuid();
+        var model = new ReplyModel
+        {
+            BeforeReply = () => Execute(
+                "UPDATE \"ProcessingRuns\" SET \"LeaseUntil\" = clock_timestamp() - interval '1 second', \"DeadlineAt\" = clock_timestamp() - interval '1 second' WHERE \"Id\" = @r", ("r", run)).GetAwaiter().GetResult(),
+        };
+
+        Assert.True(await Dispatcher(model).RunOnceAsync(Ct));
+        Assert.Equal("Running", await RunStatus(run));
+
+        Assert.Null(await ClaimWork("w", turns: false));
+        Assert.Equal("Failed", await RunStatus(run));
+        Assert.Equal("deadline_exceeded", await Scalar<string>("SELECT \"ErrorCode\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task The_run_sweep_only_touches_analysis_runs()
+    {
+        using var client = await App.LoginAsync();
+        var project = await CreateProject(client);
+        await PostMessage(client, project, "Un messaggio PM.");
+        var run = (await Json(await Analyze(client, project, Guid.NewGuid()))).GetProperty("id").GetGuid();
+        await Execute("UPDATE \"ChatTurns\" SET \"Status\" = 'Failed', \"ErrorCode\" = 'x', \"CompletedAt\" = now()");
+        await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = 'Failed', \"ErrorCode\" = 'x', \"CompletedAt\" = now() WHERE \"Id\" = @r", ("r", run));
+        var other = Guid.NewGuid();
+        // Il vincolo dei campi per Kind richiederebbe un'analisi confermata: il database è privato della prova, lo si toglie.
+        await Execute("ALTER TABLE \"ProcessingRuns\" DROP CONSTRAINT \"CK_ProcessingRuns_Kind_Fields\"");
+        await Execute(
+            """
+            INSERT INTO "ProcessingRuns" SELECT (jsonb_populate_record(NULL::"ProcessingRuns",
+                to_jsonb(r) || jsonb_build_object('Id', @o::text, 'Kind', 'Document', 'Status', 'Queued', 'ErrorCode', NULL, 'ErrorMessage', NULL,
+                    'CompletedAt', NULL, 'RequestKey', gen_random_uuid()::text, 'DeadlineAt', to_char(now() - interval '1 hour', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')))).*
+            FROM "ProcessingRuns" r WHERE r."Id" = @r
+            """,
+            ("o", other), ("r", run));
+
+        Assert.Null(await ClaimWork("w", turns: false));
+
+        Assert.Equal("Queued", await RunStatus(other)); // un run non-Analysis non è né reclamato né fallito dallo sweep di Analysis
+    }
+
+    [Fact]
     public async Task A_permanent_model_error_fails_the_run_without_leaking_the_exception_message()
     {
         using var client = await App.LoginAsync();
@@ -436,8 +507,12 @@ public sealed class AnalysisDispatchTests : IAsyncLifetime
 
         public Exception? FailFirst { get; set; }
 
+        /// <summary>Eseguito a ogni chiamata prima della risposta (es. per far scadere il lease durante la chiamata al modello).</summary>
+        public Action? BeforeReply { get; set; }
+
         private string Reply(IEnumerable<ChatMessage> messages)
         {
+            BeforeReply?.Invoke();
             var text = string.Join("\n", messages.Select(m => m.Text));
             if (Interlocked.Increment(ref _calls) == 1 && FailFirst is { } failure)
             {

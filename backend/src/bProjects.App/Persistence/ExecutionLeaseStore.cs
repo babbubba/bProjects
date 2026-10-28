@@ -60,6 +60,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     /// <summary>I nomi di tabella sono costanti interne (mai input): la query resta parametrica per ogni valore.</summary>
     private static string Sql(Table table, string template) => template
         .Replace("{TABLE}", table == Table.Turns ? "\"ChatTurns\"" : "\"ProcessingRuns\"", StringComparison.Ordinal)
+        .Replace("{KIND}", table == Table.Turns ? "" : " AND x.\"Kind\" = 'Analysis'", StringComparison.Ordinal)
         .Replace("{UPDATED}", table == Table.Turns ? "" : ",\n                \"UpdatedAt\" = clock_timestamp()", StringComparison.Ordinal);
 
     /// <summary>Claim dei soli ChatTurn: <see cref="ClaimNextWorkAsync"/> senza i ProcessingRun (il limite AI globale li conta comunque).</summary>
@@ -129,7 +130,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                 "FencingToken" = x."FencingToken" + 1{UPDATED}
             FROM clk
             WHERE (x."Status" = 'Queued' OR (x."Status" = 'Running' AND x."LeaseUntil" <= clk.t))
-              AND (x."DeadlineAt" <= clk.t OR x."AttemptCount" >= x."MaxAttempts")
+              AND (x."DeadlineAt" <= clk.t OR x."AttemptCount" >= x."MaxAttempts"){KIND}
             """),
             ct,
             ("message", ExhaustedMessage));

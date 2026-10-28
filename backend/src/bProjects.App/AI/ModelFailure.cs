@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Net;
+using Npgsql;
 
 namespace bProjects.App.AI;
 
@@ -7,7 +8,7 @@ namespace bProjects.App.AI;
 public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSpan? RetryAfter)
 {
     /// <summary>
-    /// Transitori: trasporto interrotto, timeout e HTTP 408/429/5xx. Tutto il resto (401/403, 400, 404,
+    /// Transitori (anche se incapsulati, es. DbUpdateException con causa transitoria): guasti transitori del database, trasporto interrotto, timeout e HTTP 408/429/5xx. Tutto il resto (401/403, 400, 404,
     /// risposte non valide) è permanente. Il chiamante non deve classificare la propria cancellazione
     /// (arresto/deadline): un OperationCanceledException qui è inteso come timeout di rete.
     /// </summary>
@@ -32,9 +33,19 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
                 return new(true, "model_unreachable", null);
             case OperationCanceledException:
                 return new(true, "model_timeout", null);
+            case NpgsqlException { IsTransient: true }:
+                // Guasto momentaneo del database (connessione, timeout, risorse): l'infrastruttura non è un errore del modello.
+                return new(true, "infrastructure_unavailable", null);
             default:
-                return new(false, "model_error", null);
+                return exception.InnerException is { } wrapped ? Wrapped(wrapped) : new(false, "model_error", null);
         }
+    }
+
+    /// <summary>Un'eccezione che ne incapsula un'altra è transitoria solo se lo è la causa; altrimenti resta un errore permanente.</summary>
+    private static ModelFailure Wrapped(Exception inner)
+    {
+        var cause = Classify(inner);
+        return cause.IsTransient ? cause : new(false, "model_error", null);
     }
 
     private static ModelFailure FromStatus(int status, TimeSpan? retryAfter) => status switch

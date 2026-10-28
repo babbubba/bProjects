@@ -234,6 +234,11 @@ internal sealed class ValidatePersistAnalysisExecutor(IServiceScopeFactory scope
         var commit = await committer.CommitAsync(claim, validation.Content!, cancellationToken);
         if (commit.Outcome == AnalysisCommitOutcome.Rejected)
         {
+            if (commit.Reason == "lease_lost")
+            {
+                throw new LeaseLostException("Commit dell'analisi rifiutato (lease_lost): il lease non è più valido.");
+            }
+
             throw new InvalidOperationException($"Commit dell'analisi rifiutato ({commit.Reason}): il lease non è più valido.");
         }
 

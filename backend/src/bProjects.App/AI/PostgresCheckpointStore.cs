@@ -44,7 +44,7 @@ public sealed record CheckpointWriter(Guid ProcessingRunId, string LeaseOwner, l
 
 /// <summary>Scrittura rifiutata: owner/fencing non più validi, run non Running o lease scaduto. Nulla è stato scritto.</summary>
 public sealed class CheckpointFencedException(Guid processingRunId)
-    : InvalidOperationException($"Scrittura checkpoint rifiutata per il run {processingRunId}: owner o fencing token non più validi.");
+    : LeaseLostException($"Scrittura checkpoint rifiutata per il run {processingRunId}: owner o fencing token non più validi.");
 
 /// <summary>
 /// <c>ICheckpointStore&lt;JsonElement&gt;</c> su PostgreSQL per <c>CheckpointManager.CreateJson</c>. Lo store è legato a un

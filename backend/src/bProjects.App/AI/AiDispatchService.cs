@@ -177,6 +177,12 @@ public sealed class AiDispatchService(
         {
             logger.LogWarning("Lease perso durante l'esecuzione dell'analisi {RunId}: il risultato non verrà committato.", claim.RunId);
         }
+        catch (Exception ex) when (IsLeaseLost(ex))
+        {
+            // Scrittura rifiutata per lease non più valido: il run non è più nostro, non si rilascia né si classifica.
+            // Scadenza del lease + sweep/reclaim decidono (nuovo tentativo, deadline_exceeded o attempts_exhausted).
+            logger.LogWarning("Analisi {RunId}: lease non più valido, nessun rilascio (decide sweep/reclaim).", claim.RunId);
+        }
         catch (Exception ex)
         {
             var failure = ModelFailure.Classify(ex);
@@ -204,6 +210,19 @@ public sealed class AiDispatchService(
         {
             await PublishRunState(claim.RunId); // Completed o Failed già scritto dal workflow
         }
+    }
+
+    private static bool IsLeaseLost(Exception exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            if (e is LeaseLostException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task Finish(Guid id, Func<ExecutionLeaseStore, CancellationToken, Task<bool>> transition, CancellationToken ct)

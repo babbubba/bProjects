@@ -131,16 +131,8 @@ public static class AnalysisEndpoints
                 .SingleOrDefaultAsync(r => r.ProjectId == projectId && r.Kind == ProcessingRunKind.Analysis && r.RequestKey == requestKey, ct);
             if (existing is not null)
             {
-                // Replay: stesso input (stesso cutoff) → stesso run, senza nuovo tentativo; input differente → conflitto.
-                if (existing.SourceCutoffSequence != cutoff)
-                {
-                    return Problem(
-                        StatusCodes.Status409Conflict,
-                        "La chiave di idempotenza è già stata usata con un input diverso",
-                        "idempotency_conflict",
-                        existing.Id);
-                }
-
+                // Replay (contracts/http-api.md, Idempotenza): il POST non ha corpo, quindi stessa chiave = stessa richiesta
+                // e torna sempre il run originale (202 se attivo, 200 se terminale), anche se il cutoff dei messaggi PM è avanzato.
                 var replay = ToView(existing);
                 return existing.Status is ProcessingRunStatus.Queued or ProcessingRunStatus.Running
                     ? Results.Accepted(LocationOf(projectId, existing.Id), replay)

@@ -200,21 +200,30 @@ public sealed class AnalysisContractTests(PostgresDatabaseFixture database) : IC
     }
 
     [Fact]
-    public async Task The_same_key_with_a_different_cutoff_is_409_idempotency_conflict()
+    public async Task The_same_key_after_the_cutoff_moved_replays_the_original_run_because_the_request_is_the_same()
     {
+        // contracts/http-api.md: POST senza corpo = stessa chiave, stessa richiesta; il cutoff mosso da una nuova nota PM non la rende diversa.
         using var client = await App.LoginAsync();
         var project = await CreateProject(client);
         await PostMessage(client, project, "Primo messaggio.");
         var key = Guid.NewGuid();
         var first = await Json(await Analyze(client, project, key));
-        await PostMessage(client, project, "Secondo messaggio: cambia l'input di Analizza.");
+        await PostMessage(client, project, "Secondo messaggio: il cutoff avanza dopo Analizza.");
 
-        var problem = await AssertProblem(await Analyze(client, project, key), HttpStatusCode.Conflict);
+        var replay = await Analyze(client, project, key);
 
-        Assert.Equal("idempotency_conflict", problem.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Accepted, replay.StatusCode); // run ancora attivo
+        var body = await Json(replay);
+        Assert.Equal(first.GetProperty("id").GetGuid(), body.GetProperty("id").GetGuid());
+        Assert.Equal(first.GetProperty("sourceCutoffSequence").GetInt64(), body.GetProperty("sourceCutoffSequence").GetInt64());
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"ProjectId\" = @p AND \"Kind\" = 'Analysis'", ("p", project)));
-        Assert.Equal(first.GetProperty("sourceCutoffSequence").GetInt64(),
-            (await Json(await client.GetAsync($"/api/projects/{project}/processing-runs/{first.GetProperty("id").GetGuid()}", Ct))).GetProperty("sourceCutoffSequence").GetInt64());
+
+        // Terminale: 200 con lo stesso run, anche con il cutoff mosso.
+        await SetRunStatus(first.GetProperty("id").GetGuid(), "Failed");
+
+        var terminal = await Analyze(client, project, key);
+        Assert.Equal(HttpStatusCode.OK, terminal.StatusCode);
+        Assert.Equal(first.GetProperty("id").GetGuid(), (await Json(terminal)).GetProperty("id").GetGuid());
     }
 
     [Fact]
