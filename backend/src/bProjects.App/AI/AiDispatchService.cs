@@ -140,7 +140,7 @@ public sealed class AiDispatchService(
             logger.LogWarning("Turno {TurnId} fallito: {ExceptionType}, codice {Code}, transitorio {Transient}",
                 claim.TurnId, ex.GetType().Name, failure.Code, failure.IsTransient);
             await Finish(claim.TurnId, async (store, c) => (await store.ReleaseAfterFailureAsync(
-                claim, failure, failure.Code, "Il modello interno ha rifiutato la richiesta.", c)).Outcome != TurnTransition.Rejected, ct);
+                claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c)).Outcome != TurnTransition.Rejected, ct);
         }
         finally
         {
@@ -173,7 +173,7 @@ public sealed class AiDispatchService(
         (store, c) => store.RenewAsync(claim, c),
         // La fase osservata è già scritta dal workflow nella proiezione: qui si notifica soltanto, senza bloccare il grafo.
         c => workflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, c),
-        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, "Il modello interno ha rifiutato la richiesta.", c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
         ct);
 
     /// <summary>
@@ -186,7 +186,7 @@ public sealed class AiDispatchService(
         claim.RunId,
         (store, c) => store.RenewAsync(claim, c),
         c => documentWorkflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, c),
-        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, "Il modello interno ha rifiutato la richiesta.", c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
         ct);
 
     private async Task RunFormalAsync(

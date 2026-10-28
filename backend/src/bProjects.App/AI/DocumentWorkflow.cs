@@ -187,7 +187,7 @@ internal sealed class LoadConfirmedRevisionExecutor(IServiceScopeFactory scopes,
         }
         catch (ContextOverflowException overflow)
         {
-            await store.FailAsync(claim, overflow.Code, "Il contenuto confermato non rientra nel budget di contesto del modello: nessuna generazione.", cancellationToken);
+            await store.FailAsync(claim, overflow.Code, $"Il contenuto confermato ({overflow.Tokens} token con le istruzioni) supera il budget di input di {overflow.BudgetTokens} token: nessuna generazione, snapshot non ridotto.", cancellationToken);
             return;
         }
 

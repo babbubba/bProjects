@@ -5,7 +5,7 @@ using Npgsql;
 namespace bProjects.App.AI;
 
 /// <summary>Esito della classificazione di un errore del modello (contracts/ai-workflow.md §2).</summary>
-public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSpan? RetryAfter)
+public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSpan? RetryAfter, string? Detail = null)
 {
     /// <summary>
     /// Transitori (anche se incapsulati, es. DbUpdateException con causa transitoria): guasti transitori del database, trasporto interrotto, timeout e HTTP 408/429/5xx. Tutto il resto (401/403, 400, 404,
@@ -17,9 +17,9 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
         switch (exception)
         {
             case ContextOverflowException overflow:
-                return new(false, overflow.Code, null);
+                return new(false, overflow.Code, null, $"Contesto di {overflow.Tokens} token oltre il budget di input di {overflow.BudgetTokens} token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.");
             case CompactionFailedException failed:
-                return new(false, failed.Code, null);
+                return new(false, failed.Code, null, "La compattazione nativa del contesto non è riuscita. Gli originali non sono stati modificati.");
             case ClientResultException { Status: 0 }:
                 // Nessuna risposta HTTP: l'SDK incapsula guasti di trasporto e timeout.
                 return new(true, "model_unreachable", null);
