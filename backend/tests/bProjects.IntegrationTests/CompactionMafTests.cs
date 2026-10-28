@@ -59,9 +59,9 @@ public abstract class CompactionScenarios : IAsyncLifetime
         return await client.CountTokensAsync(instructions, Ct);
     }
 
-    /// <summary>Soglia ridotta: la compattazione scatta quando i soli messaggi superano ~1500 token, ben sotto il budget.</summary>
+    /// <summary>Soglia ridotta: la compattazione scatta quando i soli messaggi superano ~6000 token, ben sotto il budget (lascia spazio alla sintesi).</summary>
     private async Task<AiOptions> ReducedAsync(AiOptions services, string instructions) =>
-        Tuned(services, Window, Output, Margin, await InstructionTokensAsync(Tuned(services, Window, Output, Margin, 0), instructions) + 1500);
+        Tuned(services, Window, Output, Margin, await InstructionTokensAsync(Tuned(services, Window, Output, Margin, 0), instructions) + 6000);
 
     private static AiOptions Production(AiOptions services) => Tuned(services, Window, Output, Margin, 0);
 
@@ -69,7 +69,7 @@ public abstract class CompactionScenarios : IAsyncLifetime
 
     [Fact]
     public Task Chat_over_a_reduced_threshold_compacts_natively_within_the_window_and_keeps_originals_negations_and_exclusions() =>
-        RunChatAsync(messages: 8, chars: 1600, observedCase: false);
+        RunChatAsync(messages: 16, chars: 1600, observedCase: false);
 
     [Fact]
     public Task Chat_with_the_ten_large_messages_of_the_first_manual_test_compacts_instead_of_overflowing() =>
@@ -163,7 +163,7 @@ public abstract class CompactionScenarios : IAsyncLifetime
 
     [Fact]
     public Task Analysis_over_a_reduced_threshold_compacts_natively_within_the_window_and_keeps_originals_sources_and_exclusions() =>
-        RunAnalysisAsync(messages: 8, chars: 1600, observedCase: false);
+        RunAnalysisAsync(messages: 8, chars: 3200, observedCase: false);
 
     [Fact]
     public Task Analysis_with_the_ten_large_messages_of_the_first_manual_test_compacts_instead_of_overflowing() =>
@@ -234,10 +234,22 @@ public abstract class CompactionScenarios : IAsyncLifetime
                 Assert.Contains(fact, summary.Text, StringComparison.OrdinalIgnoreCase);
             }
 
-            Assert.Contains(content.ContextAndScope.Excluded, i => i.Text.Contains("SMS", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(content.ContextAndScope.Excluded, i => i.Text.Contains("fattur", StringComparison.OrdinalIgnoreCase));
+            var where = new Func<string, string>(word => string.Join(",", new (string Name, IEnumerable<AnalysisItem> Items)[]
+                {
+                    ("goals", content.Goals), ("overview", content.ContextAndScope.Overview), ("included", content.ContextAndScope.Included),
+                    ("excluded", content.ContextAndScope.Excluded), ("requirements", content.Requirements), ("constraints", content.Constraints),
+                    ("assumptions", content.Assumptions), ("openQuestions", content.OpenQuestions),
+                }.Where(g => g.Items.Any(i => i.Text.Contains(word, StringComparison.OrdinalIgnoreCase))).Select(g => g.Name)));
+            Assert.True(content.ContextAndScope.Excluded.Any(i => i.Text.Contains("SMS", StringComparison.OrdinalIgnoreCase)),
+                $"SMS non e' tra le esclusioni; compare in: [{where("SMS")}]");
+            Assert.True(content.ContextAndScope.Excluded.Any(i => i.Text.Contains("fattur", StringComparison.OrdinalIgnoreCase)),
+                $"fatturazione non e' tra le esclusioni; compare in: [{where("fattur")}]");
             var sourceOfFirst = content.Sources.Where(s => s.MessageId == first.Id).Select(s => s.Id).ToHashSet();
-            Assert.Contains(content.ContextAndScope.Excluded, i => i.EvidenceRefs.Any(sourceOfFirst.Contains));   // fonte del messaggio sintetizzato
+            var sequenceOf = before.ToDictionary(m => m.Id, m => m.Sequence);
+            var cited = string.Join("; ", content.ContextAndScope.Excluded.Select(i => "[" + string.Join(",", i.EvidenceRefs
+                .Select(r => content.Sources.FirstOrDefault(s => s.Id == r)?.MessageId is { } m && sequenceOf.TryGetValue(m, out var q) ? q.ToString() : "?")) + "]"));
+            Assert.True(content.ContextAndScope.Excluded.Any(i => i.EvidenceRefs.Any(sourceOfFirst.Contains)),
+                $"le esclusioni non citano il messaggio sintetizzato (sequenza {first.Sequence}); sequenze citate: {cited}");   // fonte del messaggio sintetizzato
         }
 
         Report(

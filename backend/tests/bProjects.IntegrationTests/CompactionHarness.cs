@@ -59,7 +59,7 @@ internal sealed class ModelRecorder(HttpMessageHandler inner, bool requestUsage)
 
         var usage = Regex.Matches(text, "\"prompt_tokens\"\\s*:\\s*(\\d+)");
         Calls.Enqueue(new ModelCall(
-            Summarizer: messages.Any(m => m.Item1 == "system" && m.Item2 == AgentFactory.SummarizationPrompt),
+            Summarizer: messages.Any(m => m.Item1 == "system" && m.Item2.StartsWith(AgentFactory.SummarizationPrompt, StringComparison.Ordinal)),
             messages,
             usage.Count > 0 ? int.Parse(usage[^1].Groups[1].Value) : null,
             (int)response.StatusCode,
@@ -120,7 +120,7 @@ internal sealed class FakeModelServer : HttpMessageHandler
         }
 
         var user = string.Join("\n", messages.Where(m => m.Role is not ("system" or "developer")).Select(m => m.Text));
-        var summarizer = messages.Any(m => m.Role == "system" && m.Text == AgentFactory.SummarizationPrompt);
+        var summarizer = messages.Any(m => m.Role == "system" && m.Text.StartsWith(AgentFactory.SummarizationPrompt, StringComparison.Ordinal));
         var reply =
             summarizer ? SummaryOverride ?? Summary(user)
             : body["response_format"] is not null ? WorkflowRecoveryTests.AnalysisReply(user)
@@ -192,24 +192,17 @@ internal static class CompactionDialogs
         + "La fatturazione resta fuori perimetro. Non so ancora quanti clienti useranno il portale.";
 
     public const string Question =
-        "\nDomanda finale, senza fare altre domande: elenca in una frase cosa e' escluso dal primo rilascio e come si chiama il portale.";
+        "\nDomanda finale, senza fare altre domande: elenca in una frase tutto cio' che e' escluso o fuori perimetro e come si chiama il portale.";
 
-    private static readonly string[] Screens = ["elenco ticket", "dettaglio ticket", "profilo cliente", "allegati", "cronologia", "ricerca", "report", "impostazioni", "notifiche", "accessi"];
-    private static readonly string[] Fields = ["priorita", "stato", "assegnatario", "data di apertura", "categoria", "canale", "sede", "referente"];
-    private static readonly string[] Orders = ["per data", "per priorita", "per cliente", "per stato", "alfabetico"];
-    private static readonly string[] Filters = ["stato aperto", "assegnatario", "periodo", "categoria", "sede"];
-    private static readonly string[] Depts = ["assistenza", "vendite", "amministrazione", "qualita", "logistica"];
-    private static readonly string[] Checks = ["i campi obbligatori", "la coerenza dei dati", "i permessi di accesso", "l'esportazione", "le scadenze"];
 
     /// <summary>Messaggio PM di <paramref name="chars"/> caratteri; il primo contiene i fatti da preservare.</summary>
     public static string Message(int index, int chars, bool question = false)
     {
-        var text = new StringBuilder(index == 0 ? KeyFacts + " " : "");
+        // Riempitivo di contesto aziendale, privo di requisiti e volutamente ripetitivo: un riassunto fedele resta breve e non gonfia l'output dell'analisi.
+        var text = new StringBuilder(index == 0 ? KeyFacts + " " : "Informazioni di contesto sull'azienda, non requisiti del portale. ");
         for (var i = 0; text.Length < chars; i++)
         {
-            text.Append($"Nota {index}.{i}: la schermata \"{Screens[(index * 7 + i) % Screens.Length]}\" mostra {Fields[(index + i * 3) % Fields.Length]} "
-                + $"con ordinamento {Orders[(index * 5 + i) % Orders.Length]} e filtro per {Filters[(index + i * 2) % Filters.Length]}; "
-                + $"il reparto {Depts[(index * 3 + i) % Depts.Length]} verifica {Checks[(index + i) % Checks.Length]} entro il {1 + (index * 3 + i) % 28} del mese. ");
+            text.Append($"Contesto {index}.{i}: l'azienda ha sedi in tre citta e usa un gestionale interno per le pratiche quotidiane; l'informazione e' ripetuta per completezza. ");
         }
 
         var result = text.ToString(0, Math.Min(chars, text.Length));

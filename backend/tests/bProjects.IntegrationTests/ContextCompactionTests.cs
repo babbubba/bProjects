@@ -249,6 +249,47 @@ public sealed class ContextCompactionTests
     }
 
     [Fact]
+    public async Task The_summarizer_call_carries_the_application_options_capped_to_the_summary_reserve()
+    {
+        var model = new ScriptedModel();
+        var agent = await new AgentFactory(Options(), model, Words, new ChatOptions { MaxOutputTokens = 12345 })
+            .CreateCompactingAgentAsync("A", Instructions, Ct);
+
+        await agent.RunAsync(Dialog(20, i => Words10($"m{i}")), cancellationToken: Ct);
+
+        Assert.True(model.SummarizerCalls >= 1);
+        Assert.Equal(28, model.LastSummarizerOptions?.MaxOutputTokens);   // tetto = spazio riservato alla sintesi
+    }
+
+    [Fact]
+    public async Task The_summarizer_input_always_ends_with_the_explicit_user_request_to_summarize()
+    {
+        var model = new ScriptedModel();
+        var agent = await AgentAsync(model);
+
+        // Storico di sole risposte assistant più l'ultimo messaggio utente: i gruppi da riassumere finiscono con un assistant, che il runtime proseguirebbe.
+        var history = Enumerable.Range(0, 19).Select(i => new ChatMessage(ChatRole.Assistant, Words10($"m{i}"))).ToList();
+        history.Add(new ChatMessage(ChatRole.User, Words10("ultimo")));
+        await agent.RunAsync(history, cancellationToken: Ct);
+
+        Assert.True(model.SummarizerCalls >= 1);
+        Assert.Equal(ChatRole.User, model.LastSummarizerCall[^1].Role);
+        Assert.Equal(MonitoredSummarizerClientRequest, model.LastSummarizerCall[^1].Text);
+    }
+
+    [Fact]
+    public async Task A_summary_cut_by_the_output_limit_is_compaction_failed_not_a_silent_partial_summary()
+    {
+        var model = new ScriptedModel { SummaryFinish = ChatFinishReason.Length };
+        var agent = await AgentAsync(model);
+
+        await Assert.ThrowsAsync<CompactionFailedException>(() => agent.RunAsync(Dialog(20, i => Words10($"m{i}")), cancellationToken: Ct));
+        Assert.Equal(0, model.ChatCalls);
+    }
+
+    private const string MonitoredSummarizerClientRequest = "Produci ora la sintesi dei messaggi precedenti.";
+
+    [Fact]
     public async Task The_trigger_follows_the_model_token_counts_not_the_bytes_over_four_estimate_of_the_framework()
     {
         // Token del modello = 4 per parola, il doppio della stima nativa (8 byte per parola / 4 = 2): 10 messaggi da 8 parole
@@ -277,23 +318,28 @@ public sealed class ContextCompactionTests
 
         public string? SummaryOverride { get; set; }
 
+        public ChatFinishReason? SummaryFinish { get; set; }
+
         public List<ChatMessage> LastChatCall { get; private set; } = [];
 
         public List<ChatMessage> LastSummarizerCall { get; private set; } = [];
 
+        public ChatOptions? LastSummarizerOptions { get; private set; }
+
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
         {
             var list = messages.ToList();
-            if (list.Any(m => m.Role == ChatRole.System && m.Text == AgentFactory.SummarizationPrompt))
+            if (list.Any(m => m.Role == ChatRole.System && m.Text.StartsWith(AgentFactory.SummarizationPrompt, StringComparison.Ordinal)))
             {
                 SummarizerCalls++;
                 LastSummarizerCall = list;
+                LastSummarizerOptions = options;
                 if (SummarizerFailure is not null)
                 {
                     throw SummarizerFailure;
                 }
 
-                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, SummaryOverride ?? SummaryText)));
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, SummaryOverride ?? SummaryText)) { FinishReason = SummaryFinish });
             }
 
             ChatCalls++;
