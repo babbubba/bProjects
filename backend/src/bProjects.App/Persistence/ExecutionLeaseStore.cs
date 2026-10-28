@@ -29,8 +29,8 @@ public enum TurnTransition
 
 public readonly record struct TurnRelease(TurnTransition Outcome, DateTimeOffset? NextAttemptAt = null, string? ErrorCode = null);
 
-/// <summary>Lavoro AI preso in carico: esattamente uno fra un ChatTurn e un ProcessingRun di Analysis.</summary>
-public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run);
+/// <summary>Lavoro AI preso in carico: esattamente uno fra un ChatTurn, un ProcessingRun di Analysis e un ProcessingRun di Document.</summary>
+public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run, DocumentRunClaim? Document = null);
 
 /// <summary>
 /// Claim, lease e transizioni dei ChatTurn e dei ProcessingRun di Analysis su PostgreSQL (contracts/ai-workflow.md §2).
@@ -57,23 +57,34 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
         Runs,
     }
 
-    /// <summary>I nomi di tabella sono costanti interne (mai input): la query resta parametrica per ogni valore.</summary>
+    /// <summary>
+    /// I nomi di tabella sono costanti interne (mai input): la query resta parametrica per ogni valore. Per i run, {KIND} limita ai
+    /// Kind di cui il chiamante ha un esecutore (parametro <c>@kinds</c>): Analysis e Document non si toccano a vicenda.
+    /// </summary>
     private static string Sql(Table table, string template) => template
         .Replace("{TABLE}", table == Table.Turns ? "\"ChatTurns\"" : "\"ProcessingRuns\"", StringComparison.Ordinal)
-        .Replace("{KIND}", table == Table.Turns ? "" : " AND x.\"Kind\" = 'Analysis'", StringComparison.Ordinal)
+        .Replace("{KIND}", table == Table.Turns ? "" : " AND x.\"Kind\" = ANY(@kinds)", StringComparison.Ordinal)
         .Replace("{UPDATED}", table == Table.Turns ? "" : ",\n                \"UpdatedAt\" = clock_timestamp()", StringComparison.Ordinal);
 
-    /// <summary>Claim dei soli ChatTurn: <see cref="ClaimNextWorkAsync"/> senza i ProcessingRun (il limite AI globale li conta comunque).</summary>
+    private static string[] KindsOf(bool analysis, bool document) =>
+        [.. new[] { analysis ? nameof(ProcessingRunKind.Analysis) : null, document ? nameof(ProcessingRunKind.Document) : null }.OfType<string>()];
+
+    /// <summary>Claim dei soli ChatTurn: <see cref="ClaimNextWorkAsync(string, bool, bool, bool, CancellationToken)"/> senza i ProcessingRun (il limite AI globale li conta comunque).</summary>
     public async Task<ChatTurnClaim?> ClaimNextAsync(string owner, CancellationToken ct) =>
-        (await ClaimNextWorkAsync(owner, turns: true, runs: false, ct))?.Turn;
+        (await ClaimNextWorkAsync(owner, turns: true, runs: false, documents: false, ct))?.Turn;
+
+    /// <summary>Come <see cref="ClaimNextWorkAsync(string, bool, bool, bool, CancellationToken)"/> senza i run di Document.</summary>
+    public Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, CancellationToken ct) =>
+        ClaimNextWorkAsync(owner, turns, runs, documents: false, ct);
 
     /// <summary>
     /// Fa fallire i lavori non più eseguibili (deadline o tentativi esauriti) e prende in carico il prossimo lavoro
-    /// ammissibile fra ChatTurn e ProcessingRun di Analysis, in ordine di richiesta (a parità, il turno). Per i turni:
-    /// il primo non terminale della propria conversazione; per i run: Queued con NextAttemptAt raggiunto oppure Running
-    /// con lease scaduto (reclaim). Un solo lavoro può avere un lease valido nell'istanza, qualunque sia il tipo.
+    /// ammissibile fra ChatTurn e ProcessingRun di Analysis (<paramref name="runs"/>) e di Document (<paramref name="documents"/>),
+    /// in ordine di richiesta (a parità, il turno). Per i turni: il primo non terminale della propria conversazione; per i run:
+    /// Queued con NextAttemptAt raggiunto oppure Running con lease scaduto (reclaim). Ogni tipo viene fatto fallire per sweep
+    /// e preso in carico solo se il chiamante ha chi lo esegue. Un solo lavoro può avere un lease valido nell'istanza, qualunque sia il tipo.
     /// </summary>
-    public async Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, CancellationToken ct)
+    public async Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, CancellationToken ct)
     {
         await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
 
@@ -82,28 +93,29 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             await lockCommand.ExecuteNonQueryAsync(ct);
         }
 
+        var kinds = KindsOf(runs, documents);
         if (turns)
         {
-            await SweepAsync(Table.Turns, ct);
+            await SweepAsync(Table.Turns, [], ct);
         }
 
-        if (runs)
+        if (kinds.Length > 0)
         {
-            await SweepAsync(Table.Runs, ct);
+            await SweepAsync(Table.Runs, kinds, ct);
         }
 
         WorkClaim? claim = null;
         if (await RunningCountAsync(ct) < MaxConcurrentRuns)
         {
             var turnCandidate = turns ? await TurnCandidateAsync(ct) : null;
-            var runCandidate = runs ? await RunCandidateAsync(ct) : null;
+            var runCandidate = kinds.Length > 0 ? await RunCandidateAsync(kinds, ct) : null;
             if (turnCandidate is { } t && (runCandidate is not { } r || t.RequestedAt <= r.RequestedAt))
             {
                 claim = await ClaimTurnAsync(t.Id, owner, ct) is { } turn ? new WorkClaim(turn, null) : null;
             }
             else if (runCandidate is { } run)
             {
-                claim = await ClaimRunAsync(run.Id, owner, ct) is { } analysis ? new WorkClaim(null, analysis) : null;
+                claim = await ClaimRunAsync(run.Id, run.Kind, owner, ct);
             }
         }
 
@@ -115,7 +127,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
         return claim;
     }
 
-    private async Task SweepAsync(Table table, CancellationToken ct)
+    private async Task SweepAsync(Table table, string[] kinds, CancellationToken ct)
     {
         await using var sweep = await CommandAsync(
             Sql(table, """
@@ -133,7 +145,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               AND (x."DeadlineAt" <= clk.t OR x."AttemptCount" >= x."MaxAttempts"){KIND}
             """),
             ct,
-            ("message", ExhaustedMessage));
+            table == Table.Turns ? [("message", ExhaustedMessage)] : [("message", ExhaustedMessage), ("kinds", kinds)]);
         await sweep.ExecuteNonQueryAsync(ct);
     }
 
@@ -171,14 +183,14 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
         return await ReadCandidateAsync(command, ct);
     }
 
-    private async Task<(Guid Id, DateTimeOffset RequestedAt)?> RunCandidateAsync(CancellationToken ct)
+    private async Task<(Guid Id, DateTimeOffset RequestedAt, string Kind)?> RunCandidateAsync(string[] kinds, CancellationToken ct)
     {
         await using var command = await CommandAsync(
             """
             WITH clk AS (SELECT clock_timestamp() AS t)
-            SELECT r."Id", r."RequestedAt"
+            SELECT r."Id", r."RequestedAt", r."Kind"
             FROM "ProcessingRuns" r, clk
-            WHERE r."Kind" = 'Analysis'
+            WHERE r."Kind" = ANY(@kinds)
               AND ((r."Status" = 'Queued' AND (r."NextAttemptAt" IS NULL OR r."NextAttemptAt" <= clk.t))
                    OR (r."Status" = 'Running' AND r."LeaseUntil" <= clk.t))
               AND r."AttemptCount" < r."MaxAttempts"
@@ -186,8 +198,10 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             ORDER BY r."RequestedAt", r."Id"
             LIMIT 1
             """,
-            ct);
-        return await ReadCandidateAsync(command, ct);
+            ct,
+            ("kinds", kinds));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? (reader.GetGuid(0), reader.GetFieldValue<DateTimeOffset>(1), reader.GetString(2)) : null;
     }
 
     private static async Task<(Guid, DateTimeOffset)?> ReadCandidateAsync(NpgsqlCommand command, CancellationToken ct)
@@ -238,7 +252,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             : null;
     }
 
-    private async Task<AnalysisRunClaim?> ClaimRunAsync(Guid id, string owner, CancellationToken ct)
+    private async Task<WorkClaim?> ClaimRunAsync(Guid id, string kind, string owner, CancellationToken ct)
     {
         await using var command = await CommandAsync(
             """
@@ -253,7 +267,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                 "NextAttemptAt" = NULL,
                 "UpdatedAt" = clk.t
             FROM clk
-            WHERE t."Id" = @id AND t."Kind" = 'Analysis'
+            WHERE t."Id" = @id AND t."Kind" = @kind
               -- Come per i turni: l'idoneità si ricontrolla nella UPDATE, perché un commit concorrente (Completed) o un
               -- rinnovo avvenuti durante l'attesa sul lock di riga non devono essere sovrascritti.
               AND ((t."Status" = 'Queued' AND (t."NextAttemptAt" IS NULL OR t."NextAttemptAt" <= clk.t))
@@ -263,9 +277,17 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             RETURNING t."Id", t."FencingToken", t."AttemptCount"
             """,
             ct,
-            ("id", id), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
+            ("id", id), ("kind", kind), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
         await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? new AnalysisRunClaim(reader.GetGuid(0), owner, reader.GetInt64(1), reader.GetInt32(2)) : null;
+        if (!await reader.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        var (runId, fence, attempt) = (reader.GetGuid(0), reader.GetInt64(1), reader.GetInt32(2));
+        return kind == nameof(ProcessingRunKind.Document)
+            ? new WorkClaim(null, null, new DocumentRunClaim(runId, owner, fence, attempt))
+            : new WorkClaim(null, new AnalysisRunClaim(runId, owner, fence, attempt));
     }
 
     /// <summary>Estende LeaseUntil dell'owner corrente; DeadlineAt non si sposta. False se owner/fencing non sono più validi o la deadline è passata.</summary>
@@ -274,6 +296,10 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
 
     /// <summary>Come <see cref="RenewAsync(ChatTurnClaim, CancellationToken)"/> per un ProcessingRun di Analysis.</summary>
     public Task<bool> RenewAsync(AnalysisRunClaim claim, CancellationToken ct) =>
+        RenewAsync(Table.Runs, claim.RunId, claim.LeaseOwner, claim.FencingToken, ct);
+
+    /// <summary>Come <see cref="RenewAsync(ChatTurnClaim, CancellationToken)"/> per un ProcessingRun di Document.</summary>
+    public Task<bool> RenewAsync(DocumentRunClaim claim, CancellationToken ct) =>
         RenewAsync(Table.Runs, claim.RunId, claim.LeaseOwner, claim.FencingToken, ct);
 
     private async Task<bool> RenewAsync(Table table, Guid id, string owner, long fence, CancellationToken ct)
@@ -301,6 +327,11 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     /// <summary>Come <see cref="ReleaseAfterFailureAsync(ChatTurnClaim, ModelFailure, string, string, CancellationToken)"/> per un ProcessingRun di Analysis.</summary>
     public Task<TurnRelease> ReleaseAfterFailureAsync(
         AnalysisRunClaim claim, ModelFailure failure, string permanentCode, string permanentMessage, CancellationToken ct) =>
+        ReleaseAfterFailureAsync(Table.Runs, claim.RunId, claim.LeaseOwner, claim.FencingToken, claim.AttemptCount, failure, permanentCode, permanentMessage, ct);
+
+    /// <summary>Come <see cref="ReleaseAfterFailureAsync(ChatTurnClaim, ModelFailure, string, string, CancellationToken)"/> per un ProcessingRun di Document.</summary>
+    public Task<TurnRelease> ReleaseAfterFailureAsync(
+        DocumentRunClaim claim, ModelFailure failure, string permanentCode, string permanentMessage, CancellationToken ct) =>
         ReleaseAfterFailureAsync(Table.Runs, claim.RunId, claim.LeaseOwner, claim.FencingToken, claim.AttemptCount, failure, permanentCode, permanentMessage, ct);
 
     private async Task<TurnRelease> ReleaseAfterFailureAsync(

@@ -53,6 +53,14 @@ builder.Services.AddSingleton(sp => new AnalysisWorkflow(
     sp.GetRequiredService<IServiceScopeFactory>(),
     sp.GetRequiredService<ConversationalAgent>(),
     sp.GetRequiredService<InternalModelClient>().CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
+builder.Services.AddScoped<bProjects.App.Analysis.IDocumentRunStore, bProjects.App.Analysis.DocumentRunCompletion>();
+builder.Services.AddSingleton(sp =>
+{
+    var model = sp.GetRequiredService<InternalModelClient>();
+    return new DocumentAgent(
+        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model), model.CreateChatOptions(temperature: 0.2f));
+});
+builder.Services.AddSingleton(sp => new DocumentWorkflow(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentAgent>()));
 builder.Services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
 builder.Services.AddHostedService<AiDispatchService>();
 
@@ -160,6 +168,7 @@ app.MapAuthEndpoints();
 app.MapProjectEndpoints();
 app.MapConversationEndpoints();
 app.MapAnalysisEndpoints();
+app.MapDocumentEndpoints();
 app.MapProjectEventsEndpoint();
 
 app.Run();

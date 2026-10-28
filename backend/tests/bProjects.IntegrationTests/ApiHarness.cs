@@ -35,6 +35,8 @@ public sealed class ApiHarness : IAsyncDisposable
             // devono far eseguire i turni accodati. Chi vuole l'esecuzione reale la registra con <paramref name="configure"/>.
             services.RemoveAll<IChatTurnExecutor>();
             services.RemoveAll<bProjects.App.AI.AnalysisWorkflow>(); // dipende dal client AI, che qui non deve esistere
+            services.RemoveAll<bProjects.App.AI.DocumentWorkflow>(); // idem: dipende dal client AI
+            services.RemoveAll<bProjects.App.AI.DocumentAgent>();
             configure?.Invoke(services);
         }));
     }

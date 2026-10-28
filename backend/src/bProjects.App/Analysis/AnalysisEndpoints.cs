@@ -352,7 +352,7 @@ public static class AnalysisEndpoints
     }
 
     /// <summary>Configurazione risolta del run, congelata alla richiesta: nessun endpoint né credenziale, soltanto parametri.</summary>
-    private static string FrozenConfig(AiOptions ai, ExecutionOptions policy) => JsonSerializer.Serialize(new
+    internal static string FrozenConfig(AiOptions ai, ExecutionOptions policy) => JsonSerializer.Serialize(new
     {
         modelId = ai.ModelId,
         structuredOutputMode = ai.StructuredOutputMode.ToString(),

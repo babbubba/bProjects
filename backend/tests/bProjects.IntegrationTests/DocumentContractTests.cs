@@ -7,9 +7,12 @@ using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
 using bProjects.App.Persistence;
+using bProjects.App.Projects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace bProjects.IntegrationTests;
@@ -19,15 +22,13 @@ namespace bProjects.IntegrationTests;
 /// documento», e ai-workflow §5-§6) su PostgreSQL reale con un IChatClient finto: nessuna chiamata al DGX. Copre il 409 senza
 /// revisione corrente confermata con zero invocazioni dell'agente, replay/conflitto della chiave, snapshot immutabile,
 /// bozza Proposed/NotApproved, edit durante il run e conservazione dell'ultima bozza in caso d'errore.
-/// Test-first (convenzione T010/T024): le prove sono Skipped con motivo finché il compito che le rende possibili non esiste e
-/// diventano verdi con T038 (Draft), T039/T040 (agente e workflow) e T041 (endpoint). Ogni prova usa un database nuovo: il
+/// Test-first (convenzione T010/T024): scritte prima dell'implementazione e Skipped con motivo finché i compiti che le rendono possibili
+/// non esistevano, sono verdi da T041 (con T038 Draft e T039/T040 agente e workflow). Ogni prova usa un database nuovo: il
 /// limite AI globale rende gli stati interdipendenti.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
 public sealed class DocumentContractTests : IAsyncLifetime
 {
-    private const string PendingT041 = "T041: endpoint document-generations e GET draft non ancora implementati (con T038 Draft e T040 DocumentWorkflow).";
-
     private readonly PostgresDatabaseFixture _database = new();
     private ApiHarness? _app;
 
@@ -63,7 +64,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
 
     // ================================================================ nominali
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Generating_from_the_confirmed_current_revision_is_202_with_a_queued_document_run_frozen_on_that_revision()
     {
         using var client = await App.LoginAsync();
@@ -95,7 +96,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.False(view.GetProperty("canGenerate").GetBoolean()); // un run formale attivo impedisce un secondo comando
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task A_dispatched_run_commits_a_proposed_not_approved_draft_bound_to_the_input_revision_and_it_is_readable()
     {
         using var client = await App.LoginAsync();
@@ -140,7 +141,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @a", ("a", s.Analysis)));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task The_model_receives_the_whole_confirmed_json_of_the_input_revision_without_history_or_dialogue()
     {
         using var client = await App.LoginAsync();
@@ -162,7 +163,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Null(options.ResponseFormat as ChatResponseFormatJson); // Markdown libero, non output strutturato
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task An_edit_during_the_document_run_is_allowed_and_leaves_its_input_snapshot_unchanged()
     {
         using var client = await App.LoginAsync();
@@ -202,7 +203,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Accepted, (await Generate(client, s, Guid.NewGuid(), v2)).StatusCode);
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Only_new_pm_notes_beyond_the_cutoff_set_hasNewNotes_on_the_draft()
     {
         using var client = await App.LoginAsync();
@@ -221,7 +222,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
 
     // ================================================================ idempotenza
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task The_same_key_and_input_replays_the_same_run_202_while_active_and_200_when_terminal()
     {
         using var client = await App.LoginAsync();
@@ -248,7 +249,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(1, await Scalar<int>("SELECT \"AttemptCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", first.GetProperty("id").GetGuid()))); // il replay non è un nuovo attempt
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task The_same_key_with_a_different_input_is_409_idempotency_conflict_and_with_the_same_input_replays_even_if_no_longer_current()
     {
         using var client = await App.LoginAsync();
@@ -271,7 +272,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Another_key_while_a_formal_run_is_active_is_409_processing_active_pointing_to_the_existing_run()
     {
         using var client = await App.LoginAsync();
@@ -286,7 +287,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task A_new_analysis_that_is_active_blocks_generation_with_processing_active()
     {
         using var client = await App.LoginAsync();
@@ -302,7 +303,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task After_a_failed_run_a_new_key_starts_a_new_run_and_the_old_run_stays_readable()
     {
         using var client = await App.LoginAsync();
@@ -321,9 +322,64 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(JsonValueKind.Null, old.GetProperty("draftId").ValueKind); // un Failed non presenta un risultato
     }
 
+    [Fact]
+    public async Task Concurrent_commands_create_a_single_run_and_the_same_key_replays_it()
+    {
+        using var client = await App.LoginAsync();
+        var s = await Seed(client, confirm: true);
+
+        var distinct = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Generate(client, s, Guid.NewGuid(), s.Revision)));
+
+        Assert.Equal(1, distinct.Count(r => r.StatusCode == HttpStatusCode.Accepted));
+        Assert.Equal(5, distinct.Count(r => r.StatusCode == HttpStatusCode.Conflict));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
+
+        var other = await Seed(client, confirm: true);
+        var key = Guid.NewGuid();
+        var same = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Generate(client, other, key, other.Revision)));
+
+        Assert.All(same, r => Assert.Equal(HttpStatusCode.Accepted, r.StatusCode));
+        Assert.Single((await Task.WhenAll(same.Select(Json))).Select(v => v.GetProperty("id").GetGuid()).Distinct());
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document' AND \"ProjectId\" = @p", ("p", other.Project)));
+    }
+
+    [Fact]
+    public async Task A_generation_racing_an_edit_either_freezes_the_confirmed_revision_or_is_refused_never_an_unconfirmed_input()
+    {
+        for (var round = 0; round < 3; round++)
+        {
+            using var client = await App.LoginAsync();
+            var s = await Seed(client, confirm: true);
+            var content = await Content(client, s);
+            content["goals"]![0]!["text"] = $"Obiettivo concorrente {round}";
+
+            var generate = Generate(client, s, Guid.NewGuid(), s.Revision);
+            var edit = Put(client, s, s.Revision, content);
+            var responses = await Task.WhenAll(generate, edit);
+
+            var runs = await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document' AND \"ProjectId\" = @p", ("p", s.Project));
+            if (responses[0].StatusCode == HttpStatusCode.Accepted)
+            {
+                // Il comando ha preso il lock per primo: input congelato sulla revisione confermata, l'edit è ammesso (Document attivo).
+                Assert.Equal(1, runs);
+                Assert.Equal(HttpStatusCode.OK, responses[1].StatusCode);
+                Assert.Equal(s.Revision, await Scalar<Guid>("SELECT \"InputRevisionId\" FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document' AND \"ProjectId\" = @p", ("p", s.Project)));
+            }
+            else
+            {
+                // L'edit ha vinto: la v1 non è più la corrente, nessun run e nessuna invocazione.
+                Assert.Equal(HttpStatusCode.Conflict, responses[0].StatusCode);
+                Assert.Equal("revision_conflict", (await Json(responses[0])).GetProperty("code").GetString());
+                Assert.Equal(0, runs);
+            }
+
+            Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @a AND \"ValidationState\" = 'PmConfirmed'", ("a", s.Analysis)));
+        }
+    }
+
     // ================================================================ guardie: nessuna invocazione dell'agente
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Without_a_confirmed_current_revision_it_is_409_analysis_not_confirmed_creates_no_run_and_invokes_no_agent()
     {
         using var client = await App.LoginAsync();
@@ -341,7 +397,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(JsonValueKind.Null, project.GetProperty("activeProcessingRunId").ValueKind);
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task A_revision_that_is_not_the_current_one_is_409_revision_conflict_with_the_current_revision_and_invokes_no_agent()
     {
         using var client = await App.LoginAsync();
@@ -366,7 +422,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Only_the_current_analysis_of_the_project_can_generate_and_unknown_or_foreign_analyses_are_404()
     {
         using var client = await App.LoginAsync();
@@ -385,7 +441,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Theory(Skip = PendingT041)]
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("non-un-uuid")]
@@ -405,7 +461,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Theory(Skip = PendingT041)]
+    [Theory]
     [InlineData("{}")]
     [InlineData("{\"revisionId\":\"non-un-uuid\"}")]
     [InlineData("{\"revisionId\":\"00000000-0000-0000-0000-000000000000\"}")]
@@ -426,7 +482,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Kind\" = 'Document'"));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Document_endpoints_require_authentication_and_the_pm_role_and_another_pm_can_read_the_draft()
     {
         var project = Guid.NewGuid();
@@ -451,7 +507,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await second.GetAsync($"/api/projects/{seeded.Project}/draft", Ct)).StatusCode);
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task Reading_the_draft_of_a_project_without_one_or_of_an_unknown_project_is_404()
     {
         using var client = await App.LoginAsync();
@@ -463,7 +519,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
 
     // ================================================================ errore: l'ultima bozza resta
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task A_failed_generation_keeps_the_last_successful_draft_and_latest_draft_id_and_creates_no_new_draft()
     {
         using var client = await App.LoginAsync();
@@ -500,7 +556,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         }
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task A_model_outage_keeps_the_last_draft_a_transient_error_is_retried_and_a_permanent_one_is_failed()
     {
         using var client = await App.LoginAsync();
@@ -528,7 +584,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\""));
     }
 
-    [Fact(Skip = PendingT041)]
+    [Fact]
     public async Task A_new_successful_generation_replaces_the_latest_draft_and_keeps_the_previous_one_consultable()
     {
         using var client = await App.LoginAsync();
@@ -538,7 +594,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         var firstId = (await Json(await client.GetAsync($"/api/projects/{s.Project}/draft", Ct))).GetProperty("id").GetGuid();
 
         var second = await Json(await Generate(client, s, Guid.NewGuid(), s.Revision));
-        Assert.True(await Dispatcher(new DocumentModel(_ => "# Seconda versione\n\nTesto rigenerato.")).RunOnceAsync(Ct));
+        Assert.True(await Dispatcher(new DocumentModel(text => "# Seconda versione\n\nTesto rigenerato [fonte:" + DocumentModel.EmbeddedJson(text)["sources"]![0]!["id"] + "]")).RunOnceAsync(Ct));
 
         var latest = await Json(await client.GetAsync($"/api/projects/{s.Project}/draft", Ct));
         Assert.NotEqual(firstId, latest.GetProperty("id").GetGuid());
@@ -546,6 +602,124 @@ public sealed class DocumentContractTests : IAsyncLifetime
         Assert.Contains("Seconda versione", latest.GetProperty("markdown").GetString());
         Assert.Equal(2, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProjectId\" = @p", ("p", s.Project))); // la precedente resta consultabile
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"Id\" = @d", ("d", firstId)));
+    }
+
+    // ================================================================ stessa coda e stesso dispatch dell'Analysis
+
+    [Fact]
+    public async Task A_claimer_without_a_document_workflow_neither_claims_nor_sweeps_a_document_run_and_one_with_it_does()
+    {
+        using var client = await App.LoginAsync();
+        var s = await Seed(client, confirm: true);
+        var document = (await Json(await Generate(client, s, Guid.NewGuid(), s.Revision))).GetProperty("id").GetGuid();
+        await Execute("UPDATE \"ProcessingRuns\" SET \"DeadlineAt\" = now() - interval '1 second' WHERE \"Id\" = @r", ("r", document));
+
+        // chi esegue solo Analysis non legge né fa fallire per scadenza un run Document: resta Queued
+        Assert.Null(await Claim("analysis-only", turns: false, analyses: true, documents: false));
+        Assert.Equal("Queued", await RunStatus(document));
+        Assert.Null(await Claim("nobody", turns: false, analyses: false, documents: false));
+        Assert.Equal("Queued", await RunStatus(document));
+
+        // con il workflow di Document lo sweep lo porta a Failed con il codice di scadenza
+        Assert.Null(await Claim("document", turns: false, analyses: false, documents: true));
+        Assert.Equal("Failed", await RunStatus(document));
+        Assert.Equal("deadline_exceeded", await Scalar<string>("SELECT \"ErrorCode\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", document)));
+    }
+
+    [Fact]
+    public async Task Analysis_and_document_runs_share_one_fifo_queue_and_the_global_ai_limit_and_never_cross_kinds()
+    {
+        using var client = await App.LoginAsync();
+        var first = await Seed(client, confirm: true);
+        var document = (await Json(await Generate(client, first, Guid.NewGuid(), first.Revision))).GetProperty("id").GetGuid();
+        var second = await Seed(client, confirm: true);
+        var analyze = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{second.Project}/analyses");
+        analyze.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var analysis = (await Json(await client.SendAsync(analyze, Ct))).GetProperty("id").GetGuid();
+
+        // chi esegue solo Document prende il Document, mai l'Analysis in coda
+        var claimed = await Claim("worker", turns: false, analyses: false, documents: true);
+        Assert.Null(claimed!.Run);
+        Assert.Equal(document, claimed.Document!.RunId);
+        Assert.Equal(1, claimed.Document.AttemptCount);
+        Assert.Equal("Running", await RunStatus(document));
+        Assert.Equal("Queued", await RunStatus(analysis));
+
+        // limite AI globale: finché il lease è valido nessun altro lavoro, di nessun tipo
+        Assert.Null(await Claim("other", turns: false, analyses: true, documents: true));
+
+        // lease scaduto: chi esegue solo Analysis prende l'Analysis e non fa il reclaim del Document
+        await Execute("UPDATE \"ProcessingRuns\" SET \"LeaseUntil\" = now() - interval '1 second' WHERE \"Id\" = @r", ("r", document));
+        var onlyAnalysis = await Claim("analysis-worker", turns: false, analyses: true, documents: false);
+        Assert.Null(onlyAnalysis!.Document);
+        Assert.Equal(analysis, onlyAnalysis.Run!.RunId);
+        Assert.Equal("Running", await RunStatus(document)); // scaduto ma intatto, non riassegnato
+
+        // scade anche l'Analysis: con entrambi i tipi vince la richiesta più vecchia (il Document) con reclaim, nuovo owner/fence/attempt
+        await Execute("UPDATE \"ProcessingRuns\" SET \"LeaseUntil\" = now() - interval '1 second' WHERE \"Id\" = @r", ("r", analysis));
+        var reclaimed = await Claim("both", turns: false, analyses: true, documents: true);
+        Assert.Equal(document, reclaimed!.Document!.RunId);
+        Assert.Equal("both", reclaimed.Document.LeaseOwner);
+        Assert.Equal(2, reclaimed.Document.AttemptCount);
+        Assert.True(reclaimed.Document.FencingToken > claimed.Document.FencingToken);
+    }
+
+    [Fact]
+    public async Task A_stale_document_claim_cannot_renew_and_a_transient_failure_requeues_with_backoff_like_the_analysis()
+    {
+        using var client = await App.LoginAsync();
+        var s = await Seed(client, confirm: true);
+        var document = (await Json(await Generate(client, s, Guid.NewGuid(), s.Revision))).GetProperty("id").GetGuid();
+        var claim = (await Claim("worker", turns: false, analyses: false, documents: true))!.Document!;
+        using var scope = App.Services.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>();
+
+        Assert.True(await store.RenewAsync(claim, Ct));
+        Assert.False(await store.RenewAsync(claim with { FencingToken = claim.FencingToken + 1 }, Ct));
+        Assert.False(await store.RenewAsync(claim with { LeaseOwner = "altro" }, Ct));
+
+        var released = await store.ReleaseAfterFailureAsync(claim, ModelFailure.Classify(new HttpRequestException("giù", null, HttpStatusCode.ServiceUnavailable)), "x", "y", Ct);
+        Assert.Equal(TurnTransition.Requeued, released.Outcome);
+        Assert.Equal("Queued", await RunStatus(document));
+        Assert.Equal(TurnTransition.Rejected, (await store.ReleaseAfterFailureAsync(claim, ModelFailure.Classify(new InvalidOperationException()), "x", "y", Ct)).Outcome); // lease già rilasciato
+    }
+
+    [Fact]
+    public async Task The_document_run_publishes_processing_state_Queued_Running_and_Completed_with_only_real_stages_and_the_draft_id()
+    {
+        using var client = await App.LoginAsync();
+        var s = await Seed(client, confirm: true);
+        using var subscription = App.Services.GetRequiredService<ProjectEventHub>().Subscribe(s.Project);
+
+        var run = await Json(await Generate(client, s, Guid.NewGuid(), s.Revision));
+        Assert.True(await Dispatcher(new DocumentModel()).RunOnceAsync(Ct));
+        await Task.Delay(300, Ct); // le notifiche di fase sono effimere e non bloccano il grafo
+
+        var states = new List<JsonElement>();
+        while (subscription.Reader.TryRead(out var evt))
+        {
+            if (evt.Name == ProjectEventHub.ProcessingState)
+            {
+                states.Add(JsonDocument.Parse(evt.Data).RootElement.Clone());
+            }
+        }
+
+        Assert.Equal("Queued", states[0].GetProperty("status").GetString()); // alla richiesta, post-commit
+        Assert.Equal("Document", states[0].GetProperty("kind").GetString());
+        Assert.Contains(states, x => x.GetProperty("status").GetString() == "Running");
+        var done = states[^1];
+        Assert.Equal("Completed", done.GetProperty("status").GetString());
+        Assert.Equal(run.GetProperty("id").GetGuid(), done.GetProperty("id").GetGuid());
+        Assert.NotEqual(JsonValueKind.Null, done.GetProperty("draftId").ValueKind);
+        Assert.All(
+            states.Select(x => x.GetProperty("lastObservedStage")).Where(x => x.ValueKind != JsonValueKind.Null),
+            stage => Assert.Contains(stage.GetString(), DocumentWorkflow.Stages));
+    }
+
+    private async Task<WorkClaim?> Claim(string owner, bool turns, bool analyses, bool documents)
+    {
+        using var scope = App.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>().ClaimNextWorkAsync(owner, turns, analyses, documents, Ct);
     }
 
     // ================================================================ supporto
@@ -582,11 +756,22 @@ public sealed class DocumentContractTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Dispatcher con il DocumentWorkflow sul modello finto: lo stesso dispatcher e la stessa coda dei run di Analysis (T030),
-    /// ora anche per Kind=Document. Il cablaggio esiste da T041; fino ad allora le prove che lo usano sono Skipped.
+    /// Dispatcher con il DocumentWorkflow sul modello finto: lo stesso dispatcher, la stessa coda e lo stesso limite AI globale dei run
+    /// di Analysis (T030), ora anche per Kind=Document. Nessun esecutore chat né workflow di analisi: prende solo run Document.
     /// </summary>
-    private AiDispatchService Dispatcher(DocumentModel model) =>
-        throw new NotImplementedException($"{PendingT041} (modello finto {model.GetType().Name})");
+    private AiDispatchService Dispatcher(DocumentModel model)
+    {
+        var scopes = App.Services.GetRequiredService<IServiceScopeFactory>();
+        var agent = new DocumentAgent(
+            new AgentFactory(new AiOptions { ContextWindowTokens = 32768 }, model, (t, _) => new(t.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length)),
+            new ChatOptions { ModelId = "fake" });
+        return new AiDispatchService(
+            scopes,
+            Options.Create(new ExecutionOptions()),
+            NullLogger<AiDispatchService>.Instance,
+            runEvents: App.Services.GetRequiredService<ProcessingRunEvents>(),
+            documentWorkflow: new DocumentWorkflow(scopes, agent));
+    }
 
     /// <summary>
     /// Progetto con un messaggio PM e un'analisi completata con la sola revisione AI v1 (come farebbe il commit di T029), poi,

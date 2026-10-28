@@ -18,9 +18,9 @@ public interface IChatTurnExecutor
 
 /// <summary>
 /// Dispatcher dei lavori AI: un solo ciclo, quindi una sola esecuzione AI per istanza, sia per i ChatTurn sia per i
-/// ProcessingRun di Analysis (stessa coda, stesso limite globale, FIFO per richiesta); claim, lease e fencing sono nel
+/// ProcessingRun di Analysis e di Document (stessa coda, stesso limite globale, FIFO per richiesta); claim, lease e fencing sono nel
 /// database (<see cref="ExecutionLeaseStore"/>). Un turno è eseguito dall'<see cref="IChatTurnExecutor"/>; un run di
-/// Analysis dal workflow nativo <see cref="AnalysisWorkflow"/>, che sceglie da solo avvio o ripresa dal checkpoint: il
+/// Analysis dal workflow nativo <see cref="AnalysisWorkflow"/> e uno di Document da <see cref="DocumentWorkflow"/>, che scelgono da soli avvio o ripresa dal checkpoint: il
 /// dispatcher non decide mai il passo successivo. Senza esecutore o workflow registrati il rispettivo tipo di lavoro
 /// non viene letto né modificato: resta Queued finché esiste chi può eseguirlo davvero.
 /// </summary>
@@ -31,7 +31,8 @@ public sealed class AiDispatchService(
     IChatTurnExecutor? executor = null,
     ChatTurnEvents? events = null,
     AnalysisWorkflow? workflow = null,
-    ProcessingRunEvents? runEvents = null) : BackgroundService
+    ProcessingRunEvents? runEvents = null,
+    DocumentWorkflow? documentWorkflow = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
@@ -40,9 +41,9 @@ public sealed class AiDispatchService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (executor is null && workflow is null)
+        if (executor is null && workflow is null && documentWorkflow is null)
         {
-            logger.LogInformation("Nessun esecutore dei turni né workflow di analisi registrati: il dispatcher non prende in carico lavori.");
+            logger.LogInformation("Nessun esecutore dei turni né workflow formale registrati: il dispatcher non prende in carico lavori.");
             return;
         }
 
@@ -74,7 +75,7 @@ public sealed class AiDispatchService(
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
-        if (executor is null && workflow is null)
+        if (executor is null && workflow is null && documentWorkflow is null)
         {
             return false;
         }
@@ -83,7 +84,7 @@ public sealed class AiDispatchService(
         using (var scope = scopes.CreateScope())
         {
             work = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
-                .ClaimNextWorkAsync(_owner, turns: executor is not null, runs: workflow is not null, ct);
+                .ClaimNextWorkAsync(_owner, turns: executor is not null, runs: workflow is not null, documents: documentWorkflow is not null, ct);
         }
 
         if (work is null)
@@ -95,9 +96,13 @@ public sealed class AiDispatchService(
         {
             await RunTurnAsync(turn, ct);
         }
+        else if (work.Run is { } analysis)
+        {
+            await RunAnalysisAsync(analysis, ct);
+        }
         else
         {
-            await RunAnalysisAsync(work.Run!, ct);
+            await RunDocumentAsync(work.Document!, ct);
         }
 
         return true;
@@ -156,17 +161,44 @@ public sealed class AiDispatchService(
     /// Completed (o registra Failed per output non valido). Un errore del modello o dell'infrastruttura è classificato
     /// qui (transitorio: Queued con backoff entro tentativi e deadline; permanente: Failed) con le stesse regole dei turni.
     /// </summary>
-    private async Task RunAnalysisAsync(AnalysisRunClaim claim, CancellationToken ct)
+    private Task RunAnalysisAsync(AnalysisRunClaim claim, CancellationToken ct) => RunFormalAsync(
+        "analisi",
+        claim.RunId,
+        (store, c) => store.RenewAsync(claim, c),
+        // La fase osservata è già scritta dal workflow nella proiezione: qui si notifica soltanto, senza bloccare il grafo.
+        c => workflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, "Il modello interno ha rifiutato la richiesta.", c),
+        ct);
+
+    /// <summary>
+    /// Esegue un run di Document con lo stesso ciclo, lo stesso lease e le stesse regole di retry dell'Analysis: il workflow
+    /// nativo project-document-v1 committa da sé bozza + Completed + LatestDraftId (o registra Failed per output non valido o
+    /// contesto oltre budget).
+    /// </summary>
+    private Task RunDocumentAsync(DocumentRunClaim claim, CancellationToken ct) => RunFormalAsync(
+        "generazione del documento",
+        claim.RunId,
+        (store, c) => store.RenewAsync(claim, c),
+        c => documentWorkflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, "Il modello interno ha rifiutato la richiesta.", c),
+        ct);
+
+    private async Task RunFormalAsync(
+        string label,
+        Guid runId,
+        Func<ExecutionLeaseStore, CancellationToken, Task<bool>> renew,
+        Func<CancellationToken, Task> execute,
+        Func<ExecutionLeaseStore, ModelFailure, CancellationToken, Task<TurnRelease>> release,
+        CancellationToken ct)
     {
-        await PublishRunState(claim.RunId); // Running
+        await PublishRunState(runId); // Running
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var stopHeartbeat = new CancellationTokenSource();
-        var heartbeat = HeartbeatAsync((store, c) => store.RenewAsync(claim, c), claim.RunId, leaseLost, stopHeartbeat.Token);
+        var heartbeat = HeartbeatAsync(renew, runId, leaseLost, stopHeartbeat.Token);
         var completed = false;
         try
         {
-            // La fase osservata è già scritta dal workflow nella proiezione: qui si notifica soltanto, senza bloccare il grafo.
-            await workflow!.RunAsync(claim, stage => { _ = PublishRunState(claim.RunId); }, leaseLost.Token);
+            await execute(leaseLost.Token);
             completed = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -175,29 +207,28 @@ public sealed class AiDispatchService(
         }
         catch (OperationCanceledException) when (leaseLost.IsCancellationRequested)
         {
-            logger.LogWarning("Lease perso durante l'esecuzione dell'analisi {RunId}: il risultato non verrà committato.", claim.RunId);
+            logger.LogWarning("Lease perso durante l'esecuzione ({Label}) del run {RunId}: il risultato non verrà committato.", label, runId);
         }
         catch (Exception ex) when (IsLeaseLost(ex))
         {
             // Scrittura rifiutata per lease non più valido: il run non è più nostro, non si rilascia né si classifica.
             // Scadenza del lease + sweep/reclaim decidono (nuovo tentativo, deadline_exceeded o attempts_exhausted).
-            logger.LogWarning("Analisi {RunId}: lease non più valido, nessun rilascio (decide sweep/reclaim).", claim.RunId);
+            logger.LogWarning("Run {RunId} ({Label}): lease non più valido, nessun rilascio (decide sweep/reclaim).", runId, label);
         }
         catch (Exception ex)
         {
             var failure = ModelFailure.Classify(ex);
-            logger.LogWarning("Analisi {RunId} fallita: {ExceptionType}, codice {Code}, transitorio {Transient}",
-                claim.RunId, ex.GetType().Name, failure.Code, failure.IsTransient);
+            logger.LogWarning("Run {RunId} ({Label}) fallito: {ExceptionType}, codice {Code}, transitorio {Transient}",
+                runId, label, ex.GetType().Name, failure.Code, failure.IsTransient);
             using var scope = scopes.CreateScope();
-            var released = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>().ReleaseAfterFailureAsync(
-                claim, failure, failure.Code, "Il modello interno ha rifiutato la richiesta.", ct);
+            var released = await release(scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>(), failure, ct);
             if (released.Outcome == TurnTransition.Rejected)
             {
-                logger.LogInformation("Analisi {RunId}: transizione rifiutata (lease/fencing non più validi).", claim.RunId);
+                logger.LogInformation("Run {RunId} ({Label}): transizione rifiutata (lease/fencing non più validi).", runId, label);
             }
             else
             {
-                await PublishRunState(claim.RunId);
+                await PublishRunState(runId);
             }
         }
         finally
@@ -208,9 +239,10 @@ public sealed class AiDispatchService(
 
         if (completed)
         {
-            await PublishRunState(claim.RunId); // Completed o Failed già scritto dal workflow
+            await PublishRunState(runId); // Completed o Failed già scritto dal workflow
         }
     }
+
 
     private static bool IsLeaseLost(Exception exception)
     {
