@@ -7,7 +7,8 @@ const baseURL = process.env['E2E_BASE_URL'];
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1, // i test condividono lo stesso stack e uno di essi lo riavvia
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],

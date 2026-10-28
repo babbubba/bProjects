@@ -1,0 +1,129 @@
+<div class="shell">
+  <button
+    type="button"
+    class="btn btn-outline-secondary shell-toggle"
+    aria-controls="project-sidebar"
+    [attr.aria-expanded]="sidebarOpen()"
+    (click)="toggleSidebar()"
+  >
+    {{ sidebarOpen() ? 'Chiudi elenco' : 'Progetti' }}
+  </button>
+
+  <aside
+    id="project-sidebar"
+    class="shell-sidebar"
+    [class.is-open]="sidebarOpen()"
+    aria-label="Progetti"
+  >
+    <div class="sidebar-head">
+      <h2 class="h6 text-uppercase text-secondary mb-0">Progetti</h2>
+      <button
+        type="button"
+        class="btn btn-sm btn-primary"
+        [attr.aria-expanded]="formOpen()"
+        aria-controls="new-project"
+        (click)="toggleForm()"
+      >
+        Nuovo progetto
+      </button>
+    </div>
+
+    @if (formOpen()) {
+      <form id="new-project" class="new-project" (ngSubmit)="create()" novalidate>
+        <div class="mb-2">
+          <label for="project-name" class="form-label">Nome</label>
+          <input
+            id="project-name"
+            name="name"
+            class="form-control"
+            maxlength="200"
+            required
+            [(ngModel)]="newName"
+          />
+        </div>
+        <div class="mb-2">
+          <label for="project-description" class="form-label">Descrizione (facoltativa)</label>
+          <textarea
+            id="project-description"
+            name="description"
+            class="form-control"
+            rows="3"
+            maxlength="4000"
+            [(ngModel)]="newDescription"
+          ></textarea>
+        </div>
+        <div class="alert alert-danger py-2" role="alert" [hidden]="!createError()">
+          {{ createError() }}
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" [disabled]="creating()">
+          {{ creating() ? 'Creazione…' : 'Crea progetto' }}
+        </button>
+      </form>
+    }
+
+    <div class="alert alert-danger py-2 m-2" role="alert" [hidden]="!listError()">
+      {{ listError() }}
+    </div>
+
+    <nav aria-label="Elenco progetti">
+      <ul class="project-list list-unstyled mb-0">
+        @for (project of projects(); track project.id) {
+          <li>
+            <a
+              class="project-item"
+              [routerLink]="['/projects', project.id]"
+              [class.active]="project.id === id()"
+              [attr.aria-current]="project.id === id() ? 'page' : null"
+            >
+              <span class="project-name">{{ project.name }}</span>
+              <span class="project-meta"
+                >{{ formatDate(project.createdAt) }} · {{ project.createdBy }}</span
+              >
+            </a>
+          </li>
+        }
+      </ul>
+    </nav>
+
+    @if (listLoading()) {
+      <p class="text-secondary small m-3" role="status">Caricamento…</p>
+    } @else if (projects().length === 0 && !listError()) {
+      <p class="text-secondary small m-3">Nessun progetto. Creane uno per iniziare.</p>
+    }
+    @if (nextCursor() && !listLoading()) {
+      <button type="button" class="btn btn-link m-2" (click)="loadMore()">
+        Carica altri progetti
+      </button>
+    }
+
+    <div class="sidebar-foot">
+      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="logout()">
+        Esci
+      </button>
+    </div>
+  </aside>
+
+  <section class="shell-main" aria-live="polite">
+    @if (selected(); as project) {
+      <article>
+        <h1 class="h3 project-title">{{ project.name }}</h1>
+        <p class="text-secondary">
+          Creato il {{ formatDate(project.createdAt) }} da {{ project.createdBy }}
+        </p>
+        @if (project.description) {
+          <p class="project-description">{{ project.description }}</p>
+        }
+        <div class="chat-placeholder" role="note">
+          Il dialogo con l'assistente non è ancora disponibile in questa versione.
+        </div>
+      </article>
+    } @else if (detailError()) {
+      <div class="alert alert-warning" role="alert">{{ detailError() }}</div>
+    } @else {
+      <div class="empty-state">
+        <h1 class="h4">Seleziona o crea un progetto</h1>
+        <p class="text-secondary">Scegli un progetto dall'elenco per riaprirlo.</p>
+      </div>
+    }
+  </section>
+</div>
