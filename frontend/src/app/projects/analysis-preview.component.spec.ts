@@ -5,6 +5,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AuthService } from '../auth/auth.service';
 import { ANALYSIS_POLL_MS, AnalysisPreviewComponent } from './analysis-preview.component';
 import { AnalysisView, ProcessingRunView, ProjectView } from './project-api.service';
+import { measured, metrics } from './context-usage.fixtures';
 import { ProjectEventsService, ProjectStreamHandlers } from './project-events.service';
 
 const P = 'p-1';
@@ -813,5 +814,87 @@ describe('AnalysisPreviewComponent', () => {
     await setup();
     fixture.destroy();
     expect(close).toHaveBeenCalled();
+  });
+
+  describe('metriche di inferenza del run', () => {
+    const line = () =>
+      [...el.querySelectorAll('[data-testid=run-metrics] .inference-metrics > *')]
+        .map((n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim())
+        .join(' ')
+        .replace(/\s+/g, ' ');
+
+    async function startRun() {
+      await setup();
+      await click();
+      http
+        .expectOne((r) => r.method === 'POST' && r.url === `${BASE}/analyses`)
+        .flush(run(), { status: 202, statusText: 'Accepted' });
+      await settle();
+    }
+
+    it('run in corso senza telemetria: nessuna riga; con metriche running: configurazione e «generazione in corso…»', async () => {
+      await startRun();
+      expect(el.querySelector('[data-testid=run-metrics]')).toBeNull();
+
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Running',
+          metrics: metrics({ state: 'running', phase: 'analysis', maxOutputTokens: { value: 8192, confirmed: false } }),
+        }),
+      });
+      await settle();
+
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 (limite richiesto) · generazione in corso…');
+    });
+
+    it('run completato: mostra le metriche definitive del run (stessa riga della chat)', async () => {
+      await startRun();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Completed',
+          analysisId: 'r-1',
+          metrics: metrics({ phase: 'analysis', completionTokens: measured(2650), finishReason: 'length' }),
+        }),
+      });
+      await settle();
+      http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
+      await settle();
+
+      expect(line()).toBe(
+        'CTX 49.152 · Max output 8.192 · Generati 2.650 token Risposta troncata dal limite di output',
+      );
+      expect(el.querySelector('[data-testid=run-metrics] [data-testid=metrics-truncated]')).not.toBeNull();
+    });
+
+    it('run completato senza telemetria (storico): «Metriche non disponibili»', async () => {
+      await startRun();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({ status: 'Completed', analysisId: 'r-1', metrics: null }),
+      });
+      await settle();
+      http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
+      await settle();
+
+      expect(el.querySelector('[data-testid=run-metrics] [data-testid=metrics-unavailable]')).not.toBeNull();
+    });
+
+    it('run fallito: nessuna metrica attribuita', async () => {
+      await startRun();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Failed',
+          error: { code: 'llm_unavailable', message: null },
+          metrics: metrics({ state: 'failed' }),
+        }),
+      });
+      await settle();
+
+      expect(el.querySelector('[data-testid=run-error]')).not.toBeNull();
+      expect(el.querySelector('[data-testid=run-metrics]')).toBeNull();
+    });
   });
 });

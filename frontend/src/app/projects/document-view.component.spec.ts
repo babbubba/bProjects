@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import { ANALYSIS_POLL_MS } from './analysis-preview.component';
 import { CurrentRevision, DocumentViewComponent } from './document-view.component';
 import { DraftView, ProcessingRunView, ProjectView, RevisionView } from './project-api.service';
+import { measured, metrics } from './context-usage.fixtures';
 import { ProjectEventsService, ProjectStreamHandlers } from './project-events.service';
 
 const P = 'p-1';
@@ -363,5 +364,82 @@ describe('DocumentViewComponent', () => {
     });
     expect(q('generation-state')!.textContent).toContain('Generazione in corso');
     expect(fixture.componentInstance.busy()).toBe(true);
+  });
+
+  describe('metriche di inferenza del run', () => {
+    const line = () =>
+      [...el.querySelectorAll('[data-testid=run-metrics] .inference-metrics > *')]
+        .map((n) => n.querySelector('[aria-hidden=true]')?.textContent?.trim() ?? n.textContent?.trim())
+        .join(' ')
+        .replace(/\s+/g, ' ');
+
+    async function generate() {
+      await setup({ draft: draft() });
+      void fixture.componentInstance.generate('rev-1');
+      await settle();
+      http
+        .expectOne((r) => r.method === 'POST')
+        .flush(run(), { status: 202, statusText: 'Accepted' });
+      await settle();
+    }
+
+    it('in corso mostra la configurazione nota della richiesta, a fine run le metriche definitive', async () => {
+      await generate();
+      expect(q('run-metrics')).toBeNull();
+
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({ status: 'Running', metrics: metrics({ state: 'running', phase: 'document' }) }),
+      });
+      await settle();
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 · generazione in corso…');
+
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Completed',
+          draftId: 'dr-2',
+          metrics: metrics({ phase: 'document', completionTokens: measured(3100) }),
+        }),
+      });
+      await settle();
+      http.expectOne(`${BASE}/draft`).flush(draft({ id: 'dr-2' }));
+      await settle();
+      http.expectOne(`${BASE}/analyses/a-1/revisions/2`).flush(revision());
+      await settle();
+
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 · Generati 3.100 token');
+    });
+
+    it('run completato senza telemetria: «Metriche non disponibili»', async () => {
+      await generate();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({ status: 'Completed', draftId: 'dr-2', metrics: null }),
+      });
+      await settle();
+      http.expectOne(`${BASE}/draft`).flush(draft({ id: 'dr-2' }));
+      await settle();
+      http.expectOne(`${BASE}/analyses/a-1/revisions/2`).flush(revision());
+      await settle();
+
+      expect(q('run-metrics')!.querySelector('[data-testid=metrics-unavailable]')).not.toBeNull();
+    });
+
+    it('run fallito: nessuna metrica attribuita', async () => {
+      await generate();
+      handlers.onEvent({
+        name: 'processing.state',
+        data: run({
+          status: 'Failed',
+          error: { code: 'llm_unavailable', message: null },
+          metrics: metrics({ state: 'failed' }),
+        }),
+      });
+      await settle();
+
+      expect(q('generation-error')).not.toBeNull();
+      expect(q('run-metrics')).toBeNull();
+    });
   });
 });
