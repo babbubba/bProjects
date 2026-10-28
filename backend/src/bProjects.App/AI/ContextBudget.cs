@@ -99,19 +99,39 @@ public sealed class CompactionMonitor
 }
 
 /// <summary>Client usato dalla SummarizationCompactionStrategy: registra errori e sintesi vuote.</summary>
-internal sealed class MonitoredSummarizerClient(IChatClient inner, CompactionMonitor monitor) : DelegatingChatClient(inner)
+internal sealed class MonitoredSummarizerClient(
+    IChatClient inner, CompactionMonitor monitor, ChatOptions? defaults, int maxSummaryTokens) : DelegatingChatClient(inner)
 {
+    public const string Request = "Produci ora la sintesi dei messaggi precedenti.";
+
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            var response = await base.GetResponseAsync(messages, options, cancellationToken);
+            // La strategia nativa non passa opzioni: senza quelle dell'applicazione il runtime lascia attivo il ragionamento
+            // nascosto e l'output senza tetto (sintesi lentissime). Il tetto di output è lo spazio riservato alla sintesi.
+            var sent = options ?? defaults?.Clone() ?? new ChatOptions();
+            sent.MaxOutputTokens = Math.Min(sent.MaxOutputTokens ?? maxSummaryTokens, maxSummaryTokens);
+
+            // La richiesta di sintesi è sempre l'ultimo messaggio: i gruppi da riassumere possono finire con un assistant (il runtime lo
+            // proseguirebbe) o con una nota utente a cui il modello risponderebbe imitando lo storico invece di riassumere.
+            var list = messages.ToList();
+            list.Add(new ChatMessage(ChatRole.User, Request));
+
+            var response = await base.GetResponseAsync(list, sent, cancellationToken);
             if (string.IsNullOrWhiteSpace(response.Text))
             {
                 var empty = new CompactionFailedException("sintesi vuota");
                 monitor.Record(empty);
                 throw empty;
+            }
+
+            if (response.FinishReason == ChatFinishReason.Length)
+            {
+                var cut = new CompactionFailedException("sintesi troncata dal limite di output");
+                monitor.Record(cut);
+                throw cut;
             }
 
             return response;

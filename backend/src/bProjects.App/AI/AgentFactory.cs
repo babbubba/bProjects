@@ -16,16 +16,18 @@ public sealed class AgentFactory
     private readonly AiOptions _options;
     private readonly IChatClient _model;
     private readonly TokenCounter _count;
+    private readonly ChatOptions? _summarizerOptions;
 
-    public AgentFactory(AiOptions options, IChatClient model, TokenCounter count)
+    public AgentFactory(AiOptions options, IChatClient model, TokenCounter count, ChatOptions? summarizerOptions = null)
     {
         _options = options;
         _model = model;
         _count = count;
+        _summarizerOptions = summarizerOptions;
     }
 
     public static AgentFactory Create(AiOptions options, InternalModelClient client) =>
-        new(options, client.ChatClient, async (text, ct) => await client.CountTokensAsync(text, ct));
+        new(options, client.ChatClient, async (text, ct) => await client.CountTokensAsync(text, ct), client.CreateChatOptions(temperature: 0));
 
     /// <summary>
     /// Client per chat e analisi. La soglia della strategia sottrae i token delle istruzioni; la history originale
@@ -42,11 +44,15 @@ public sealed class AgentFactory
         // Soglia nativa (CompactionTrigger) sui token reali del modello; la strategia nativa riassume solo i gruppi più
         // vecchi necessari a rientrare e ne preserva almeno l'ultimo (il messaggio a cui rispondere): il minimo di default
         // del framework (8 gruppi) renderebbe incomprimibile una conversazione di pochi messaggi molto lunghi.
+        // La strategia smette di riassumere quando il trigger non scatta più, ma la sintesi si aggiunge dopo: si lascia
+        // sotto soglia lo spazio della sintesi (il suo tetto di output) perché il contesto finale resti entro il budget.
+        var reserve = Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, _options.MaxOutputTokens), messageTrigger / 2));
         var strategy = new SummarizationCompactionStrategy(
-            new MonitoredSummarizerClient(_model, monitor),
+            new MonitoredSummarizerClient(_model, monitor, _summarizerOptions, reserve),
             index => measured.Included(index) > messageTrigger,
             minimumPreservedGroups: PreservedGroups,
-            summarizationPrompt: SummarizationPrompt);
+            summarizationPrompt: $"{SummarizationPrompt} Lunghezza massima: circa {Math.Max(1, reserve / 4)} parole.",
+            target: index => measured.Included(index) <= messageTrigger - reserve);
 
         return new ChatClientBuilder(_model)
             .Use(inner => new MeasuringChatClient(inner, measured))
@@ -67,9 +73,11 @@ public sealed class AgentFactory
         + "Conserva sempre, senza attenuarli né invertirli: fatti, requisiti, vincoli, decisioni e assunzioni; "
         + "negazioni ed esclusioni (ciò che è escluso, fuori perimetro o non richiesto, e ciò che il project manager non sa o non ha deciso); "
         + "conflitti e punti aperti; nomi, numeri, date e termini tecnici; "
-        + "gli identificativi di messaggio e di sequenza (id=..., sequenza=...), riportandoli accanto al fatto a cui si riferiscono "
+        + "gli identificativi di messaggio (id, un UUID di 36 caratteri) e di sequenza, copiati per intero e mai abbreviati, con il ruolo del messaggio d'origine (ruolo=user oppure ruolo=assistant), accanto al fatto a cui si riferiscono "
         + "così che resti riconducibile al messaggio d'origine. "
-        + "Non aggiungere informazioni, interpretazioni o stime. Ometti solo convenevoli e ripetizioni. Rispondi solo con la sintesi.";
+        + "La sintesi deve essere molto più breve dell'originale (al massimo un quarto della sua lunghezza): raggruppa gli elementi simili o ripetitivi "
+        + "in poche frasi, senza elencarli uno per uno, ma non omettere mai negazioni, esclusioni, decisioni, nomi e identificativi. "
+        + "Non aggiungere informazioni, interpretazioni o stime. Rispondi solo con la sintesi.";
 
     /// <summary>Client del DocumentAgent: nessuna compattazione, fallisce con context_overflow prima della chiamata.</summary>
     public IChatClient CreateDocumentClient() =>

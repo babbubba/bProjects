@@ -19,7 +19,7 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
             case ContextOverflowException overflow:
                 return new(false, overflow.Code, null, $"Contesto di {overflow.Tokens} token oltre il budget di input di {overflow.BudgetTokens} token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.");
             case CompactionFailedException failed:
-                return new(false, failed.Code, null, "La compattazione nativa del contesto non è riuscita. Gli originali non sono stati modificati.");
+                return new(false, failed.Code, null, $"{failed.Message} Gli originali non sono stati modificati.");
             case ClientResultException { Status: 0 }:
                 // Nessuna risposta HTTP: l'SDK incapsula guasti di trasporto e timeout.
                 return new(true, "model_unreachable", null);
