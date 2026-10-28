@@ -120,7 +120,8 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Analysis, ct);
-        if (run.WorkflowDefinitionVersion != ProcessingRun.AnalysisWorkflowVersion || run.MafVersion != Conversation.CurrentMafVersion)
+        if (run.WorkflowDefinitionVersion != ProcessingRun.AnalysisWorkflowVersion || run.MafVersion != Conversation.CurrentMafVersion
+            || !run.PromptVersionMatches("analysis", ConversationalAgent.ConsolidationPromptVersion))
         {
             // Nessuna migrazione implicita di un vecchio grafo: errore esplicito e permanente.
             await FailAsync(claim, "workflow_incompatible", "La definizione del workflow del run non è compatibile con quella corrente.", ct);

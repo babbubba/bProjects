@@ -64,7 +64,8 @@ public sealed class DocumentWorkflow(IServiceScopeFactory scopes, DocumentAgent 
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Document, ct);
-        if (run.WorkflowDefinitionVersion != ProcessingRun.DocumentWorkflowVersion || run.MafVersion != Conversation.CurrentMafVersion)
+        if (run.WorkflowDefinitionVersion != ProcessingRun.DocumentWorkflowVersion || run.MafVersion != Conversation.CurrentMafVersion
+            || !run.PromptVersionMatches("document", DocumentAgent.PromptVersion))
         {
             // Nessuna migrazione implicita di un vecchio grafo: errore esplicito e permanente.
             await FailAsync(claim, "workflow_incompatible", "La definizione del workflow del run non è compatibile con quella corrente.", ct);

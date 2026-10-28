@@ -64,6 +64,31 @@ public sealed class ProcessingRun
 
     /// <summary>Versioni dei prompt (JSONB).</summary>
     public string? PromptVersions { get; set; }
+
+    /// <summary>
+    /// La versione del prompt congelata al comando coincide con quella del grafo che sta per riprendere (contracts/ai-workflow.md §2 e §8:
+    /// nessun checkpoint di altra configurazione è riutilizzabile). Un run senza versioni congelate (nate fuori dal comando) non è confrontabile.
+    /// </summary>
+    public bool PromptVersionMatches(string key, string expected)
+    {
+        if (PromptVersions is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(PromptVersions);
+            return document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && document.RootElement.TryGetProperty(key, out var value)
+                && value.ValueKind == System.Text.Json.JsonValueKind.String
+                && value.GetString() == expected;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
     public string? WorkflowSessionId { get; set; }
 
     public int AttemptCount { get; set; }
