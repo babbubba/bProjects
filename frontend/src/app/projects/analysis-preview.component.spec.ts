@@ -345,6 +345,52 @@ describe('AnalysisPreviewComponent', () => {
     expect(button().disabled).toBe(false); // nuovo comando esplicito possibile
   });
 
+  it('context_overflow: spiegazione, valori misurati solo se presenti e azione praticabile', async () => {
+    await setup();
+    await click();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({
+        status: 'Failed',
+        error: { code: 'context_overflow', message: 'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.' },
+      }),
+    });
+    await settle();
+    const text = el.querySelector('[data-testid=run-error]')?.textContent ?? '';
+    expect(text).toContain('supera il contesto gestibile');
+    expect(text).toContain('31000 token');
+    expect(text).toContain('24000 token');
+    expect(text).toContain('messaggio più recente');
+    expect(text).not.toContain('rifiutato la richiesta');
+    expect(text).not.toContain('%');
+    expect(el.querySelector('[data-testid=preview]')).toBeNull();
+  });
+
+  it('context_overflow senza valori nei dati: nessun numero inventato', async () => {
+    await setup();
+    await click();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({
+        status: 'Failed',
+        error: { code: 'context_overflow', message: 'Il modello interno ha rifiutato la richiesta.' },
+      }),
+    });
+    await settle();
+    const text = el.querySelector('[data-testid=run-error]')?.textContent ?? '';
+    expect(text).toContain('messaggio più recente');
+    expect(text).not.toContain('rifiutato la richiesta');
+    expect(text.replace('Analisi non riuscita.', '')).not.toMatch(/\d/);
+  });
+
   it("run fallito con analisi precedente: l'ultima anteprima buona resta visibile insieme all'errore", async () => {
     await setup({
       project: project({

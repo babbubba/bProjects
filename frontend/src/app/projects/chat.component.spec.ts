@@ -230,6 +230,32 @@ describe('ChatComponent', () => {
     // Nessun POST né ulteriore richiesta automatica: http.verify() in afterEach lo garantisce.
   });
 
+  it('context_overflow: spiega il limite con i valori misurati e indica cosa fare, senza il generico rifiuto', async () => {
+    await type('Ciao');
+    await submit();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush({ message: userMessage(), chatTurnId: 't-1' }, { status: 201, statusText: 'Created' });
+    await settle();
+    http
+      .expectOne(`/api/projects/${P}/chat-turns/t-1`)
+      .flush(
+        turn({
+          status: 'Failed',
+          error: { code: 'context_overflow', message: 'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.' },
+        }),
+      );
+    await settle();
+
+    const text = el.querySelector('.turn-error')?.textContent ?? '';
+    expect(text).toContain('supera il contesto gestibile');
+    expect(text).toContain('31000 token');
+    expect(text).toContain('24000 token');
+    expect(text).toContain('messaggio più recente');
+    expect(text).not.toContain('rifiutato la richiesta');
+    expect(text).not.toContain('%');
+  });
+
   it('explains a server-side idempotency conflict and uses a new id on the next send', async () => {
     await type('A');
     await submit();

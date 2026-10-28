@@ -13,6 +13,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../auth/auth.service';
 import { ChatTurnView, MessageView, ProjectApiService } from './project-api.service';
+import { describeFailure } from './failure-text';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 
 /** Intervallo (ms) di riconciliazione dei turni pendenti; 0 disattiva il polling. */
@@ -146,8 +147,7 @@ export class ChatComponent {
   protected turnError(message: MessageView): string {
     const turn = this.turnOf(message);
     if (turn?.status !== 'Failed') return '';
-    const known = turn.error ? errorLabels[turn.error.code] : undefined;
-    return known ?? turn.error?.message ?? 'La risposta AI non è riuscita.';
+    return describeFailure(turn.error, errorLabels, 'La risposta AI non è riuscita.', 'chat');
   }
 
   protected async send(): Promise<void> {

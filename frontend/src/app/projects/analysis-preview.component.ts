@@ -19,6 +19,7 @@ import {
   ProcessingRunView,
   ProjectApiService,
 } from './project-api.service';
+import { describeFailure } from './failure-text';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 import type { CurrentRevision } from './document-view.component';
 
@@ -219,8 +220,7 @@ export class AnalysisPreviewComponent {
   protected readonly runError = computed(() => {
     const run = this.run();
     if (run?.status !== 'Failed') return '';
-    const known = run.error ? errorLabels[run.error.code] : undefined;
-    return known ?? run.error?.message ?? "L'analisi non è riuscita.";
+    return describeFailure(run.error, errorLabels, "L'analisi non è riuscita.", 'analysis');
   });
   protected readonly stageLabel = computed(() => {
     const run = this.run();

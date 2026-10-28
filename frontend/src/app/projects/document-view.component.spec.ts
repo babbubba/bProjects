@@ -254,6 +254,30 @@ describe('DocumentViewComponent', () => {
     expect(q('markdown')!.textContent).toContain('Nuova bozza');
   });
 
+  it('context_overflow: indica il contenuto da ridurre e mostra i valori misurati', async () => {
+    await setup({ draft: draft() });
+    void fixture.componentInstance.generate('rev-1');
+    await settle();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({
+        status: 'Failed',
+        error: { code: 'context_overflow', message: 'Contesto di 31000 token oltre il budget di input di 24000 token, non riducibile con la compattazione nativa. Gli originali non sono stati modificati.' },
+      }),
+    });
+    await settle();
+    const text = q('generation-error')!.textContent ?? '';
+    expect(text).toContain('31000 token');
+    expect(text).toContain('24000 token');
+    expect(text).toContain("contenuto dell'anteprima");
+    expect(text).not.toContain('rifiutato la richiesta');
+    expect(text).not.toContain('%');
+  });
+
   it("un run fallito mostra l'errore in italiano e non nasconde l'ultima bozza", async () => {
     await setup({ draft: draft() });
     void fixture.componentInstance.generate('rev-1');

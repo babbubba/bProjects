@@ -20,6 +20,7 @@ import {
   ProcessingRunView,
   ProjectApiService,
 } from './project-api.service';
+import { describeFailure } from './failure-text';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 
 const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'short' });
@@ -100,8 +101,7 @@ export class DocumentViewComponent {
   protected readonly runError = computed(() => {
     const run = this.run();
     if (run?.status !== 'Failed') return '';
-    const known = run.error ? errorLabels[run.error.code] : undefined;
-    return known ?? run.error?.message ?? 'La generazione non è riuscita.';
+    return describeFailure(run.error, errorLabels, 'La generazione non è riuscita.', 'document');
   });
   protected readonly stageLabel = computed(() => {
     const run = this.run();
