@@ -7,11 +7,13 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
   untracked,
 } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
 import {
+  AnalysisContent,
   AnalysisItem,
   AnalysisView,
   ProcessingRunView,
@@ -40,10 +42,135 @@ const errorLabels: Record<string, string> = {
 
 const classificationLabels = { Declared: 'Dichiarato', Inferred: 'Dedotto', Assumed: 'Ipotizzato' };
 
-interface Section {
-  key: string;
+type SectionKey =
+  | 'goals'
+  | 'overview'
+  | 'included'
+  | 'excluded'
+  | 'requirements'
+  | 'flows'
+  | 'constraints'
+  | 'dependencies'
+  | 'assumptions'
+  | 'questions';
+
+interface SectionDef {
+  key: SectionKey;
+  /** Percorso della sezione nel contenuto (come negli errori di campo del server). */
+  path: string;
   title: string;
-  items: AnalysisItem[];
+  /** Classificazione delle voci aggiunte dal PM. */
+  added: AnalysisItem['classification'];
+  get: (c: AnalysisContent) => AnalysisItem[];
+  set: (c: AnalysisContent, items: AnalysisItem[]) => AnalysisContent;
+}
+
+const sectionDefs: SectionDef[] = [
+  {
+    key: 'goals',
+    path: 'goals',
+    title: 'Obiettivi',
+    added: 'Declared',
+    get: (c) => c.goals,
+    set: (c, goals) => ({ ...c, goals }),
+  },
+  {
+    key: 'overview',
+    path: 'contextAndScope.overview',
+    title: 'Contesto',
+    added: 'Declared',
+    get: (c) => c.contextAndScope.overview,
+    set: (c, overview) => ({ ...c, contextAndScope: { ...c.contextAndScope, overview } }),
+  },
+  {
+    key: 'included',
+    path: 'contextAndScope.included',
+    title: 'In perimetro',
+    added: 'Declared',
+    get: (c) => c.contextAndScope.included,
+    set: (c, included) => ({ ...c, contextAndScope: { ...c.contextAndScope, included } }),
+  },
+  {
+    key: 'excluded',
+    path: 'contextAndScope.excluded',
+    title: 'Fuori perimetro',
+    added: 'Declared',
+    get: (c) => c.contextAndScope.excluded,
+    set: (c, excluded) => ({ ...c, contextAndScope: { ...c.contextAndScope, excluded } }),
+  },
+  {
+    key: 'requirements',
+    path: 'requirements',
+    title: 'Requisiti',
+    added: 'Declared',
+    get: (c) => c.requirements,
+    set: (c, requirements) => ({ ...c, requirements }),
+  },
+  {
+    key: 'flows',
+    path: 'operationalFlows',
+    title: 'Flussi operativi',
+    added: 'Declared',
+    get: (c) => c.operationalFlows,
+    set: (c, operationalFlows) => ({ ...c, operationalFlows }),
+  },
+  {
+    key: 'constraints',
+    path: 'constraints',
+    title: 'Vincoli',
+    added: 'Declared',
+    get: (c) => c.constraints,
+    set: (c, constraints) => ({ ...c, constraints }),
+  },
+  {
+    key: 'dependencies',
+    path: 'dependencies',
+    title: 'Integrazioni e dipendenze',
+    added: 'Declared',
+    get: (c) => c.dependencies,
+    set: (c, dependencies) => ({ ...c, dependencies }),
+  },
+  {
+    key: 'assumptions',
+    path: 'assumptions',
+    title: 'Assunzioni',
+    added: 'Assumed',
+    get: (c) => c.assumptions,
+    set: (c, assumptions) => ({ ...c, assumptions }),
+  },
+  {
+    key: 'questions',
+    path: 'openQuestions',
+    title: 'Punti aperti (lacune)',
+    added: 'Assumed',
+    get: (c) => c.openQuestions,
+    set: (c, openQuestions) => ({ ...c, openQuestions }),
+  },
+];
+
+const fieldWords: Record<string, string> = {
+  text: 'testo',
+  evidenceRefs: 'fonti',
+  classification: 'classificazione',
+  description: 'descrizione',
+  resolution: 'risoluzione',
+  reason: 'motivazione',
+  selectedAlternativeIds: 'scelta delle alternative',
+  alternatives: 'alternative',
+  status: 'stato',
+  sources: 'fonti',
+};
+
+/** Errore di campo restituito dal server in 422 preview_invalid. */
+export interface FieldError {
+  field: string;
+  message: string;
+}
+
+/** Motivazione e scelta in corso di un conflitto (buffer di modifica prima di «Segna come risolto»). */
+interface ResolutionDraft {
+  selected: string[];
+  reason: string;
 }
 
 /** Invio di Analizza non ancora confermato: la chiave resta stabile finché l'esito è incerto. */
@@ -81,7 +208,12 @@ export class AnalysisPreviewComponent {
   });
   protected readonly failed = computed(() => this.run()?.status === 'Failed');
   protected readonly canAnalyze = computed(
-    () => !this.loading() && !this.active() && this.analyzeState() !== 'sending',
+    () =>
+      !this.loading() &&
+      !this.active() &&
+      this.analyzeState() !== 'sending' &&
+      !this.dirty() &&
+      !this.busy(),
   );
   protected readonly runError = computed(() => {
     const run = this.run();
@@ -99,26 +231,85 @@ export class AnalysisPreviewComponent {
     if (/validate|persist/i.test(stage)) return `${state}: validazione e salvataggio`;
     return `${state}: consolidamento`;
   });
-  protected readonly sections = computed<Section[]>(() => {
-    const c = this.analysis()?.content;
-    if (!c) return [];
-    return [
-      { key: 'goals', title: 'Obiettivi', items: c.goals },
-      { key: 'overview', title: 'Contesto', items: c.contextAndScope.overview },
-      { key: 'included', title: 'In perimetro', items: c.contextAndScope.included },
-      { key: 'excluded', title: 'Fuori perimetro', items: c.contextAndScope.excluded },
-      { key: 'requirements', title: 'Requisiti', items: c.requirements },
-      { key: 'flows', title: 'Flussi operativi', items: c.operationalFlows },
-      { key: 'constraints', title: 'Vincoli', items: c.constraints },
-      { key: 'dependencies', title: 'Integrazioni e dipendenze', items: c.dependencies },
-      { key: 'assumptions', title: 'Assunzioni', items: c.assumptions },
-      { key: 'questions', title: 'Punti aperti', items: c.openQuestions },
-    ].filter((s) => s.items.length > 0);
+  protected readonly sectionDefs = sectionDefs;
+
+  // Form semplice (T035): la bozza è una copia dell'ultima revisione caricata; il server resta la fonte di verità.
+  protected readonly draft = signal<AnalysisContent | null>(null);
+  protected readonly saving = signal(false);
+  protected readonly confirming = signal(false);
+  protected readonly saveError = signal('');
+  protected readonly serverErrors = signal<FieldError[]>([]);
+  /** Revisione più recente del server quando il salvataggio è rifiutato per base obsoleta (409): la bozza resta intatta. */
+  protected readonly conflictView = signal<AnalysisView | null>(null);
+  private readonly resolutions = signal<Record<string, ResolutionDraft>>({});
+
+  protected readonly busy = computed(() => this.saving() || this.confirming());
+  protected readonly canEdit = computed(() => !!this.analysis()?.canEdit && !this.active());
+  protected readonly dirty = computed(() => {
+    const base = this.analysis()?.content;
+    const draft = this.draft();
+    return !!base && !!draft && JSON.stringify(base) !== JSON.stringify(draft);
+  });
+  protected readonly clientErrors = computed<string[]>(() => {
+    const draft = this.draft();
+    if (!draft) return [];
+    const errors: string[] = [];
+    for (const def of sectionDefs) {
+      def.get(draft).forEach((item, i) => {
+        if (!item.text.trim()) errors.push(`${def.title}, voce ${i + 1}: il testo è obbligatorio.`);
+      });
+    }
+    draft.conflicts.forEach((c, i) => {
+      if (!c.description.trim()) errors.push(`Conflitto ${i + 1}: la descrizione è obbligatoria.`);
+      c.alternatives.forEach((a, j) => {
+        if (!a.text.trim()) {
+          errors.push(`Conflitto ${i + 1}, alternativa ${j + 1}: il testo è obbligatorio.`);
+        }
+      });
+    });
+    return errors;
+  });
+  protected readonly canSave = computed(
+    () =>
+      this.canEdit() &&
+      this.dirty() &&
+      !this.busy() &&
+      !this.conflictView() &&
+      this.clientErrors().length === 0,
+  );
+  protected readonly canConfirm = computed(
+    () =>
+      this.canEdit() &&
+      !this.dirty() &&
+      !this.busy() &&
+      !this.conflictView() &&
+      !!this.analysis()?.canConfirm,
+  );
+  /** Genera è offerto soltanto sulla revisione confermata, corrente e senza modifiche pendenti. */
+  protected readonly canGenerate = computed(() => {
+    const view = this.analysis();
+    return (
+      !!view &&
+      view.validationState === 'PmConfirmed' &&
+      view.canGenerate &&
+      !this.dirty() &&
+      !this.active() &&
+      !this.busy()
+    );
+  });
+  protected readonly primaryAction = computed<'save' | 'confirm' | 'generate' | null>(() => {
+    if (this.dirty()) return 'save';
+    if (this.canConfirm()) return 'confirm';
+    if (this.canGenerate()) return 'generate';
+    return null;
   });
   private readonly sourceLabels = computed(
     () =>
       new Map((this.analysis()?.content.sources ?? []).map((s, i) => [s.id, `F${i + 1}`] as const)),
   );
+
+  /** Richiesta di generazione del documento sulla revisione confermata (il collegamento al backend è T042). */
+  readonly generateRequested = output<string>();
 
   private idempotencyKey: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -164,6 +355,335 @@ export class AnalysisPreviewComponent {
   protected sourceLabel(index: number, kind: string, role: string | null): string {
     if (kind === 'PmRevision') return `F${index + 1} · revisione del PM`;
     return `F${index + 1} · messaggio ${role === 'assistant' ? "dell'assistente (solo contesto)" : 'del PM'}`;
+  }
+
+  protected itemsOf(def: SectionDef): AnalysisItem[] {
+    const draft = this.draft();
+    return draft ? def.get(draft) : [];
+  }
+
+  protected inputValue(event: Event): string {
+    return (event.target as HTMLInputElement | HTMLTextAreaElement).value;
+  }
+
+  /** Voce o campo con errore: testo vuoto (controllo locale) o segnalato dal server per quel percorso. */
+  protected itemInvalid(def: SectionDef, index: number, item: AnalysisItem): boolean {
+    const prefix = `${def.path}[${index}]`;
+    return !item.text.trim() || this.serverErrors().some((e) => e.field.startsWith(prefix));
+  }
+
+  protected conflictInvalid(index: number): boolean {
+    return this.serverErrors().some((e) => e.field.startsWith(`conflicts[${index}]`));
+  }
+
+  /** «goals[0].text» → «Obiettivi, voce 1 (testo)»: il percorso del server reso leggibile, mai il contenuto dell'utente. */
+  protected fieldLabel(field: string): string {
+    const rest = (tail: string) => {
+      const word =
+        tail
+          .replace(/^\./, '')
+          .split('.')
+          .pop()
+          ?.replace(/\[\d+\]$/, '') ?? '';
+      return fieldWords[word] ? ` (${fieldWords[word]})` : '';
+    };
+    for (const def of sectionDefs) {
+      const m = new RegExp(`^${def.path.replace('.', '\\.')}\\[(\\d+)\\](.*)$`).exec(field);
+      if (m) return `${def.title}, voce ${Number(m[1]) + 1}${rest(m[2])}`;
+    }
+    const conflict = /^conflicts\[(\d+)\](.*)$/.exec(field);
+    if (conflict) {
+      const alt = /^\.alternatives\[(\d+)\](.*)$/.exec(conflict[2]);
+      return alt
+        ? `Conflitto ${Number(conflict[1]) + 1}, alternativa ${Number(alt[1]) + 1}${rest(alt[2])}`
+        : `Conflitto ${Number(conflict[1]) + 1}${rest(conflict[2])}`;
+    }
+    return /^sources/.test(field) ? 'Fonti' : field;
+  }
+
+  private edit(change: (content: AnalysisContent) => AnalysisContent): void {
+    const draft = this.draft();
+    if (!draft || !this.canEdit() || this.busy()) return;
+    this.draft.set(change(draft));
+    this.serverErrors.set([]);
+  }
+
+  protected setItemText(def: SectionDef, index: number, text: string): void {
+    this.edit((c) =>
+      def.set(
+        c,
+        def.get(c).map((item, i) => (i === index ? { ...item, text } : item)),
+      ),
+    );
+  }
+
+  protected addItem(def: SectionDef): void {
+    this.edit((c) =>
+      def.set(c, [
+        ...def.get(c),
+        { id: crypto.randomUUID(), text: '', classification: def.added, evidenceRefs: [] },
+      ]),
+    );
+  }
+
+  protected removeItem(def: SectionDef, index: number): void {
+    this.edit((c) =>
+      def.set(
+        c,
+        def.get(c).filter((_, i) => i !== index),
+      ),
+    );
+  }
+
+  private editConflict(
+    index: number,
+    change: (
+      conflict: AnalysisContent['conflicts'][number],
+    ) => AnalysisContent['conflicts'][number],
+  ): void {
+    this.edit((c) => ({
+      ...c,
+      conflicts: c.conflicts.map((conflict, i) => (i === index ? change(conflict) : conflict)),
+    }));
+  }
+
+  protected setConflictDescription(index: number, description: string): void {
+    this.editConflict(index, (c) => ({ ...c, description }));
+  }
+
+  protected setAlternativeText(index: number, alt: number, text: string): void {
+    this.editConflict(index, (c) => ({
+      ...c,
+      alternatives: c.alternatives.map((a, j) => (j === alt ? { ...a, text } : a)),
+    }));
+  }
+
+  protected resolutionOf(conflict: AnalysisContent['conflicts'][number]): ResolutionDraft {
+    return (
+      this.resolutions()[conflict.id] ?? {
+        selected: conflict.resolution?.selectedAlternativeIds ?? [],
+        reason: conflict.resolution?.reason ?? '',
+      }
+    );
+  }
+
+  private patchResolution(
+    conflict: AnalysisContent['conflicts'][number],
+    patch: Partial<ResolutionDraft>,
+  ): void {
+    if (!this.canEdit() || this.busy()) return;
+    this.resolutions.update((r) => ({
+      ...r,
+      [conflict.id]: { ...this.resolutionOf(conflict), ...patch },
+    }));
+  }
+
+  protected toggleAlternative(
+    conflict: AnalysisContent['conflicts'][number],
+    altId: string,
+    checked: boolean,
+  ): void {
+    const selected = this.resolutionOf(conflict).selected.filter((id) => id !== altId);
+    this.patchResolution(conflict, { selected: checked ? [...selected, altId] : selected });
+  }
+
+  protected setResolutionReason(
+    conflict: AnalysisContent['conflicts'][number],
+    reason: string,
+  ): void {
+    this.patchResolution(conflict, { reason });
+  }
+
+  /** La risoluzione richiede almeno un'alternativa scelta e una motivazione non vuota. */
+  protected canResolve(conflict: AnalysisContent['conflicts'][number]): boolean {
+    const r = this.resolutionOf(conflict);
+    return this.canEdit() && !this.busy() && r.selected.length > 0 && r.reason.trim().length > 0;
+  }
+
+  protected resolveConflict(index: number): void {
+    const conflict = this.draft()?.conflicts[index];
+    if (!conflict || !this.canResolve(conflict)) return;
+    const r = this.resolutionOf(conflict);
+    this.editConflict(index, (c) => ({
+      ...c,
+      status: 'Resolved',
+      resolution: {
+        selectedAlternativeIds: r.selected,
+        reason: r.reason.trim(),
+        evidenceRefs: c.resolution?.evidenceRefs ?? [],
+      },
+    }));
+  }
+
+  /** Rinvia: il conflitto resta (o torna) aperto, senza risoluzione. */
+  protected deferConflict(index: number): void {
+    const conflict = this.draft()?.conflicts[index];
+    if (!conflict) return;
+    this.resolutions.update((r) => {
+      const { [conflict.id]: _, ...rest } = r;
+      return rest;
+    });
+    this.editConflict(index, (c) => ({ ...c, status: 'Open', resolution: null }));
+  }
+
+  /** Scarta le modifiche non salvate e riparte dall'ultima revisione caricata. */
+  protected discard(): void {
+    const view = this.analysis();
+    if (view && !this.busy()) this.applyView(view);
+  }
+
+  private applyView(view: AnalysisView): void {
+    this.analysis.set(view);
+    this.draft.set(JSON.parse(JSON.stringify(view.content)) as AnalysisContent);
+    this.resolutions.set({});
+    this.conflictView.set(null);
+    this.serverErrors.set([]);
+    this.saveError.set('');
+  }
+
+  protected async save(): Promise<void> {
+    const view = this.analysis();
+    const draft = this.draft();
+    if (!view || !draft || !this.canSave()) return;
+    const gen = this.generation;
+    const projectId = this.projectId();
+    this.saving.set(true);
+    this.saveError.set('');
+    this.serverErrors.set([]);
+    try {
+      const saved = await this.api.savePreview(
+        projectId,
+        view.analysisId,
+        view.currentRevisionId,
+        draft,
+      );
+      if (gen === this.generation) this.applyView(saved);
+    } catch (e) {
+      if (gen === this.generation)
+        await this.onPreviewFailure(e, projectId, view.analysisId, gen, 'save');
+    } finally {
+      if (gen === this.generation) this.saving.set(false);
+    }
+  }
+
+  protected async confirm(): Promise<void> {
+    const view = this.analysis();
+    if (!view || !this.canConfirm()) return;
+    const gen = this.generation;
+    const projectId = this.projectId();
+    this.confirming.set(true);
+    this.saveError.set('');
+    try {
+      const confirmed = await this.api.confirmPreview(
+        projectId,
+        view.analysisId,
+        view.currentRevisionId,
+      );
+      if (gen === this.generation) this.applyView(confirmed);
+    } catch (e) {
+      if (gen === this.generation)
+        await this.onPreviewFailure(e, projectId, view.analysisId, gen, 'confirm');
+    } finally {
+      if (gen === this.generation) this.confirming.set(false);
+    }
+  }
+
+  /** Richiesta di generazione: solo sulla revisione confermata; la chiamata al backend è collegata in T042. */
+  protected generate(): void {
+    const view = this.analysis();
+    if (view && this.canGenerate()) this.generateRequested.emit(view.currentRevisionId);
+  }
+
+  /** Esiti d'errore di PUT/confirm: la bozza dell'utente non viene mai sostituita da un errore. */
+  private async onPreviewFailure(
+    e: unknown,
+    projectId: string,
+    analysisId: string,
+    gen: number,
+    action: 'save' | 'confirm',
+  ): Promise<void> {
+    const verb = action === 'save' ? 'Il salvataggio' : 'La conferma';
+    const mine = action === 'save' ? ' Le tue modifiche restano nel modulo.' : '';
+    if (!(e instanceof HttpErrorResponse)) {
+      this.saveError.set(`${verb} non è riuscito.${mine} Riprova.`);
+      return;
+    }
+    const body = (e.error ?? {}) as {
+      code?: string;
+      errors?: FieldError[];
+      processingRunId?: string;
+    };
+    if (e.status === 422) {
+      const errors = (body.errors ?? []).filter((x) => typeof x?.field === 'string');
+      this.serverErrors.set(errors);
+      this.saveError.set(
+        `${verb} è stato rifiutato: i campi indicati non sono validi. Nulla è stato salvato.${mine}`,
+      );
+    } else if (e.status === 409 && body.code === 'revision_conflict') {
+      await this.onRevisionConflict(projectId, analysisId, gen, verb);
+    } else if (e.status === 409 && body.code === 'processing_active') {
+      this.saveError.set(
+        `Un'analisi è in corso: l'anteprima è bloccata finché non termina.${mine}`,
+      );
+      if (body.processingRunId) void this.adopt(projectId, body.processingRunId, gen);
+    } else if (e.status === 409 && body.code === 'analysis_not_current') {
+      this.saveError.set(
+        `Questa non è più l'analisi corrente del progetto: ricarica la pagina.${mine}`,
+      );
+    } else if (e.status === 401) {
+      this.saveError.set('Sessione scaduta: accedi di nuovo.');
+    } else {
+      this.saveError.set(`${verb} non è riuscito.${mine} Riprova.`);
+    }
+  }
+
+  /** Base obsoleta (409): legge la revisione corrente ma lascia la bozza intatta finché il PM non sceglie. */
+  private async onRevisionConflict(
+    projectId: string,
+    analysisId: string,
+    gen: number,
+    verb: string,
+  ): Promise<void> {
+    try {
+      const latest = await this.api.getAnalysis(projectId, analysisId);
+      if (gen !== this.generation) return;
+      if (this.dirty()) {
+        this.conflictView.set(latest);
+        this.saveError.set(
+          `${verb} non è stato eseguito: l'anteprima è stata modificata da un'altra revisione (versione ${latest.version}). Le tue modifiche non sono state salvate né sovrascritte.`,
+        );
+      } else {
+        this.applyView(latest);
+        this.saveError.set(
+          `L'anteprima era cambiata (versione ${latest.version}): ora vedi la versione corrente. Riprova.`,
+        );
+      }
+    } catch {
+      this.saveError.set(
+        `${verb} non è stato eseguito: la revisione non è più la corrente e non è stato possibile rileggerla. Le tue modifiche restano nel modulo.`,
+      );
+    }
+  }
+
+  /** Conflitto di revisione: ricarica la versione corrente scartando le modifiche locali. */
+  protected reloadLatest(): void {
+    const latest = this.conflictView();
+    if (latest) this.applyView(latest);
+  }
+
+  /** Conflitto di revisione: riapplica le modifiche locali come nuova revisione sopra quella corrente. */
+  protected keepMine(): void {
+    const latest = this.conflictView();
+    const draft = this.draft();
+    if (!latest || !draft) return;
+    this.analysis.set(latest);
+    this.draft.set({
+      ...draft,
+      sources: latest.content.sources,
+      validationState: latest.content.validationState,
+    });
+    this.conflictView.set(null);
+    this.saveError.set('');
   }
 
   protected async analyze(): Promise<void> {
@@ -233,6 +753,13 @@ export class AnalysisPreviewComponent {
     this.stopPolling();
     this.run.set(null);
     this.analysis.set(null);
+    this.draft.set(null);
+    this.resolutions.set({});
+    this.conflictView.set(null);
+    this.saveError.set('');
+    this.serverErrors.set([]);
+    this.saving.set(false);
+    this.confirming.set(false);
     this.idempotencyKey = null;
     this.analyzeState.set('idle');
     this.commandError.set('');
@@ -242,7 +769,8 @@ export class AnalysisPreviewComponent {
     try {
       await this.restore(projectId, gen);
     } catch {
-      if (gen === this.generation) this.loadError.set("Impossibile caricare lo stato dell'analisi.");
+      if (gen === this.generation)
+        this.loadError.set("Impossibile caricare lo stato dell'analisi.");
     } finally {
       if (gen === this.generation) this.loading.set(false);
     }
@@ -282,7 +810,13 @@ export class AnalysisPreviewComponent {
     try {
       const view = await this.api.getAnalysis(projectId, analysisId);
       if (gen !== this.generation) return;
-      this.analysis.set(view);
+      // Una nuova revisione non sovrascrive mai modifiche non salvate dello stesso documento.
+      if (this.dirty() && this.analysis()?.analysisId === view.analysisId) {
+        if (view.currentRevisionId !== this.analysis()?.currentRevisionId)
+          this.conflictView.set(view);
+        return;
+      }
+      this.applyView(view);
       this.previewError.set('');
     } catch {
       // L'ultima anteprima buona resta visibile; nessuna anteprima viene inventata.
@@ -301,7 +835,12 @@ export class AnalysisPreviewComponent {
     if (event.name !== 'processing.state') return;
     const data = event.data as ProcessingRunView | null;
     const current = this.run();
-    if (!data || typeof data.id !== 'string' || data.kind !== 'Analysis' || data.id !== current?.id) {
+    if (
+      !data ||
+      typeof data.id !== 'string' ||
+      data.kind !== 'Analysis' ||
+      data.id !== current?.id
+    ) {
       return;
     }
     this.track(projectId, data, this.generation);

@@ -112,7 +112,11 @@ export class ProjectEventsService {
     }
   }
 
-  private async read(body: ReadableStream<Uint8Array>, h: ProjectStreamHandlers, signal: AbortSignal) {
+  private async read(
+    body: ReadableStream<Uint8Array>,
+    h: ProjectStreamHandlers,
+    signal: AbortSignal,
+  ) {
     const decoder = new TextDecoder();
     const parser = new SseParser((frame) => {
       if (signal.aborted) return;

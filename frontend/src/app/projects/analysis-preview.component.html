@@ -3,7 +3,9 @@
     <h2 id="analysis-title" class="h5 mb-0">Analisi iniziale</h2>
     <button
       type="button"
-      class="btn btn-primary"
+      class="btn"
+      [class.btn-primary]="!analysis()"
+      [class.btn-outline-primary]="!!analysis()"
       data-testid="analyze"
       [disabled]="!canAnalyze()"
       (click)="analyze()"
@@ -36,7 +38,9 @@
       <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       {{ stageLabel() }}
       @if (run()!.attemptCount > 1) {
-        <span class="text-secondary">· tentativo {{ run()!.attemptCount }} di {{ run()!.maxAttempts }}</span>
+        <span class="text-secondary"
+          >· tentativo {{ run()!.attemptCount }} di {{ run()!.maxAttempts }}</span
+        >
       }
     </p>
   }
@@ -61,14 +65,26 @@
         >
         <span
           class="badge text-bg-success"
+          data-testid="confirmed-badge"
           [hidden]="view.validationState !== 'PmConfirmed'"
           >Confermata dal PM</span
         >
-        <span class="text-secondary small">
-          Versione {{ view.version }} · {{ view.origin === 'Ai' ? 'generata dall\'AI' : 'modificata dal PM' }}
-          · {{ formatTime(view.createdAt) }}
-        </span>
+        @if (dirty()) {
+          <span class="badge text-bg-info" data-testid="dirty-badge">Modifiche non salvate</span>
+        }
       </div>
+      <p class="text-secondary small" data-testid="revision-info">
+        Versione {{ view.version }} ·
+        {{ view.origin === 'Ai' ? "generata dall'AI" : 'modificata dal PM' }}
+        @if (view.createdBy) {
+          · {{ view.createdBy }}
+        }
+        · {{ formatTime(view.createdAt) }}
+        @if (view.confirmedAt) {
+          · confermata{{ view.confirmedBy ? ' da ' + view.confirmedBy : '' }} il
+          {{ formatTime(view.confirmedAt) }}
+        }
+      </p>
       @if (view.hasNewNotes) {
         <p class="alert alert-info py-2" role="status" data-testid="new-notes">
           Ci sono nuove note del PM successive a questa analisi. Premi «Analizza di nuovo» per
@@ -78,47 +94,220 @@
       @if (previewError()) {
         <p class="alert alert-warning py-2" role="alert">{{ previewError() }}</p>
       }
-
-      @for (section of sections(); track section.key) {
-        <section [attr.data-section]="section.key">
-          <h3 class="h6">{{ section.title }}</h3>
-          <ul>
-            @for (item of section.items; track item.id) {
-              <li>
-                {{ item.text }}
-                <span class="badge text-bg-light border">{{ classification(item) }}</span>
-                @if (item.evidenceRefs.length) {
-                  <span class="text-secondary small">({{ refs(item) }})</span>
-                }
-              </li>
-            }
-          </ul>
-        </section>
+      @if (!canEdit()) {
+        <p class="alert alert-secondary py-2" role="status" data-testid="readonly-note">
+          {{
+            active()
+              ? "Un'analisi è in corso: l'anteprima è in sola lettura finché non termina."
+              : "Questa anteprima non è modificabile (non è l'analisi corrente)."
+          }}
+        </p>
       }
 
-      @if (view.content.conflicts.length) {
-        <section data-section="conflicts">
-          <h3 class="h6">Conflitti</h3>
-          <ul>
-            @for (conflict of view.content.conflicts; track conflict.id) {
-              <li>
-                {{ conflict.description }}
-                <span class="badge text-bg-light border">{{
-                  conflict.status === 'Open' ? 'Aperto' : 'Risolto'
-                }}</span>
-                <ul>
-                  @for (alt of conflict.alternatives; track alt.id) {
-                    <li>{{ alt.text }} <span class="text-secondary small">({{ refs(alt) }})</span></li>
+      @if (conflictView(); as latest) {
+        <div class="alert alert-warning" role="alert" data-testid="conflict-banner">
+          <p class="mb-2">
+            <strong>Conflitto di revisione.</strong> L'anteprima è stata modificata da un'altra
+            revisione (versione {{ latest.version }}, {{ formatTime(latest.createdAt) }}). Le tue
+            modifiche sono ancora nel modulo e non sono state sovrascritte. Scegli come procedere.
+          </p>
+          <div class="d-flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              data-testid="conflict-reload"
+              (click)="reloadLatest()"
+            >
+              Scarta le mie modifiche e mostra la versione {{ latest.version }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary"
+              data-testid="conflict-keep"
+              (click)="keepMine()"
+            >
+              Mantieni le mie modifiche sopra la versione {{ latest.version }}
+            </button>
+          </div>
+        </div>
+      }
+      @if (saveError()) {
+        <div class="alert alert-danger py-2" role="alert" data-testid="save-error">
+          {{ saveError() }}
+        </div>
+      }
+      @if (serverErrors().length) {
+        <ul class="alert alert-danger py-2 ps-4 small" data-testid="field-errors">
+          @for (error of serverErrors(); track $index) {
+            <li>
+              <strong>{{ fieldLabel(error.field) }}:</strong> {{ error.message }}
+            </li>
+          }
+        </ul>
+      }
+      @if (canEdit() && clientErrors().length) {
+        <ul class="alert alert-warning py-2 ps-4 small" data-testid="client-errors">
+          @for (message of clientErrors(); track $index) {
+            <li>{{ message }}</li>
+          }
+        </ul>
+      }
+
+      <form class="preview-form" (submit)="$event.preventDefault()" novalidate>
+        <fieldset [disabled]="!canEdit() || busy()">
+          @for (def of sectionDefs; track def.key) {
+            <section [attr.data-section]="def.key" class="form-section">
+              <h3 class="h6">{{ def.title }}</h3>
+              @if (!itemsOf(def).length) {
+                <p class="text-secondary small mb-1">Nessuna voce.</p>
+              }
+              @for (item of itemsOf(def); track item.id; let i = $index) {
+                <div class="item-row" data-testid="item">
+                  <textarea
+                    class="form-control form-control-sm"
+                    rows="2"
+                    data-testid="item-text"
+                    [attr.aria-label]="def.title + ', voce ' + (i + 1)"
+                    [attr.aria-invalid]="itemInvalid(def, i, item)"
+                    [class.is-invalid]="itemInvalid(def, i, item)"
+                    [value]="item.text"
+                    (input)="setItemText(def, i, inputValue($event))"
+                  ></textarea>
+                  <div class="item-meta small text-secondary">
+                    <span class="badge text-bg-light border">{{ classification(item) }}</span>
+                    @if (item.evidenceRefs.length) {
+                      <span>Fonti: {{ refs(item) }}</span>
+                    } @else {
+                      <span>Nessuna fonte</span>
+                    }
+                    @if (canEdit()) {
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-link text-danger p-0 ms-auto"
+                        data-testid="remove-item"
+                        [attr.aria-label]="'Rimuovi ' + def.title + ', voce ' + (i + 1)"
+                        (click)="removeItem(def, i)"
+                      >
+                        Rimuovi
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+              @if (canEdit()) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  [attr.data-testid]="'add-' + def.key"
+                  (click)="addItem(def)"
+                >
+                  Aggiungi a «{{ def.title }}»
+                </button>
+              }
+            </section>
+          }
+
+          <section data-section="conflicts" class="form-section">
+            <h3 class="h6">Conflitti</h3>
+            @if (!draft()!.conflicts.length) {
+              <p class="text-secondary small mb-1">Nessun conflitto.</p>
+            }
+            @for (conflict of draft()!.conflicts; track conflict.id; let ci = $index) {
+              <div
+                class="conflict"
+                data-testid="conflict"
+                [class.conflict-invalid]="conflictInvalid(ci)"
+              >
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+                  <span class="badge text-bg-light border" data-testid="conflict-status">{{
+                    conflict.status === 'Open' ? 'Aperto' : 'Risolto'
+                  }}</span>
+                </div>
+                <textarea
+                  class="form-control form-control-sm"
+                  rows="2"
+                  data-testid="conflict-description"
+                  [attr.aria-label]="'Conflitto ' + (ci + 1) + ', descrizione'"
+                  [class.is-invalid]="!conflict.description.trim()"
+                  [value]="conflict.description"
+                  (input)="setConflictDescription(ci, inputValue($event))"
+                ></textarea>
+                <p class="small text-secondary mb-1 mt-2">Alternative (scegli una o più):</p>
+                @for (alt of conflict.alternatives; track alt.id; let ai = $index) {
+                  <div class="alt-row">
+                    <input
+                      type="checkbox"
+                      class="form-check-input"
+                      data-testid="alt-choice"
+                      [attr.aria-label]="
+                        'Conflitto ' + (ci + 1) + ': scegli alternativa ' + (ai + 1)
+                      "
+                      [checked]="resolutionOf(conflict).selected.includes(alt.id)"
+                      (change)="toggleAlternative(conflict, alt.id, $any($event.target).checked)"
+                    />
+                    <textarea
+                      class="form-control form-control-sm"
+                      rows="1"
+                      data-testid="alt-text"
+                      [attr.aria-label]="'Conflitto ' + (ci + 1) + ', alternativa ' + (ai + 1)"
+                      [class.is-invalid]="!alt.text.trim()"
+                      [value]="alt.text"
+                      (input)="setAlternativeText(ci, ai, inputValue($event))"
+                    ></textarea>
+                    <span class="small text-secondary">{{
+                      alt.evidenceRefs.length ? '(' + refs(alt) + ')' : ''
+                    }}</span>
+                  </div>
+                }
+                <label class="small text-secondary mt-2" [attr.for]="'reason-' + conflict.id"
+                  >Motivazione della risoluzione</label
+                >
+                <textarea
+                  class="form-control form-control-sm"
+                  rows="2"
+                  data-testid="resolution-reason"
+                  [id]="'reason-' + conflict.id"
+                  [value]="resolutionOf(conflict).reason"
+                  (input)="setResolutionReason(conflict, inputValue($event))"
+                ></textarea>
+                @if (canEdit()) {
+                  <div class="d-flex flex-wrap gap-2 mt-2">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-success"
+                      data-testid="resolve-conflict"
+                      [disabled]="!canResolve(conflict)"
+                      (click)="resolveConflict(ci)"
+                    >
+                      {{
+                        conflict.status === 'Resolved'
+                          ? 'Aggiorna risoluzione'
+                          : 'Segna come risolto'
+                      }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary"
+                      data-testid="defer-conflict"
+                      [disabled]="conflict.status === 'Open'"
+                      (click)="deferConflict(ci)"
+                    >
+                      {{
+                        conflict.status === 'Open' ? 'Resta aperto (rinviato)' : 'Riapri e rinvia'
+                      }}
+                    </button>
+                  </div>
+                  @if (!canResolve(conflict) && conflict.status === 'Open') {
+                    <p class="small text-secondary mb-0 mt-1" data-testid="resolve-hint">
+                      Per risolvere scegli almeno un'alternativa e scrivi la motivazione.
+                    </p>
                   }
-                </ul>
-                @if (conflict.resolution; as resolution) {
-                  <p class="small mb-0">Motivazione: {{ resolution.reason }}</p>
                 }
-              </li>
+              </div>
             }
-          </ul>
-        </section>
-      }
+          </section>
+        </fieldset>
+      </form>
 
       @if (view.content.sources.length) {
         <section data-section="sources">
@@ -129,6 +318,60 @@
             }
           </ul>
         </section>
+      }
+
+      <div class="preview-actions" data-testid="preview-actions">
+        <button
+          type="button"
+          class="btn"
+          data-testid="save"
+          [class.btn-primary]="primaryAction() === 'save'"
+          [class.btn-outline-secondary]="primaryAction() !== 'save'"
+          [disabled]="!canSave()"
+          (click)="save()"
+        >
+          {{ saving() ? 'Salvataggio…' : 'Salva' }}
+        </button>
+        @if (dirty() && canEdit()) {
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            data-testid="discard"
+            [disabled]="busy()"
+            (click)="discard()"
+          >
+            Annulla modifiche
+          </button>
+        }
+        <button
+          type="button"
+          class="btn"
+          data-testid="confirm"
+          [class.btn-primary]="primaryAction() === 'confirm'"
+          [class.btn-outline-secondary]="primaryAction() !== 'confirm'"
+          [disabled]="!canConfirm()"
+          (click)="confirm()"
+        >
+          {{ confirming() ? 'Conferma…' : 'Conferma' }}
+        </button>
+        @if (view.validationState === 'PmConfirmed') {
+          <button
+            type="button"
+            class="btn"
+            data-testid="generate"
+            [class.btn-primary]="primaryAction() === 'generate'"
+            [class.btn-outline-secondary]="primaryAction() !== 'generate'"
+            [disabled]="!canGenerate()"
+            (click)="generate()"
+          >
+            Genera
+          </button>
+        }
+      </div>
+      @if (dirty() && canEdit()) {
+        <p class="small text-secondary mb-0" data-testid="save-first">
+          Salva le modifiche prima di confermare: la conferma vale per la revisione salvata.
+        </p>
       }
     </article>
   } @else if (!loading() && !active() && !failed()) {

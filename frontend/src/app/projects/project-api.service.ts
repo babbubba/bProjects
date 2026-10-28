@@ -119,7 +119,7 @@ export interface AnalysisConflict {
   resolution: { selectedAlternativeIds: string[]; reason: string; evidenceRefs: string[] } | null;
 }
 
-/** AnalysisContent 1.0.0 (contracts/ai-workflow.md §4), solo lettura in questa fase. */
+/** AnalysisContent 1.0.0 (contracts/ai-workflow.md §4), modificabile dal PM tramite form semplice (T035). */
 export interface AnalysisContent {
   schemaVersion: string;
   analysisId: string;
@@ -250,6 +250,33 @@ export class ProjectApiService {
     return firstValueFrom(
       this.http.get<AnalysisView>(
         `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}`,
+      ),
+    );
+  }
+
+  /** Salva l'anteprima come nuova revisione del PM; If-Match è l'ID della revisione corrente in forma quotata. */
+  savePreview(
+    projectId: string,
+    analysisId: string,
+    revisionId: string,
+    content: AnalysisContent,
+  ): Promise<AnalysisView> {
+    return firstValueFrom(
+      this.http.put<AnalysisView>(
+        `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}/preview`,
+        content,
+        { headers: { 'If-Match': `"${revisionId}"` } },
+      ),
+    );
+  }
+
+  /** Conferma la revisione corrente (ripetuta sulla stessa revisione è idempotente); non avvia alcuna generazione. */
+  confirmPreview(projectId: string, analysisId: string, revisionId: string): Promise<AnalysisView> {
+    return firstValueFrom(
+      this.http.post<AnalysisView>(
+        `/api/projects/${encodeURIComponent(projectId)}/analyses/${encodeURIComponent(analysisId)}/confirm`,
+        null,
+        { headers: { 'If-Match': `"${revisionId}"` } },
       ),
     );
   }

@@ -62,15 +62,28 @@ function analysis(over: Partial<AnalysisView> = {}): AnalysisView {
       projectId: P,
       sourceCutoffSequence: 1,
       validationState: 'Unvalidated',
-      sources: [{ id: 's-1', kind: 'Message', messageId: 'm-1', messageRole: 'user', revisionId: null }],
-      goals: [{ id: 'g-1', text: 'Realizzare un portale clienti', classification: 'Declared', evidenceRefs: ['s-1'] }],
+      sources: [
+        { id: 's-1', kind: 'Message', messageId: 'm-1', messageRole: 'user', revisionId: null },
+      ],
+      goals: [
+        {
+          id: 'g-1',
+          text: 'Realizzare un portale clienti',
+          classification: 'Declared',
+          evidenceRefs: ['s-1'],
+        },
+      ],
       contextAndScope: { overview: [], included: [], excluded: [] },
-      requirements: [{ id: 'q-1', text: 'Login con email', classification: 'Inferred', evidenceRefs: ['s-1'] }],
+      requirements: [
+        { id: 'q-1', text: 'Login con email', classification: 'Inferred', evidenceRefs: ['s-1'] },
+      ],
       operationalFlows: [],
       constraints: [],
       dependencies: [],
       assumptions: [],
-      openQuestions: [{ id: 'o-1', text: 'Quanti utenti?', classification: 'Assumed', evidenceRefs: [] }],
+      openQuestions: [
+        { id: 'o-1', text: 'Quanti utenti?', classification: 'Assumed', evidenceRefs: [] },
+      ],
       conflicts: [],
     },
     validationState: 'Unvalidated',
@@ -103,10 +116,22 @@ describe('AnalysisPreviewComponent', () => {
   };
 
   const text = () => el.textContent ?? '';
+  /** I testi del form sono valori di textarea, non textContent. */
+  const values = () =>
+    Array.from(el.querySelectorAll('textarea'))
+      .map((t) => t.value)
+      .join(' | ');
   const button = () => el.querySelector<HTMLButtonElement>('[data-testid=analyze]')!;
 
   /** Apre il componente rispondendo alla ProjectView (e, se indicati, a run e anteprima). */
-  async function setup(opts: { project?: ProjectView; run?: ProcessingRunView; analysis?: AnalysisView; pollMs?: number } = {}) {
+  async function setup(
+    opts: {
+      project?: ProjectView;
+      run?: ProcessingRunView;
+      analysis?: AnalysisView;
+      pollMs?: number;
+    } = {},
+  ) {
     open.mockReset();
     close.mockReset();
     open.mockImplementation((_id: string, h: ProjectStreamHandlers) => {
@@ -158,7 +183,7 @@ describe('AnalysisPreviewComponent', () => {
     expect(button().disabled).toBe(false);
   });
 
-  it('Analizza invia POST con Idempotency-Key UUID, segue processing.state e mostra l\'anteprima non validata', async () => {
+  it("Analizza invia POST con Idempotency-Key UUID, segue processing.state e mostra l'anteprima non validata", async () => {
     await setup();
     await click();
     const post = http.expectOne((r) => r.method === 'POST' && r.url === `${BASE}/analyses`);
@@ -170,11 +195,19 @@ describe('AnalysisPreviewComponent', () => {
     expect(button().disabled).toBe(true);
     expect(el.querySelector('[data-testid=preview]')).toBeNull();
 
-    handlers.onEvent({ name: 'processing.state', data: run({ status: 'Running', attemptCount: 1, lastObservedStage: 'LoadDialog' }) });
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ status: 'Running', attemptCount: 1, lastObservedStage: 'LoadDialog' }),
+    });
     await settle();
-    expect(el.querySelector('[data-testid=run-state]')?.textContent).toContain('lettura del dialogo');
+    expect(el.querySelector('[data-testid=run-state]')?.textContent).toContain(
+      'lettura del dialogo',
+    );
 
-    handlers.onEvent({ name: 'processing.state', data: run({ status: 'Completed', analysisId: 'r-1', resultRevisionId: 'rev-1' }) });
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ status: 'Completed', analysisId: 'r-1', resultRevisionId: 'rev-1' }),
+    });
     await settle();
     http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
     await settle();
@@ -183,13 +216,13 @@ describe('AnalysisPreviewComponent', () => {
     const badge = el.querySelector<HTMLElement>('[data-testid=validation-badge]')!;
     expect(badge.hidden).toBe(false);
     expect(badge.textContent).toContain('Non validata / in attesa del PM');
-    expect(text()).toContain('Realizzare un portale clienti');
-    expect(text()).toContain('Login con email');
-    expect(text()).toContain('Quanti utenti?');
+    expect(values()).toContain('Realizzare un portale clienti');
+    expect(values()).toContain('Login con email');
+    expect(values()).toContain('Quanti utenti?');
     expect(text()).toContain('Punti aperti');
     expect(text()).toContain('F1 · messaggio del PM');
-    // Solo lettura e nessun Markdown/documento: nessun campo modificabile né azioni di generazione.
-    expect(el.querySelectorAll('textarea, input').length).toBe(0);
+    // Nessun Markdown/documento: nessuna azione di generazione sulla revisione non confermata.
+    expect(el.querySelector('[data-testid=generate]')).toBeNull();
     expect(text().toLowerCase()).not.toContain('markdown');
     expect(el.querySelector('.analysis')!.innerHTML).not.toContain('<pre');
   });
@@ -197,10 +230,15 @@ describe('AnalysisPreviewComponent', () => {
   it('un evento di un altro run non cambia lo stato', async () => {
     await setup();
     await click();
-    http.expectOne((r) => r.method === 'POST').flush(run(), { status: 202, statusText: 'Accepted' });
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
     await settle();
     handlers.onEvent({ name: 'processing.state', data: run({ id: 'altro', status: 'Failed' }) });
-    handlers.onEvent({ name: 'processing.state', data: run({ kind: 'Document', status: 'Failed' }) });
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ kind: 'Document', status: 'Failed' }),
+    });
     await settle();
     expect(el.querySelector('[data-testid=run-state]')).not.toBeNull();
     expect(el.querySelector('[data-testid=run-error]')).toBeNull();
@@ -209,10 +247,14 @@ describe('AnalysisPreviewComponent', () => {
   it('senza SSE il polling riconcilia il run fino al completamento', async () => {
     await setup({ pollMs: 5 });
     await click();
-    http.expectOne((r) => r.method === 'POST').flush(run(), { status: 202, statusText: 'Accepted' });
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
     await settle();
     await new Promise((r) => setTimeout(r, 15));
-    http.expectOne(`${BASE}/processing-runs/r-1`).flush(run({ status: 'Completed', analysisId: 'r-1' }));
+    http
+      .expectOne(`${BASE}/processing-runs/r-1`)
+      .flush(run({ status: 'Completed', analysisId: 'r-1' }));
     await settle();
     http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
     await settle();
@@ -225,9 +267,14 @@ describe('AnalysisPreviewComponent', () => {
     await click();
     http
       .expectOne((r) => r.method === 'POST')
-      .flush({ code: 'no_pm_input', title: 'Serve almeno un messaggio del project manager' }, { status: 422, statusText: 'Unprocessable' });
+      .flush(
+        { code: 'no_pm_input', title: 'Serve almeno un messaggio del project manager' },
+        { status: 422, statusText: 'Unprocessable' },
+      );
     await settle();
-    expect(el.querySelector('[data-testid=command-error]')?.textContent).toContain('almeno un messaggio nella chat');
+    expect(el.querySelector('[data-testid=command-error]')?.textContent).toContain(
+      'almeno un messaggio nella chat',
+    );
     expect(el.querySelector('[data-testid=run-state]')).toBeNull();
     expect(el.querySelector('[data-testid=preview]')).toBeNull();
   });
@@ -237,23 +284,30 @@ describe('AnalysisPreviewComponent', () => {
     await click();
     http
       .expectOne((r) => r.method === 'POST')
-      .flush({ code: 'processing_active', processingRunId: 'r-9' }, { status: 409, statusText: 'Conflict' });
+      .flush(
+        { code: 'processing_active', processingRunId: 'r-9' },
+        { status: 409, statusText: 'Conflict' },
+      );
     await settle();
-    http.expectOne(`${BASE}/processing-runs/r-9`).flush(run({ id: 'r-9', status: 'Running', attemptCount: 1 }));
+    http
+      .expectOne(`${BASE}/processing-runs/r-9`)
+      .flush(run({ id: 'r-9', status: 'Running', attemptCount: 1 }));
     await settle();
     expect(el.querySelector('[data-testid=command-error]')?.textContent).toContain('già in corso');
     expect(el.querySelector('[data-testid=run-state]')).not.toBeNull();
     expect(button().disabled).toBe(true);
   });
 
-  it('esito incerto: la ripetizione riusa la stessa Idempotency-Key; dopo il successo una nuova richiesta ne usa un\'altra', async () => {
+  it("esito incerto: la ripetizione riusa la stessa Idempotency-Key; dopo il successo una nuova richiesta ne usa un'altra", async () => {
     await setup();
     await click();
     const first = http.expectOne((r) => r.method === 'POST');
     const key = first.request.headers.get('Idempotency-Key');
     first.error(new ProgressEvent('error'), { status: 0 });
     await settle();
-    expect(el.querySelector('[data-testid=command-error]')?.textContent).toContain('Non sappiamo se la richiesta');
+    expect(el.querySelector('[data-testid=command-error]')?.textContent).toContain(
+      'Non sappiamo se la richiesta',
+    );
     expect(button().disabled).toBe(false);
 
     await click();
@@ -274,47 +328,422 @@ describe('AnalysisPreviewComponent', () => {
   it('run fallito: errore chiaro e nessuna anteprima di successo', async () => {
     await setup();
     await click();
-    http.expectOne((r) => r.method === 'POST').flush(run(), { status: 202, statusText: 'Accepted' });
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
     await settle();
     handlers.onEvent({
       name: 'processing.state',
       data: run({ status: 'Failed', error: { code: 'invalid_agent_output', message: null } }),
     });
     await settle();
-    expect(el.querySelector('[data-testid=run-error]')?.textContent).toContain('non era un\'analisi valida');
+    expect(el.querySelector('[data-testid=run-error]')?.textContent).toContain(
+      "non era un'analisi valida",
+    );
     expect(el.querySelector('[data-testid=preview]')).toBeNull();
     expect(el.querySelector('[data-testid=empty]')).toBeNull();
     expect(button().disabled).toBe(false); // nuovo comando esplicito possibile
   });
 
-  it('run fallito con analisi precedente: l\'ultima anteprima buona resta visibile insieme all\'errore', async () => {
+  it("run fallito con analisi precedente: l'ultima anteprima buona resta visibile insieme all'errore", async () => {
     await setup({
-      project: project({ latestAnalysisRunId: 'r-2', currentAnalysisId: 'r-1', currentRevisionId: 'rev-1', validationState: 'Unvalidated' }),
+      project: project({
+        latestAnalysisRunId: 'r-2',
+        currentAnalysisId: 'r-1',
+        currentRevisionId: 'rev-1',
+        validationState: 'Unvalidated',
+      }),
       analysis: analysis(),
-      run: run({ id: 'r-2', status: 'Failed', error: { code: 'deadline_exceeded', message: null } }),
+      run: run({
+        id: 'r-2',
+        status: 'Failed',
+        error: { code: 'deadline_exceeded', message: null },
+      }),
     });
     expect(el.querySelector('[data-testid=preview]')).not.toBeNull();
-    expect(text()).toContain('Realizzare un portale clienti');
+    expect(values()).toContain('Realizzare un portale clienti');
     expect(el.querySelector('[data-testid=run-error]')?.textContent).toContain('tempo massimo');
-    expect(el.querySelector('[data-testid=run-error]')?.textContent).toContain('ultima anteprima valida');
+    expect(el.querySelector('[data-testid=run-error]')?.textContent).toContain(
+      'ultima anteprima valida',
+    );
   });
 
   it('alla riapertura con un run attivo mostra lo stato e blocca Analizza senza inviare comandi', async () => {
     await setup({
       project: project({ activeProcessingRunId: 'r-1', latestAnalysisRunId: 'r-1' }),
-      run: run({ status: 'Running', attemptCount: 1, lastObservedStage: 'ValidatePersistAnalysis' }),
+      run: run({
+        status: 'Running',
+        attemptCount: 1,
+        lastObservedStage: 'ValidatePersistAnalysis',
+      }),
     });
-    expect(el.querySelector('[data-testid=run-state]')?.textContent).toContain('validazione e salvataggio');
+    expect(el.querySelector('[data-testid=run-state]')?.textContent).toContain(
+      'validazione e salvataggio',
+    );
     expect(button().disabled).toBe(true);
   });
 
-  it('segnala le nuove note PM successive all\'analisi', async () => {
+  it("segnala le nuove note PM successive all'analisi", async () => {
     await setup({
-      project: project({ latestAnalysisRunId: 'r-1', currentAnalysisId: 'r-1', currentRevisionId: 'rev-1' }),
+      project: project({
+        latestAnalysisRunId: 'r-1',
+        currentAnalysisId: 'r-1',
+        currentRevisionId: 'rev-1',
+      }),
       analysis: analysis({ hasNewNotes: true }),
     });
     expect(el.querySelector('[data-testid=new-notes]')).not.toBeNull();
     expect(button().textContent).toContain('Analizza di nuovo');
+  });
+
+  describe('form di modifica (T035)', () => {
+    const openProject = project({
+      latestAnalysisRunId: 'r-1',
+      currentAnalysisId: 'r-1',
+      currentRevisionId: 'rev-1',
+    });
+    const tid = (id: string) => el.querySelector<HTMLButtonElement>(`[data-testid=${id}]`)!;
+    const reqText = () =>
+      el.querySelector<HTMLTextAreaElement>('[data-section=requirements] [data-testid=item-text]')!;
+    const typeIn = async (ta: HTMLTextAreaElement, value: string) => {
+      ta.value = value;
+      ta.dispatchEvent(new Event('input'));
+      await settle();
+    };
+    const press = async (id: string) => {
+      tid(id).click();
+      await Promise.resolve();
+      await settle();
+    };
+    const open1 = (over: Partial<AnalysisView> = {}) =>
+      setup({ project: openProject, analysis: analysis(over) });
+
+    /** Revisione v2 del PM come la restituisce PUT. */
+    const edited = (over: Partial<AnalysisView> = {}, requirement = 'Login con SSO') =>
+      analysis({
+        currentRevisionId: 'rev-2',
+        version: 2,
+        origin: 'PmEdit',
+        createdBy: 'Mario Rossi',
+        content: {
+          ...analysis().content,
+          requirements: [
+            {
+              id: 'q-1',
+              text: requirement,
+              classification: 'Inferred',
+              evidenceRefs: ['s-1', 's-pm'],
+            },
+          ],
+          sources: [
+            ...analysis().content.sources,
+            {
+              id: 's-pm',
+              kind: 'PmRevision',
+              messageId: null,
+              messageRole: null,
+              revisionId: 'rev-2',
+            },
+          ],
+        },
+        ...over,
+      });
+
+    const withConflict = () => {
+      const base = analysis();
+      return analysis({
+        content: {
+          ...base.content,
+          conflicts: [
+            {
+              id: 'k-1',
+              description: 'Hosting: cloud o on-premise?',
+              status: 'Open',
+              alternatives: [
+                { id: 'a-1', text: 'Cloud', classification: 'Declared', evidenceRefs: ['s-1'] },
+                {
+                  id: 'a-2',
+                  text: 'On-premise',
+                  classification: 'Declared',
+                  evidenceRefs: ['s-1'],
+                },
+              ],
+              resolution: null,
+            },
+          ],
+        },
+      });
+    };
+
+    it('mostra origine, versione e fonti; a revisione pulita il pulsante primario è Conferma', async () => {
+      await open1();
+      expect(tid('revision-info').textContent).toContain('Versione 1');
+      expect(tid('revision-info').textContent).toContain("generata dall'AI");
+      expect(text()).toContain('F1 · messaggio del PM');
+      expect(tid('save').disabled).toBe(true);
+      expect(tid('confirm').disabled).toBe(false);
+      expect(tid('confirm').classList).toContain('btn-primary');
+      expect(tid('save').classList).not.toContain('btn-primary');
+      expect(el.querySelector('[data-testid=generate]')).toBeNull();
+      // Tutte le sezioni sono modificabili, comprese integrazioni, assunzioni e lacune.
+      for (const key of ['dependencies', 'assumptions', 'questions', 'requirements', 'goals']) {
+        expect(el.querySelector(`[data-testid=add-${key}]`)).not.toBeNull();
+      }
+    });
+
+    it('dopo una modifica Salva diventa primario e Conferma è bloccata finché non si salva', async () => {
+      await open1();
+      await typeIn(reqText(), 'Login con SSO');
+      expect(el.querySelector('[data-testid=dirty-badge]')).not.toBeNull();
+      expect(tid('save').disabled).toBe(false);
+      expect(tid('save').classList).toContain('btn-primary');
+      expect(tid('confirm').disabled).toBe(true);
+      expect(tid('confirm').classList).not.toContain('btn-primary');
+      expect(tid('analyze').disabled).toBe(true);
+      expect(text()).toContain('Salva le modifiche prima di confermare');
+    });
+
+    it('Salva invia PUT con If-Match quotato e contenuto completo; Conferma, poi Genera solo sulla revisione confermata', async () => {
+      await open1();
+      await typeIn(reqText(), 'Login con SSO');
+      await press('save');
+      const put = http.expectOne(
+        (r) => r.method === 'PUT' && r.url === `${BASE}/analyses/r-1/preview`,
+      );
+      expect(put.request.headers.get('If-Match')).toBe('"rev-1"');
+      expect(put.request.body.requirements[0].text).toBe('Login con SSO');
+      expect(put.request.body.goals[0].text).toBe('Realizzare un portale clienti');
+      expect(put.request.body.schemaVersion).toBe('1.0.0');
+      put.flush(edited(), { headers: { ETag: '"rev-2"' } });
+      await settle();
+
+      expect(el.querySelector('[data-testid=dirty-badge]')).toBeNull();
+      expect(tid('revision-info').textContent).toContain('Versione 2');
+      expect(tid('revision-info').textContent).toContain('modificata dal PM');
+      expect(tid('revision-info').textContent).toContain('Mario Rossi');
+      expect(text()).toContain('F2 · revisione del PM');
+      expect(tid('save').disabled).toBe(true);
+      expect(tid('confirm').classList).toContain('btn-primary');
+      expect(el.querySelector('[data-testid=generate]')).toBeNull();
+
+      await press('confirm');
+      const confirm = http.expectOne(
+        (r) => r.method === 'POST' && r.url === `${BASE}/analyses/r-1/confirm`,
+      );
+      expect(confirm.request.headers.get('If-Match')).toBe('"rev-2"');
+      expect(confirm.request.body).toBeNull();
+      confirm.flush(
+        edited({
+          validationState: 'PmConfirmed',
+          confirmedBy: 'Mario Rossi',
+          confirmedAt: '2030-01-02T10:00:00Z',
+          canConfirm: false,
+          canGenerate: true,
+        }),
+      );
+      await settle();
+
+      expect(el.querySelector<HTMLElement>('[data-testid=confirmed-badge]')!.hidden).toBe(false);
+      expect(tid('confirm').disabled).toBe(true);
+      const generate = tid('generate');
+      expect(generate.disabled).toBe(false);
+      expect(generate.classList).toContain('btn-primary');
+      const emitted: string[] = [];
+      fixture.componentInstance.generateRequested.subscribe((id) => emitted.push(id));
+      generate.click();
+      expect(emitted).toEqual(['rev-2']);
+      // Nessuna chiamata di generazione né altra richiesta HTTP (verificato da http.verify in afterEach).
+    });
+
+    it('Genera è disabilitato se la revisione confermata non può generare', async () => {
+      await open1({ validationState: 'PmConfirmed', canConfirm: false, canGenerate: false });
+      expect(tid('generate').disabled).toBe(true);
+    });
+
+    it('422: mostra gli errori di campo e conserva il testo digitato', async () => {
+      await open1();
+      await typeIn(reqText(), 'Testo non accettato');
+      await press('save');
+      http
+        .expectOne((r) => r.method === 'PUT')
+        .flush(
+          {
+            code: 'preview_invalid',
+            errors: [{ field: 'requirements[0].text', message: 'vuoto o solo spazi.' }],
+          },
+          { status: 422, statusText: 'Unprocessable' },
+        );
+      await settle();
+      const errors = tid('field-errors').textContent ?? '';
+      expect(errors).toContain('Requisiti, voce 1 (testo)');
+      expect(errors).toContain('vuoto o solo spazi.');
+      expect(tid('save-error').textContent).toContain('Nulla è stato salvato');
+      expect(reqText().value).toBe('Testo non accettato');
+      expect(reqText().getAttribute('aria-invalid')).toBe('true');
+      expect(tid('save').disabled).toBe(false); // riprovabile dopo la correzione
+    });
+
+    it('un testo vuoto è segnalato subito e blocca Salva senza chiamare il server', async () => {
+      await open1();
+      await typeIn(reqText(), '   ');
+      expect(tid('client-errors').textContent).toContain(
+        'Requisiti, voce 1: il testo è obbligatorio',
+      );
+      expect(tid('save').disabled).toBe(true);
+    });
+
+    it('409: le modifiche dell’utente non vengono sovrascritte e il PM sceglie come procedere', async () => {
+      await open1();
+      await typeIn(reqText(), 'La mia modifica');
+      await press('save');
+      http
+        .expectOne((r) => r.method === 'PUT')
+        .flush(
+          { code: 'revision_conflict', currentRevisionId: 'rev-2' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await settle();
+      http.expectOne(`${BASE}/analyses/r-1`).flush(edited({}, 'Modifica di un altro PM'));
+      await settle();
+
+      expect(el.querySelector('[data-testid=conflict-banner]')?.textContent).toContain(
+        'versione 2',
+      );
+      expect(reqText().value).toBe('La mia modifica'); // nessuna sovrascrittura
+      expect(tid('save').disabled).toBe(true); // nessun invio finché non si sceglie
+      expect(tid('confirm').disabled).toBe(true);
+
+      await press('conflict-keep');
+      expect(reqText().value).toBe('La mia modifica');
+      expect(el.querySelector('[data-testid=conflict-banner]')).toBeNull();
+      expect(tid('save').disabled).toBe(false);
+      await press('save');
+      const retry = http.expectOne((r) => r.method === 'PUT');
+      expect(retry.request.headers.get('If-Match')).toBe('"rev-2"');
+      expect(retry.request.body.requirements[0].text).toBe('La mia modifica');
+      // Le fonti storiche della revisione corrente restano nel corpo (il server non le accetta mutate).
+      expect(retry.request.body.sources.map((s: { id: string }) => s.id)).toEqual(['s-1', 's-pm']);
+      retry.flush(edited({ currentRevisionId: 'rev-3', version: 3 }, 'La mia modifica'));
+      await settle();
+      expect(tid('revision-info').textContent).toContain('Versione 3');
+    });
+
+    it('409: «Scarta» mostra la versione corrente senza inviare nulla', async () => {
+      await open1();
+      await typeIn(reqText(), 'La mia modifica');
+      await press('save');
+      http
+        .expectOne((r) => r.method === 'PUT')
+        .flush({ code: 'revision_conflict' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      http.expectOne(`${BASE}/analyses/r-1`).flush(edited({}, 'Modifica di un altro PM'));
+      await settle();
+      await press('conflict-reload');
+      expect(reqText().value).toBe('Modifica di un altro PM');
+      expect(el.querySelector('[data-testid=dirty-badge]')).toBeNull();
+    });
+
+    it('risoluzione di un conflitto: serve almeno una scelta e la motivazione', async () => {
+      await setup({ project: openProject, analysis: withConflict() });
+      const reason = () =>
+        el.querySelector<HTMLTextAreaElement>('[data-testid=resolution-reason]')!;
+      const choice = () => el.querySelector<HTMLInputElement>('[data-testid=alt-choice]')!;
+      expect(tid('resolve-conflict').disabled).toBe(true);
+      expect(el.querySelector('[data-testid=resolve-hint]')).not.toBeNull();
+
+      choice().click();
+      await settle();
+      expect(tid('resolve-conflict').disabled).toBe(true); // manca la motivazione
+      await typeIn(reason(), '   ');
+      expect(tid('resolve-conflict').disabled).toBe(true); // solo spazi
+      await typeIn(reason(), 'Deciso con il cliente il 12/03');
+      expect(tid('resolve-conflict').disabled).toBe(false);
+
+      await press('resolve-conflict');
+      expect(el.querySelector('[data-testid=conflict-status]')!.textContent).toContain('Risolto');
+      expect(tid('save').classList).toContain('btn-primary');
+      await press('save');
+      const put = http.expectOne((r) => r.method === 'PUT');
+      const conflict = put.request.body.conflicts[0];
+      expect(conflict.status).toBe('Resolved');
+      expect(conflict.resolution.selectedAlternativeIds).toEqual(['a-1']);
+      expect(conflict.resolution.reason).toBe('Deciso con il cliente il 12/03');
+      // Le alternative originali restano tutte nel corpo.
+      expect(conflict.alternatives.map((a: { id: string }) => a.id)).toEqual(['a-1', 'a-2']);
+      put.flush(withConflict());
+      await settle();
+    });
+
+    it('rinvio: un conflitto risolto può tornare aperto senza risoluzione', async () => {
+      const base = withConflict();
+      const resolved = analysis({
+        content: {
+          ...base.content,
+          conflicts: [
+            {
+              ...base.content.conflicts[0],
+              status: 'Resolved',
+              resolution: {
+                selectedAlternativeIds: ['a-2'],
+                reason: 'Scelta del PM',
+                evidenceRefs: ['s-1'],
+              },
+            },
+          ],
+        },
+      });
+      await setup({ project: openProject, analysis: resolved });
+      expect(el.querySelector('[data-testid=conflict-status]')!.textContent).toContain('Risolto');
+      expect(el.querySelector<HTMLTextAreaElement>('[data-testid=resolution-reason]')!.value).toBe(
+        'Scelta del PM',
+      );
+      await press('defer-conflict');
+      expect(el.querySelector('[data-testid=conflict-status]')!.textContent).toContain('Aperto');
+      await press('save');
+      const put = http.expectOne((r) => r.method === 'PUT');
+      expect(put.request.body.conflicts[0].status).toBe('Open');
+      expect(put.request.body.conflicts[0].resolution).toBeNull();
+      put.flush(base);
+      await settle();
+    });
+
+    it('aggiunge voci con id nuovo e classificazione coerente con la sezione', async () => {
+      await open1();
+      tid('add-assumptions').click();
+      await settle();
+      const added = el.querySelector<HTMLTextAreaElement>(
+        '[data-section=assumptions] [data-testid=item-text]',
+      )!;
+      expect(tid('save').disabled).toBe(true); // voce vuota: non salvabile
+      await typeIn(added, 'Il cliente fornisce le API');
+      await press('save');
+      const put = http.expectOne((r) => r.method === 'PUT');
+      expect(put.request.body.assumptions[0].classification).toBe('Assumed');
+      expect(put.request.body.assumptions[0].id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(put.request.body.assumptions[0].evidenceRefs).toEqual([]);
+      put.flush(analysis({ currentRevisionId: 'rev-2', version: 2 }));
+      await settle();
+    });
+
+    it('con un’analisi attiva (canEdit=false) il form è di sola lettura e Salva/Conferma sono bloccati', async () => {
+      await setup({
+        project: project({
+          activeProcessingRunId: 'r-2',
+          latestAnalysisRunId: 'r-2',
+          currentAnalysisId: 'r-1',
+          currentRevisionId: 'rev-1',
+        }),
+        analysis: analysis({ canEdit: false, canConfirm: false }),
+        run: run({ id: 'r-2', status: 'Running', attemptCount: 1 }),
+      });
+      expect(el.querySelector('[data-testid=readonly-note]')).not.toBeNull();
+      expect(el.querySelector('fieldset')!.disabled).toBe(true);
+      expect(tid('save').disabled).toBe(true);
+      expect(tid('confirm').disabled).toBe(true);
+      expect(el.querySelector('[data-testid=add-goals]')).toBeNull();
+      expect(el.querySelector('[data-testid=remove-item]')).toBeNull();
+      expect(values()).toContain('Realizzare un portale clienti'); // resta leggibile
+    });
   });
 
   it('chiude lo stream alla distruzione', async () => {
