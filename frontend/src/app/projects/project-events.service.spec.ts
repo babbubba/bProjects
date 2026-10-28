@@ -203,7 +203,9 @@ describe('ProjectEventsService', () => {
           new ReadableStream<Uint8Array>({
             start(c) {
               setTimeout(() => c.enqueue(enc.encode('event: chat.state\ndata: {"x":1}\n\n')), 10);
-              init.signal!.addEventListener('abort', () => c.error(new DOMException('a', 'AbortError')));
+              init.signal!.addEventListener('abort', () =>
+                c.error(new DOMException('a', 'AbortError')),
+              );
             },
           }),
           { status: 200 },
