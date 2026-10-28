@@ -1,0 +1,13 @@
+{
+  "name": "bprojects-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.2"
+  }
+}
