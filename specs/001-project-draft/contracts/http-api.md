@@ -185,7 +185,8 @@ Problem Details: 400 malformed/revision_required, 401 sessione assente, 403 ruol
 404 risorsa non disponibile, 409 conflitto, 422 input/payload non valido,
 503 database temporaneamente indisponibile. Fallimenti asincroni sono nel turno/run:
 llm_unavailable, context_overflow, compaction_failed, invalid_agent_output,
-deadline_exceeded, attempts_exhausted, checkpoint_incompatible, processing_failed.
+deadline_exceeded, attempts_exhausted, checkpoint_incompatible, processing_failed,
+context_window_mismatch (finestra del runtime minore di quella configurata: nessuna richiesta inviata).
 Schema/metadati non validi in PUT: 422 preview_invalid e dettagli di campo non riservati.
 Niente stack trace, contenuti completi, endpoint sensibili o segreti nei log/errori.
 
@@ -221,9 +222,11 @@ interface InferenceMetrics {
 }
 ```
 
-* `Message` (ruolo assistant) e le viste `ProcessingRun` di analisi e documento includono `metrics: InferenceMetrics | null`.
+* `Message` (ruolo assistant), le viste `ProcessingRun` di analisi e documento, `AnalysisView` (metriche del run di analisi) e
+  `DraftView` (metriche del run Document che l'ha generata) includono `metrics: InferenceMetrics | null`.
   `null` = record storico senza telemetria (mostrato come «non disponibile»). Una risposta fallita non ha messaggio né metriche.
-  I tentativi/retry sono righe distinte in `inference_calls`, ma il risultato logico espone solo quelle del tentativo vincente.
+  I tentativi/retry sono righe distinte in `InferenceCalls`, ma il risultato logico espone solo quelle del tentativo vincente.
+  `calls` conta tutte le chiamate del tentativo vincente, sintesi comprese; `compaction` aggrega le sole chiamate di sintesi.
 * Nessun nuovo evento SSE: `chat.state` e `processing.state` (inizio/fine) e la riconnessione fanno rifare il GET del contesto.
 
 `GET /api/projects/{p}/context-usage` → 200 (isolato per progetto, stessa autorizzazione degli altri endpoint):
@@ -254,3 +257,8 @@ interface ContextUsage {
 Chiavi di composizione oggi realmente supportate: `system_instructions`, `user_messages`, `assistant_messages`,
 `derived_summary`, `analysis_structured`. Le chiavi future (`document_markdown`, `document_pdf`, `knowledge_base`) si
 aggiungono solo quando esiste la sorgente; il pannello rende qualunque `items[]` senza codice per categoria.
+
+`last.refId` è l'ID del messaggio assistant (chat) o del ProcessingRun (analisi/documento); `last.at` è la fine della chiamata
+finale. `history` descrive lo storico originale letto dall'ultima inferenza di chat/analisi (somma dei token misurati, *calculated*);
+senza un'inferenza misurata riporta il numero di messaggi conservati e `originalTokens` unavailable. `compaction` è l'ultimo evento
+di compattazione del progetto (prima = storico originale, dopo = messaggi della chiamata finale; risparmio solo se dopo ≤ prima).
