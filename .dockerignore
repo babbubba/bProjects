@@ -1,0 +1,9 @@
+**/.git
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+infra/.env
+tests/e2e/test-results
+tests/e2e/playwright-report
