@@ -62,25 +62,55 @@ public sealed class InternalModelClient : IDisposable
     /// Opzioni di richiesta coerenti con la configurazione della fase (<see cref="AiOptions.ForPhase"/>): output massimo,
     /// ragionamento nascosto (spento di default) e, se è fornito uno schema e la modalità è JsonSchema,
     /// <c>response_format json_schema</c> nativo. In ValidatedTextJson non si invia alcun vincolo: la validazione tipizzata è del backend.
+    /// Lo schema viaggia così com'è nella rappresentazione grezza: l'adattatore OpenAI di M.E.AI (10.10.1) lo riscriverebbe per lo
+    /// strict mode spostando <c>pattern</c> e <c>format</c> nella <c>description</c>, e llama.cpp costruirebbe la grammatica senza
+    /// vincolo sugli UUID (osservato sul DGX: id come «src-1» e invalid_agent_output su ogni analisi del progetto a 9 scambi).
     /// </summary>
     public ChatOptions CreateChatOptions(
         JsonElement? schema = null, string schemaName = "result", float? temperature = null, AiPhase phase = AiPhase.Chat)
     {
         var settings = _options.ForPhase(phase);
+        var structured = schema is not null && _options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
+        var schemaJson = structured ? schema!.Value.GetRawText() : null;
         var options = new ChatOptions
         {
             ModelId = _options.ModelId,
             MaxOutputTokens = settings.MaxOutputTokens,
             Temperature = temperature,
-            RawRepresentationFactory = _ => CreateRawOptions(settings.EnableThinking),
+            RawRepresentationFactory = _ => CreateRawOptions(settings.EnableThinking, schemaName, schemaJson),
         };
 
-        if (schema is { } s && _options.StructuredOutputMode == StructuredOutputMode.JsonSchema)
+        if (structured)
         {
-            options.ResponseFormat = Microsoft.Extensions.AI.ChatResponseFormat.ForJsonSchema(s, schemaName);
+            // Resta valorizzato per MAF e per la telemetria; il response_format inviato è quello grezzo, che l'adattatore non sovrascrive.
+            options.ResponseFormat = Microsoft.Extensions.AI.ChatResponseFormat.ForJsonSchema(schema!.Value, schemaName);
         }
 
         return options;
+    }
+
+    /// <summary>
+    /// Le stesse opzioni con un altro schema (es. lo schema del singolo run), sia in <c>ResponseFormat</c> sia nel response_format
+    /// grezzo realmente inviato. Senza output strutturato (ValidatedTextJson) le opzioni restano invariate: nessun vincolo.
+    /// </summary>
+    public static ChatOptions WithJsonSchema(ChatOptions options, JsonElement schema, string schemaName)
+    {
+        if (options.ResponseFormat is not ChatResponseFormatJson)
+        {
+            return options;
+        }
+
+        var json = schema.GetRawText();
+        var inner = options.RawRepresentationFactory;
+        var result = options.Clone();
+        result.ResponseFormat = Microsoft.Extensions.AI.ChatResponseFormat.ForJsonSchema(schema, schemaName);
+        result.RawRepresentationFactory = client =>
+        {
+            var raw = inner?.Invoke(client) as ChatCompletionOptions ?? new ChatCompletionOptions();
+            raw.ResponseFormat = OpenAI.Chat.ChatResponseFormat.CreateJsonSchemaFormat(schemaName, BinaryData.FromString(json));
+            return raw;
+        };
+        return result;
     }
 
     /// <summary>Modelli esposti dal server con la finestra dichiarata nelle loro impostazioni.</summary>
@@ -191,10 +221,15 @@ public sealed class InternalModelClient : IDisposable
     public void Dispose() => _http.Dispose();
 
 #pragma warning disable SCME0001 // Patch del payload: unico modo per passare chat_template_kwargs al server.
-    private static ChatCompletionOptions CreateRawOptions(bool enableThinking)
+    private static ChatCompletionOptions CreateRawOptions(bool enableThinking, string schemaName, string? schemaJson)
     {
         var raw = new ChatCompletionOptions();
         raw.Patch.Set("$.chat_template_kwargs"u8, BinaryData.FromString($"{{\"enable_thinking\":{(enableThinking ? "true" : "false")}}}"));
+        if (schemaJson is not null)
+        {
+            raw.ResponseFormat = OpenAI.Chat.ChatResponseFormat.CreateJsonSchemaFormat(schemaName, BinaryData.FromString(schemaJson));
+        }
+
         return raw;
     }
 #pragma warning restore SCME0001

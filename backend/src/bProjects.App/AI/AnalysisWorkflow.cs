@@ -38,6 +38,69 @@ public static class AnalysisSchema
 
     public static JsonElement Element => Schema.Value;
 
+    /// <summary>
+    /// Schema del singolo run: i valori che il modello deve soltanto copiare sono vincolati a quelli fidati del server, così la
+    /// grammatica di llama.cpp non può alterarli. analysisId, projectId e sourceCutoffSequence ammettono un solo valore; id e
+    /// messageId delle fonti ed evidenceRefs ammettono solo gli id dei messaggi fino al cutoff (una fonte Message ha l'id del suo
+    /// messaggio). Sul DGX, con il solo pattern, un id copiato perdeva un carattere e il pattern spostava i trattini
+    /// (analysisId diverso dal server). La validazione resta invariata e completa.
+    /// </summary>
+    public static JsonElement ForRun(AnalysisRunInput input)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(Element.GetRawText())!;
+        var properties = node["properties"]!;
+        properties["analysisId"] = Only("string", input.AnalysisId.ToString());
+        properties["projectId"] = Only("string", input.ProjectId.ToString());
+        properties["sourceCutoffSequence"] = Only("integer", input.SourceCutoffSequence);
+        if (input.Dialog.Count > 0)
+        {
+            var messages = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "string",
+                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. input.Dialog.Select(m => System.Text.Json.Nodes.JsonValue.Create(m.Id.ToString()))]),
+            };
+            var source = properties["sources"]!["items"]!["properties"]!;
+            source["id"] = messages.DeepClone();
+            source["messageId"] = messages.DeepClone();
+            ConstrainEvidence(node, messages);
+        }
+
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
+    private static System.Text.Json.Nodes.JsonObject Only<T>(string type, T value) => new()
+    {
+        ["type"] = type,
+        ["enum"] = new System.Text.Json.Nodes.JsonArray(System.Text.Json.Nodes.JsonValue.Create(value)),
+    };
+
+    private static void ConstrainEvidence(System.Text.Json.Nodes.JsonNode? node, System.Text.Json.Nodes.JsonObject messages)
+    {
+        switch (node)
+        {
+            case System.Text.Json.Nodes.JsonObject obj:
+                if (obj["evidenceRefs"] is System.Text.Json.Nodes.JsonObject evidence && evidence["items"] is not null)
+                {
+                    evidence["items"] = messages.DeepClone();
+                }
+
+                foreach (var child in obj.Select(p => p.Value).ToList())
+                {
+                    ConstrainEvidence(child, messages);
+                }
+
+                break;
+            case System.Text.Json.Nodes.JsonArray array:
+                foreach (var child in array)
+                {
+                    ConstrainEvidence(child, messages);
+                }
+
+                break;
+        }
+    }
+
     private const string UuidPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
 
     private static void ConstrainUuidFormats(System.Text.Json.Nodes.JsonNode? node)
@@ -91,7 +154,15 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
     /// <summary>Costruisce il grafo nativo. Topologia, id degli executor e id/nome dell'agente sono stabili per il resume.</summary>
     public async Task<Workflow> BuildAsync(AnalysisRunClaim claim, CancellationToken ct)
     {
-        var agent = await conversational.CreateConsolidationAgentAsync(analysisOptions, ct);
+        // Lo schema dipende solo dall'input immutabile del run (cutoff fisso): avvio e ripresa costruiscono lo stesso agente.
+        AnalysisRunInput input;
+        using (var scope = scopes.CreateScope())
+        {
+            input = await scope.ServiceProvider.GetRequiredService<IAnalysisRunStore>().LoadInputAsync(claim.RunId, ct);
+        }
+
+        var options = InternalModelClient.WithJsonSchema(analysisOptions, AnalysisSchema.ForRun(input), AnalysisSchema.Name);
+        var agent = await conversational.CreateConsolidationAgentAsync(options, ct);
         var load = new LoadDialogExecutor(scopes, claim).BindExecutor();
         var consolidate = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false, ReassignOtherAgentsAsUsers = false });
         var validate = new ValidatePersistAnalysisExecutor(scopes, claim).BindExecutor();
