@@ -48,6 +48,9 @@ public sealed class InternalModelClient : IDisposable
         {
             Endpoint = endpoint,
             RetryPolicy = new ClientRetryPolicy(maxRetries: 0),
+            // Senza questo il client applica il proprio default di 100 s, più corto di RequestTimeoutSeconds: osservato sul DGX
+            // un'analisi da ~6.000 token annullata a 100,0 s (model_timeout) e poi deadline_exceeded.
+            NetworkTimeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds),
             Transport = new HttpClientPipelineTransport(_http),
         };
         ChatClient = new OpenAIClient(new ApiKeyCredential(options.ApiKey), clientOptions)
