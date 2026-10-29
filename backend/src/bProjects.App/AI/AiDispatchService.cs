@@ -164,9 +164,12 @@ public sealed class AiDispatchService(
             // Fuori dal try dell'esecutore: un errore del database qui non è un errore del modello e non va classificato come tale.
             // Un esecutore che torna senza aver committato Completed ha violato il contratto: Failed, mai un turno a metà.
             // Se il turno è già Completed la guardia di fencing rifiuta l'update, ed è l'esito normale.
-            using var scope = scopes.CreateScope();
-            if (await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
-                .FailAsync(claim, "processing_failed", "L'esecuzione è terminata senza produrre una risposta.", ct))
+            // Commit rifiutato senza perdita del lease (es. session_revision_changed): le chiamate del tentativo si scrivono nella
+            // stessa transazione del Failed e solo se owner/fencing sono ancora validi, come per il Failed del validatore dei run.
+            if (await ReleaseAsync(async (store, c) =>
+                    await store.FailAsync(claim, "processing_failed", "L'esecuzione è terminata senza produrre una risposta.", c)
+                        ? new TurnRelease(TurnTransition.Failed, ErrorCode: "processing_failed")
+                        : new TurnRelease(TurnTransition.Rejected), inference, owner, ct) is not null)
             {
                 await PublishState(claim.TurnId);
             }
@@ -266,8 +269,9 @@ public sealed class AiDispatchService(
 
 
     /// <summary>
-    /// Rilascio dopo un errore osservato dall'owner, nella stessa transazione delle righe di telemetria del tentativo (failed/interrupted,
-    /// mai token inventati): se owner/fencing non sono più validi non si scrive nulla. Null se la transizione è stata rifiutata.
+    /// Rilascio dopo un errore osservato dall'owner (o Failed di un turno terminato senza commit), nella stessa transazione delle righe
+    /// di telemetria del tentativo (failed/interrupted, mai token inventati): se owner/fencing non sono più validi la transazione si
+    /// annulla e non si scrive nulla. Null se la transizione è stata rifiutata.
     /// </summary>
     private async Task<TurnRelease?> ReleaseAsync(
         Func<ExecutionLeaseStore, CancellationToken, Task<TurnRelease>> release, InferenceScope inference, InferenceOwner owner, CancellationToken ct)
