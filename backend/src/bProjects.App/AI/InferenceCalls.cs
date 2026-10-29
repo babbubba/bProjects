@@ -58,6 +58,10 @@ public static class InferenceCallLog
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Limiti delle colonne (AppDbContext): un valore diagnostico più lungo si tronca, mai un'inferenza riuscita che fallisce.</summary>
+    public const int ModelIdMaxLength = 256;
+    public const int FinishReasonMaxLength = 32;
+
     /// <summary>
     /// Aggiunge al contesto EF le righe delle chiamate dello scope (senza SaveChanges). Con <paramref name="result"/> la chiamata
     /// finale del tentativo vincente è marcata IsFinal con composizione, storico ed evento di compattazione. Le chiamate ancora in
@@ -85,7 +89,7 @@ public static class InferenceCallLog
                 Attempt = owner.Attempt,
                 FencingToken = owner.FencingToken,
                 Phase = call.Phase,
-                ModelId = call.ModelId,
+                ModelId = Truncate(call.ModelId, ModelIdMaxLength),
                 StartedAt = call.StartedAt,
                 DurationMs = call.DurationMs,
                 ContextWindowTokens = call.ContextWindowTokens,
@@ -97,7 +101,7 @@ public static class InferenceCallLog
                 CompletionTokens = call.CompletionTokens,
                 TotalTokens = call.TotalTokens,
                 CachedTokens = call.CachedTokens,
-                FinishReason = call.FinishReason,
+                FinishReason = Truncate(call.FinishReason, FinishReasonMaxLength),
                 State = call.State,
                 IsFinal = isFinal,
                 Composition = isFinal && call.Composition is { } composition
@@ -133,6 +137,9 @@ public static class InferenceCallLog
         Stage(db, scope, projectId, owner, result: false);
         await db.SaveChangesAsync(ct);
     }
+
+    [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(value))]
+    private static string? Truncate(string? value, int max) => value is { Length: var length } && length > max ? value[..max] : value;
 
     /// <summary>
     /// Evento di compattazione del tentativo: token dello storico originale (prima) e dei messaggi inviati nella chiamata finale (dopo),
