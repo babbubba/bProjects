@@ -375,6 +375,33 @@ sintesi è min(budget/6, output Compaction, soglia messaggi/2), cioè 1.297 toke
 l'unica chat troncata (1.851 -> 1.297, 70%) è un'uscita anomala del modello, non un
 difetto del calcolo.
 
+### Telemetria di inferenza e monitor del contesto
+
+Estensione autorizzata dopo la prima slice (contratto: `contracts/http-api.md`, dati: `data-model.md` «InferenceCall»).
+
+* **Significato dei valori.** `ctx-size` = finestra per slot allocata dal server (`/props` `n_ctx`, misurata); `n-predict` =
+  default di generazione del server (distinto; -1 = illimitato, mostrato come assente); `max_tokens` = massimo richiesto dal
+  client per la singola chiamata (limite *richiesto*, mai confermato dal runtime); `prompt_tokens`, `completion_tokens` (include i
+  token di reasoning consumati, mai il loro testo), `total_tokens`, `cached_tokens`, `finish_reason` = `usage` del runtime.
+  Ogni valore ha provenienza `measured` / `calculated` (formula esplicita, es. quota non attribuita = prompt misurato − somma dei
+  componenti tokenizzati) / `estimated` / `unavailable`. Nessun `lunghezza/4` è presentato come misura.
+* **Parametri.** `Ai:ContextWindowTokens/MaxOutputTokens/SafetyMarginTokens/CompactionTriggerTokens/EnableThinking`, override di
+  fase `Ai:Phases:{Chat,Analysis,Document,Compaction}:{MaxOutputTokens,EnableThinking}` (vuoto = eredita), budget di input di fase =
+  finestra − output di fase − margine, `Ai:RuntimeCheckSeconds` (cache della sonda, 60 s). `ReasoningBudgetTokens` non è
+  implementato: il supporto del runtime non è verificato. Con finestra configurata maggiore di quella reale (`/props`) le chiamate
+  falliscono con `context_window_mismatch` (non transitorio); con DGX offline o modello non caricato nessun blocco e nessuna
+  capacità inventata (`runtime.status` offline/unverified).
+* **Cattura e persistenza.** OpenAI .NET imposta `stream_options.include_usage`; il chunk finale di llama.cpp porta l'usage. Una
+  riga `InferenceCalls` per chiamata, scritta nella transazione di commit del risultato (con lease/fencing) o dal percorso di
+  fallimento; i tentativi sono righe distinte, il risultato espone solo quelle del tentativo vincente. Nessun prompt, testo o
+  reasoning in tabella.
+* **Monitor.** `GET /api/projects/{p}/context-usage` alimenta `ContextUsagePanelComponent` (colonna destra sticky da 1200px,
+  compatto sotto); si aggiorna su `chat.state`/`processing.state`/riconnessione SSE esistenti. Il breakdown rende solo categorie
+  con sorgente reale (`system_instructions`, `user_messages`, `assistant_messages`, `derived_summary`, `analysis_structured`).
+* **Limiti.** Un'analisi ripresa da checkpoint successivo alla chiamata al modello non ha chiamate nel tentativo vincente
+  (`metrics` null); arresto dell'app o lease perso non scrivono righe del tentativo; `effective` del reasoning è on/off solo se
+  deducibile dalla risposta; `modelId` è quello inviato nella richiesta.
+
 ### Backlog funzionale successivo alla prima vertical slice (DEFERRED)
 
 Queste voci sono **decisioni di roadmap**, non T054+ e non condizioni aggiuntive
@@ -394,11 +421,11 @@ contratti, criteri di accettazione e task separati. Ordine proposto:
    estrazione, consolidamento e successiva generazione dalla normale compattazione
    conversazionale. Non introdurre un semplice riassunto lossy come sostituzione
    dell'analisi strutturata.
-3. **P2 — Indicatori di capienza del contesto.** Informazioni consultabili su
-   budget e utilizzo del contesto realmente stimato/misurato, considerando
-   istruzioni, output riservato, sintesi, singolo messaggio e operazione; avvisi
-   progressivi solo con semantica verificabile. Non indicare una percentuale
-   esatta se il contenuto effettivamente inviato è soggetto a compattazione.
+3. ~~P2 — Indicatori di capienza del contesto.~~ **Realizzato e verificato** (vedi
+   «Telemetria di inferenza e monitor del contesto»): metriche misurate per
+   risposta/run e monitor sticky con composizione reale. Restano differiti i
+   contatori per PDF, Markdown e Knowledge Base (nessuna sorgente esiste: nessuna
+   riga simulata) e la previsione del prossimo prompt prima dell'invio (voce 4).
 4. **P2 — Avviso sugli incollaggi estesi.** Avvertire prima di inviare un messaggio
    potenzialmente superiore al budget; non abbassare automaticamente il limite di
    trasporto di 65.536 caratteri, non troncare e non impedire senza motivo
