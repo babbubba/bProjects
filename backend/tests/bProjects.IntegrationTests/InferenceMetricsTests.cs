@@ -9,6 +9,8 @@ using bProjects.App.Projects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace bProjects.IntegrationTests;
@@ -387,6 +389,109 @@ public sealed class InferenceMetricsTests : IAsyncLifetime
         Assert.Single(await host.CallsAsync(turnId: turnId));
     }
 
+    [Fact]
+    public async Task A_chat_commit_rejected_for_a_changed_session_revision_fails_the_turn_and_writes_its_attempt_rows_once()
+    {
+        var server = new CannedLlamaServer();
+        await using var host = await MetricsHost.StartAsync(Connection, server, MetricsHost.CannedOptions(), chat: false, formal: false);
+        var (pm, project) = await host.NewProjectAsync();
+        using var _ = pm;
+        var turnId = await CompactionHost.PostAsync(pm, project, "Nota con la revisione della sessione cambiata prima del commit.");
+        var executor = new RevisionChangedExecutor(host, Connection, stealLeaseAfterCommit: false);
+
+        // Il vero dispatcher: l'esecutore torna senza eccezione con il commit rifiutato (session_revision_changed, non lease_lost).
+        Assert.True(await Dispatcher(host, executor).RunOnceAsync(Ct));
+
+        Assert.Equal(("Rejected", (string?)"session_revision_changed"), executor.Commit);
+        var turn = await TurnAsync(host, turnId);
+        Assert.Equal(ChatTurnStatus.Failed, turn.Status);
+        Assert.Equal("processing_failed", turn.ErrorCode);
+
+        // La chiamata del tentativo è scritta una sola volta con il Failed: riuscita come chiamata, mai finale, token del runtime.
+        var row = Assert.Single(await host.CallsAsync(turnId: turnId));
+        Assert.False(row.IsFinal);
+        Assert.Equal(InferenceCallState.Completed, row.State);
+        Assert.Equal(1, row.Attempt);
+        Assert.Equal(turn.FencingToken, row.FencingToken);
+        Assert.NotNull(row.PromptTokens);
+        Assert.Equal(1, await Scalar<long>(Connection, """SELECT count(*) FROM "InferenceCalls" WHERE "ChatTurnId" = @t""", ("t", turnId)));
+    }
+
+    [Fact]
+    public async Task A_worker_that_loses_the_lease_after_a_rejected_commit_neither_fails_the_turn_nor_writes_rows()
+    {
+        var server = new CannedLlamaServer();
+        await using var host = await MetricsHost.StartAsync(Connection, server, MetricsHost.CannedOptions(), chat: false, formal: false);
+        var (pm, project) = await host.NewProjectAsync();
+        using var _ = pm;
+        var turnId = await CompactionHost.PostAsync(pm, project, "Nota il cui lease passa a un altro worker dopo il commit rifiutato.");
+        var executor = new RevisionChangedExecutor(host, Connection, stealLeaseAfterCommit: true);
+
+        Assert.True(await Dispatcher(host, executor).RunOnceAsync(Ct));
+
+        // FailAsync con owner/fencing vecchi non ha effetto: transazione annullata, nessuna riga, il turno resta del nuovo owner.
+        Assert.Equal(("Rejected", (string?)"session_revision_changed"), executor.Commit);
+        Assert.Empty(await host.CallsAsync(turnId: turnId));
+        var turn = await TurnAsync(host, turnId);
+        Assert.Equal(ChatTurnStatus.Running, turn.Status);
+        Assert.Equal("altro-worker", turn.LeaseOwner);
+        Assert.Null(turn.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Diagnostic_values_longer_than_their_columns_are_truncated_and_the_inference_still_succeeds()
+    {
+        var model = new string('m', 300);
+        var server = new CannedLlamaServer { Model = model };
+        await using var host = await MetricsHost.StartAsync(Connection, server, MetricsHost.CannedOptions(o => o.ModelId = model));
+        var (pm, project) = await host.NewProjectAsync();
+        using var _ = pm;
+
+        var turn = await MetricsHost.ChatAsync(pm, project, "Nota con valori diagnostici più lunghi delle colonne.");
+
+        Assert.Equal("Completed", turn.GetProperty("status").GetString());
+        var row = Assert.Single(await host.CallsAsync(turnId: turn.GetProperty("id").GetGuid()));
+        Assert.True(row.IsFinal);
+        Assert.Equal(model[..InferenceCallLog.ModelIdMaxLength], row.ModelId);
+        Assert.Equal("stop", row.FinishReason);
+
+        // Il client OpenAI ammette solo i finish_reason noti: un valore più lungo della colonna arriva solo da un altro IChatClient.
+        // Stessa cattura reale (AgentFactory pubblica sopra un client che risponde con finish_reason e modello lunghissimi).
+        var finish = "stop_" + new string('x', 60);
+        var factory = new AgentFactory(host.Options, new FixedResponseClient(new ChatFinishReason(finish), model),
+            (text, _) => ValueTask.FromResult(CannedLlamaServer.Tokens(text)));
+        using (InferenceScope.Begin())
+        {
+            var response = await factory.CreateDocumentClient().GetResponseAsync([new ChatMessage(ChatRole.User, "x")], new ChatOptions(), Ct);
+            Assert.Equal(finish, response.FinishReason?.Value);
+            using var scope = host.App.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            InferenceCallLog.Stage(db, InferenceScope.Current, project, new(row.ChatTurnId, null, 9, 9), result: false);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var stored = Assert.Single(await host.CallsAsync(turnId: row.ChatTurnId), r => r.Attempt == 9);
+        Assert.Equal(finish[..InferenceCallLog.FinishReasonMaxLength], stored.FinishReason);
+        Assert.Equal(model[..InferenceCallLog.ModelIdMaxLength], stored.ModelId);
+        Assert.Equal(InferenceCallState.Completed, stored.State);
+    }
+
+    /// <summary>IChatClient che risponde sempre con lo stesso testo, finish_reason e modello (senza ModelId nelle opzioni la cattura lo prende dalla risposta).</summary>
+    private sealed class FixedResponseClient(ChatFinishReason finish, string modelId) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")) { FinishReason = finish, ModelId = modelId });
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
     // ---------------------------------------------------------------- persistenza, riapertura, configurazione
 
     [Fact]
@@ -549,6 +654,40 @@ public sealed class InferenceMetricsTests : IAsyncLifetime
     }
 
     // ---------------------------------------------------------------- supporto
+
+    private static async Task<ChatTurn> TurnAsync(MetricsHost host, Guid turnId)
+    {
+        using var scope = host.App.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().ChatTurns.AsNoTracking().SingleAsync(t => t.Id == turnId, Ct);
+    }
+
+    /// <summary>Dispatcher reale costruito a mano: un solo RunOnceAsync deterministico, senza il ciclo in background.</summary>
+    private static AiDispatchService Dispatcher(MetricsHost host, IChatTurnExecutor executor) => new(
+        host.App.Services.GetRequiredService<IServiceScopeFactory>(),
+        Options.Create(new ExecutionOptions()),
+        NullLogger<AiDispatchService>.Instance,
+        executor);
+
+    /// <summary>
+    /// Esecutore come <see cref="ConversationalTurnExecutor"/> (vero ConversationalAgent e vero commit), ma la revisione della sessione
+    /// cambia fra l'esecuzione e il commit; con <paramref name="stealLeaseAfterCommit"/> il lease passa poi a un altro owner.
+    /// </summary>
+    private sealed class RevisionChangedExecutor(MetricsHost host, string connection, bool stealLeaseAfterCommit) : IChatTurnExecutor
+    {
+        public (string Outcome, string? Reason) Commit { get; private set; }
+
+        public async Task ExecuteAsync(ChatTurnClaim claim, CancellationToken ct)
+        {
+            var reply = await RunAsync(host, host.App.Services.GetRequiredService<ConversationalAgent>(), claim);
+            await Exec(connection, """UPDATE "Conversations" SET "ChatSessionRevision" = "ChatSessionRevision" + 1 WHERE "Id" = @c""", ("c", claim.ConversationId));
+            var result = await CommitAsync(host, claim, reply);
+            Commit = (result.Outcome.ToString(), result.Reason);
+            if (stealLeaseAfterCommit)
+            {
+                await Exec(connection, """UPDATE "ChatTurns" SET "LeaseOwner" = 'altro-worker', "FencingToken" = "FencingToken" + 1 WHERE "Id" = @t""", ("t", claim.TurnId));
+            }
+        }
+    }
 
     private static async Task<ChatTurnClaim?> ClaimAsync(MetricsHost host, string owner)
     {

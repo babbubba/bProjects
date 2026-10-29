@@ -32,6 +32,9 @@ internal sealed class CannedLlamaServer : HttpMessageHandler
 
     public int Ctx { get; set; } = 32768;
 
+    /// <summary>Id del modello esposto da /v1/models e riportato nelle risposte.</summary>
+    public string Model { get; set; } = ModelId;
+
     /// <summary>Il server non restituisce mai usage (né in JSON né in streaming): i token devono risultare unavailable.</summary>
     public bool OmitUsage { get; set; }
 
@@ -67,7 +70,7 @@ internal sealed class CannedLlamaServer : HttpMessageHandler
         {
             return path switch
             {
-                "/v1/models" => Json($$$"""{"data":[{"id":"{{{ModelId}}}","status":{"value":"loaded","args":["--ctx-size","{{{Ctx}}}"]}}]}"""),
+                "/v1/models" => Json($$$"""{"data":[{"id":"{{{Model}}}","status":{"value":"loaded","args":["--ctx-size","{{{Ctx}}}"]}}]}"""),
                 "/props" => Json($$$"""{"default_generation_settings":{"n_ctx":{{{Ctx}}},"params":{"n_predict":-1}},"total_slots":1}"""),
                 "/slots" => Json($$$"""[{"n_ctx":{{{Ctx}}}}]"""),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound),
@@ -122,7 +125,7 @@ internal sealed class CannedLlamaServer : HttpMessageHandler
         {
             ["choices"] = new JsonArray(new JsonObject { ["finish_reason"] = "stop", ["index"] = 0, ["message"] = message }),
             ["created"] = 1,
-            ["model"] = ModelId,
+            ["model"] = Model,
             ["system_fingerprint"] = "canned",
             ["object"] = "chat.completion",
             ["id"] = "chatcmpl-canned",
@@ -138,14 +141,14 @@ internal sealed class CannedLlamaServer : HttpMessageHandler
 
     private HttpResponseMessage Stream(string text, object? usage, object timings)
     {
-        static string Chunk(object choices, object? usage = null, object? timings = null)
+        string Chunk(object choices, object? usage = null, object? timings = null)
         {
             var node = new JsonObject
             {
                 ["choices"] = JsonSerializer.SerializeToNode(choices),
                 ["created"] = 1,
                 ["id"] = "chatcmpl-canned",
-                ["model"] = ModelId,
+                ["model"] = Model,
                 ["system_fingerprint"] = "canned",
                 ["object"] = "chat.completion.chunk",
             };
