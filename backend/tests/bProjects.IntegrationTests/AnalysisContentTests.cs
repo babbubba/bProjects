@@ -244,6 +244,101 @@ public sealed class AnalysisContentTests
         else
         {
             Assert.False(format is ChatResponseFormatJson { Schema: not null }, "ValidatedTextJson non invia lo schema al modello");
+            Assert.Null(SentSchema(model.Options[0], model)); // nemmeno nella rappresentazione grezza
+        }
+    }
+
+    [Fact]
+    public async Task The_run_schema_admits_only_the_trusted_values_and_the_message_ids_up_to_the_cutoff()
+    {
+        var world = AnalysisFixtures.World();
+        var model = new ScriptedChatClient(AnalysisFixtures.NominalAi(world).ToJsonString());
+
+        await AnalysisGateway.RunAnalysisAsync(model, StructuredOutputMode.JsonSchema, world.Trusted, Ct);
+
+        // Lo schema inviato è quello grezzo del run: i valori da copiare non possono essere alterati dalla grammatica.
+        var schema = SentSchema(Assert.Single(model.Options), model)!;
+        var properties = schema["properties"]!;
+        Assert.Equal([world.AnalysisId.ToString()], Enum(properties["analysisId"]));
+        Assert.Equal([world.ProjectId.ToString()], Enum(properties["projectId"]));
+        Assert.Equal(world.Cutoff, Assert.Single(properties["sourceCutoffSequence"]!["enum"]!.AsArray())!.GetValue<long>());
+
+        // Solo i messaggi del progetto fino al cutoff: né quello oltre il cutoff né quello di un altro progetto.
+        string[] dialog = [.. world.Trusted.Messages.Where(m => m.ProjectId == world.ProjectId && m.Sequence <= world.Cutoff).OrderBy(m => m.Sequence).Select(m => m.Id.ToString())];
+        var source = properties["sources"]!["items"]!["properties"]!;
+        Assert.Equal(dialog, Enum(source["id"]));
+        Assert.Equal(dialog, Enum(source["messageId"]));
+        Assert.Equal(dialog, Enum(properties["goals"]!["items"]!["properties"]!["evidenceRefs"]!["items"]));
+
+        // Ogni altro elemento con evidenze è lo stesso tipo (lo schema generato lo riferisce con $ref): nessuna evidenza resta libera.
+        foreach (var (name, items) in new[]
+        {
+            ("requirements", properties["requirements"]!["items"]), ("assumptions", properties["assumptions"]!["items"]),
+            ("overview", properties["contextAndScope"]!["properties"]!["overview"]!["items"]),
+            ("alternatives", properties["conflicts"]!["items"]!["properties"]!["alternatives"]!["items"]),
+        })
+        {
+            Assert.True(items!["$ref"]?.GetValue<string>() == "#/properties/goals/items", name);
+        }
+
+        Assert.DoesNotMatch("\"evidenceRefs\":\\{\"type\":\"array\",\"items\":\\{\"type\":\"string\",\"format\"", schema.ToJsonString());
+
+        // Gli id nuovi restano UUID vincolati dal pattern, che il runtime trasforma in grammatica (mai spostato nella description).
+        var goalId = properties["goals"]!["items"]!["properties"]!["id"]!;
+        Assert.Equal("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", goalId["pattern"]!.GetValue<string>());
+        Assert.Null(goalId["description"]);
+        Assert.Equal(schema.ToJsonString(), JsonNode.Parse(Assert.IsType<ChatResponseFormatJson>(model.Options[0].ResponseFormat).Schema!.Value.GetRawText())!.ToJsonString());
+    }
+
+    [Fact]
+    public async Task The_request_on_the_wire_carries_the_schema_unaltered_by_the_openai_adapter()
+    {
+        // Vero client OpenAI + adattatore M.E.AI: senza la rappresentazione grezza l'adattatore sposterebbe pattern e format nella
+        // description (strict mode) e llama.cpp costruirebbe una grammatica senza vincolo sugli UUID.
+        var wire = new CapturingHandler();
+        var options = new AiOptions { Endpoint = "http://localhost:1/v1/", ModelId = "fake", ApiKey = "non-usata" };
+        using var client = new InternalModelClient(options, wire);
+        var chat = client.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis);
+
+        await client.ChatClient.GetResponseAsync([new ChatMessage(ChatRole.User, "x")], chat, Ct);
+
+        var body = JsonNode.Parse(Assert.Single(wire.Bodies))!;
+        Assert.Equal("json_schema", body["response_format"]!["type"]!.GetValue<string>());
+        var sent = body["response_format"]!["json_schema"]!["schema"]!;
+        Assert.Equal(JsonNode.Parse(AnalysisSchema.Element.GetRawText())!.ToJsonString(), sent.ToJsonString());
+        Assert.DoesNotContain("pattern: ", sent.ToJsonString()); // nessun vincolo spostato nella description
+        Assert.False(body["chat_template_kwargs"]!["enable_thinking"]!.GetValue<bool>());
+        Assert.Equal(0, body["temperature"]!.GetValue<double>());
+    }
+
+    private static string[] Enum(JsonNode? node) => [.. node!["enum"]!.AsArray().Select(v => v!.GetValue<string>())];
+
+    /// <summary>Schema del response_format grezzo che il client OpenAI invierà (null se non c'è output strutturato).</summary>
+    private static JsonNode? SentSchema(ChatOptions options, IChatClient client)
+    {
+        if (options.RawRepresentationFactory?.Invoke(client) is not OpenAI.Chat.ChatCompletionOptions raw || raw.ResponseFormat is null)
+        {
+            return null;
+        }
+
+        var json = JsonNode.Parse(System.ClientModel.Primitives.ModelReaderWriter.Write(raw.ResponseFormat).ToString())!;
+        return json["json_schema"]!["schema"];
+    }
+
+    /// <summary>Risponde a /chat/completions con un completamento minimo e conserva i corpi delle richieste.</summary>
+    private sealed class CapturingHandler : HttpMessageHandler
+    {
+        public List<string> Bodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Bodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"id":"c","object":"chat.completion","created":1,"model":"fake","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{}"}}]}""",
+                    System.Text.Encoding.UTF8, "application/json"),
+            };
         }
     }
 
