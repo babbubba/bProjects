@@ -345,9 +345,35 @@ osservato chat 51.253 -> 21.256 token (server 21.313), analisi 51.867 -> 22.396 
 22.437), budget 27.648. Restano limiti strutturali con errore esplicito e valori misurati:
 ultimo messaggio oltre il budget (`context_overflow`, solo con finestra piccola: 65.536
 caratteri stanno sotto 27.648 token) e gruppi da riassumere oltre n_ctx in una sola
-chiamata (`compaction_failed`, HTTP 400 del runtime). Nota: la generazione strutturata
-dell'analisi fallisce occasionalmente con id non validi (`invalid_agent_output`), anche
-senza compattazione (T031): non è un difetto della compattazione.
+chiamata (`compaction_failed`, HTTP 400 del runtime). La generazione strutturata
+dell'analisi che falliva con id non validi (`invalid_agent_output`) non dipendeva dalla
+compattazione: vedi l'esito seguente.
+
+**Esito `invalid_agent_output` dell'analisi (DGX, Qwen3.6-35B, 2026-10-29).** Progetto reale
+a 9 scambi (~4.890 token di prompt, compattazione non attiva): prima della correzione 5/5
+`invalid_agent_output` (`$.sources[0].id`, riga 9) e 2/5 troncati a 4096 (`length`);
+ricostruita la stessa richiesta, il modello scriveva id come `src-1` (42/42 id non UUID).
+Causa: l'adattatore OpenAI di M.E.AI 10.10.1 riscrive lo schema per lo strict mode
+spostando `pattern`/`format` nella `description`, quindi la grammatica di llama.cpp non
+vincolava gli UUID (lo stesso schema inviato invariato è applicato). Correzioni: schema
+inviato invariato nel response_format grezzo; schema per run con i soli valori fidati
+(un `analysisId` copiato sotto il solo pattern perdeva un carattere, 1 run su 2); fonti
+Message con l'id del messaggio ed evidenze solo dirette (con UUID validi, ~35 token
+ciascuno, 136 riferimenti portavano l'output a 9.591 token e 156 s; una richiesta di JSON
+compatto è stata scartata perché il modello entrava in ripetizione); tetto di output
+dell'analisi 8192 in compose; timeout di rete del client allineato a
+`RequestTimeoutSeconds` (il default di 100 s del client ha annullato un'analisi a 100,0 s,
+poi `deadline_exceeded`). Esito sullo stack: 10/10 analisi completate (completion
+4.593–6.063 token, `stop`, 79–103 s), 3/3 documenti e 2/2 analisi del caso breve
+(~1.800 token, ~30 s). Limite residuo: l'output cresce con il numero di elementi e di
+UUID; a ~61 token/s il tetto di 8192 token vale ~135 s, entro i 150 s della chiamata e i
+180 s della deadline, ma un'analisi più ricca può ancora finire troncata (`length`) ed è
+allora `invalid_agent_output`, senza retry. Il `compaction_failed` osservato con
+`CompactionTriggerTokens=3000` è un artefatto della soglia di prova: il tetto della
+sintesi è min(budget/6, output Compaction, soglia messaggi/2), cioè 1.297 token in chat e
+972 in analisi invece di 4096; le sintesi misurate occupano il 12–32% del prompt e
+l'unica chat troncata (1.851 -> 1.297, 70%) è un'uscita anomala del modello, non un
+difetto del calcolo.
 
 ### Backlog funzionale successivo alla prima vertical slice (DEFERRED)
 

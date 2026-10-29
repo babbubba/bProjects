@@ -15,7 +15,10 @@ Nessun ricorso automatico a credenziali scoperte nell'ambiente.
 
 Configurazione prevista: ConnectionStrings__AppDb; Ai__Endpoint/ModelId/ApiKey;
 Ai__ContextWindowTokens/MaxOutputTokens/SafetyMarginTokens/CompactionTriggerTokens;
-Ai__StructuredOutputMode=JsonSchema oppure ValidatedTextJson.
+Ai__StructuredOutputMode=JsonSchema oppure ValidatedTextJson;
+Ai__Phases__{Chat,Analysis,Document,Compaction}__MaxOutputTokens/EnableThinking
+(vuoto = eredita il globale; in compose Analysis vale 8192 di default perché
+l'analisi con UUID validi supera i 4096 token, vedi plan.md, esito invalid_agent_output).
 Execution__LeaseDurationSeconds=30, RenewIntervalSeconds=10, MaxAttempts=3,
 RetryBaseDelaySeconds=2, RetryMaxDelaySeconds=10, RunDeadlineSeconds=180.
 I valori risolti sono fissati nella richiesta; segreti fuori da repo/prompt/log.

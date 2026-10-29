@@ -129,6 +129,13 @@ I controlli semantici sotto sono parte dello stesso contratto; non si assume che
 l'endpoint locale supporti l'intero vocabolario JSON Schema. Il formato nativo usa
 la proiezione compatibile del modello; entrambe le modalità passano la stessa
 validazione tipizzata e semantica nel backend prima del commit o della visualizzazione.
+In JsonSchema la proiezione è costruita per run e inviata invariata nel response_format
+(l'adattatore OpenAI di M.E.AI la riscriverebbe per lo strict mode spostando pattern e
+format nella description, e llama.cpp non vincolerebbe gli UUID): pattern UUID per gli
+id nuovi; analysisId, projectId e sourceCutoffSequence ammettono solo i valori fidati;
+id e messageId delle fonti ed evidenceRefs solo gli id dei messaggi fino al cutoff
+(una fonte Message prodotta dall'AI ha l'id del proprio messaggio). È un aiuto alla
+generazione, non una validazione: le regole sotto restano tutte verificate dal backend.
 
 ```json
 {
