@@ -41,7 +41,7 @@ services:
       Ai__RuntimeCheckSeconds: ${AI_RUNTIME_CHECK_SECONDS:-60}
       Ai__Phases__Chat__MaxOutputTokens: ${AI_CHAT_MAX_OUTPUT_TOKENS:-}
       Ai__Phases__Chat__EnableThinking: ${AI_CHAT_ENABLE_THINKING:-}
-      Ai__Phases__Analysis__MaxOutputTokens: ${AI_ANALYSIS_MAX_OUTPUT_TOKENS:-}
+      Ai__Phases__Analysis__MaxOutputTokens: ${AI_ANALYSIS_MAX_OUTPUT_TOKENS:-8192}
       Ai__Phases__Analysis__EnableThinking: ${AI_ANALYSIS_ENABLE_THINKING:-}
       Ai__Phases__Document__MaxOutputTokens: ${AI_DOCUMENT_MAX_OUTPUT_TOKENS:-}
       Ai__Phases__Document__EnableThinking: ${AI_DOCUMENT_ENABLE_THINKING:-}
