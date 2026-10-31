@@ -221,7 +221,10 @@ public sealed class PmCorrectionTests
 
         Assert.Equal(EditTargetKind.Found, target.Kind);
         Assert.Equal(["richiesta"], target.Preserved);
-        Assert.Equal(PmCorrection.Preserving(s.Correction.EditedText, Approves), target.NewText);
+        // Solo il frammento necessario: nessuna approvazione ripetuta, nessuna parte dell'originale oltre a «rifiuta la richiesta».
+        Assert.Equal($"{s.Correction.EditedText}; rifiuta la richiesta", target.NewText);
+        Assert.DoesNotContain("Il responsabile diretto approva", target.NewText, StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(AcceptanceChecker.Norm(target.NewText!), "approv"));
         Assert.StartsWith(s.Correction.EditedText, target.NewText, StringComparison.Ordinal);
         Assert.Contains("rifiuta la richiesta", target.NewText, StringComparison.Ordinal);
         var again = PmCorrection.Locate(s, ai);
@@ -244,6 +247,108 @@ public sealed class PmCorrectionTests
         var document = AcceptanceChecker.CheckDocument(s, AcceptanceOracle.RenderMarkdown(confirmed, s.Name), confirmed, correctionApplied: true, ai);
         Assert.DoesNotContain(document.Failures, f => f.Contains("«richiesta»", StringComparison.Ordinal));
         Assert.DoesNotContain(document.Notes, n => n.Contains("«richiesta»", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------------------------------------------ modifica che contraddice l'originale
+
+    /// <summary>Ferie con una correzione che cambia il limite di anticipo da 5 a 10 giorni (la fixture originale resta intatta: solo questo script di prova).</summary>
+    private static ProjectScript Anticipo10() => Ferie with
+    {
+        Facts = [.. Ferie.Facts.Select(f => f.Key == "anticipo" ? f with { Match = ["giorni", "anticip"] } : f)],
+        Correction = new Correction("anticipo", "Le ferie vanno richieste con almeno 10 giorni lavorativi di anticipo", [], null),
+    };
+
+    [Fact]
+    public void A_correction_that_changes_a_limit_does_not_restore_the_superseded_value()
+    {
+        // La voce porta il limite di 5 giorni e, nello stesso periodo, l'eccezione delle urgenze: il PM cambia solo il limite.
+        var s = Anticipo10();
+        var (json, _) = Analysis(s, ["anticipo", "urgenze"],
+            (Sec.Constraints, 0, "Le ferie vanno richieste con almeno 5 giorni lavorativi di anticipo, salvo urgenze decise dal responsabile"));
+
+        var target = PmCorrection.Locate(s, json);
+
+        Assert.Equal(EditTargetKind.Found, target.Kind);
+        Assert.Equal(["urgenze"], target.Preserved);
+        Assert.Equal($"{s.Correction.EditedText}; salvo urgenze decise dal responsabile", target.NewText);
+        var norm = AcceptanceChecker.Norm(target.NewText!);
+        Assert.Contains("10 giorni", norm, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\b5\b", norm);
+        var (body, run) = Apply(s, json);
+        Assert.Empty(run.Findings.Failures);
+        Assert.Equal(target.NewText, PmCorrection.Items(body!, target.Section)[target.Index]!["text"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void A_fragment_that_would_bring_back_a_superseded_value_makes_the_correction_fail_explicitly()
+    {
+        // Il fatto «urgenze» vive solo in un frammento che nomina ancora «5 giorni»: conservarlo riporterebbe la condizione superata.
+        var s = Anticipo10();
+        var (json, _) = Analysis(s, ["anticipo", "urgenze"],
+            (Sec.Constraints, 0, "Le ferie vanno richieste con almeno 5 giorni lavorativi di anticipo; le urgenze sono decise dal responsabile entro 5 giorni"));
+
+        var target = PmCorrection.Locate(s, json);
+
+        Assert.Equal(EditTargetKind.Absent, target.Kind);
+        Assert.Null(target.NewText);
+        Assert.Contains("assenti dal testo corretto e potrebbe riportare una condizione superata", target.Message, StringComparison.Ordinal);
+        // Nessuna aggiunta del PM in questo script: senza modifica applicata non c'e' corpo da inviare e nulla viene riscritto.
+        var (body, run) = Apply(s, json);
+        Assert.Equal([target.Message], run.Findings.Failures);
+        Assert.Null(body);
+        Assert.DoesNotContain(s.Correction.EditedText, Texts(json));
+    }
+
+    [Fact]
+    public void An_unsplittable_multi_fact_item_fails_instead_of_inventing_text()
+    {
+        var s = Anticipo10();
+        var (json, _) = Analysis(s, ["anticipo", "urgenze"], (Sec.Constraints, 0, "Le ferie vanno richieste con almeno 5 giorni di anticipo salvo urgenze"));
+
+        var target = PmCorrection.Locate(s, json);
+
+        Assert.Equal(EditTargetKind.Absent, target.Kind);
+        Assert.Contains("trasformazione non determinabile", target.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_n2_rewrite_keeps_provenance_and_passes_the_pm_validators()
+    {
+        var s = Ferie;
+        var (json, ids) = Analysis(s, ["richiesta", "solo-responsabile"], (Sec.Requirements, 0, Sends), (Sec.Requirements, 1, Approves));
+        var ai = Content(json);
+        var target = PmCorrection.Locate(s, ai);
+        var revision = Guid.NewGuid();
+
+        var edited = AcceptanceFixtureTests.Corrected(ai, s, revision, AnalysisContentState.Unvalidated);
+
+        var before = AcceptanceChecker.Items(ai, target.Section)[target.Index];
+        var after = AcceptanceChecker.Items(edited, target.Section)[target.Index];
+        var pm = edited.Sources.Single(x => x.Kind == AnalysisSourceKind.PmRevision);
+        Assert.Equal((before.Id, before.Classification), (after.Id, after.Classification));
+        Assert.Equal([.. before.EvidenceRefs, pm.Id], after.EvidenceRefs);
+        Assert.Equal(target.NewText, after.Text);
+        // Nessun'altra voce cambia: stesso testo, stesse fonti.
+        foreach (var section in Enum.GetValues<Sec>())
+        {
+            var original = AcceptanceChecker.Items(ai, section);
+            var changed = AcceptanceChecker.Items(edited, section).Take(original.Count).ToList();
+            for (var n = 0; n < original.Count; n++)
+            {
+                if (section == target.Section && n == target.Index)
+                {
+                    continue;
+                }
+
+                Assert.Equal((original[n].Id, original[n].Text, original[n].EvidenceRefs), (changed[n].Id, changed[n].Text, changed[n].EvidenceRefs));
+            }
+        }
+
+        var context = ids.Context with { PmRevisionIds = new HashSet<Guid> { revision } };
+        var accepted = AnalysisContentValidator.Validate(edited, context, AnalysisActorKind.PmEdit, ai);
+        Assert.True(accepted.Accepted, string.Join("; ", accepted.Violations));
+        var confirmed = edited with { ValidationState = AnalysisContentState.PmConfirmed };
+        Assert.True(AnalysisContentValidator.Validate(confirmed, context, AnalysisActorKind.PmConfirm, edited).Accepted);
     }
 
     [Fact]

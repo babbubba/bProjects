@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using bProjects.App.Analysis;
 
 namespace bProjects.IntegrationTests;
@@ -62,13 +63,12 @@ internal static class PmCorrection
                 $"correzione non applicabile: «{edit.Key}» ambigua, {pool.Count} voci candidate ({string.Join("; ", pool.Select(x => $"{x.Section}: «{x.Text}»"))}), nessuna scelta silenziosa");
         }
 
-        // Nessuna candidata puo' essere sostituita senza perdere altri fatti: la voce a piu' fatti si riscrive conservando il testo originale,
-        // purche' la conservazione sia verificata con la regola del verificatore e la voce sia una sola.
-        var repairable = assessed
-            .Select(x => (x.Candidate, x.Lost, NewText: Preserving(script.Correction.EditedText, x.Candidate.Text)))
-            .Where(x => Lost(script, edit, texts, x.Candidate.Section, x.Candidate.Index, x.NewText).Count == 0
-                && AcceptanceChecker.Matches(AcceptanceChecker.Norm(x.NewText), edit.Match))
+        // Nessuna candidata puo' essere sostituita senza perdere altri fatti: la voce a piu' fatti si riscrive conservando solo i frammenti
+        // dell'originale che servono a quei fatti (Preserve), mai l'intera voce. Se non e' determinabile in modo univoco e sicuro, non si applica.
+        var attempts = assessed
+            .Select(x => (x.Candidate, x.Lost, Result: Preserve(script, edit, texts, x.Candidate.Section, x.Candidate.Index, x.Candidate.Text)))
             .ToList();
+        var repairable = attempts.Where(x => x.Result.NewText is not null).Select(x => (x.Candidate, x.Lost, NewText: x.Result.NewText!)).ToList();
         if (repairable.Count == 1)
         {
             var r = repairable[0];
@@ -86,12 +86,72 @@ internal static class PmCorrection
         return new(EditTargetKind.Absent, default, -1, lost,
             $"correzione non applicabile: nessuna voce di «{edit.Key}» in {where} puo' essere riscritta conservando gli altri fatti; sostituire "
             + string.Join(", ", assessed.Select(x => $"«{x.Candidate.Text}»"))
-            + $" cancellerebbe {string.Join(", ", lost.Select(k => $"«{k}»"))} (fatti indipendenti dalla correzione)");
+            + $" cancellerebbe {string.Join(", ", lost.Select(k => $"«{k}»"))} (fatti indipendenti dalla correzione); "
+            + string.Join("; ", attempts.Select(x => x.Result.Reason)));
     }
 
-    /// <summary>Testo corretto seguito dal testo originale (iniziale minuscola): il PM modifica la parte sua e lascia intatto il resto.</summary>
-    internal static string Preserving(string editedText, string originalText) =>
-        $"{editedText.TrimEnd('.', ' ')}; {char.ToLowerInvariant(originalText[0])}{originalText[1..]}";
+    /// <summary>Segmenti di una voce: separati da punteggiatura forte o da «e»/«o». Sono le unita' minime che si possono conservare.</summary>
+    private static readonly Regex SegmentSplit = new(@"\s*(?:[;,.:]|\s[eo]\s)\s*", RegexOptions.Compiled);
+
+    /// <summary>Numeri (cifre o parole) di un testo: un valore conservato non deve contraddire quelli del testo corretto.</summary>
+    private static readonly Regex Numbers = new(@"\b(\d+|uno|una|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|cento|mille)\b", RegexOptions.Compiled);
+
+    private static HashSet<string> NumbersOf(string text) =>
+        [.. Numbers.Matches(AcceptanceChecker.Norm(text)).Select(m => m.Value)];
+
+    /// <summary>
+    /// Riscrittura circoscritta di una voce a piu' fatti: testo corretto, poi i soli segmenti dell'originale necessari a non perdere gli altri
+    /// fatti attesi (il sottoinsieme piu' piccolo, verificato con la regola del verificatore). Rifiuta (testo nullo con motivo) se: nessun
+    /// sottoinsieme conserva i fatti; piu' sottoinsiemi della stessa dimensione sono equivalenti; un segmento ripete il fatto modificato
+    /// (duplicherebbe cio' che il PM ha riscritto); un segmento contiene numeri assenti dal testo corretto (potrebbe riportare una condizione
+    /// superata, es. 5 giorni dopo la modifica a 10). Nessun testo inventato: solo frammenti verbatim dell'originale.
+    /// </summary>
+    internal static (string? NewText, string Reason) Preserve(ProjectScript script, Fact edit, Func<Sec, IReadOnlyList<string>> texts, Sec section, int index, string original)
+    {
+        var edited = script.Correction.EditedText;
+        var segments = SegmentSplit.Split(original).Where(x => x.Length > 0).ToList();
+        if (segments.Count < 2 || segments.Count > 10)
+        {
+            return (null, $"«{original}» non e' scomponibile in frammenti conservabili: trasformazione non determinabile");
+        }
+
+        var editedNumbers = NumbersOf(edited);
+        var valid = new List<(int Count, string Text)>();
+        var rejected = new List<string>();
+        for (var mask = 1; mask < 1 << segments.Count; mask++)
+        {
+            var kept = Enumerable.Range(0, segments.Count).Where(i => (mask & 1 << i) != 0).Select(i => segments[i]).ToList();
+            var fragment = string.Join("; ", kept);
+            var text = $"{edited.TrimEnd('.', ' ')}; {fragment}";
+            if (Lost(script, edit, texts, section, index, text).Count > 0)
+            {
+                continue;
+            }
+
+            if (NumbersOf(fragment).Except(editedNumbers).Any())
+            {
+                rejected.Add($"il frammento «{fragment}» contiene valori ({string.Join(", ", NumbersOf(fragment).Except(editedNumbers))}) assenti dal testo corretto e potrebbe riportare una condizione superata");
+                continue;
+            }
+
+            if (AcceptanceChecker.Matches(AcceptanceChecker.Norm(fragment), edit.Match))
+            {
+                rejected.Add($"il frammento «{fragment}» ripete il fatto «{edit.Key}» gia' riscritto dal PM");
+                continue;
+            }
+
+            valid.Add((kept.Count, text));
+        }
+
+        if (valid.Count == 0)
+        {
+            return (null, rejected.Count > 0 ? string.Join("; ", rejected.Distinct()) : "nessun frammento dell'originale conserva gli altri fatti");
+        }
+
+        var smallest = valid.Min(x => x.Count);
+        var best = valid.Where(x => x.Count == smallest).Select(x => x.Text).Distinct().ToList();
+        return best.Count == 1 ? (best[0], string.Empty) : (null, $"{best.Count} sottoinsiemi di frammenti equivalenti: trasformazione non determinabile");
+    }
 
     public static EditTarget Locate(ProjectScript script, AnalysisContent content) =>
         Locate(script, s => AcceptanceChecker.Items(content, s).Select(i => i.Text).ToList());

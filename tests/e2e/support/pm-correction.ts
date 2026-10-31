@@ -45,9 +45,38 @@ function lost(p: ProjectCase, edit: Fact, texts: (section: string) => string[], 
     .map((f) => f.key);
 }
 
-/** Testo corretto seguito dal testo originale (iniziale minuscola): il PM modifica la parte sua e lascia intatto il resto. */
-export const preserving = (editedText: string, originalText: string) =>
-  `${editedText.replace(/[. ]+$/, '')}; ${originalText[0].toLowerCase()}${originalText.slice(1)}`;
+const SEGMENT_SPLIT = /\s*(?:[;,.:]|\s[eo]\s)\s*/;
+const NUMBERS = /\b(\d+|uno|una|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|cento|mille)\b/g;
+const numbersOf = (text: string) => new Set(norm(text).match(NUMBERS) ?? []);
+
+/**
+ * Riscrittura circoscritta di una voce a piu' fatti: testo corretto, poi i soli segmenti dell'originale necessari a non perdere gli altri
+ * fatti attesi (il sottoinsieme piu' piccolo, verificato con `covers`). Rifiuta (newText assente, con motivo) se: nessun sottoinsieme
+ * conserva i fatti; piu' sottoinsiemi della stessa dimensione sono equivalenti; un segmento ripete il fatto modificato; un segmento
+ * contiene numeri assenti dal testo corretto (potrebbe riportare una condizione superata). Nessun testo inventato. Specchio di Preserve in C#.
+ */
+export function preserve(p: ProjectCase, edit: Fact, texts: (section: string) => string[], section: string, index: number, original: string): { newText?: string; reason: string } {
+  const edited = p.correction.editedText;
+  const segments = original.split(SEGMENT_SPLIT).filter((x) => x.length > 0);
+  if (segments.length < 2 || segments.length > 10) return { reason: `«${original}» non e' scomponibile in frammenti conservabili: trasformazione non determinabile` };
+  const editedNumbers = numbersOf(edited);
+  const valid: { count: number; text: string }[] = [];
+  const rejected: string[] = [];
+  for (let mask = 1; mask < 1 << segments.length; mask++) {
+    const kept = segments.filter((_, i) => (mask & (1 << i)) !== 0);
+    const fragment = kept.join('; ');
+    const text = `${edited.replace(/[. ]+$/, '')}; ${fragment}`;
+    if (lost(p, edit, texts, section, index, text).length) continue;
+    const extra = [...numbersOf(fragment)].filter((n) => !editedNumbers.has(n));
+    if (extra.length) { rejected.push(`il frammento «${fragment}» contiene valori (${extra.join(', ')}) assenti dal testo corretto e potrebbe riportare una condizione superata`); continue; }
+    if (matches(norm(fragment), edit.match)) { rejected.push(`il frammento «${fragment}» ripete il fatto «${edit.key}» gia' riscritto dal PM`); continue; }
+    valid.push({ count: kept.length, text });
+  }
+  if (!valid.length) return { reason: rejected.length ? [...new Set(rejected)].join('; ') : "nessun frammento dell'originale conserva gli altri fatti" };
+  const smallest = Math.min(...valid.map((x) => x.count));
+  const best = [...new Set(valid.filter((x) => x.count === smallest).map((x) => x.text))];
+  return best.length === 1 ? { newText: best[0], reason: '' } : { reason: `${best.length} sottoinsiemi di frammenti equivalenti: trasformazione non determinabile` };
+}
 
 /** Individua la voce da modificare; `texts` restituisce i testi di una sezione nell'ordine dell'anteprima. */
 export function locateEdit(p: ProjectCase, texts: (section: string) => string[]): EditTarget {
@@ -72,10 +101,9 @@ export function locateEdit(p: ProjectCase, texts: (section: string) => string[])
     };
   }
 
-  // Nessuna candidata e' sostituibile senza perdere altri fatti: voce a piu' fatti riscritta conservando l'originale, se verificato e unica.
-  const repairable = assessed
-    .map((x) => ({ ...x, newText: preserving(p.correction.editedText, x.c.text) }))
-    .filter((x) => !lost(p, edit, texts, x.c.section, x.c.index, x.newText).length && matches(norm(x.newText), edit.match));
+  // Nessuna candidata e' sostituibile senza perdere altri fatti: voce a piu' fatti riscritta conservando solo i frammenti necessari, se univoco e sicuro.
+  const attempts = assessed.map((x) => ({ ...x, result: preserve(p, edit, texts, x.c.section, x.c.index, x.c.text) }));
+  const repairable = attempts.filter((x) => x.result.newText !== undefined).map((x) => ({ ...x, newText: x.result.newText! }));
   if (repairable.length === 1) {
     const [r] = repairable;
     return {
@@ -93,6 +121,7 @@ export function locateEdit(p: ProjectCase, texts: (section: string) => string[])
   return {
     kind: 'absent', lost: all, preserved: [],
     message: `correzione non applicabile: nessuna voce di «${edit.key}» in ${where} puo' essere riscritta conservando gli altri fatti; sostituire ${assessed.map((x) => `«${x.c.text}»`).join(', ')} `
-      + `cancellerebbe ${all.map((k) => `«${k}»`).join(', ')} (fatti indipendenti dalla correzione)`,
+      + `cancellerebbe ${all.map((k) => `«${k}»`).join(', ')} (fatti indipendenti dalla correzione); `
+      + attempts.map((x) => x.result.reason).join('; '),
   };
 }

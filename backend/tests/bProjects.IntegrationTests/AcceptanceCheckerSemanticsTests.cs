@@ -209,8 +209,8 @@ public sealed class AcceptanceCheckerSemanticsTests
         Assert.False(Flags(run.Analysis(), "richiesta"));
 
         var (simulated, _) = run.Confirm();
-        Assert.Contains(simulated.Requirements, i => i.Text == PmCorrection.Preserving(run.Script.Correction.EditedText, approves));
-        var rewritten = simulated with { Requirements = [.. simulated.Requirements.Select(i => i.Text == PmCorrection.Preserving(run.Script.Correction.EditedText, approves) ? i with { Text = run.Script.Correction.EditedText } : i)] };
+        Assert.Contains(simulated.Requirements, i => i.Text == $"{run.Script.Correction.EditedText}; rifiuta la richiesta");
+        var rewritten = simulated with { Requirements = [.. simulated.Requirements.Select(i => i.Text == $"{run.Script.Correction.EditedText}; rifiuta la richiesta" ? i with { Text = run.Script.Correction.EditedText } : i)] };
         var rendered = AcceptanceOracle.RenderMarkdown(rewritten, run.Script.Name);
 
         var withAi = AcceptanceChecker.CheckDocument(run.Script, rendered, rewritten, true, run.Content);

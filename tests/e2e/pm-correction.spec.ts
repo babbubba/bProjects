@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { acceptanceCases, covers, norm, type ProjectCase } from './support/acceptance';
-import { locateEdit, preserving } from './support/pm-correction';
+import { locateEdit } from './support/pm-correction';
 
 // T052 - scelta della voce nella correzione PM simulata (support/pm-correction.ts), specchio di PmCorrectionTests.cs con gli stessi
 // messaggi. Non richiede stack, modello ne' browser: prova l'harness, non il modello ne' il verificatore.
@@ -61,7 +61,9 @@ test.describe('correzione PM simulata: scelta della voce (senza stack)', () => {
     const target = locateEdit(ferie, texts);
     expect(target.kind).toBe('found');
     expect(target.preserved).toEqual(['richiesta']);
-    expect(target.newText).toBe(preserving(ferie.correction.editedText, APPROVES));
+    // solo il frammento necessario: nessuna approvazione ripetuta
+    expect(target.newText).toBe(`${ferie.correction.editedText}; rifiuta la richiesta`);
+    expect(norm(target.newText!).match(/approv/g)).toHaveLength(1);
     expect(target.newText!.startsWith(ferie.correction.editedText)).toBe(true);
     expect(texts(target.section!)[target.index!]).toBe(APPROVES);
     // dopo la riscrittura «richiesta» (con «rifiuta») e «solo-responsabile» sono entrambi coperti
@@ -70,6 +72,42 @@ test.describe('correzione PM simulata: scelta della voce (senza stack)', () => {
       const f = ferie.facts.find((x) => x.key === key)!;
       expect(covers(f.match, f.parts, f.accept.flatMap(after).map(norm)), key).toBe(true);
     }
+  });
+
+  // Ferie con una correzione che cambia il limite da 5 a 10 giorni (solo questo script di prova; la fixture originale resta intatta).
+  const anticipo10 = (): ProjectCase => {
+    const f = project('ferie');
+    return {
+      ...f,
+      facts: f.facts.map((x) => (x.key === 'anticipo' ? { ...x, match: ['giorni', 'anticip'] } : x)),
+      correction: { ...f.correction, editKey: 'anticipo', editedText: 'Le ferie vanno richieste con almeno 10 giorni lavorativi di anticipo', additions: [] },
+    };
+  };
+
+  test('una modifica che cambia un limite non ripristina il valore superato', () => {
+    const s = anticipo10();
+    const texts = preview(s, ['anticipo', 'urgenze'], [['constraints', 0, 'Le ferie vanno richieste con almeno 5 giorni lavorativi di anticipo, salvo urgenze decise dal responsabile']]);
+    const target = locateEdit(s, texts);
+    expect(target.kind).toBe('found');
+    expect(target.preserved).toEqual(['urgenze']);
+    expect(target.newText).toBe(`${s.correction.editedText}; salvo urgenze decise dal responsabile`);
+    expect(norm(target.newText!)).toContain('10 giorni');
+    expect(norm(target.newText!)).not.toMatch(/\b5\b/);
+  });
+
+  test('un frammento che riporterebbe un valore superato fa fallire la correzione in modo esplicito', () => {
+    const s = anticipo10();
+    const target = locateEdit(s, preview(s, ['anticipo', 'urgenze'], [['constraints', 0, 'Le ferie vanno richieste con almeno 5 giorni lavorativi di anticipo; le urgenze sono decise dal responsabile entro 5 giorni']]));
+    expect(target.kind).toBe('absent');
+    expect(target.newText).toBeUndefined();
+    expect(target.message).toContain('assenti dal testo corretto e potrebbe riportare una condizione superata');
+  });
+
+  test("una voce a piu' fatti non scomponibile fallisce invece di inventare testo", () => {
+    const s = anticipo10();
+    const target = locateEdit(s, preview(s, ['anticipo', 'urgenze'], [['constraints', 0, 'Le ferie vanno richieste con almeno 5 giorni di anticipo salvo urgenze']]));
+    expect(target.kind).toBe('absent');
+    expect(target.message).toContain('trasformazione non determinabile');
   });
 
   test("due voci a piu' fatti equivalenti: segnalate, non scelte in silenzio", () => {
