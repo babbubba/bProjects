@@ -56,8 +56,16 @@ services:
       Ai__Phases__Compaction__MaxOutputTokens: ${AI_COMPACTION_MAX_OUTPUT_TOKENS:-}
       Ai__Phases__Compaction__EnableThinking: ${AI_COMPACTION_ENABLE_THINKING:-false}
       Ai__Phases__Compaction__RequestTimeoutSeconds: ${AI_COMPACTION_REQUEST_TIMEOUT_SECONDS:-}
+      # Estrazione delle evidenze (registro atomico): una chiamata con schema per messaggio PM, senza ragionamento di default; un messaggio
+      # ricco di fatti produce molte evidenze, da qui il tetto di output più ampio di quello globale.
+      Ai__Phases__Extraction__ModelId: ${AI_EXTRACTION_MODEL_ID:-}
+      Ai__Phases__Extraction__MaxOutputTokens: ${AI_EXTRACTION_MAX_OUTPUT_TOKENS:-16384}
+      Ai__Phases__Extraction__EnableThinking: ${AI_EXTRACTION_ENABLE_THINKING:-false}
+      Ai__Phases__Extraction__RequestTimeoutSeconds: ${AI_EXTRACTION_REQUEST_TIMEOUT_SECONDS:-600}
       # Deadline dei run di analisi: deve superare Ai__Phases__Analysis__RequestTimeoutSeconds (chat e documento restano a 180 s).
       Execution__AnalysisRunDeadlineSeconds: ${EXECUTION_ANALYSIS_RUN_DEADLINE_SECONDS:-1200}
+      # Deadline di ogni lavoro di estrazione dalla richiesta (coda inclusa): con parallel=1 le estrazioni attendono chat e run.
+      Execution__ExtractionDeadlineSeconds: ${EXECUTION_EXTRACTION_DEADLINE_SECONDS:-3600}
     depends_on:
       db:
         condition: service_healthy

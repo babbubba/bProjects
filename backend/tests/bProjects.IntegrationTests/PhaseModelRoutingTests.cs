@@ -41,6 +41,10 @@ public sealed class PhaseModelRoutingTests
             ["Ai:Phases:Document:EnableThinking"] = "false",
             ["Ai:Phases:Compaction:ModelId"] = "",
             ["Ai:Phases:Compaction:EnableThinking"] = "false",
+            ["Ai:Phases:Extraction:ModelId"] = "",
+            ["Ai:Phases:Extraction:MaxOutputTokens"] = "16384",
+            ["Ai:Phases:Extraction:EnableThinking"] = "false",
+            ["Ai:Phases:Extraction:RequestTimeoutSeconds"] = "600",
         }).Build().GetSection(AiOptions.SectionName).Get<AiOptions>()!;
 
     [Fact]
@@ -59,6 +63,9 @@ public sealed class PhaseModelRoutingTests
         Assert.Equal(900, o.ForPhase(AiPhase.Analysis).RequestTimeoutSeconds);
         Assert.Equal(150, o.ForPhase(AiPhase.Chat).RequestTimeoutSeconds);
         Assert.Equal(150, o.ForPhase(AiPhase.Document).RequestTimeoutSeconds);
+        Assert.False(o.ForPhase(AiPhase.Extraction).EnableThinking);
+        Assert.Equal(131072 - 16384 - 1024, o.ForPhase(AiPhase.Extraction).InputBudgetTokens);
+        Assert.Equal(600, o.ForPhase(AiPhase.Extraction).RequestTimeoutSeconds);
         Assert.Equal(900, o.MaxRequestTimeoutSeconds);
 
         Assert.Equal(Qwen38, ComposeDefaults(Qwen38).ForPhase(AiPhase.Analysis).ModelId);
