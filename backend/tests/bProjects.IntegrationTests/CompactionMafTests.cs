@@ -170,8 +170,12 @@ public abstract class CompactionScenarios : IAsyncLifetime
     public Task Analysis_over_a_reduced_threshold_compacts_natively_within_the_window_and_keeps_originals_sources_and_exclusions() =>
         RunAnalysisAsync(messages: 8, chars: 3200, observedCase: false);
 
+    /// <summary>
+    /// Caso osservato: con la vista del registro nel messaggio finale, la sintesi in una sola chiamata uscirebbe dal budget della fase
+    /// Compaction (finestra - output - margine). Il consolidamento è incrementale: nessuna sintesi, nessun overflow, originali interi.
+    /// </summary>
     [Fact]
-    public Task Analysis_with_the_ten_large_messages_of_the_first_manual_test_compacts_instead_of_overflowing() =>
+    public Task Analysis_with_the_ten_large_messages_of_the_first_manual_test_is_consolidated_incrementally_instead_of_overflowing() =>
         RunAnalysisAsync(messages: 10, chars: 18_500, observedCase: true);
 
     /// <summary>
@@ -217,22 +221,44 @@ public abstract class CompactionScenarios : IAsyncLifetime
         Assert.True(terminal.GetProperty("status").GetString() == "Completed", $"analisi non completata: {CompactionHost.ErrorOf(terminal)}");
 
         var summaries = host.Recorder.Summaries;
-        Assert.True(summaries.Count >= 1, "la compattazione nativa non si e' attivata");
-        Assert.All(summaries, s => Assert.Equal(200, s.Status));
-        var main = Assert.Single(host.Recorder.Main);
-        Assert.True(main.Structured, "la chiamata finale deve essere quella di consolidamento con output strutturato");
-        var summary = Assert.Single(main.Messages, m => m.Text.StartsWith("[Summary]", StringComparison.Ordinal));
-        Assert.Equal("assistant", summary.Role);
-        Assert.Contains(main.Messages, m => m.Role == "user" && m.Text.Contains("Produci ora l'unico oggetto JSON"));   // l'istruzione finale e' intatta
-        if (productionPhases)
-        {
-            Assert.All(summaries, x => Assert.False(x.Thinking, "la richiesta di compattazione deve avere enable_thinking=false"));
-            Assert.True(main.Thinking, "il consolidamento finale deve avere enable_thinking=true");
-        }
-
-        // Gli identificativi di fonte del primo messaggio (sintetizzato) restano nella sintesi: l'analisi puo' ancora citarlo.
+        var calls = host.Recorder.Main;
+        Assert.All(calls, c => Assert.True(c.Structured, "ogni chiamata principale deve essere di consolidamento con output strutturato"));
+        Assert.All(calls, c => Assert.Equal(200, c.Status));
+        Assert.All(calls, c => Assert.Contains(c.Messages, m => m.Role == "user" && m.Text.Contains("Produci ora l'unico oggetto JSON")));   // l'istruzione finale e' intatta
+        var main = calls[^1];
         var first = before[0];
-        Assert.Contains(first.Id.ToString(), summary.Text);
+        string? summaryText = null;
+        if (observedCase)
+        {
+            // Nessuna sintesi (nessuna perdita): ogni originale PM intero in almeno un passo, ogni passo entro il budget, l'analisi corrente passa avanti.
+            Assert.Empty(summaries);
+            Assert.True(calls.Count >= 2, $"atteso un consolidamento incrementale, chiamate={calls.Count}");
+            Assert.All(before.Where(m => m.Role == "User"), m => Assert.Contains(calls, c => c.Texts.Contains($"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}")));
+            foreach (var call in calls)
+            {
+                var sent = await host.CountSentAsync(call);
+                Assert.True(sent <= options.InputBudgetTokens, $"passo con contesto {sent} oltre il budget {options.InputBudgetTokens}");
+            }
+
+            Assert.All(calls.Skip(1), c => Assert.Contains(c.Texts, x => x.Contains("Analisi corrente dopo i passi")));
+        }
+        else
+        {
+            Assert.True(summaries.Count >= 1, "la compattazione nativa non si e' attivata");
+            Assert.All(summaries, s => Assert.Equal(200, s.Status));
+            Assert.Single(calls);
+            var summary = Assert.Single(main.Messages, m => m.Text.StartsWith("[Summary]", StringComparison.Ordinal));
+            Assert.Equal("assistant", summary.Role);
+            if (productionPhases)
+            {
+                Assert.All(summaries, x => Assert.False(x.Thinking, "la richiesta di compattazione deve avere enable_thinking=false"));
+                Assert.True(main.Thinking, "il consolidamento finale deve avere enable_thinking=true");
+            }
+
+            // Gli identificativi di fonte del primo messaggio (sintetizzato) restano nella sintesi: l'analisi puo' ancora citarlo.
+            Assert.Contains(first.Id.ToString(), summary.Text);
+            summaryText = summary.Text;
+        }
 
         var instructionTokens = await host.Model.CountTokensAsync(ConversationalAgent.ConsolidationInstructions, Ct);
         var originalTokens = instructionTokens + await CountAsync(host, texts);
@@ -257,10 +283,13 @@ public abstract class CompactionScenarios : IAsyncLifetime
 
         if (Real)
         {
-            // Solo il modello reale puo' dimostrare che negazioni ed esclusioni attraversano la sintesi fino all'analisi.
-            foreach (var fact in new[] { "SMS", "fattur", "Aurora" })
+            // Solo il modello reale puo' dimostrare che negazioni ed esclusioni attraversano la sintesi (se c'e') fino all'analisi.
+            if (summaryText is not null)
             {
-                Assert.Contains(fact, summary.Text, StringComparison.OrdinalIgnoreCase);
+                foreach (var fact in new[] { "SMS", "fattur", "Aurora" })
+                {
+                    Assert.Contains(fact, summaryText, StringComparison.OrdinalIgnoreCase);
+                }
             }
 
             var where = new Func<string, string>(word => string.Join(",", new (string Name, IEnumerable<AnalysisItem> Items)[]
@@ -325,8 +354,12 @@ public abstract class CompactionScenarios : IAsyncLifetime
         Report($"T047 limite strutturale chat: token={numbers.Groups[1].Value} budget={numbers.Groups[2].Value} (finestra {options.ContextWindowTokens})");
     }
 
+    /// <summary>
+    /// Un dialogo molto più grande della finestra: la sintesi in una sola chiamata non è eseguibile (prima: compaction_failed). Il
+    /// consolidamento è incrementale per intervalli di sequenza: ogni originale intero, nessuna sintesi, ogni passo entro il budget.
+    /// </summary>
     [Fact]
-    public async Task A_dialog_larger_than_the_model_window_cannot_be_summarized_in_one_call_analysis_fails_with_compaction_failed()
+    public async Task A_dialog_larger_than_the_model_window_is_consolidated_incrementally_with_every_original_whole_and_no_summary()
     {
         TestEnvironment.RequirePostgres();
         var connection = Connection;
@@ -335,9 +368,8 @@ public abstract class CompactionScenarios : IAsyncLifetime
         var (pm, project) = await host.NewProjectAsync();
         using var _ = pm;
 
-        // Il riassunto nativo e' una sola chiamata: i gruppi da riassumere superano n_ctx del runtime (circa 2,6 volte la finestra).
-        var runtimeCtx = await RuntimeContextAsync(host);
-        var count = (int)Math.Min(40, Math.Ceiling(runtimeCtx * 2.6 * 3 / 60_000));
+        // Circa 2,6 volte la finestra configurata: nessuna chiamata singola, né con sintesi né senza, può contenerlo.
+        var count = (int)Math.Ceiling(options.ContextWindowTokens * 2.6 * 3 / 60_000);
         for (var i = 0; i < count; i++)
         {
             await CompactionHost.PostAsync(pm, project, CompactionDialogs.Message(i, 60_000));
@@ -347,17 +379,23 @@ public abstract class CompactionScenarios : IAsyncLifetime
         var run = await CompactionHost.AnalyzeAsync(pm, project);
         var terminal = await CompactionHost.WaitRunAsync(pm, project, run);
 
-        Assert.Equal("Failed", terminal.GetProperty("status").GetString());
-        Assert.Equal("compaction_failed", terminal.GetProperty("error").GetProperty("code").GetString());
-        Assert.Equal(1, terminal.GetProperty("attemptCount").GetInt32());                      // permanente: nessun retry
-        var summary = Assert.Single(host.Recorder.Summaries);                                   // tentata una volta, rifiutata dal runtime
-        Assert.Equal(400, summary.Status);
-        Assert.Empty(host.Recorder.Main);                                                       // nessuna analisi su contesto non riassunto o troncato
-        Assert.Equal(0, await CompactionHost.ScalarAsync<long>(connection, """SELECT COUNT(*) FROM "AnalysisRevisions" """));
+        Assert.True(terminal.GetProperty("status").GetString() == "Completed", $"analisi non completata: {CompactionHost.ErrorOf(terminal)}");
+        Assert.Equal(1, terminal.GetProperty("attemptCount").GetInt32());
+        Assert.Empty(host.Recorder.Summaries);                                                  // nessuna sintesi, nessuna perdita
+        var calls = host.Recorder.Main;
+        Assert.True(calls.Count >= 2, $"atteso un consolidamento incrementale, chiamate={calls.Count}");
+        Assert.All(calls, c => Assert.Equal(200, c.Status));
+        foreach (var call in calls)
+        {
+            var sent = await host.CountSentAsync(call);
+            Assert.True(sent <= options.InputBudgetTokens, $"passo con contesto {sent} oltre il budget {options.InputBudgetTokens}");
+        }
+
+        Assert.All(before, m => Assert.Contains(calls, c => c.Texts.Contains($"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}")));
+        Assert.Equal(1, await CompactionHost.ScalarAsync<long>(connection, """SELECT COUNT(*) FROM "AnalysisRevisions" """));
         Assert.Equal(before, await CompactionHost.OriginalsAsync(connection));
 
-        Report(
-            $"T047 limite strutturale sintesi: messaggi={count} n_ctx={runtimeCtx} sintesi_http={summary.Status} errore={terminal.GetProperty("error").GetProperty("code").GetString()}");
+        Report($"T047 dialogo oltre la finestra: messaggi={count} finestra={options.ContextWindowTokens} passi={calls.Count}");
     }
 
     // ------------------------------------------------------------------------------------------------ Document

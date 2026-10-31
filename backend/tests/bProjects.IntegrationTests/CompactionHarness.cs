@@ -87,6 +87,12 @@ internal sealed class FakeModelServer : HttpMessageHandler
     /// <summary>Risposta fissa dei turni chat (storico di preparazione); null = risposta che riporta i fatti se il contesto li contiene.</summary>
     public string? ChatReply { get; set; }
 
+    /// <summary>Risposta delle richieste con output strutturato (consolidamento); null = <see cref="WorkflowRecoveryTests.AnalysisReply"/>.</summary>
+    public Func<string, string>? StructuredReply { get; set; }
+
+    /// <summary>Richieste strutturate da rifiutare con 503 prima di rispondere (errore transitorio del runtime).</summary>
+    public int FailStructured { get; set; }
+
     public static int Tokens(string text) => (text.Length + 3) / 4;
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -120,11 +126,17 @@ internal sealed class FakeModelServer : HttpMessageHandler
             };
         }
 
+        if (body["response_format"] is not null && FailStructured > 0)
+        {
+            FailStructured--;
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        }
+
         var user = string.Join("\n", messages.Where(m => m.Role is not ("system" or "developer")).Select(m => m.Text));
         var summarizer = messages.Any(m => m.Role == "system" && m.Text.StartsWith(AgentFactory.SummarizationPrompt, StringComparison.Ordinal));
         var reply =
             summarizer ? SummaryOverride ?? Summary(user)
-            : body["response_format"] is not null ? WorkflowRecoveryTests.AnalysisReply(user)
+            : body["response_format"] is not null ? (StructuredReply ?? WorkflowRecoveryTests.AnalysisReply)(user)
             : ChatReply ?? (Regex.IsMatch(user, "SMS") ? "Esclusi dal primo rilascio: SMS e fatturazione. Il portale si chiama Aurora." : "Risposta.");
 
         return body["stream"]?.GetValue<bool>() == true ? Stream(reply, prompt) : Json(Completion(reply, prompt));
@@ -240,7 +252,8 @@ internal sealed class CompactionHost : IAsyncDisposable
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     public static async Task<CompactionHost> StartAsync(
-        string connectionString, AiOptions options, HttpMessageHandler server, bool chat, bool analysis, bool prepare, bool requestUsage = false)
+        string connectionString, AiOptions options, HttpMessageHandler server, bool chat, bool analysis, bool prepare, bool requestUsage = false,
+        Action<IServiceCollection>? configure = null)
     {
         var recorder = new ModelRecorder(server, requestUsage);
         var model = new InternalModelClient(options, recorder);
@@ -264,6 +277,8 @@ internal sealed class CompactionHost : IAsyncDisposable
             {
                 services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
             }
+
+            configure?.Invoke(services);
         });
         return new CompactionHost(app, model, recorder, options);
     }
