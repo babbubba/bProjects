@@ -841,12 +841,13 @@ public sealed class AcceptanceDeterministicTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_large_context_case_runs_through_native_compaction_with_originals_unchanged_without_claiming_nominal_success()
+    public async Task The_large_context_case_is_consolidated_incrementally_with_originals_unchanged_without_claiming_nominal_success()
     {
         TestEnvironment.RequirePostgres();
         var script = Assert.Single(AcceptanceCases.Exploratory.Projects);
         // Valori di produzione (infra/.env.example) e server finto con tokenizer a un token ogni quattro caratteri: ~185.000 caratteri
-        // sono ~46.000 token contro un budget di input di 27.648, quindi la compattazione nativa DEVE attivarsi.
+        // sono ~46.000 token contro un budget di input di 23.552 (fase Analysis): una chiamata singola, anche con la sintesi nativa entro il
+        // budget della fase Compaction, non basta, quindi il consolidamento è incrementale (contracts/ai-workflow.md §10.7).
         var options = new AiOptions
         {
             Endpoint = "http://dgx.test/v1/", ApiKey = "chiave-di-prova", ModelId = "modello-finto",
@@ -866,14 +867,19 @@ public sealed class AcceptanceDeterministicTests : IAsyncLifetime
         var terminal = await CompactionHost.WaitRunAsync(pm, project, run);
 
         Assert.Equal("Completed", terminal.GetProperty("status").GetString());
-        Assert.NotEmpty(host.Recorder.Summaries);                              // la compattazione nativa si e' attivata
-        Assert.All(host.Recorder.Summaries, s => Assert.Equal(200, s.Status));
-        var main = Assert.Single(host.Recorder.Main);
-        Assert.True(await host.CountSentAsync(main) <= options.InputBudgetTokens);
+        Assert.Empty(host.Recorder.Summaries);                                 // nessuna sintesi: nessuna perdita
+        var calls = host.Recorder.Main;
+        Assert.True(calls.Count >= 2, $"atteso un consolidamento incrementale, chiamate={calls.Count}");
+        foreach (var call in calls)
+        {
+            Assert.True(await host.CountSentAsync(call) <= options.ForPhase(AiPhase.Analysis).InputBudgetTokens);
+        }
+
+        Assert.All(before, m => Assert.Contains(calls, c => c.Texts.Contains($"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}")));
         Assert.Equal(before, await CompactionHost.OriginalsAsync(_database.ConnectionString));   // originali intatti
         Assert.Equal(script.Messages, before.Select(m => m.Body));
         TestContext.Current.SendDiagnosticMessage(
-            $"T052 esplorativo deterministico: messaggi={script.Messages.Length} caratteri={script.Messages.Sum(m => m.Length)} sintesi={host.Recorder.Summaries.Count} "
+            $"T052 esplorativo deterministico: messaggi={script.Messages.Length} caratteri={script.Messages.Sum(m => m.Length)} passi={calls.Count} "
             + "(server finto: non prova le attese sul contenuto ne' il modello reale)");
     }
 
