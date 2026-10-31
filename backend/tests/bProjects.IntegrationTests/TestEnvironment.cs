@@ -44,6 +44,7 @@ public static class TestEnvironment
             Endpoint = endpoint.ToString(),
             ApiKey = DgxApiKey!,
             ModelId = DgxModel!,
+            Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml (AI_ANALYSIS_MAX_OUTPUT_TOKENS)
         };
     }
 

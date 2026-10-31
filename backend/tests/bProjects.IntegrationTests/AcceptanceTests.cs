@@ -850,6 +850,7 @@ public sealed class AcceptanceDeterministicTests : IAsyncLifetime
         {
             Endpoint = "http://dgx.test/v1/", ApiKey = "chiave-di-prova", ModelId = "modello-finto",
             ContextWindowTokens = 32768, MaxOutputTokens = 4096, SafetyMarginTokens = 1024, CompactionTriggerTokens = 0,
+            Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml: l'analisi con UUID validi supera i 4096 token
         };
         await using var host = await CompactionHost.StartAsync(_database.ConnectionString, options, new FakeModelServer(), chat: false, analysis: true, prepare: true);
         var (pm, project) = await host.NewProjectAsync();
@@ -922,7 +923,7 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
             services.AddSingleton(agent);
             services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
             services.AddSingleton(sp => new AnalysisWorkflow(
-                sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
+                sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis)));
             counter = new CallCounter(model.ChatClient);
             var documentFactory = new AgentFactory(options, counter, async (t, ct) => await model.CountTokensAsync(t, ct));
             services.AddSingleton(new DocumentAgent(documentFactory, model.CreateChatOptions(temperature: 0.2f)));
@@ -956,6 +957,7 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         {
             Endpoint = services.Endpoint, ApiKey = services.ApiKey, ModelId = services.ModelId,
             ContextWindowTokens = 32768, MaxOutputTokens = 4096, SafetyMarginTokens = 1024, CompactionTriggerTokens = 0,
+            Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml: l'analisi con UUID validi supera i 4096 token
         };
 
         await using var host = await CompactionHost.StartAsync(
