@@ -989,7 +989,7 @@ T052 e T053 restano aperti; PR #3 non mergiata. Stack Docker `bprojects-t053b` f
 **Problema [M]:** per `ferie` l'unica voce con «responsabile diretto» era «Il responsabile diretto approva o rifiuta la richiesta», che porta anche il fatto indipendente `richiesta`. Sostituirla col testo corretto cancellava «rifiuta»; la 1C aveva risolto segnalando la correzione come non applicabile (N2 FAIL per limite dell'harness, non del modello).
 
 **Regola nuova (`PmCorrection.cs` / `support/pm-correction.ts`, stesse regole e stessi messaggi):** invariate le fasi 1C (candidate per `Match`, scarto di quelle che scoprono altri fatti con `Covers`, preferenza per la voce dedicata, `Ambiguous` se più equivalenti). Se **nessuna** candidata è sostituibile senza perdere fatti:
-- per ogni candidata il nuovo testo è `«testo corretto»; «testo originale con iniziale minuscola»` (`Preserving`): nessuna parola nuova, il PM modifica la parte sua e lascia intatto il resto;
+- ~~il nuovo testo era «testo corretto»; «intera voce originale»~~ **sostituito in 9.5** (conservava condizioni superate e ripeteva l'approvazione); ora `Preserve` conserva solo i frammenti necessari;
 - la candidata è ammessa solo se, **verificato con `Covers`** (regola del checker), nessun altro fatto atteso si perde e il fatto da modificare resta espresso (`Match`);
 - esattamente una ammessa → `Found` con `NewText` e `Preserved` (i fatti conservati), id, classificazione ed `evidenceRefs` invariati;
 - più ammesse → `Ambiguous` («voci candidate a piu' fatti», nessuna scelta silenziosa);
