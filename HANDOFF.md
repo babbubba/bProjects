@@ -531,3 +531,55 @@ AI_API_KEY=<chiave> python -I tests/prompt-replay/replay_analysis.py --calls doc
    chiamata 6 di boreale, righe ~6667-7390) voce per voce, secondo H1–H3 di 2A.4.
 3. Riportare `prompt_tokens` (differenza esatta del system), `completion_tokens`, `finish_reason`.
 4. Non ripetere la chiamata, non cambiare prompt, non eseguire altri casi; output fuori da `docs/` e fuori dal repository.
+
+---
+
+# Sessione 2B (Sonnet) — esperimento V7 vs V8, una sola inferenza — 2026-10-31
+
+**Base:** `experiment/requirements-quality` @ `26dddd3`. **Esito: NON MIGLIORATO.** Nessun codice modificato; una sola richiesta al DGX, senza retry,
+prompt invariato dopo l'osservazione.
+
+**Output** (fuori dal repository e da `docs/`, senza credenziali): `C:\source\repos\babbubba\replay-2b\` — `payload.json`, `report.json`, `response.json`
+(risposta grezza con `timings`), `content.json` (AnalysisContent V8), `v8_pretty.json` e `v7_content.json` (versioni indentate per il confronto),
+`stdout.txt`, `stderr.txt`.
+
+## 2B.1 Verifiche offline
+- Branch/commit corretti (`26dddd3`); albero pulito salvo `docs/` non versionato.
+- SHA-256 del system dopo `strip()`: V7 (`2a2ef50`) `25adffa6…`, V8 `930d9b41…`: coincidono con 2A.1.
+- Dry-run: `restOfPayloadIdentical = true`, `topLevelKeyOrderIdentical = true`, hash del resto `6c38f819…` uguale all'originale; cambia solo `messages[0].content`.
+- Script: una sola `urlopen` in `--send`, nessun ciclo né retry; rifiuta uscite sotto `docs/`.
+- Endpoint: `AI_ENDPOINT` di `infra/.env` è un segnaposto (`host.docker.internal:9`); usato il DGX `192.168.253.18:8080` dalle variabili di sessione
+  `BPROJECTS_TEST_DGX_*` (stesso host dei test di integrazione). `/v1/models` (non inferenza) elenca `Qwen3.8-Flash-Next-Smart` (stato `sleeping`).
+
+## 2B.2 Misure
+
+| Metrica | V7 | V8 |
+|---|---|---|
+| Integrazione obbligatoria | **No** («Integrazione con il gestionale ordini Colorweb») | **Sì** («Integrazione obbligatoria con il gestionale ordini Colorweb», Dependencies, fonte seq. 5) |
+| Trasferimento ordini in tempo reale | No | **No**: «tempo reale» e «ordini che arrivano al gestionale» assenti in tutto il JSON |
+| Altri requisiti conservati | 7/7 | 7/7 (ordini, spedizione, SMS/email a scelta, SMS avviso consegna, SSO, solo propri ordini, settembre, listino escluso, niente password locali) |
+| Omissioni reali | 2 (obbligo, tempo reale) | 1 (tempo reale / modalità di trasferimento ordini) |
+| Affermazioni non supportate | 0 | 0 (nessuna integrazione, ruolo o funzione inventati; nessuna informazione dell'assistente promossa) |
+| Validità JSON | valida, 14 ID unici | valida, stessa struttura AnalysisContent (15 chiavi, 14 ID unici) |
+| Prompt tokens | 4 138 (3 091 da cache) | 4 269 (0 da cache): system +131 token esatti (stima 2A.1: ~+137) |
+| Completion tokens | 2 153 | 2 136 (−0,8%, entro la soglia +15%) |
+| Tempo totale | 80,1 s (proxy) | server: 85,6 s (prefill 6,7 s + generazione 78,9 s); a muro ~165 s (da mtime dei file) perché il modello era `sleeping` e senza cache di prefisso — non confrontabile col V7 |
+| Finish reason | stop | stop |
+| System fingerprint | `b10703-0b5be7e4a` | `b10703-0b5be7e4a` (`sameServerBuild = true`) |
+
+Il fingerprint uguale indica la stessa build di llama.cpp, non prova identità di pesi, quantizzazione né configurazione del server.
+
+## 2B.3 Valutazione semantica
+- **H1 non soddisfatta:** V8 recupera il qualificatore «obbligatoria» e lo lega correttamente a Colorweb, ma perde «tempo reale» e il legame
+  ordini→gestionale. La modifica V8 ha quindi aiutato su uno dei due qualificatori (obbligo) e non sull'altro (tempi).
+- **H2 soddisfatta:** nessuna regressione. Differenze minori: l'obiettivo V8 ripete «per inserire ordini e seguirne la spedizione» (già in Requirements), duplicazione lieve
+  contro «ogni informazione in una sola sezione», ma supportata dalla fonte seq. 1; «seguono la spedizione degli ordini» e «Niente password locali per l'accesso» sono
+  riformulazioni fedeli.
+- **H3 soddisfatta:** JSON valido, `finish_reason = stop`, fonti = messaggi PM (seq. 1, 3, 5, 7, 9), nessun messaggio dell'assistente come fonte. Il checker automatico non è stato rieseguito;
+  il confronto è manuale sul JSON.
+
+## 2B.4 Decisione: **NON MIGLIORATO**
+Resta una delle due omissioni («tempo reale»). Una singola inferenza a temperatura 0 mostra un miglioramento parziale ma non dimostra ripetibilità né
+generalità; V8 non va considerato migliore in assoluto. Non verificati: strumento→operazione (magazzino) e responsabilità esterna (ferie), non coperti da Boreale.
+Possibile direzione (non eseguita, fuori incarico): il vincolo sui tempi è stato trattato come accessorio anche con l'esempio «entro 3 giorni»; valutare in una sessione
+di sviluppo se serve un caso esplicito di tempi/ordine di trasferimento.
