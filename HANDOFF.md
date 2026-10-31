@@ -661,3 +661,17 @@ Evidenze (fuori dal repository): `C:\source\repos\babbubba\replay-3\` (`props.js
 
 Il commutatore è applicato dal template (punti 3–4), ma l'efficacia del thinking con `json_schema` non è dimostrabile senza generare e le evidenze disponibili suggeriscono che la grammatica eager possa sopprimerlo. Con un esito HTTP 200 non si potrebbe distinguere «thinking attivo» da «thinking soppresso», e il gate richiede che l'attivazione sia dimostrabile. Per questo la richiesta di trattamento **non è stata inviata**: V8 non-thinking resta l'unica misura (sezione 2B, NON MIGLIORATO). Nessun confronto, nessuna metrica di costo del trattamento, nessun diff del trattamento.
 Nessuna ulteriore sperimentazione né modifica proposta in questa sessione.
+
+## 4.3 Esperimento thinking (su indicazione esplicita dopo 4.2) — INCONCLUSIVE
+
+Richiesta di trattamento = payload V8 di 2B (`replay-2b/payload.json`) con **solo** `chat_template_kwargs.enable_thinking` da `false` a `true`. Diff automatico dei due JSON: unica chiave diversa `chat_template_kwargs`, stesso ordine delle chiavi. Modello già `loaded` (nessun tempo di caricamento incluso), stesso server e build `b10703-0b5be7e4a`, `POST /v1/chat/completions`, non in streaming, **una sola** richiesta, nessun retry, timeout client 240 s.
+
+**Esito:** nessuna risposta entro 240 s (`curl` rc=28, `http=000`, 240,02 s). Nessun corpo di risposta: nessun `reasoning_content`, `finish_reason`, `usage`, `timings` né JSON da valutare. Per regola dell'incarico: **INCONCLUSIVE**, nessuna seconda prova.
+
+Cosa si può dire e cosa no:
+- La V8 senza thinking aveva generato 2 136 token in 78,9 s (27 token/s); la richiesta con thinking non è terminata in 240 s, cioè l'attesa è almeno ~3 volte quella della V8 (ragionamento non osservabile, ma coerente con thinking attivo: non è una prova).
+- Non si sa se il server stesse ragionando, fosse bloccato dalla grammatica o avesse un altro problema; il client ha chiuso la connessione e non c'è log lato server consultato.
+- Nessuna affermazione su qualità («obbligatoria», «in tempo reale»), token o conservazione dei requisiti.
+- Costo operativo documentato: con timeout di 240 s e lo stesso `max_completion_tokens 8192`, il trattamento non è completabile nei tempi della V8 su questa configurazione.
+
+Evidenza: `C:\source\repos\babbubba\replay-3\applytpl_true.json` (corpo inviato). Nessun codice, modello, schema, prompt o sampling modificato; nessun ulteriore esperimento.
