@@ -723,3 +723,59 @@ Prima della chiamata: modello `loaded`, `/slots` con `is_processing=false` (ness
 - **Omissioni reali:** 0 (V8: 1). **Affermazioni non supportate:** 0 (nessuna integrazione, ruolo o funzione inventati; fonti = soli messaggi PM). Valutazione manuale, il checker automatico non è stato eseguito.
 - **Decisione: PROMETTENTE.** Thinking attivo e dimostrato, entrambi i vincoli critici conservati, nessuna regressione, costo documentato: ~5× token e ~5× tempo (414 s a muro, oltre i timeout di 240 e 600 s provati prima), con limite di output raddoppiato.
 - **Cautele:** una sola esecuzione a temperatura 0, indicazione esplorativa e non una misura attendibile (nessuna prova di ripetibilità; il ragionamento è vicino alla soglia di 8 192 e potrebbe superare 16384 su analisi più lunghe). Il confronto non è perfettamente isolato rispetto a V8: oltre a `enable_thinking` è cambiato `max_completion_tokens`, necessario per l'attivazione utile; il modello non era `sleeping` (V8 di 2B era freddo), per cui i tempi di generazione sono confrontabili e quelli a muro no. Non verificati: magazzino e ferie. Il prodotto non è stato modificato; tenere 414 s vs `RequestTimeoutSeconds` del backend è una considerazione per chi deciderà, non un'azione di questa sessione.
+
+---
+
+# Sessione 5 (Sonnet) — benchmark Qwen3.6-35B-Smart vs Qwen3.8-Flash-Next-Smart — 2026-10-31
+
+**Esito: QWEN3.6 PROMETTENTE** (una sola esecuzione: indicazione esplorativa, non affidabilità statistica). Nessun codice, `models.ini`, prompt, schema o sampling modificati; un'unica inferenza DGX; nessun push/merge.
+Evidenze (fuori dal repository): `C:\source\repos\babbubba\replay-qwen36\` — `payload.json`, `response.json` (grezza con `timings`), `content_pretty.json`, `content.txt`, `props.json`, `chat_template.jinja`, `applytpl_out.json`; baseline in `replay-3\` (`payload_think16k.json`, `response_think16k.json`, `content_think16k_pretty.json`).
+
+## 5.1 Verifiche preliminari (zero generazioni)
+- Profilo `Qwen3.6-35B-Smart` presente in `/v1/models`, distinto da `Qwen3.6-35B` (n-predict 8192, senza reasoning). GGUF: `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`. Build `b10703-0b5be7e4a` (stessa della baseline).
+- Argomenti effettivi: `--reasoning on`, `--reasoning-budget 12288` (**uguale** a Qwen3.8), `--reasoning-format deepseek`, `--jinja`, ctx 131072 (n_ctx confermato da `/props` e `/slots`), `--n-predict 32768` (≥16384), `--parallel 1`.
+- Template: `enable_thinking is false` → `<think>\n\n</think>\n\n`, altrimenti `<think>\n`. `POST /apply-template` col payload: `true` → prompt (16 162 car.) termina con `<think>\n`; `false` (controllo, non inviato) → con `<think>\n\n</think>\n\n`. `json_schema` accettato (grammatica applicata; confermato dall'esito).
+- Prima della chiamata: nessun modello in elaborazione, `/slots` `is_processing=false`. Caricamento a freddo (innescato da `/apply-template`, non da generazione): **20,0 s**, escluso dalle velocità.
+
+## 5.2 Variabili del confronto (il modello non è l'unica differenza)
+| | Qwen3.8-Flash-Next-Smart | Qwen3.6-35B-Smart |
+|---|---|---|
+| Pesi | `Qwen3.8-Flash-Next` UD-IQ4_XS (~177 B parametri totali nei metadati) | `Qwen3.6-35B-A3B` UD-Q4_K_XL (35B-A3B) |
+| Cache KV | f16 | q8_0 |
+| ubatch | 512 | 1024 |
+| `presence-penalty` server | 0.0 | **1.5** (la richiesta non lo invia: si applica il default del profilo) |
+| Seed server | 4242 | non fissato (casuale; `temperature 0` rende il campionamento deterministico) |
+| Cache di prefisso | 4 301 token riusati | 0 (prefill completo) |
+| Tokenizer | non identico (4 305 vs 4 251 token di prompt per lo stesso testo) | |
+Il numero di token **non** è una misura equivalente del lavoro svolto.
+
+## 5.3 Richiesta
+Payload = quello inviato nella prova riuscita di 4.5 (`payload_think16k.json`), diff automatico: **solo** `model` (`Qwen3.8-Flash-Next-Smart` → `Qwen3.6-35B-Smart`); `enable_thinking=true`, `max_completion_tokens=16384`, `temperature 0`, `response_format`, messaggi e identificativi invariati. Una chiamata, nessun retry, timeout 900 s.
+
+## 5.4 Risultati affiancati
+| Metrica | Qwen3.8 | Qwen3.6 | Rapporto 3.6/3.8 |
+|---|---|---|---|
+| HTTP / `finish_reason` | 200 / `stop` | 200 / `stop` | |
+| Thinking (`reasoning_content`) | presente, 31 697 car., chiuso | presente, 19 706 car., chiuso | 0,62 (car.) |
+| Completion tokens | 10 625 | 7 907 | **0,744** |
+| di cui reasoning / output (stima*) | ~8 400 / ~2 200 | ~5 950 / ~1 950 | ~0,71 / ~0,89 |
+| Prompt tokens | 4 305 (4 301 in cache) | 4 251 (0 in cache) | |
+| Prefill | 0,09 s (4 token) | 1,99 s (4 251 token, 2 133 tok/s) | non confrontabile (cache) |
+| Generazione | 414,1 s | 132,2 s | **0,319 (3,13× più veloce)** |
+| Velocità | 25,7 tok/s | 59,8 tok/s | 2,33× |
+| Durata a muro | 414,3 s | 134,3 s | 0,324 |
+| Caricamento a freddo | modello già caricato (non misurato) | 20,0 s | |
+| JSON valido, 15 chiavi, fonti = 5 messaggi PM | sì | sì | |
+\* `usage` non separa reasoning e output: output stimato dalla lunghezza del contenuto (Qwen3.8: 4 645 car. ≈ 2 200 token; Qwen3.6: 4 068 car.), reasoning = resto. Stime, non misure.
+
+## 5.5 Valutazione semantica (confronto manuale con la conversazione PM; checker automatico non eseguito)
+Requisiti critici su Qwen3.6, tutti **conservati**: (1) portale ordini Colorificio Bianchi (goal e overview); (2) inserimento ordini e (3) monitoraggio spedizione («I clienti inseriscono gli ordini e ne seguono la spedizione»); (4) SMS/email a scelta del cliente; (5) SMS per l'avviso di consegna; (6) Colorweb **obbligatoria** e (7) ordini **in tempo reale** al gestionale («Integrazione con il gestionale ordini Colorweb: obbligatoria, gli ordini devono arrivare in tempo reale al gestionale», Dependencies, fonte seq. 5, con la condizione riportata alla lettera); (8) SSO aziendale; (9) niente password locali; (10) «solo i propri ordini»; (11) settembre; (12) listino «non entra nel portale ed è gestito altrove» (Excluded).
+- **Omissioni critiche: 0. Omissioni minori: 0.** Nessuna perdita di qualificatore, soggetto o attribuzione di responsabilità (il listino è «gestito altrove», non assegnato a un sistema inventato).
+- **Affermazioni non supportate: 0.** Nessun requisito, conflitto o domanda aperta inventati (`conflicts`, `openQuestions`, `assumptions` vuoti come in Qwen3.8); tutte le voci `Declared` con fonte il messaggio PM corretto; nessuna informazione dell'assistente promossa.
+- **Differenze di formulazione (non errori):** Qwen3.6 fonde inserimento e spedizione in una voce e «niente password locali» dentro il requisito SSO, mentre Qwen3.8 le separa e mette le password locali fra le esclusioni; per Colorweb ricopia la frase del PM, Qwen3.8 la riformula. La V8 senza thinking restava l'unica con «tempo reale» perso (2B).
+
+## 5.6 Decisione: **QWEN3.6 PROMETTENTE**
+Qualità semantica comparabile a Qwen3.8 con thinking sul caso Boreale (0 omissioni, 0 affermazioni inventate, entrambi i vincoli Colorweb), output completo e generazione ~3,1× più veloce con ~26% di token in meno. Il vantaggio è reale ma confuso con le differenze 5.2 (quantizzazione, `presence-penalty 1.5`, KV q8_0, cache di prefisso).
+- **Consolidamento finale:** appare adatto per questo caso, con tempi (134 s a muro) molto più vicini ai limiti pratici. Resta da stabilire ripetibilità e comportamento sugli altri casi (magazzino, ferie) prima di qualsiasi scelta; un solo run a `temperature 0` non è una misura statistica.
+- **Chat conversazionale:** **non valutabile** da questo test (nessuna conversazione, solo analisi con ~5 950 token di ragionamento stimati prima della risposta). La velocità (59,8 tok/s) è favorevole; la latenza con thinking attivo in chat resta da misurare.
+Nessun altro esperimento eseguito o proposto.
