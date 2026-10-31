@@ -828,3 +828,55 @@ Finestra `Ai:ContextWindowTokens` 131072 (= ctx-size del profilo con parallel=1)
 3. Analisi su Boreale: stato Running fino al completamento (atteso ~2–3 min), revisione AI valida; `InferenceCalls`: `ReasoningRequested=true`, `MaxOutputTokensRequested=32768`, `finish_reason=stop`; `AgentConfig` del run con `requestTimeoutSeconds 900`, `runDeadlineSeconds 1200`.
 4. Revisione/conferma PM, poi generazione documento: `ReasoningRequested=false`, bozza Markdown generata.
 5. Facoltativo: `AI_ANALYSIS_MODEL_ID=Qwen3.8-Flash-Next-Smart` (con timeout 1500 / deadline 1800) per verificare la selezione; un ID inesistente deve dare `model_not_available` senza chiamate.
+
+---
+
+# Sessione 7 (Sonnet) — smoke test reale Qwen3.6-35B-Smart sul DGX — 2026-10-31
+
+**Esito: PASS** (percorso completo riuscito 1 volta + 2 ripetizioni del consolidamento). Nessuna modifica applicativa: nessun difetto riproducibile trovato. Nessun codice, `models.ini`, prompt V8, `AnalysisContent`, checker o fixture modificati; nessun push/merge, nessun nuovo branch/worktree. `docs/acceptance-trace/` intatta (non tracciata, come prima).
+Evidenze (fuori dal repository, senza segreti): `C:\source\repos\babbubba\smoke-qwen36\` — `state.json` (osservazione 1, percorso completo), `state2.json`/`state3.json` (ripetizioni), `drive.py` (driver API), `sem.py` (controllo semantico sulle fixture).
+
+## 7.1 Configurazione effettivamente usata
+- DGX raggiungibile, autenticazione Bearer funzionante (401 senza chiave). Profilo `Qwen3.6-35B-Smart` in `/v1/models` (stato `sleeping` all'inizio): GGUF `Qwen3.6-35B-A3B-UD-Q4_K_XL`, `--ctx-size 131072`, `--parallel 1`, `--n-predict 32768`, `--reasoning on`, KV q8_0, ubatch 1024. `models.ini` non toccato.
+- Stack isolato, **non** `infra/.env`: progetto compose `bprojects-smoke36`, file env fuori dal repository (segreti generati, endpoint e chiave del DGX di prova), `WEB_PORT=18095`, volume PostgreSQL nuovo, immagini costruite dal commit `11e0633`. `AI_MODEL_ID=Qwen3.6-35B-Smart`, `AI_CONTEXT_WINDOW_TOKENS=131072`, nessun override di fase. Gli ambienti esistenti (`bprojects-close-pg18`, `bprojects-ctxmon`) non sono stati toccati.
+- Passi espliciti necessari su DB vuoto (procedura di CLAUDE.md, non un difetto): `app migrate`, poi `app bootstrap-accounts` (account PM di prova). Prima del `migrate` il dispatcher ha loggato 42 `fail` (`relation ... does not exist`), spariti subito dopo.
+- Log all'avvio, una riga per fase: Chat/Document/Compaction `Qwen3.6-35B-Smart`, thinking **False**, 4096, 150 s; Analysis `Qwen3.6-35B-Smart`, thinking **True**, 32768, **900 s**. `AgentConfig` congelata nel run: analisi `requestTimeoutSeconds 900`, `runDeadlineSeconds 1200`, `inputBudgetTokens 97280`, `contextWindowTokens 131072`; documento 150/180 s, thinking false. Corrisponde a 6.3.
+
+## 7.2 Esiti e misure (caso Boreale: 5 messaggi PM da `acceptance-cases.json`)
+| Fase | Esito | Durata | Token (prompt / completion) | `finish_reason` | Thinking richiesto |
+|---|---|---|---|---|---|
+| Chat (5 turni × 3 progetti) | Completed, SSE `chat.delta` 53–68 eventi per turno | 2,0–5,1 s per turno (modello 1,0–1,5 s; primo delta 0,8–3,9 s; il 5,1 s è il primo turno a modello `sleeping`) | 47–81 completion | stop | false |
+| Consolidamento #1 (percorso completo) | Completed, 1 tentativo | modello 114,1 s (muro 117,9 s) | 4258 / 6791 | stop | true |
+| Consolidamento #2 | Completed, 1 tentativo | modello 134,3 s (muro 135,9 s) | 4261 / 8122 (cache 3230) | stop | true |
+| Consolidamento #3 | Completed, 1 tentativo | modello 141,2 s (muro 144,9 s) | 4282 / 8483 (cache 3222) | stop | true |
+| Documento Markdown (solo #1) | Completed, 1 tentativo | modello 13,8 s (muro 16,1 s) | 3397 / 759 | stop | false |
+- Consolidamento, tre osservazioni: media 129,9 s (114,1–141,2), 7 799 completion token (6 791–8 483), circa 60 tok/s (59,5–60,5). Benchmark sessione 5: 132,2 s e 7 907 token, coerente. Tutti i tempi a muro (118–145 s) sono **entro il criterio nominale di 180 s**; analisi #1 più documento = 134 s a muro. Margine 20–35 %; la deadline di sicurezza di 1200 s non è mai stata vicina. Requisiti non modificati.
+- Retry: 0. Timeout: 0. Errori applicativi nel log: nessuno dopo il `migrate`. `maxOutputTokens` risulta `confirmed:false` (`serverDefaultNPredict null`); il valore inviato è 32768 per l'analisi e 4096 altrove (`InferenceCalls.MaxOutputTokensRequested`).
+- `InferenceCalls` (tutte le righe): `ReasoningRequested` = true **solo** per `Analysis`; chat e documento false; modello sempre `Qwen3.6-35B-Smart`.
+
+## 7.3 Percorso funzionale (osservazione 1)
+- Chat: risposte in streaming, persistite (10 messaggi: 5 PM e 5 assistant, con metriche per messaggio), nessun testo di ragionamento.
+- Revisione PM: modifica «I clienti vedono esclusivamente i propri ordini», una voce in Requisiti e un'assunzione, quindi v2 `PmEdit` (fonti `PmRevision` assegnate dal server); conferma, quindi `PmConfirmed` da `smokepm`, `canGenerate=true`.
+- Documento: `analysisVersion 2`, `analysisRevisionId` uguale alla revisione confermata, etichetta «Bozza AI — da revisionare», 1 667 caratteri, ogni voce con `[fonte:…]`, voci PM con la fonte della revisione PM, modifica e aggiunte presenti.
+- Persistenza: riavvio del contenitore `app` e riapertura: bozza identica, analisi v2 `PmConfirmed`, 10 messaggi.
+- `reasoning_content` e `<think` assenti da tutte le risposte API salvate e dai log dell'app.
+- Nota di contratto (non un difetto): per un run di analisi `analysisId` della `ProcessingRunView` è `null`; l'id dell'analisi è l'id del run (`CurrentAnalysisId`).
+
+## 7.4 Qualità semantica Boreale (confronto manuale con i 5 messaggi PM e con la fixture)
+- JSON valido (schema applicato dal server), 5 fonti = 5 messaggi PM, ogni voce `Declared` con la fonte corretta; `conflicts`, `openQuestions`, `assumptions` vuoti; nessuna informazione dell'assistente promossa.
+- #1 e #2: 9/9 fatti attesi, fonti uguali alle attese. #2 fonde «niente password locali» nel vincolo SSO e separa inserimento e spedizione; #1 mette le password locali tra le esclusioni.
+- #3: 8/9 con il verificatore a regex della fixture. «integrazione» risulta **mancante** solo perché la fixture richiede `colorweb`, `tempo reale` e `obbligatori` in una sola voce, mentre il modello ha scritto «Integrazione obbligatoria con il gestionale ordini Colorweb» (Dependencies, fonte 3) e «Gli ordini devono arrivare in tempo reale al gestionale» (Requirements, fonte 3). Semanticamente nulla è perso (obbligatorietà e tempo reale presenti, stessa fonte); è una differenza di formulazione che il checker rigoroso non accetta (la fixture non ha `parts`). Checker e fixture non modificati.
+- In tutte e tre: 0 omissioni critiche, 0 inversioni di negazione (il listino «non entra nel portale» ed è escluso; password locali escluse), 0 vincoli persi (Colorweb obbligatoria e in tempo reale, SSO, «solo i propri ordini», settembre), 0 affermazioni inventate, nessun contenuto del progetto Aurora.
+
+## 7.5 Limiti e non verificato
+- La compattazione MAF non è scattata (trigger a 97 280 token, contesto di circa 4 k): la regola «thinking OFF in compattazione» è provata solo dai test offline della sessione 6, non da una chiamata reale.
+- Una sola osservazione completa (con revisione PM e documento); le ripetizioni coprono solo il consolidamento. Solo il caso Boreale (magazzino e ferie non provati). Qwen3.8 non provato (rinviato, come richiesto).
+- Non è stato osservato un passaggio forzato fra modelli diversi (tutte le fasi usano lo stesso modello).
+- Suite di test automatici non rieseguita (nessuna modifica al codice); stato test = sessione 6 (343 totali, 239 superati, 104 skipped).
+
+## 7.6 Stato Git e ambiente
+- Branch `experiment/requirements-quality`; unico commit di questa sessione: aggiornamento di `HANDOFF.md` (senza `Co-Authored-By`). Nessun push né merge. `docs/` resta non tracciata.
+- Stack di prova `bprojects-smoke36` fermato (`docker compose stop`), volume conservato per ispezione; rimozione: `docker compose -p bprojects-smoke36 --env-file <env di prova> -f infra/compose.yaml down -v`.
+
+## 7.7 Raccomandazione
+**Pronto per la validazione finale**, con tre riserve: (1) verificare almeno un secondo caso (magazzino o ferie) e una conversazione abbastanza lunga da far scattare la compattazione; (2) decidere se rendere il verificatore tollerante alla separazione «obbligatoria»/«tempo reale» su due voci (`parts`) o accettarla come variabilità (non modificato qui); (3) i tempi (114–141 s, 6,8–8,5 k token) stanno nei 180 s nominali ma con margine non ampio e ragionamento variabile: la deadline di sicurezza a 1200 s va mantenuta.
