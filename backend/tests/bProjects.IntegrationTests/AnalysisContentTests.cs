@@ -124,6 +124,47 @@ public sealed class AnalysisContentTests
     }
 
     [Fact]
+    public void Item_ids_are_unique_per_payload_not_across_analyses_or_projects()
+    {
+        // Regola 1: ID «unici nel payload». Il modello ripete ID-segnaposto fra progetti (V7: 74 occorrenze, 38 distinti);
+        // nessuna lettura li risolve fuori dalla catena di revisioni della stessa analisi, quindi il riuso è ammesso.
+        var (first, second) = (AnalysisFixtures.World(), AnalysisFixtures.World());
+        var (a, b) = (AnalysisFixtures.NominalAi(first), AnalysisFixtures.NominalAi(second));
+        var ids = ItemNodes(a).Select(n => n["id"]!.GetValue<string>()).ToList();
+        foreach (var (node, id) in ItemNodes(b).Zip(ids))
+        {
+            node["id"] = id;
+        }
+
+        Assert.NotEqual(first.ProjectId, second.ProjectId);
+        Assert.Equal(ids, ItemNodes(b).Select(n => n["id"]!.GetValue<string>()));
+        var (outcomeA, outcomeB) = (AnalysisGateway.Validate(a, first.Trusted, AnalysisActor.Ai), AnalysisGateway.Validate(b, second.Trusted, AnalysisActor.Ai));
+        Assert.True(outcomeA.Accepted, outcomeA.Code);
+        Assert.True(outcomeB.Accepted, outcomeB.Code);
+
+        static IEnumerable<JsonObject> ItemNodes(JsonObject root)
+        {
+            var scope = root["contextAndScope"]!;
+            foreach (var array in new[] { root["goals"], scope["overview"], scope["included"], scope["excluded"], root["requirements"], root["operationalFlows"], root["constraints"], root["dependencies"], root["assumptions"], root["openQuestions"] })
+            {
+                foreach (var item in array!.AsArray())
+                {
+                    yield return item!.AsObject();
+                }
+            }
+
+            foreach (var conflict in root["conflicts"]!.AsArray())
+            {
+                yield return conflict!.AsObject();
+                foreach (var alternative in conflict["alternatives"]!.AsArray())
+                {
+                    yield return alternative!.AsObject();
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void A_pm_edit_adds_a_pm_revision_source_and_the_pm_may_resolve_a_conflict_with_a_reason()
     {
         var world = AnalysisFixtures.World();
@@ -717,6 +758,7 @@ internal static class AnalysisFixtures
         ["testo_solo_whitespace"] = new(false, r => At(r, "goals")["text"] = " \t\r\n "),
         ["id_elemento_duplicato"] = new(false, r => At(r, "requirements")["id"] = At(r, "goals")["id"]!.GetValue<string>()),
         ["id_fonte_duplicato"] = new(false, r => r["sources"]![1]!["id"] = r["sources"]![0]!["id"]!.GetValue<string>()),
+        ["id_elemento_uguale_a_fonte"] = new(false, r => At(r, "goals")["id"] = r["sources"]![0]!["id"]!.GetValue<string>()),
         ["evidenza_non_risolta"] = new(false, r => At(r, "goals")["evidenceRefs"] = new JsonArray(Id())),
         ["cutoff_diverso_dal_server"] = new(false, r => r["sourceCutoffSequence"] = 4),
         ["analysisId_diverso_dal_server"] = new(false, r => r["analysisId"] = Id()),

@@ -583,3 +583,59 @@ Resta una delle due omissioni («tempo reale»). Una singola inferenza a tempera
 generalità; V8 non va considerato migliore in assoluto. Non verificati: strumento→operazione (magazzino) e responsabilità esterna (ferie), non coperti da Boreale.
 Possibile direzione (non eseguita, fuori incarico): il vincolo sui tempi è stato trattato come accessorio anche con l'esempio «entro 3 giorni»; valutare in una sessione
 di sviluppo se serve un caso esplicito di tempi/ordine di trasferimento.
+
+# Sessione 3 (Opus) — ID degli elementi di analisi — 2026-10-31
+
+**Base:** `experiment/requirements-quality` @ `7cdd8ee`. **Esito: nessun bug contrattuale; riuso fra progetti tollerato dal perimetro degli ID.**
+Nessuna modifica al codice di produzione, solo due test di gate. Zero DGX, nessuna suite lunga.
+
+## 3.1 Fatto osservato
+Report V2 (V7): 74 occorrenze di ID di elementi in sei analisi, 38 distinti globalmente, nessuna collisione interna a un payload.
+Il modello produce ID-segnaposto ripetibili (es. `a1b2c3d4-e5f6-7890-abcd-ef1234567890`, `b2c3d4e5-…`), quindi progetti diversi riusano gli stessi ID.
+
+## 3.2 Perché non è un bug (letture verificate nel codice)
+- **Contratto** (`ai-workflow.md` §4, regola 1): «ID di elementi/fonti unici **nel payload**». Non c'è requisito di unicità globale né per progetto.
+- **Validatore** (`AnalysisContentValidator.Checker`): un solo `_ids` per fonti, elementi, conflitti e alternative del payload. Rifiuta duplicati interni,
+  compreso un elemento con l'ID di una fonte.
+- **`evidenceRefs`** puntano solo a `sources[].id` (messaggi o revisioni reali, fidati dal server), mai a ID di elementi. `selectedAlternativeIds` punta ad
+  alternative dello stesso conflitto, e l'AI non può produrre risoluzioni (regola 3).
+- **Revisioni PM** (`PreviewAttribution.Apply`): confrontano gli ID solo con la revisione **corrente della stessa analisi** (`current`, catena `AnalysisId`).
+  Una nuova analisi ha un nuovo `AnalysisId` e una propria catena, senza contenuto ereditato. Gli elementi aggiunti dal PM usano `crypto.randomUUID()` (frontend).
+- **Persistenza:** `ContentJson` è `jsonb` senza indici o colonne sugli ID degli elementi. Nessuna query li risolve fuori dalla revisione.
+- **Documento:** i marcatori `[fonte:<id>]` sono validati contro `SourceIds`, non contro gli ID degli elementi.
+- **MAF, resume e checkpoint:** il checkpoint conserva l'output del modello. Il commit (`AnalysisRunCompletion`) valida e persiste quel JSON senza riassegnare ID,
+  quindi un resume produce lo stesso contenuto. Nessuna dipendenza dall'unicità globale.
+- **Frontend:** `track item.id` all'interno di una sola anteprima, dove l'unicità è garantita dal validatore.
+
+## 3.3 Invariante proposta (ora fissata dai test)
+1. Gli ID di fonti, elementi, conflitti e alternative sono unici **all'interno di un payload AnalysisContent** (anche tra categorie diverse).
+2. L'identità di un elemento ha significato **solo nella catena di revisioni della stessa analisi** (`AnalysisId`). Lì è stabile, perché l'attribuzione PM si basa su di essa.
+3. Un ID di elemento non è una chiave globale. Lo stesso valore in un'altra analisi o in un altro progetto non ha legame semantico.
+
+## 3.4 Rischio residuo (potenziale, non attuale)
+Diventa un problema reale solo se si introduce una lettura **tra analisi**: riferimenti a elementi di analisi precedenti, KB, indici o colonne sugli ID degli elementi,
+oppure link esterni a un elemento. Per lo stesso motivo un ID-segnaposto non è un UUID v4 RFC: `Guid` lo accetta e il contratto chiede solo «UUID validi».
+**Proposta tecnica, da attuare solo quando arriva quel requisito:** riassegnare gli ID nel solo commit della prima revisione AI (`AnalysisRunCompletion`, prima della validazione),
+con un UUID v5 deterministico `(AnalysisId, id originale)`. È deterministico, quindi replay/resume/reload danno gli stessi ID e non nasce nessun GUID nuovo.
+La mappatura è totale: gli `evidenceRefs` non citano elementi, e l'AI non produce risoluzioni da rimappare. Le revisioni PM ereditano gli ID già riassegnati.
+Non va applicata a revisioni già persistite senza una migrazione con mappa esplicita.
+
+## 3.5 Diff
+```
+ backend/tests/bProjects.IntegrationTests/AnalysisContentTests.cs | 42 +
+   - caso semantico AiInvalid `id_elemento_uguale_a_fonte` (elemento con l'ID di una fonte ⇒ rifiutato in entrambe le modalità)
+   - Fact `Item_ids_are_unique_per_payload_not_across_analyses_or_projects` (stessi ID degli elementi in due progetti/analisi ⇒ entrambi accettati)
+```
+Limite: il secondo test fissa il contratto del validatore (contesti indipendenti). Non dimostra l'assenza di vincoli DB futuri, che oggi non esistono (3.2).
+
+## 3.6 Test eseguiti (solo mirati, offline)
+- `dotnet build bProjects.sln --no-restore`: 0 avvisi, 0 errori.
+- `dotnet test --solution bProjects.sln --no-build -- --filter-class "bProjects.IntegrationTests.AnalysisContentTests"`: **141 superati / 0 falliti / 0 ignorati**.
+- `--filter-method "*Invalid_ai_output_is_rejected_identically*"`: 70 = 35 casi × 2 modalità, tutti superati (erano 34 casi prima).
+
+## 3.7 Test mirati da lanciare in una sessione successiva (facoltativi)
+```bash
+dotnet test --solution bProjects.sln -- --filter-class "bProjects.IntegrationTests.AnalysisContentTests"
+dotnet test --solution bProjects.sln --filter-trait "Category=Integration" -- --filter-class "bProjects.IntegrationTests.PreviewRevisionTests"   # richiede BPROJECTS_TEST_POSTGRES
+```
+Il secondo copre l'attribuzione PM sulla catena di revisioni (invariante 2) e non è stato lanciato qui perché richiede Postgres.
