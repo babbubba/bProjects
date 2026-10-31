@@ -26,7 +26,7 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
     : IEvidenceExtractionExecutor
 {
     public const string AgentName = "EvidenceExtractor";
-    public const string PromptVersion = "extraction-v1";
+    public const string PromptVersion = "extraction-v2";
 
     private static readonly Lazy<string> Prompt = new(() => LoadPrompt("extraction.md"));
 

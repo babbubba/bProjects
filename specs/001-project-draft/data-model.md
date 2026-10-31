@@ -256,7 +256,7 @@ Indici: univoco parziale `MessageId` per Queued/Running (un solo lavoro aperto p
 | Id / ProjectId / ConversationId / MessageId / MessageSequence | Origine esatta |
 | Version | ≥ 1, univoco per MessageId, assegnato sotto lock del messaggio |
 | JobId | FK univoca al lavoro che l'ha prodotta |
-| SchemaVersion / PromptVersion / ModelId | `evidence-1.0.0`, `extraction-v1`, modello effettivo |
+| SchemaVersion / PromptVersion / ModelId | `evidence-1.0.0`, `extraction-v2`, modello effettivo |
 | Parameters | JSONB: configurazione effettiva (ExtractorConfig) e contesto usato (`contextThroughSequence`, id dei messaggi e versioni precedenti fornite, omissioni per budget) |
 | EvidenceCount / NoEvidenceReason | `NoEvidenceReason` obbligatorio se e solo se `EvidenceCount = 0` |
 | CreatedAt | Tempo del database |

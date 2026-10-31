@@ -343,7 +343,7 @@ l'originale PM resta l'autorità e nessuna evidenza ha come fonte primaria un me
 - Errori del modello: stessa classificazione di `ModelFailure` (transitorio → Queued con backoff; permanente → Failed). Output non
   valido: Failed `invalid_agent_output` con le violazioni (troncate a 1.000 caratteri), nessuna riparazione né seconda chiamata.
 
-### 10.2 Agente e input (fase `Extraction`, prompt `extraction-v1`, schema `evidence-1.0.0`)
+### 10.2 Agente e input (fase `Extraction`, prompt `extraction-v2`, schema `evidence-1.0.0`)
 
 `ChatClientAgent` MAF senza history né strumenti, temperatura 0, `json_schema` per lavoro; configurazione `Ai:Phases:Extraction`
 (modello, `enable_thinking`, `max_completion_tokens`, timeout) risolta e congelata in `ExtractorConfig` alla richiesta del lavoro.

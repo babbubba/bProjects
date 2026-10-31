@@ -46,6 +46,9 @@ Campi
   facoltatività, esclusività («solo», «esclusivamente»), tempi («in tempo reale», «il giorno prima»), con il testo del PM.
 - `polarity`: Affirmed; Negated (il PM nega un fatto); Excluded (fuori perimetro); Prohibited (divieto: «niente», «non deve»);
   Undefined (non ancora definito). Non invertire mai il significato.
+- Polarità e campi descrivono lo stesso fatto: in un'evidenza Prohibited, Negated o Excluded `channel`, `object`, `instrument` e
+  gli altri campi indicano ciò che è vietato, negato o escluso; ciò che è ammesso, richiesto o esclusivo è un'altra evidenza
+  Affirmed. Una sola evidenza non unisce mai un divieto e un obbligo, anche se nascono dalla stessa frase.
 - `certainty`: Declared (detto dal PM), Inferred (deduzione diretta e necessaria dal testo), Hypothesized (il PM ipotizza o
   usa «forse», «probabilmente»), ToClarify (il PM dice che va chiarito o deciso). Non trasformare un desiderio («vorrebbero»)
   o un'ipotesi in un impegno.
