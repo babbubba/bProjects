@@ -70,8 +70,7 @@ public sealed class AgentFactory
         // La strategia smette di riassumere quando il trigger non scatta più, ma la sintesi si aggiunge dopo: si lascia
         // sotto soglia lo spazio della sintesi (il suo tetto di output) perché il contesto finale resti entro il budget.
         // Il tetto di output della sintesi è quello della fase Compaction, lo stesso che MonitoredSummarizerClient impone alla richiesta.
-        var summaryOutput = _options.ForPhase(AiPhase.Compaction).MaxOutputTokens;
-        var reserve = Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, summaryOutput), messageTrigger / 2));
+        var reserve = SummaryReserve(budget, messageTrigger);
         var strategy = new SummarizationCompactionStrategy(
             new MonitoredSummarizerClient(Model(AiPhase.Compaction, count: null), monitor, _summarizerOptions, reserve),
             index => measured.Included(index) > messageTrigger,
@@ -84,6 +83,53 @@ public sealed class AgentFactory
             .UseAIContextProviders(new CompactionProvider(strategy))
             .Use(inner => new ContextBudgetChatClient(inner, budget, measured.CountAsync, monitor))
             .Build();
+    }
+
+    /// <summary>Spazio lasciato sotto la soglia per la sintesi: il suo tetto di output, entro un sesto del budget e metà della soglia.</summary>
+    private int SummaryReserve(ContextBudget budget, int messageTrigger) =>
+        Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, _options.ForPhase(AiPhase.Compaction).MaxOutputTokens), messageTrigger / 2));
+
+    /// <summary>Opzioni del modello interno (budget, tetti di output e fasi) con cui sono costruiti client e agenti.</summary>
+    public AiOptions Options => _options;
+
+    /// <summary>Token di un testo con lo stesso contatore delle chiamate (tokenizer del modello).</summary>
+    public ValueTask<int> CountAsync(string text, CancellationToken cancellationToken = default) => _count(text, cancellationToken);
+
+    /// <summary>
+    /// Prevede, con le stesse regole del client compattante di <paramref name="phase"/>, se una chiamata con queste istruzioni e questi
+    /// messaggi (l'ultimo sempre preservato) resta entro il budget: senza compattazione, oppure riassumendo i gruppi più vecchi in una
+    /// sola richiesta di sintesi che a sua volta stia nel budget della fase Compaction. False = la chiamata singola non è eseguibile
+    /// senza perdere informazioni o fallire (compaction_failed/context_overflow): il chiamante deve suddividere il lavoro.
+    /// </summary>
+    public async ValueTask<bool> FitsWithCompactionAsync(
+        string instructions, IReadOnlyList<int> messageTokens, AiPhase phase, CancellationToken cancellationToken = default)
+    {
+        var budget = ContextBudget.From(_options, phase);
+        var instructionTokens = await _count(instructions, cancellationToken);
+        var messageTrigger = budget.MessageTriggerTokens(instructionTokens);
+        var total = messageTokens.Sum();
+        if (total <= messageTrigger && instructionTokens + total <= budget.InputBudgetTokens)
+        {
+            return true;
+        }
+
+        // Come la strategia nativa: si riassumono i messaggi più vecchi, interi, finché il resto scende sotto soglia meno la riserva.
+        var target = messageTrigger - SummaryReserve(budget, messageTrigger);
+        var kept = total;
+        var summarized = 0;
+        for (var i = 0; i < messageTokens.Count - PreservedGroups && kept > target; i++)
+        {
+            kept -= messageTokens[i];
+            summarized += messageTokens[i];
+        }
+
+        if (kept > target)
+        {
+            return false; // l'ultimo messaggio da solo supera la soglia: nessuna sintesi lo fa rientrare
+        }
+
+        var summarizer = ContextBudget.From(_options, AiPhase.Compaction);
+        return summarized + await _count(SummarizationPrompt, cancellationToken) <= summarizer.InputBudgetTokens;
     }
 
     /// <summary>Gruppi finali sempre preservati dalla sintesi: il solo ultimo, cioè il messaggio PM/istruzione del turno.</summary>

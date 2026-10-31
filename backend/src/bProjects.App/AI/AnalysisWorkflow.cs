@@ -339,17 +339,36 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
         }
 
         var options = InternalModelClient.WithJsonSchema(analysisOptions, AnalysisSchema.ForRun(input), AnalysisSchema.Name);
-        var agent = await conversational.CreateConsolidationAgentAsync(options, ct);
-        var load = new LoadDialogExecutor(scopes, claim).BindExecutor();
-        var consolidate = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false, ReassignOtherAgentsAsUsers = false });
+        // Passo singolo (grafo invariato) o consolidamento incrementale: un agente nativo per passo, separati da un executor che valida
+        // l'analisi corrente e consegna il passo successivo. Il piano dipende solo dall'input congelato e dalle opzioni: stessa topologia al resume.
+        var plan = await AnalysisConsolidation.PlanAsync(input, conversational.Factory, ct);
+        var load = new LoadDialogExecutor(scopes, claim, plan).BindExecutor();
         var validate = new ValidatePersistAnalysisExecutor(scopes, claim).BindExecutor();
+        var agents = new List<ExecutorBinding>();
+        for (var step = 1; step <= plan.Steps.Count; step++)
+        {
+            var agent = await conversational.CreateConsolidationAgentAsync(options, ct, step);
+            agents.Add(agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false, ReassignOtherAgentsAsUsers = false }));
+        }
 
-        return new WorkflowBuilder(load)
-            .AddEdge(load, consolidate)
-            .AddEdge(consolidate, validate)
+        var builder = new WorkflowBuilder(load).AddEdge(load, agents[0]);
+        for (var step = 1; step < plan.Steps.Count; step++)
+        {
+            var next = new ConsolidationStepExecutor(scopes, claim, plan, step).BindExecutor();
+            builder.AddEdge(agents[step - 1], next).AddEdge(next, agents[step]);
+        }
+
+        return builder
+            .AddEdge(agents[^1], validate)
             .WithOutputFrom(validate)
             .Build();
     }
+
+    /// <summary>Fase osservabile di un executor: gli agenti e i passi del consolidamento incrementale sono tutti «consolidamento».</summary>
+    private static string? StageOf(string executorId) =>
+        Stages.Contains(executorId) ? executorId
+        : executorId.StartsWith(ConsolidationId + "-", StringComparison.Ordinal) || executorId.StartsWith("ConsolidationStep", StringComparison.Ordinal) ? ConsolidationId
+        : null;
 
     /// <summary>
     /// Esegue il run per conto dell'owner del lease: avvio nativo oppure, se esiste un checkpoint del run, ripresa
@@ -413,11 +432,11 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
             {
                 switch (evt)
                 {
-                    case ExecutorInvokedEvent invoked when Stages.Contains(invoked.ExecutorId) && invoked.ExecutorId != lastStage:
+                    case ExecutorInvokedEvent invoked when StageOf(invoked.ExecutorId) is { } stage && stage != lastStage:
                         // Solo fasi reali, osservate dagli eventi nativi (l'host dell'agente è invocato più volte per fase): informativo, mai un prossimo step.
-                        lastStage = invoked.ExecutorId;
-                        await RecordStageAsync(claim, invoked.ExecutorId, ct);
-                        onStage?.Invoke(invoked.ExecutorId);
+                        lastStage = stage;
+                        await RecordStageAsync(claim, stage, ct);
+                        onStage?.Invoke(stage);
                         break;
                     case WorkflowErrorEvent error:
                         failure ??= error.Exception;
@@ -484,7 +503,7 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
 /// </summary>
 [SendsMessage(typeof(List<ChatMessage>))]
 [SendsMessage(typeof(TurnToken))]
-internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRunClaim claim)
+internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRunClaim claim, ConsolidationPlan plan)
     : Executor<TurnToken>(AnalysisWorkflow.LoadDialogId)
 {
     public override async ValueTask HandleAsync(TurnToken message, IWorkflowContext context, CancellationToken cancellationToken = default)
@@ -496,30 +515,8 @@ internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRu
             throw new InvalidOperationException("Nessun messaggio del project manager fino al cutoff: niente da analizzare.");
         }
 
-        var messages = run.Dialog
-            .Select(m => new ChatMessage(
-                m.Role == AnalysisMessageRole.User ? ChatRole.User : ChatRole.Assistant,
-                $"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}"))
-            .ToList();
-        var final = new StringBuilder();
-        if (run.Evidence is { } evidence)
-        {
-            // Nel messaggio finale, che la compattazione nativa preserva sempre: il registro non dipende dalla sintesi della history.
-            final.AppendLine(evidence.ToPromptText());
-        }
-
-        messages.Add(new ChatMessage(ChatRole.User, final
-            .AppendLine("Dati affidabili del server per questa analisi:")
-            .AppendLine($"- analysisId: {run.AnalysisId}")
-            .AppendLine($"- projectId: {run.ProjectId}")
-            .AppendLine($"- sourceCutoffSequence: {run.SourceCutoffSequence}")
-            .AppendLine("Promemoria: compila le proprietà nell'ordine dello schema; ogni informazione in una sola sezione, con le parole del project manager; "
-                + "negazioni ed esclusioni («non», «niente», «senza», «no») in contextAndScope.excluded; posizioni incompatibili solo in conflicts, mai anche come requisiti o vincoli; "
-                + "openQuestions solo per ciò che il project manager dichiara di non sapere o di non aver deciso; nessuna informazione dei messaggi dell'assistente; non omettere nessuna frase del project manager che porti un fatto, un numero, un nome o un'esclusione; una frase con contrasto («mentre», «invece») resta in una voce sola.")
-            .AppendLine(run.Evidence is null ? "" : "In ogni voce, evidenceKeys elenca gli alias E… delle evidenze che la voce rappresenta; ogni evidenza del registro deve comparire in almeno una voce.")
-            .AppendLine("Produci ora l'unico oggetto JSON AnalysisContent 1.0.0.")
-            .ToString()));
-
+        // Passo singolo: tutto il dialogo e la vista completa nel messaggio finale; incrementale: il primo intervallo e la sua parte del registro.
+        var messages = AnalysisConsolidation.Messages(run, plan, step: 1, prior: null);
         await context.SendMessageAsync(messages, cancellationToken: cancellationToken);
         await context.SendMessageAsync(message, cancellationToken: cancellationToken);
     }
@@ -549,6 +546,13 @@ internal sealed class ValidatePersistAnalysisExecutor(IServiceScopeFactory scope
         // La mappa elemento→evidenze (evidenceKeys) è interna: separata prima della validazione, AnalysisContent 1.0.0 resta il contratto.
         var (content, keys, keyViolations) = AnalysisSchema.SplitEvidenceKeys(text, input.Evidence?.Aliases ?? []);
         var validation = AnalysisContentValidator.ValidateText(content, input.ToValidationContext(), AnalysisActorKind.Ai);
+        // Consolidamento incrementale: l'ultimo passo non può perdere le evidenze già rappresentate dai precedenti (stato nativo del workflow).
+        var lost = AnalysisConsolidation.Lost(
+            await context.ReadStateAsync<List<string>>(AnalysisConsolidation.RepresentedKey, AnalysisConsolidation.StateScope, cancellationToken), keys);
+        if (lost.Count > 0)
+        {
+            keyViolations.Add(AnalysisConsolidation.LostViolation(lost));
+        }
 
         if (!validation.Accepted || keyViolations.Count > 0)
         {

@@ -482,6 +482,10 @@ certezza, citazioni e relazioni con stato aperto/stale). Lo schema del run aggiu
 il validatore li toglie prima della validazione di `AnalysisContent 1.0.0`, che resta il contratto persistito; la mappa elemento→evidenze
 è salvata in `AnalysisEvidenceLinks` nel commit della revisione AI. Un run v2 accodato prima dell'aggiornamento fallisce con
 `workflow_incompatible` (regola esistente: nessun checkpoint incompatibile ripreso).
+Quando dialogo e vista non stanno in una chiamata (nemmeno con la sintesi nativa entro il budget della fase Compaction) il
+consolidamento è incrementale per intervalli di sequenza, ogni passo con originali ed evidenze interi e l'analisi corrente da
+aggiornare (contracts/ai-workflow.md §10.7): nessun limite al numero di evidenze, nessuna sintesi del registro, perdita di evidenze già
+rappresentate rifiutata. Costo: una chiamata di consolidamento per passo, entro la deadline del run (`Execution:AnalysisRunDeadlineSeconds`).
 
 **Estrazione.** Un `ChatClientAgent` MAF (fase `Extraction`, configurazione propria `Ai:Phases:Extraction`, default senza ragionamento,
 4096 token, timeout 150 s) riceve un solo messaggio utente: il messaggio da estrarre, gli originali PM precedenti (più recenti entro il

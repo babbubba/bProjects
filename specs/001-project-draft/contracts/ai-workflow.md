@@ -440,6 +440,18 @@ la mappa, rimuove `evidenceKeys` e valida il resto con le regole di §4. Alias i
 rappresentare ogni evidenza selezionata nella sezione coerente con tipo e polarità, di riportare le alternative aperte solo in
 `conflicts` e di non promuovere `Inferred`/`Hypothesized` a dichiarato; la verifica resta del report di copertura (§10.8).
 
+**Registro oltre il budget: consolidamento incrementale.** Prima di costruire il grafo il server pianifica con i token reali del modello
+(`AnalysisConsolidation.PlanAsync`). Passo singolo (grafo sopra, invariato) se la chiamata sta nel budget della fase Analysis senza
+compattazione oppure con la compattazione nativa, la cui sintesi deve a sua volta stare nel budget della fase Compaction (finestra −
+output − margine). Altrimenti il grafo nativo diventa LoadDialog → agente₁ → passo₁ → agente₂ → … → agenteₙ → ValidatePersist: ogni passo
+copre un intervallo di sequenze entro il cutoff con gli originali interi e le loro evidenze intere (ciascuna in un solo passo; le relazioni
+nel passo della più recente), più l'analisi corrente con `evidenceKeys` (uscita validata del passo precedente, riservata al tetto di
+output della fase). Le evidenze di un messaggio che non stanno in un passo si distribuiscono su più passi ripetendo l'originale; un
+messaggio che non sta con una sola sua evidenza è `context_overflow` esplicito. Ogni passo valida l'uscita come §4 (alias ammessi: quelli
+introdotti fin lì) e non può perdere alias già rappresentati (stato nativo del workflow, nei checkpoint): perdita ⇒ `invalid_agent_output`.
+Nessun limite al numero di evidenze, nessuna sintesi, nessun troncamento; il piano è deterministico (stessa topologia al resume) e ogni
+passo è un superstep con checkpoint, quindi un retry riprende dall'ultimo passo completato entro la stessa deadline del run.
+
 ### 10.8 Verifica di copertura e provenienza (`coverage-v1`)
 
 Input esatti: selezione e vista del run, mappa, revisione AI, revisione target (default: corrente), bozza opzionale (deve derivare

@@ -112,9 +112,10 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
     /// Lo stesso ConversationalAgent in modalità consolidamento (T029): prompt, opzioni di output strutturato e sessione
     /// propri, separati dal dialogo. Nessun ChatHistoryProvider applicativo: la conversazione arriva come messaggi del
     /// grafo (LoadDialog) e la sessione appartiene al checkpoint del workflow. Compattazione nativa sul client, con il budget
-    /// della fase Analysis (le <paramref name="analysisOptions"/> vanno create con la stessa fase).
+    /// della fase Analysis (le <paramref name="analysisOptions"/> vanno create con la stessa fase). Nel consolidamento incrementale ogni
+    /// passo ha un agente proprio (<paramref name="step"/> &gt; 1: id «consolidation-N»), quindi una sessione propria che non accumula i passi.
     /// </summary>
-    public async Task<ChatClientAgent> CreateConsolidationAgentAsync(ChatOptions analysisOptions, CancellationToken ct)
+    public async Task<ChatClientAgent> CreateConsolidationAgentAsync(ChatOptions analysisOptions, CancellationToken ct, int step = 1)
     {
         var options = new ChatOptions
         {
@@ -127,8 +128,14 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
         };
         return new ChatClientAgent(
             await factory.CreateCompactingClientAsync(ConsolidationInstructions, AiPhase.Analysis, ct),
-            new ChatClientAgentOptions { Id = ConsolidationAgentId, Name = AgentName, ChatOptions = options });
+            new ChatClientAgentOptions { Id = ConsolidationStepAgentId(step), Name = AgentName, ChatOptions = options });
     }
+
+    /// <summary>Id dell'agente del passo: il primo resta «consolidation» (grafo a passo singolo invariato).</summary>
+    public static string ConsolidationStepAgentId(int step) => step == 1 ? ConsolidationAgentId : $"{ConsolidationAgentId}-{step}";
+
+    /// <summary>Contatore e regole di budget del modello interno, per pianificare il consolidamento.</summary>
+    public AgentFactory Factory => factory;
 
     private static string LoadPrompt() => LoadPrompt("conversation.md");
 

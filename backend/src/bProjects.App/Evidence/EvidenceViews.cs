@@ -347,53 +347,34 @@ public sealed record EvidenceSelectionView(
     public IReadOnlyList<string> Aliases => [.. Evidences.Select(e => e.Alias)];
 
     /// <summary>Testo per il consolidamento: compatto, stabile, senza id interni delle evidenze (gli alias bastano al modello).</summary>
-    public string ToPromptText()
+    public string ToPromptText() => ToPromptText(null, null);
+
+    /// <summary>
+    /// Come <see cref="ToPromptText()"/> per una parte del consolidamento incrementale: le sole evidenze di <paramref name="aliases"/>,
+    /// le relazioni la cui evidenza più recente è fra queste (l'altra è già stata vista in un passo precedente o in questo) e i
+    /// messaggi senza evidenze di <paramref name="sequences"/>. Null = tutto. Ogni evidenza resta intera: nessun testo è troncato.
+    /// </summary>
+    public string ToPromptText(IReadOnlyCollection<string>? aliases, IReadOnlyCollection<long>? sequences)
     {
         var text = new StringBuilder()
             .AppendLine("Registro delle evidenze selezionate per questa analisi (versioni congelate). Ogni evidenza è un'interpretazione")
             .AppendLine("strutturata della frase PM citata, che resta l'autorità; usala per non perdere fatti, qualificatori, negazioni e legami.");
-        foreach (var e in Evidences)
+        foreach (var e in Evidences.Where(e => aliases is null || aliases.Contains(e.Alias)))
         {
-            var message = Items.First(i => i.MessageId == e.MessageId);
-            text.Append(e.Alias).Append(" · messaggio sequenza ").Append(e.Sequence.ToString(CultureInfo.InvariantCulture))
-                .Append(" (id ").Append(message.MessageId).Append(") · ").Append(e.Kind).Append(" · ").Append(e.Polarity)
-                .Append(" · ").Append(e.Certainty).AppendLine();
-            text.Append("  enunciato: ").AppendLine(e.Statement);
-            var s = e.Content.Structure;
-            var parts = new[]
-            {
-                ("soggetto", s.Subject), ("azione", s.Action), ("oggetto", s.Object), ("ambito", s.Scope), ("scopo", s.Purpose),
-                ("strumento", s.Instrument), ("canale", s.Channel), ("destinatario", s.Recipient),
-            }.Where(p => p.Item2 is not null).Select(p => $"{p.Item1}: {p.Item2}").ToList();
-            if (parts.Count > 0)
-            {
-                text.Append("  ").AppendLine(string.Join("; ", parts));
-            }
-
-            if (e.Content.Qualifiers.Count > 0)
-            {
-                text.Append("  qualificatori: ").AppendLine(string.Join("; ", e.Content.Qualifiers.Select(q => $"{q.Type} «{q.Text}»")));
-            }
-
-            foreach (var span in e.Content.Sources)
-            {
-                text.Append("  citazione ").Append(span.Role == EvidenceSourceRole.Primary ? "" : $"({span.Role}, sequenza {span.Sequence}) ")
-                    .Append('«').Append(span.Quote).AppendLine("»");
-            }
+            text.Append(EvidenceBlock(e));
         }
 
-        if (Relations.Count > 0)
+        var relations = Relations.Where(r => aliases is null || aliases.Contains(RelationOwner(r))).ToList();
+        if (relations.Count > 0)
         {
             text.AppendLine("Relazioni fra evidenze:");
-            foreach (var r in Relations)
+            foreach (var r in relations)
             {
-                text.Append("- ").Append(r.FromAlias).Append(' ').Append(r.Type).Append(' ').Append(r.ToAlias)
-                    .Append(r.Basis == EvidenceRelationBasis.Declared ? " (dichiarata dal PM)" : " (inferita, da verificare)")
-                    .AppendLine(r.Open ? " — conflitto aperto: le posizioni restano alternative" : "");
+                text.Append(RelationLine(r));
             }
         }
 
-        var empty = Items.Where(i => i.EvidenceCount == 0).ToList();
+        var empty = Items.Where(i => i.EvidenceCount == 0 && (sequences is null || sequences.Contains(i.Sequence))).ToList();
         if (empty.Count > 0)
         {
             text.AppendLine("Messaggi PM senza evidenze (esito validato): " + string.Join("; ",
@@ -401,5 +382,66 @@ public sealed record EvidenceSelectionView(
         }
 
         return text.ToString();
+    }
+
+    /// <summary>Blocco di testo di una evidenza nella vista (intestazione, enunciato, struttura, qualificatori, citazioni).</summary>
+    public string EvidenceBlock(ViewEvidence e)
+    {
+        var text = new StringBuilder();
+        var message = Items.First(i => i.MessageId == e.MessageId);
+        text.Append(e.Alias).Append(" · messaggio sequenza ").Append(e.Sequence.ToString(CultureInfo.InvariantCulture))
+            .Append(" (id ").Append(message.MessageId).Append(") · ").Append(e.Kind).Append(" · ").Append(e.Polarity)
+            .Append(" · ").Append(e.Certainty).AppendLine();
+        text.Append("  enunciato: ").AppendLine(e.Statement);
+        var s = e.Content.Structure;
+        var parts = new[]
+        {
+            ("soggetto", s.Subject), ("azione", s.Action), ("oggetto", s.Object), ("ambito", s.Scope), ("scopo", s.Purpose),
+            ("strumento", s.Instrument), ("canale", s.Channel), ("destinatario", s.Recipient),
+        }.Where(p => p.Item2 is not null).Select(p => $"{p.Item1}: {p.Item2}").ToList();
+        if (parts.Count > 0)
+        {
+            text.Append("  ").AppendLine(string.Join("; ", parts));
+        }
+
+        if (e.Content.Qualifiers.Count > 0)
+        {
+            text.Append("  qualificatori: ").AppendLine(string.Join("; ", e.Content.Qualifiers.Select(q => $"{q.Type} «{q.Text}»")));
+        }
+
+        foreach (var span in e.Content.Sources)
+        {
+            text.Append("  citazione ").Append(span.Role == EvidenceSourceRole.Primary ? "" : $"({span.Role}, sequenza {span.Sequence}) ")
+                .Append('«').Append(span.Quote).AppendLine("»");
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>Riga di una relazione nella vista.</summary>
+    public static string RelationLine(ViewRelation r) =>
+        $"- {r.FromAlias} {r.Type} {r.ToAlias}"
+        + (r.Basis == EvidenceRelationBasis.Declared ? " (dichiarata dal PM)" : " (inferita, da verificare)")
+        + (r.Open ? " — conflitto aperto: le posizioni restano alternative" : "") + Environment.NewLine;
+
+    /// <summary>L'evidenza più recente (ordine degli alias) di una relazione: la relazione si mostra con lei, quando l'altra è già nota.</summary>
+    public string RelationOwner(ViewRelation r)
+    {
+        var from = IndexOf(r.FromAlias);
+        var to = IndexOf(r.ToAlias);
+        return from >= to ? r.FromAlias : r.ToAlias;
+    }
+
+    private int IndexOf(string alias)
+    {
+        for (var i = 0; i < Evidences.Count; i++)
+        {
+            if (Evidences[i].Alias == alias)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 }
