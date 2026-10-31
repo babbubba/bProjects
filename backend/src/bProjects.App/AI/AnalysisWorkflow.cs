@@ -52,22 +52,77 @@ public static class AnalysisSchema
         properties["analysisId"] = Only("string", input.AnalysisId.ToString());
         properties["projectId"] = Only("string", input.ProjectId.ToString());
         properties["sourceCutoffSequence"] = Only("integer", input.SourceCutoffSequence);
-        if (input.Dialog.Count > 0)
+        // Le fonti sono i soli messaggi del PM (quelli dell'assistente sono contesto e non provano fatti): la grammatica elenca una
+        // fonte per messaggio, con id, messageId e ruolo già determinati, così il modello non può alterare un id né attribuire a un
+        // messaggio dell'assistente il ruolo user (osservato: tutte le fonti «user», messageRole incoerente e run invalid_agent_output).
+        var users = input.Dialog.Where(m => m.Role == AnalysisMessageRole.User).ToList();
+        if (users.Count > 0)
         {
             var messages = new System.Text.Json.Nodes.JsonObject
             {
                 ["type"] = "string",
-                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. input.Dialog.Select(m => System.Text.Json.Nodes.JsonValue.Create(m.Id.ToString()))]),
+                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. users.Select(m => System.Text.Json.Nodes.JsonValue.Create(m.Id.ToString()))]),
             };
-            var source = properties["sources"]!["items"]!["properties"]!;
-            source["id"] = messages.DeepClone();
-            source["messageId"] = messages.DeepClone();
+            properties["sources"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "array",
+                ["prefixItems"] = new System.Text.Json.Nodes.JsonArray([.. users.Select(m => (System.Text.Json.Nodes.JsonNode)MessageSource(m.Id))]),
+                ["minItems"] = users.Count,
+                ["maxItems"] = users.Count,
+            };
             ConstrainEvidence(node, messages);
         }
 
+        Reorder(node);
         using var document = JsonDocument.Parse(node.ToJsonString());
         return document.RootElement.Clone();
     }
+
+    /// <summary>
+    /// La grammatica impone l'ordine delle proprietà dello schema, e il modello scrive nell'ordine in cui le trova: conflitti, lacune
+    /// ed esclusioni precedono le sezioni dei fatti, così quando compila requisiti e vincoli ha già collocato altrove le posizioni
+    /// in conflitto, ciò che il PM non sa e ciò che esclude (osservato: le stesse affermazioni ripetute come requisiti o vincoli e
+    /// negazioni finite nei vincoli). L'ordine non cambia il contenuto: il validatore e il DTO non dipendono dall'ordine.
+    /// </summary>
+    private static void Reorder(System.Text.Json.Nodes.JsonNode node)
+    {
+        string[] root = ["schemaVersion", "analysisId", "projectId", "sourceCutoffSequence", "validationState", "sources", "goals", "conflicts",
+            "openQuestions", "contextAndScope", "requirements", "operationalFlows", "constraints", "dependencies", "assumptions"];
+        Sort(node["properties"]!.AsObject(), root);
+        if (node["properties"]!["contextAndScope"]?["properties"] is System.Text.Json.Nodes.JsonObject scope)
+        {
+            Sort(scope, ["excluded", "overview", "included"]);
+        }
+    }
+
+    private static void Sort(System.Text.Json.Nodes.JsonObject properties, string[] order)
+    {
+        var entries = properties.ToList();
+        properties.Clear();
+        foreach (var name in order.Concat(entries.Select(p => p.Key).Except(order)))
+        {
+            if (entries.FirstOrDefault(p => p.Key == name) is { Value: { } value })
+            {
+                properties[name] = value;
+            }
+        }
+    }
+
+    /// <summary>Fonte Message di un messaggio del PM con tutti i campi determinati (stessa forma e ordine di <see cref="AnalysisSource"/>).</summary>
+    private static System.Text.Json.Nodes.JsonObject MessageSource(Guid messageId) => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["id"] = Only("string", messageId.ToString()),
+            ["kind"] = Only("string", nameof(AnalysisSourceKind.Message)),
+            ["messageId"] = Only("string", messageId.ToString()),
+            ["messageRole"] = Only("string", "user"),
+            ["revisionId"] = new System.Text.Json.Nodes.JsonObject { ["type"] = "null" },
+        },
+        ["required"] = new System.Text.Json.Nodes.JsonArray("id", "kind", "messageId", "messageRole", "revisionId"),
+        ["additionalProperties"] = false,
+    };
 
     private static System.Text.Json.Nodes.JsonObject Only<T>(string type, T value) => new()
     {
@@ -309,6 +364,9 @@ internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRu
             .AppendLine($"- analysisId: {run.AnalysisId}")
             .AppendLine($"- projectId: {run.ProjectId}")
             .AppendLine($"- sourceCutoffSequence: {run.SourceCutoffSequence}")
+            .AppendLine("Promemoria: compila le proprietà nell'ordine dello schema; ogni informazione in una sola sezione, con le parole del project manager; "
+                + "negazioni ed esclusioni («non», «niente», «senza», «no») in contextAndScope.excluded; posizioni incompatibili solo in conflicts, mai anche come requisiti o vincoli; "
+                + "openQuestions solo per ciò che il project manager dichiara di non sapere o di non aver deciso; nessuna informazione dei messaggi dell'assistente; non omettere nessuna frase del project manager che porti un fatto, un numero, un nome o un'esclusione; una frase con contrasto («mentre», «invece») resta in una voce sola.")
             .AppendLine("Produci ora l'unico oggetto JSON AnalysisContent 1.0.0.")
             .ToString()));
 

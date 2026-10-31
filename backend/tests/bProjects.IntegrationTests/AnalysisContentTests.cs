@@ -263,11 +263,23 @@ public sealed class AnalysisContentTests
         Assert.Equal([world.ProjectId.ToString()], Enum(properties["projectId"]));
         Assert.Equal(world.Cutoff, Assert.Single(properties["sourceCutoffSequence"]!["enum"]!.AsArray())!.GetValue<long>());
 
-        // Solo i messaggi del progetto fino al cutoff: né quello oltre il cutoff né quello di un altro progetto.
-        string[] dialog = [.. world.Trusted.Messages.Where(m => m.ProjectId == world.ProjectId && m.Sequence <= world.Cutoff).OrderBy(m => m.Sequence).Select(m => m.Id.ToString())];
-        var source = properties["sources"]!["items"]!["properties"]!;
-        Assert.Equal(dialog, Enum(source["id"]));
-        Assert.Equal(dialog, Enum(source["messageId"]));
+        // Solo i messaggi del PM del progetto fino al cutoff (quelli dell'assistente sono contesto, non fonti): né quello oltre il cutoff né
+        // quello di un altro progetto. Le fonti sono una tupla fissa, una per messaggio, con id, messageId e ruolo già determinati.
+        string[] dialog = [.. world.Trusted.Messages.Where(m => m.ProjectId == world.ProjectId && m.Sequence <= world.Cutoff && m.Role == "user")
+            .OrderBy(m => m.Sequence).Select(m => m.Id.ToString())];
+        var sources = properties["sources"]!["prefixItems"]!.AsArray();
+        Assert.Equal(dialog.Length, sources.Count);
+        Assert.Equal(dialog.Length, properties["sources"]!["minItems"]!.GetValue<int>());
+        Assert.Equal(dialog.Length, properties["sources"]!["maxItems"]!.GetValue<int>());
+        for (var i = 0; i < dialog.Length; i++)
+        {
+            var source = sources[i]!["properties"]!;
+            Assert.Equal([dialog[i]], Enum(source["id"]));
+            Assert.Equal([dialog[i]], Enum(source["messageId"]));
+            Assert.Equal(["user"], Enum(source["messageRole"]));
+            Assert.Equal(["Message"], Enum(source["kind"]));
+        }
+
         Assert.Equal(dialog, Enum(properties["goals"]!["items"]!["properties"]!["evidenceRefs"]!["items"]));
 
         // Ogni altro elemento con evidenze è lo stesso tipo (lo schema generato lo riferisce con $ref): nessuna evidenza resta libera.
