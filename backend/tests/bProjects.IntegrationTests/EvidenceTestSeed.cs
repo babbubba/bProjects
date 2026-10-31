@@ -19,9 +19,10 @@ internal static class EvidenceTestSeed
 
     /// <summary>
     /// Accoda un lavoro per ogni messaggio PM senza versione corrente né lavoro aperto (come il backfill) e poi esegue tutti i lavori
-    /// aperti del database, nell'ordine del claim. Ritorna il numero di versioni committate.
+    /// aperti del database, nell'ordine del claim. Ritorna il numero di versioni committate. Con <paramref name="enqueueMissing"/> false
+    /// esegue soltanto i lavori già aperti (per le prove che lasciano di proposito un messaggio senza versione).
     /// </summary>
-    public static async Task<int> CompleteAsync(IServiceProvider services, CancellationToken ct = default)
+    public static async Task<int> CompleteAsync(IServiceProvider services, CancellationToken ct = default, bool enqueueMissing = true)
     {
         using (var scope = services.CreateScope())
         {
@@ -30,7 +31,7 @@ internal static class EvidenceTestSeed
             var ai = scope.ServiceProvider.GetService<IOptions<AiOptions>>()?.Value ?? new AiOptions { ModelId = "seed" };
             var conversations = await db.Conversations.AsNoTracking().Select(c => new { c.Id, c.ProjectId, c.LastSequence }).ToListAsync(ct);
             var now = (await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").ToListAsync(ct)).Single();
-            foreach (var c in conversations)
+            foreach (var c in enqueueMissing ? conversations : [])
             {
                 await new EvidenceLedgerStore(db).EnqueueAsync(c.ProjectId, c.Id, long.MaxValue, onlyMissing: true,
                     ExtractionJobReason.Backfill, null, null, now, policy, EvidenceLedgerStore.ExtractorConfig(ai, policy), ct);
