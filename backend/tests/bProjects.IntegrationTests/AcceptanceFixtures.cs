@@ -88,7 +88,10 @@ internal static class AcceptanceCases
     /// <summary>Prova di limite separata dai casi nominali: dieci messaggi per ~185.000 caratteri (plan.md). Un errore gestito non e' un successo nominale.</summary>
     public static AcceptanceCase Exploratory { get; } = BuildExploratory();
 
-    public static IEnumerable<object[]> NominalIds() => Nominal.Select(c => new object[] { c.Id });
+    /// <summary>Con BPROJECTS_ACCEPTANCE_ONLY (es. «N1») solo i casi il cui id inizia così: per rieseguire un caso senza gli altri.</summary>
+    public static IEnumerable<object[]> NominalIds() => Nominal
+        .Where(c => Environment.GetEnvironmentVariable("BPROJECTS_ACCEPTANCE_ONLY") is not { Length: > 0 } only || c.Id.StartsWith(only, StringComparison.Ordinal))
+        .Select(c => new object[] { c.Id });
 
     // ------------------------------------------------------------------------------------------------ 1. frammenti
 
@@ -335,7 +338,8 @@ internal static class AcceptanceCases
                         with { Parts = [[@"client", @"inser", @"ordini"], [@"client", @"spedizion"]] },
                     F("notifiche", Sec.Requirements, "Le notifiche arrivano via SMS e via email, a scelta del cliente", 2, [@"sms", @"email"], Sec.Constraints),
                     F("sms-consegna", Sec.Requirements, "Gli SMS servono per l'avviso di consegna", 2, [@"sms", @"consegna"], Sec.Constraints, Sec.Flows),
-                    F("integrazione", Sec.Dependencies, "Integrazione obbligatoria in tempo reale con il gestionale ordini Colorweb", 3, [@"colorweb", @"tempo reale", @"obbligatori"], Sec.Requirements, Sec.Included),
+                    F("integrazione", Sec.Dependencies, "Integrazione obbligatoria in tempo reale con il gestionale ordini Colorweb", 3, [@"colorweb", @"tempo reale", @"obbligatori"], Sec.Requirements, Sec.Included)
+                        with { Parts = [[@"colorweb", @"obbligatori"], [@"tempo reale", @"ordini", @"gestionale"]] },
                     F("sso", Sec.Requirements, "Accesso con SSO aziendale del cliente, senza password locali", 4, [@"\bsso\b"], Sec.Constraints, Sec.Flows),
                     F("propri", Sec.Requirements, "I clienti vedono solo i propri ordini", 5, [@"propri", @"ordini"], Sec.Constraints),
                     F("settembre", Sec.Constraints, "Messa online prevista a settembre", 5, [@"settembre"], Sec.Goals),

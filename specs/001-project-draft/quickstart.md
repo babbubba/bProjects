@@ -251,3 +251,21 @@ deve essere registrato. Non utilizzare il PASS documentale come prova runtime.
 Riferimenti: [spec](spec.md), [data model](data-model.md),
 [API](contracts/http-api.md), [contratto AI](contracts/ai-workflow.md),
 [checklist canonica](checklists/requirements.md).
+
+## Esito verifica tecnica T053 PRELIMINARE (2026-10-31, Qwen3.6-35B-Smart, DGX reale)
+
+Commit di partenza `ca945c6` + modifiche di sessione 8 (solo test/documentazione). **Preliminare: T053 resta aperto** perche' T052 non e' superato.
+
+| Verifica | Esito |
+| --- | --- |
+| `dotnet restore` e `dotnet build` | PASS, 0 errori, 0 avvisi |
+| Suite backend senza MafReal (deterministica + Integration su PostgreSQL 18) | PASS 1002, 0 falliti, 1 ignorato (`V7_replay_dump`, richiede traccia V7) |
+| MafReal su DGX (32 test, un solo run, in parallelo su `parallel=1`) | **25 PASS, 7 FAIL, 0 SKIP**; `LocalProviderTests` corretto e ripassato 8/8 (attesa finestra obsoleta); restano: N2, N3, N5 nominali, esplorativo grande, T047 chat ridotta, T047 analisi 10 messaggi grandi (vedi HANDOFF 8.2/8.3) |
+| `npm run test:ci` (Vitest, Node 24.22.1) | PASS 168/168 in 13 file |
+| `npm run test:e2e` (Playwright, desktop-1440 + mobile-390, stack Docker isolato, `E2E_MODEL_MODE=offline`) | 177 PASS, 0 falliti, 33 SKIP (percorsi con modello reale e prove solo desktop) |
+| Docker `up --build --wait`, `migrate`, bootstrap account, riavvio `down`/`up` nei test E2E | PASS (le prove di riavvio desktop sono incluse nei 177) |
+| Persistenza/SSE/idempotenza | coperte dalle suite Integration ed E2E sopra; nessuna prova di crash con modello reale |
+| Nominali reali N1–N5 | **FAIL** (prima esecuzione 0/5; rerun: N1 e Boreale PASS, Aurora FAIL) |
+| Compattazione reale, fasi di produzione | 1 PASS + 1 FAIL (perdita SMS nell'analisi finale) |
+
+Gli SKIP non sono PASS. Nessuna attestazione di SC-001–SC-012: mancano le valutazioni umane.

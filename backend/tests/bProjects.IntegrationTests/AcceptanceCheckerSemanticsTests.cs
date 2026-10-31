@@ -287,6 +287,49 @@ public sealed class AcceptanceCheckerSemanticsTests
         Assert.Equal(weakened, Flags(run.Document($"\n## Dipendenze\n\n- {text}\n"), "colorweb-indebolita"));
     }
 
+    // ------------------------------------------------------------------------------------------------ Colorweb: vincoli distribuiti su voci collegate (sessione 8, ripetizione 3 dello smoke test)
+
+    private const string ColorwebMandatory = "Integrazione obbligatoria con il gestionale ordini Colorweb";
+    private const string ColorwebRealTime = "Gli ordini devono arrivare in tempo reale al gestionale";
+
+    [Theory]
+    [InlineData("Integrazione obbligatoria in tempo reale con il gestionale ordini Colorweb", null, 3, 3, null, "tutti i vincoli nella stessa voce")]
+    [InlineData(ColorwebMandatory, ColorwebRealTime, 3, 3, null, "vincoli distribuiti, stessa fonte, stesso sistema (ripetizione 3)")]
+    [InlineData("Integrazione facoltativa con il gestionale ordini Colorweb", ColorwebRealTime, 3, 3, "omissione", "Colorweb facoltativo")]
+    [InlineData(ColorwebMandatory, "Gli ordini arrivano in modo differito al gestionale", 3, 3, "omissione", "integrazione differita")]
+    [InlineData(ColorwebMandatory, "Gli ordini arrivano al gestionale in batch notturno", 3, 3, "omissione", "integrazione batch")]
+    [InlineData(ColorwebMandatory, "Le notifiche SMS arrivano in tempo reale al cliente", 3, 3, "omissione", "tempo reale di un altro sistema (notifiche)")]
+    [InlineData(ColorwebMandatory, "I dati del listino arrivano in tempo reale al gestionale prezzi", 3, 3, "omissione", "tempo reale di un altro sistema (listino): manca il legame con gli ordini")]
+    [InlineData("Integrazione con il gestionale ordini Colorweb", ColorwebRealTime, 3, 3, "omissione", "obbligatorieta' omessa")]
+    [InlineData(ColorwebMandatory, ColorwebRealTime, 3, 1, "fonte errata", "fonte non pertinente per il tempo reale")]
+    [InlineData(ColorwebMandatory, ColorwebRealTime, 1, 3, "fonte errata", "fonte non pertinente per l'obbligatorieta'")]
+    public void Colorweb_constraints_split_over_linked_items_are_covered_only_when_every_part_is_stated_and_sourced(
+        string dependency, string? requirement, int dependencyFrom, int requirementFrom, string? expectedFailure, string why)
+    {
+        var run = Of(N5, "boreale").Remove("integrazione").Add(Sec.Dependencies, dependency, from: dependencyFrom);
+        if (requirement is not null)
+        {
+            run.Add(Sec.Requirements, requirement, from: requirementFrom);
+        }
+
+        var analysis = run.Analysis();
+        var draft = run.Document(withAi: true);
+
+        if (expectedFailure is null)
+        {
+            Assert.False(Flags(analysis, "integrazione"), $"{why}: {string.Join("; ", analysis.Failures)}");
+            Assert.False(Flags(draft, "integrazione"), $"{why} (bozza): {string.Join("; ", draft.Failures)}");
+        }
+        else
+        {
+            Assert.Contains(analysis.Failures, f => f.StartsWith($"{expectedFailure}: «integrazione»", StringComparison.Ordinal));
+            if (expectedFailure == "omissione")
+            {
+                Assert.Contains(draft.Failures, f => f.StartsWith("omissione nella bozza: «integrazione»", StringComparison.Ordinal));
+            }
+        }
+    }
+
     // ------------------------------------------------------------------------------------------------ barcode: legame perso, distinto da Colorweb
 
     [Fact]

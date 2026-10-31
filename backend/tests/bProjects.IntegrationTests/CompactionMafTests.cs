@@ -169,12 +169,26 @@ public abstract class CompactionScenarios : IAsyncLifetime
     public Task Analysis_with_the_ten_large_messages_of_the_first_manual_test_compacts_instead_of_overflowing() =>
         RunAnalysisAsync(messages: 10, chars: 18_500, observedCase: true);
 
-    private async Task RunAnalysisAsync(int messages, int chars, bool observedCase)
+    /// <summary>
+    /// Regressione T052 dopo il cambio di modello e finestra (sessioni 6-7): soglia ridotta, finestra 131072 e fasi come compose.
+    /// Prova che la sintesi parte con thinking OFF e il consolidamento finale con thinking ON, entro il budget e con originali invariati.
+    /// </summary>
+    [Fact]
+    public Task Analysis_with_production_phases_summarizes_with_thinking_off_and_consolidates_with_thinking_on() =>
+        RunAnalysisAsync(messages: 8, chars: 3200, observedCase: false, productionPhases: true);
+
+    private async Task RunAnalysisAsync(int messages, int chars, bool observedCase, bool productionPhases = false)
     {
         TestEnvironment.RequirePostgres();
         var connection = Connection;
         var services = Services();
         var options = observedCase ? Production(services) : await ReducedAsync(services, ConversationalAgent.ConsolidationInstructions);
+        if (productionPhases)
+        {
+            var phased = TestEnvironment.RequireProductionLikeOptions();
+            options.ContextWindowTokens = phased.ContextWindowTokens;
+            options.Phases = phased.Phases;
+        }
         var texts = Enumerable.Range(0, messages).Select(i => CompactionDialogs.Message(i, chars)).ToList();
 
         await using var host = await CompactionHost.StartAsync(connection, options, NewServer(), chat: false, analysis: true, prepare: true, requestUsage: Real);
@@ -200,6 +214,11 @@ public abstract class CompactionScenarios : IAsyncLifetime
         var summary = Assert.Single(main.Messages, m => m.Text.StartsWith("[Summary]", StringComparison.Ordinal));
         Assert.Equal("assistant", summary.Role);
         Assert.Contains(main.Messages, m => m.Role == "user" && m.Text.Contains("Produci ora l'unico oggetto JSON"));   // l'istruzione finale e' intatta
+        if (productionPhases)
+        {
+            Assert.All(summaries, x => Assert.False(x.Thinking, "la richiesta di compattazione deve avere enable_thinking=false"));
+            Assert.True(main.Thinking, "il consolidamento finale deve avere enable_thinking=true");
+        }
 
         // Gli identificativi di fonte del primo messaggio (sintetizzato) restano nella sintesi: l'analisi puo' ancora citarlo.
         var first = before[0];

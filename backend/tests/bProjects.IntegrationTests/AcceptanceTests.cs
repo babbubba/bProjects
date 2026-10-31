@@ -537,7 +537,8 @@ internal static class AcceptanceRunner
     internal static string ErrorOf(JsonElement terminal) =>
         terminal.ValueKind != JsonValueKind.Object || !terminal.TryGetProperty("error", out var error) || error.ValueKind == JsonValueKind.Null
             ? $"stato {(terminal.ValueKind == JsonValueKind.Object ? terminal.GetProperty("status").GetString() : "sconosciuto")}, nessun errore"
-            : $"{error.GetProperty("code").GetString()}";
+            : $"{error.GetProperty("code").GetString()}"
+                + (error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String ? $" [{message.GetString()}]" : "");
 
     private static async Task<T> ScalarAsync<T>(AcceptanceEnv env, string sql, params (string Name, object Value)[] parameters)
     {
@@ -909,7 +910,7 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
     [MemberData(nameof(CaseIds))]
     public async Task The_real_model_meets_the_annotated_expectations_of_the_nominal_case(string caseId)
     {
-        var options = TestEnvironment.RequireDgxOptions();
+        var options = TestEnvironment.RequireProductionLikeOptions();
         TestEnvironment.RequirePostgres();
         var testCase = AcceptanceCases.Nominal.Single(c => c.Id == caseId);
 
@@ -918,6 +919,7 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         CallCounter? counter = null;
         await using var app = await ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
         {
+            services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
             var agent = new ConversationalAgent(factory, model.CreateChatOptions(temperature: 0.2f));
             services.AddSingleton(agent);
             services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
@@ -935,6 +937,37 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         foreach (var run in runs)
         {
             TestContext.Current.SendDiagnosticMessage($"T052 reale {caseId}/{run.Summary()}");
+        }
+
+        // Telemetria per chiamata (modello, fase, tentativo, durata, token, finish_reason, thinking richiesto/effettivo): una riga per chiamata.
+        await using (var connection = new NpgsqlConnection(_database.ConnectionString))
+        {
+            await connection.OpenAsync(Ct);
+            await using var command = new NpgsqlCommand(
+                """
+                SELECT "ProjectId", "Phase", "Attempt", "ModelId", "DurationMs", "PromptTokens", "CompletionTokens", "CachedTokens", "FinishReason",
+                       "ReasoningRequested", "ReasoningEffective", "MaxOutputTokensRequested", "State"
+                FROM "InferenceCalls" ORDER BY "StartedAt"
+                """, connection);
+            await using var reader = await command.ExecuteReaderAsync(Ct);
+            var lines = new List<string>();
+            while (await reader.ReadAsync(Ct))
+            {
+                string Col(int i) => reader.IsDBNull(i) ? "n/d" : Convert.ToString(reader.GetValue(i), System.Globalization.CultureInfo.InvariantCulture)!;
+                lines.Add($"progetto={Col(0)[..8]} fase={Col(1)} tentativo={Col(2)} modello={Col(3)} ms={Col(4)} prompt={Col(5)} completion={Col(6)} cache={Col(7)} "
+                    + $"finish={Col(8)} thinking_richiesto={Col(9)} effettivo={Col(10)} maxOut={Col(11)} stato={Col(12)}");
+            }
+
+            foreach (var line in lines)
+            {
+                TestContext.Current.SendDiagnosticMessage($"T052 chiamata {caseId} {line}");
+            }
+
+            if (Environment.GetEnvironmentVariable("BPROJECTS_ACCEPTANCE_EXPORT_DIR") is { Length: > 0 } root)
+            {
+                Directory.CreateDirectory(Path.Combine(root, caseId));
+                File.WriteAllLines(Path.Combine(root, caseId, "telemetria-chiamate.txt"), lines);
+            }
         }
 
         Assert.All(runs, run => Assert.True(run.Passed, $"{caseId}/{run.Script.Key}: " + string.Join("; ", run.Findings.Failures)));

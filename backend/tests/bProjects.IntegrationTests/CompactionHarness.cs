@@ -13,7 +13,7 @@ namespace bProjects.IntegrationTests;
 
 /// <summary>Una richiesta di completamento arrivata al server del modello, come l'ha vista la rete (nessun contenuto nei log).</summary>
 internal sealed record ModelCall(
-    bool Summarizer, IReadOnlyList<(string Role, string Text)> Messages, int? PromptTokens, int Status, bool Stream, bool Structured)
+    bool Summarizer, IReadOnlyList<(string Role, string Text)> Messages, int? PromptTokens, int Status, bool Stream, bool Structured, bool? Thinking = null)
 {
     public IEnumerable<string> Texts => Messages.Select(m => m.Text);
 }
@@ -64,7 +64,8 @@ internal sealed class ModelRecorder(HttpMessageHandler inner, bool requestUsage)
             usage.Count > 0 ? int.Parse(usage[^1].Groups[1].Value) : null,
             (int)response.StatusCode,
             stream,
-            root["response_format"] is not null));
+            root["response_format"] is not null,
+            root["chat_template_kwargs"]?["enable_thinking"]?.GetValue<bool>()));
         return response;
     }
 }
@@ -255,7 +256,13 @@ internal sealed class CompactionHost : IAsyncDisposable
             if (analysis)
             {
                 services.AddSingleton(sp => new AnalysisWorkflow(
-                    sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
+                    sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis)));
+            }
+
+            // Come compose: il consolidamento con ragionamento ha una deadline di run propria (senza override resta 180 s come prima).
+            if (options.Phases.Analysis.RequestTimeoutSeconds is not null)
+            {
+                services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
             }
         });
         return new CompactionHost(app, model, recorder, options);

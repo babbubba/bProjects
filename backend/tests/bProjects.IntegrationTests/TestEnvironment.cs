@@ -44,9 +44,33 @@ public static class TestEnvironment
             Endpoint = endpoint.ToString(),
             ApiKey = DgxApiKey!,
             ModelId = DgxModel!,
+            ContextWindowTokens = 131072,   // ctx-size del profilo Qwen3.6-35B-Smart (parallel=1), come infra/compose.yaml
             Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml (AI_ANALYSIS_MAX_OUTPUT_TOKENS)
         };
     }
+
+    /// <summary>
+    /// Opzioni AI come i default di <c>infra/compose.yaml</c> (sessioni 6-7): finestra 131072, chat/documento/compattazione con thinking OFF e
+    /// 4096 token, consolidamento con thinking ON, 32768 token e timeout 900 s. Il modello viene dalla variabile d'ambiente
+    /// (per T052: Qwen3.6-35B-Smart). Usata dalle prove di accettazione; gli altri MafReal restano su <see cref="RequireDgxOptions"/>.
+    /// </summary>
+    public static AiOptions RequireProductionLikeOptions()
+    {
+        var options = RequireDgxOptions();
+        options.ContextWindowTokens = 131072;
+        options.MaxOutputTokens = 4096;
+        options.EnableThinking = false;
+        options.Phases.Chat.EnableThinking = false;
+        options.Phases.Document.EnableThinking = false;
+        options.Phases.Compaction.EnableThinking = false;
+        options.Phases.Analysis.EnableThinking = true;
+        options.Phases.Analysis.MaxOutputTokens = 32768;
+        options.Phases.Analysis.RequestTimeoutSeconds = 900;
+        return options;
+    }
+
+    /// <summary>Deadline del run di analisi come compose (1200 s); le altre fasi restano a 180 s.</summary>
+    public const int ProductionAnalysisRunDeadlineSeconds = 1200;
 
     public static string RequirePostgres()
     {

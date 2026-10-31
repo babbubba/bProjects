@@ -880,3 +880,31 @@ Evidenze (fuori dal repository, senza segreti): `C:\source\repos\babbubba\smoke-
 
 ## 7.7 Raccomandazione
 **Pronto per la validazione finale**, con tre riserve: (1) verificare almeno un secondo caso (magazzino o ferie) e una conversazione abbastanza lunga da far scattare la compattazione; (2) decidere se rendere il verificatore tollerante alla separazione «obbligatoria»/«tempo reale» su due voci (`parts`) o accettarla come variabilità (non modificato qui); (3) i tempi (114–141 s, 6,8–8,5 k token) stanno nei 180 s nominali ma con margine non ampio e ragionamento variabile: la deadline di sicurezza a 1200 s va mantenuta.
+
+---
+
+# Sessione 8 (Sonnet) — accettazione finale T052/T053, verificatore Colorweb, compattazione reale — 2026-10-31
+
+**Esito: T052 NON superato, T053 solo preliminare. Nessun merge.** Modello `Qwen3.6-35B-Smart`, configurazione di produzione (chat/compattazione/documento thinking OFF, analisi thinking ON, 32768 token, timeout 900 s, deadline di run 1200 s, finestra 131072). Evidenze locali (non versionate): `C:\sourceeposabbubba	052-evidence\`.
+
+## 8.1 Verificatore Colorweb (ripetizione 3)
+- I JSON originali (`smoke-qwen36/state3.json`) conservano tutte e tre le informazioni: «Integrazione obbligatoria con il gestionale ordini Colorweb» (Dependencies) e «Gli ordini devono arrivare in tempo reale al gestionale» (Requirements), entrambe con fonte = messaggio PM 3 (quello che nomina Colorweb). Non era un'ambiguità: era una formulazione distribuita.
+- Correzione minima: `Parts` sul fatto `integrazione` (`AcceptanceFixtures.cs`): `[colorweb, obbligatori]` + `[tempo reale, ordini, gestionale]`; ogni parte deve avere una voce Declared con la fonte giusta. Testo, `Match`, sezioni e divieti invariati. `acceptance-cases.json` rigenerato. Il checker Markdown usa gli stessi `Parts` (stessa logica, nessuna altra modifica).
+- 10 test nuovi (`Colorweb_constraints_split_over_linked_items_…`, analisi e bozza): stessa voce PASS; distribuito PASS; facoltativo, differito, batch, tempo reale di un altro sistema (notifiche; listino senza legame con gli ordini), obbligatorietà omessa, fonte errata (due direzioni) tutti FAIL. I tre JSON reali ora soddisfano entrambe le parti. Suite checker 202/202.
+
+## 8.2 T052 nominale reale (N1–N5), prima esecuzione, un solo campione per caso
+| Caso | Esito | Causa | Classificazione |
+|---|---|---|---|
+| N1 | FAIL | generazione: `invalid_agent_output` (motivo non registrato: il messaggio non era propagato; ora lo è) | modello/output non valido, **intermittente**: rieseguito da solo → PASS (analisi 137 s, documento 17 s) |
+| N2 | FAIL | «solo email» riscritto come «Le comunicazioni avvengono esclusivamente via email» (perde «notifiche»); la correzione PM prevista non è applicabile (nessuna voce dedicata a «solo responsabile») | errore del modello (allarga l'ambito); checker non modificato |
+| N3 | FAIL | lettore di codici a barre messo in Goals, non legato a carichi/scarichi | errore del modello (legame perso), checker non modificato |
+| N4 | FAIL | analisi 180,6 s (oltre 180 s); 5 e 10 giorni e SSO/email+password affermati come vincoli/requisiti oltre al conflitto Open | errore del modello + limite di tempo superato di 0,6 s |
+| N5 | FAIL | Aurora: «domanda ripetuta» in chat; Boreale: analisi ancora Running a 210 s | modello (Aurora, riprodotto in rerun, con in più un'omissione sulle notifiche); Boreale rerun: PASS |
+Durate: chat 1,9–5,9 s; analisi 90–178 s (completion 5,4–10,6 k token, finish `stop`, 1 tentativo, thinking richiesto/effettivo ON solo per Analysis); documento 12,7–19,4 s (thinking OFF, `stop`). Nessun overflow/timeout infrastrutturale. Nessuna attesa modificata.
+
+## 8.3 Compattazione reale (regressione mirata)
+Nuovo test `Analysis_with_production_phases_…` (soglia ridotta ~6000 token, finestra 131072, fasi di produzione). Verifica sulla rete: richiesta di sintesi `enable_thinking=false`, consolidamento finale `true`, strategia attivata, budget finale entro il limite, originali invariati, SMS/fatturazione/ID fonte nella sintesi. Esiti: **1 FAIL + 1 PASS**: nel FAIL la sintesi conserva SMS ma l'analisi finale non lo riporta in nessuna sezione (perdita nel consolidamento, intermittente). Baseline T047 con Smart: chat a soglia ridotta PASS, analisi a soglia ridotta PASS (thinking OFF). Nel run MafReal completo (suite in parallelo su un DGX con `parallel=1`) i due test T047 chat-ridotta e analisi-10-messaggi sono falliti: non indagati, quindi non verificato se per contesa del DGX o del modello.
+
+## 8.4 Stato
+- T052 resta aperto: 0/5 nominali al primo giro, nessuna valutazione umana (due PM + tecnico) disponibile; il modulo `acceptance/modulo-risultati.md` non è compilato.
+- Strumenti aggiunti ai test: `RequireProductionLikeOptions`, dump telemetria per chiamata, `BPROJECTS_ACCEPTANCE_ONLY`, messaggio d'errore del run nei fallimenti, `Thinking` nel recorder; `RequireDgxOptions` ora con finestra 131072 (l'attesa 32768 era superata).

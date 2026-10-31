@@ -1457,6 +1457,17 @@
                 "colorweb",
                 "tempo reale",
                 "obbligatori"
+              ],
+              "parts": [
+                [
+                  "colorweb",
+                  "obbligatori"
+                ],
+                [
+                  "tempo reale",
+                  "ordini",
+                  "gestionale"
+                ]
               ]
             },
             {
