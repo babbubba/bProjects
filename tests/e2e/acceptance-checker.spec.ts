@@ -108,6 +108,75 @@ test.describe('verificatore dei casi di accettazione (senza stack)', () => {
     });
   }
 
+  // Regressioni dell'audit V7 (stesse regole di AcceptanceCheckerSemanticsTests): soggetto, parti atomiche, qualificatori.
+  const project = (key: string) => acceptanceCases.flatMap((c) => c.projects).find((x) => x.key === key)!;
+  const withItems = (p: ProjectCase, drop: string[], add: [keyof Content, string, number][]) => {
+    const r = ideal(p);
+    const texts = drop.map((k) => p.facts.find((f) => f.key === k)!.text);
+    for (const s of ['goals', 'requirements', 'operationalFlows', 'constraints', 'dependencies'] as const) r.content[s] = r.content[s].filter((i) => !texts.includes(i.text));
+    const sourceOf = (n: number) => {
+      const id = [...r.index].find(([, i]) => i === n)![0];
+      let s = r.content.sources.find((x) => x.messageId === id);
+      if (!s) r.content.sources.push((s = { id: uuid(), kind: 'Message', messageId: id }));
+      return s.id;
+    };
+    for (const [s, text, from] of add) (r.content[s] as Item[]).push({ id: uuid(), text, classification: 'Declared', evidenceRefs: [sourceOf(from)] });
+    return r;
+  };
+  const flagged = (failures: string[], key: string) => failures.some((f) => f.includes(`«${key}»`));
+
+  test('paghe e ratei: errore solo se il nostro sistema ne e\' il soggetto affermato', () => {
+    const ferie = project('ferie');
+    const run = (text: string) => { const r = withItems(ferie, [], [['dependencies', text, 2]]); return checkAnalysis(ferie, r.content, r.index); };
+    expect(flagged(run('Il calcolo di buste paga e ratei di ferie resta nel software paghe'), 'paghe')).toBe(false);
+    expect(flagged(run('Il software paghe calcola le buste paga e i ratei'), 'ratei')).toBe(false);
+    expect(flagged(run('Il portale calcola le buste paga'), 'paghe')).toBe(true);
+    expect(flagged(run('Il PORTALE gestisce i ratei di ferie maturati'), 'ratei')).toBe(true);
+    expect(flagged(run('Il portale calcola le buste paga, che restano nel software paghe'), 'paghe')).toBe(true);
+    expect(flagged(run('Il portale calcola le buste paga e non le trasferte'), 'paghe')).toBe(true);
+    expect(flagged(run('Integrazione con il software paghe per importare i dati'), 'integrazione-paghe')).toBe(true);
+  });
+
+  test('richiesta/approvazione e ordini/spedizione in voci distinte coprono l\'attesa; un soggetto diverso no', () => {
+    const ferie = project('ferie');
+    const split = withItems(ferie, ['richiesta'], [['requirements', 'Il dipendente invia la richiesta di ferie o permessi', 1], ['requirements', 'Il responsabile diretto approva o rifiuta', 1]]);
+    expect(flagged(checkAnalysis(ferie, split.content, split.index), 'richiesta')).toBe(false);
+    const wrong = withItems(ferie, ['richiesta'], [['requirements', 'Il dipendente invia la richiesta di ferie o permessi', 1], ['requirements', 'Il sistema approva o rifiuta automaticamente', 1]]);
+    expect(flagged(checkAnalysis(ferie, wrong.content, wrong.index), 'richiesta')).toBe(true);
+
+    const boreale = project('boreale');
+    const orders = withItems(boreale, ['ordini'], [['requirements', 'I clienti inseriscono gli ordini', 1], ['requirements', 'I clienti seguono la spedizione', 1]]);
+    expect(flagged(checkAnalysis(boreale, orders.content, orders.index), 'ordini')).toBe(false);
+    const courier = withItems(boreale, ['ordini'], [['requirements', 'I clienti inseriscono gli ordini', 1], ['requirements', 'Il corriere gestisce la spedizione', 1]]);
+    expect(flagged(checkAnalysis(boreale, courier.content, courier.index), 'ordini')).toBe(true);
+  });
+
+  test('Colorweb senza qualificatori e\' un dettaglio assente, barcode separato e\' un legame perso; Colorweb indebolita fallisce', () => {
+    const boreale = project('boreale');
+    const bare = withItems(boreale, ['integrazione'], [['dependencies', 'Integrazione con il gestionale ordini Colorweb', 3]]);
+    const colorweb = checkAnalysis(boreale, bare.content, bare.index).find((f) => f.startsWith('omissione: «integrazione»'))!;
+    expect(colorweb).toContain('qualificatore o dettaglio assente');
+    const weak = withItems(boreale, [], [['dependencies', 'Integrazione obbligatoria con Colorweb, ma non in tempo reale', 3]]);
+    expect(flagged(checkAnalysis(boreale, weak.content, weak.index), 'colorweb-indebolita')).toBe(true);
+
+    const magazzino = project('magazzino');
+    const split = withItems(magazzino, ['barcode'], [['goals', 'Gestire le scorte del magazzino ricambi con un lettore di codici a barre', 1], ['requirements', 'I magazzinieri registrano carichi e scarichi', 1]]);
+    const barcode = checkAnalysis(magazzino, split.content, split.index).find((f) => f.startsWith('omissione: «barcode»'))!;
+    expect(barcode).toContain('legame perso fra voci');
+    expect(barcode).not.toContain('qualificatore');
+  });
+
+  test('un fatto tolto dalla correzione PM non e\' un\'omissione della bozza, uno perso dal generatore si', () => {
+    const ferie = project('ferie');
+    const ai = withItems(ferie, ['richiesta'], [['requirements', 'Il dipendente invia la richiesta di ferie o permessi', 1], ['requirements', 'Il responsabile diretto approva o rifiuta la richiesta', 1]]);
+    const confirmed = withItems(ferie, ['richiesta'], [['requirements', 'Il dipendente invia la richiesta di ferie o permessi', 1]]);
+    const { markdown, sourceIds } = idealDraft(ferie, confirmed.content);
+    expect(flagged(checkDraft(ferie, markdown, sourceIds, true, { ai: ai.content, confirmed: confirmed.content }), 'richiesta')).toBe(false);
+    expect(checkDraft(ferie, markdown, sourceIds, true, { confirmed: confirmed.content }).some((f) => f.includes("«richiesta» (assente gia'"))).toBe(true);
+    // stessa bozza, ma la revisione confermata conteneva ancora il fatto: lo ha perso la generazione
+    expect(checkDraft(ferie, markdown, sourceIds, true, { confirmed: ai.content }).some((f) => f.includes('«richiesta» (presente nella revisione confermata: persa nella generazione)'))).toBe(true);
+  });
+
   test('un testo di un altro progetto nell\'analisi e nella bozza e\' rilevato', () => {
     const aurora = acceptanceCases[4].projects[0];
     const a = ideal(aurora);

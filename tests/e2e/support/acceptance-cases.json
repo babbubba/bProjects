@@ -371,6 +371,17 @@
                 "richiest",
                 "approva",
                 "rifiut"
+              ],
+              "parts": [
+                [
+                  "dipendent",
+                  "richiest"
+                ],
+                [
+                  "responsabile",
+                  "approva",
+                  "rifiut"
+                ]
               ]
             },
             {
@@ -591,13 +602,22 @@
               "pattern": "buste paga|paghe",
               "mode": "affirmed",
               "sample": "Il portale calcola le buste paga dei dipendenti",
-              "conflictKey": null
+              "conflictKey": null,
+              "external": "(rest\\w*|riman\\w*|gestit\\w*|calcolat\\w*|competenza|carico|spett\\w*|affidat\\w*)\\b.{0,30}\\bsoftware (delle )?paghe|software (delle )?paghe\\b.{0,30}\\b(calcol\\w*|gestisc\\w*|elabor\\w*)"
             },
             {
               "key": "ratei",
               "pattern": "ratei",
               "mode": "affirmed",
               "sample": "Il portale calcola i ratei di ferie maturati",
+              "conflictKey": null,
+              "external": "(rest\\w*|riman\\w*|gestit\\w*|calcolat\\w*|competenza|carico|spett\\w*|affidat\\w*)\\b.{0,30}\\bsoftware (delle )?paghe|software (delle )?paghe\\b.{0,30}\\b(calcol\\w*|gestisc\\w*|elabor\\w*)"
+            },
+            {
+              "key": "integrazione-paghe",
+              "pattern": "(integra\\w*|interfacc\\w*|sincronizz\\w*|\\bapi\\b|scambi\\w* (di )?dati|import\\w*|esport\\w*|invi\\w* (i dati )?al)[^.]{0,40}software (delle )?paghe|software (delle )?paghe[^.]{0,40}(integra\\w*|interfacc\\w*|sincronizz\\w*|\\bapi\\b|import\\w*|esport\\w*)",
+              "mode": "anywhere",
+              "sample": "Integrazione con il software paghe per importare i ratei",
               "conflictKey": null
             },
             {
@@ -1372,6 +1392,17 @@
               "match": [
                 "ordini",
                 "spedizion"
+              ],
+              "parts": [
+                [
+                  "client",
+                  "inser",
+                  "ordini"
+                ],
+                [
+                  "client",
+                  "spedizion"
+                ]
               ]
             },
             {
@@ -1424,7 +1455,8 @@
               ],
               "match": [
                 "colorweb",
-                "tempo reale"
+                "tempo reale",
+                "obbligatori"
               ]
             },
             {
@@ -1507,6 +1539,13 @@
               "pattern": "password",
               "mode": "affirmed",
               "sample": "Accesso con email e password",
+              "conflictKey": null
+            },
+            {
+              "key": "colorweb-indebolita",
+              "pattern": "colorweb.{0,80}(facoltativ|opzional|non (e )?(obbligatori|necessari)|non (in )?tempo reale|differit|asincron|batch|notturn|periodic|giornalier)|(facoltativ|opzional|non (e )?(obbligatori|necessari)|non (in )?tempo reale|differit|asincron|batch|notturn|periodic|giornalier)\\w*.{0,80}colorweb",
+              "mode": "anywhere",
+              "sample": "Integrazione facoltativa con Colorweb, con invio notturno degli ordini",
               "conflictKey": null
             },
             {

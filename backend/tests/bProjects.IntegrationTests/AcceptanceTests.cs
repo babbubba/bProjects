@@ -382,7 +382,7 @@ internal static class AcceptanceRunner
         }
 
         run.Reached = "bozza";
-        run.Findings.Merge(AcceptanceChecker.CheckDocument(script, run.Markdown ?? "", run.Confirmed, run.CorrectionApplied));
+        run.Findings.Merge(AcceptanceChecker.CheckDocument(script, run.Markdown ?? "", run.Confirmed, run.CorrectionApplied, run.Ai));
 
         // --- Riapertura: originali e risultati identici; revisione AI v1 mai modificata; un solo run per fase, una sola bozza
         var again = await pm.GetFromJsonAsync<JsonElement>($"/api/projects/{project}/draft", Ct);

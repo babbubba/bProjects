@@ -389,7 +389,7 @@ for (const nominal of acceptanceCases) {
       const confirmedView = await getJson<{ currentRevisionId: string; content: Content }>(`/api/projects/${projectId}/analyses/${project.currentAnalysisId}`);
       if (draft.status !== 'Proposed' || draft.approvalStatus !== 'NotApproved') failures.push('bozza non Proposed/NotApproved');
       if (draft.analysisRevisionId !== confirmedView.currentRevisionId || confirmedView.content.validationState !== 'PmConfirmed') failures.push('bozza non legata alla revisione confermata');
-      failures.push(...checkDraft(p, draft.markdown, new Set(confirmedView.content.sources.map((s) => s.id)), true));
+      failures.push(...checkDraft(p, draft.markdown, new Set(confirmedView.content.sources.map((s) => s.id)), true, { ai: aiView.content, confirmed: confirmedView.content }));
 
       const summary = `${p.key}: chat=${timings.chat.map((s) => s.toFixed(1)).join('/')}s analisi=${timings.analysis.toFixed(1)}s generazione=${timings.draft.toFixed(1)}s fallimenti=${failures.length}`;
       exportProject(nominal.id, p, replies, aiView.content, confirmedView.content, draft.markdown, failures, summary);

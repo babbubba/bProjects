@@ -24,8 +24,12 @@ internal enum Sec { Goals, Overview, Included, Excluded, Requirements, Flows, Co
 /// Informazione attesa. <see cref="Text"/> e' la formulazione ideale (usata dall'oracolo e dalle prove del verificatore);
 /// <see cref="Match"/> sono le espressioni regolari (senza accenti, minuscole) che devono combaciare TUTTE con la stessa voce.
 /// <see cref="From"/> sono gli indici (da 1) dei messaggi PM che la sostengono: una voce Declared deve citarne almeno uno.
+/// <see cref="Parts"/> e' una scomposizione esplicita in affermazioni atomiche (soggetto + azione/oggetto) ammessa in alternativa a
+/// <see cref="Match"/>: ogni parte deve combaciare con UNA voce, anche diversa per ciascuna parte. Le parti nel loro insieme contengono
+/// tutte le espressioni di <see cref="Match"/> (nessun qualificatore si perde) e ciascuna nomina il proprio soggetto, cosi' due
+/// frammenti di soggetti diversi non si sommano.
 /// </summary>
-internal sealed record Fact(string Key, Sec Section, string Text, AnalysisClassification Class, int[] From, string[] Match, Sec[]? Also = null)
+internal sealed record Fact(string Key, Sec Section, string Text, AnalysisClassification Class, int[] From, string[] Match, Sec[]? Also = null, string[][]? Parts = null)
 {
     public IReadOnlyList<Sec> Accept => Also is null ? [Section] : [Section, .. Also];
 }
@@ -39,8 +43,13 @@ internal enum ForbidMode
     Anywhere,
 }
 
-/// <summary><paramref name="Sample"/> e' un testo che viola il divieto: serve alle prove del verificatore (mutazioni).</summary>
-internal sealed record Forbid(string Key, string Pattern, ForbidMode Mode, string Sample, string? ConflictKey = null);
+/// <summary>
+/// <paramref name="Sample"/> e' un testo che viola il divieto: serve alle prove del verificatore (mutazioni).
+/// <paramref name="External"/> (solo <see cref="ForbidMode.Affirmed"/>) descrive la responsabilita' che il PM attribuisce a un sistema
+/// esterno (es. «resta nel software paghe»): la proposizione che la contiene non e' un'affermazione sul nostro sistema, purche' il nostro
+/// sistema non vi compaia. Non copre integrazioni o scambi di dati con quel sistema, che restano da vietare a parte.
+/// </summary>
+internal sealed record Forbid(string Key, string Pattern, ForbidMode Mode, string Sample, string? ConflictKey = null, string? External = null);
 
 internal sealed record ConflictSpec(string Key, string Description, string[] AltText, string[] AltMatch, int[][] AltFrom);
 
@@ -62,6 +71,10 @@ internal static class AcceptanceCases
     private const AnalysisClassification D = AnalysisClassification.Declared;
     private const AnalysisClassification I = AnalysisClassification.Inferred;
     private const AnalysisClassification A = AnalysisClassification.Assumed;
+
+    /// <summary>N2, messaggio 2: «quello resta nel software paghe» (responsabilita' esterna, nessuna integrazione dichiarata).</summary>
+    private const string SoftwarePaghe =
+        @"(rest\w*|riman\w*|gestit\w*|calcolat\w*|competenza|carico|spett\w*|affidat\w*)\b.{0,30}\bsoftware (delle )?paghe|software (delle )?paghe\b.{0,30}\b(calcol\w*|gestisc\w*|elabor\w*)";
 
     private static Fact F(string key, Sec sec, string text, int from, string[] match, params Sec[] also) =>
         new(key, sec, text, D, [from], match, also.Length == 0 ? null : also);
@@ -142,7 +155,8 @@ internal static class AcceptanceCases
                 ],
                 [
                     F("goal", Sec.Goals, "Sostituire il foglio Excel di gestione di ferie e permessi dell'ufficio personale", 1, [@"excel", @"ferie"], Sec.Overview),
-                    F("richiesta", Sec.Requirements, "Il dipendente invia una richiesta e il responsabile la approva o la rifiuta", 1, [@"richiest", @"approva", @"rifiut"], Sec.Flows),
+                    F("richiesta", Sec.Requirements, "Il dipendente invia una richiesta e il responsabile la approva o la rifiuta", 1, [@"richiest", @"approva", @"rifiut"], Sec.Flows)
+                        with { Parts = [[@"dipendent", @"richiest"], [@"responsabile", @"approva", @"rifiut"]] },
                     F("dipendenti", Sec.Overview, "Il portale serve circa 120 dipendenti", 1, [@"120"], Sec.Constraints, Sec.Requirements, Sec.Included),
                     F("no-paghe", Sec.Excluded, "Il calcolo delle buste paga non è previsto: resta nel software paghe", 2, [@"buste paga|paghe"]),
                     F("no-ratei", Sec.Excluded, "Il calcolo dei ratei di ferie maturati non è previsto", 2, [@"ratei"]),
@@ -159,8 +173,10 @@ internal static class AcceptanceCases
                 ],
                 [],
                 [
-                    new("paghe", @"buste paga|paghe", ForbidMode.Affirmed, "Il portale calcola le buste paga dei dipendenti"),
-                    new("ratei", @"ratei", ForbidMode.Affirmed, "Il portale calcola i ratei di ferie maturati"),
+                    new("paghe", @"buste paga|paghe", ForbidMode.Affirmed, "Il portale calcola le buste paga dei dipendenti", External: SoftwarePaghe),
+                    new("ratei", @"ratei", ForbidMode.Affirmed, "Il portale calcola i ratei di ferie maturati", External: SoftwarePaghe),
+                    new("integrazione-paghe", @"(integra\w*|interfacc\w*|sincronizz\w*|\bapi\b|scambi\w* (di )?dati|import\w*|esport\w*|invi\w* (i dati )?al)[^.]{0,40}software (delle )?paghe|software (delle )?paghe[^.]{0,40}(integra\w*|interfacc\w*|sincronizz\w*|\bapi\b|import\w*|esport\w*)",
+                        ForbidMode.Anywhere, "Integrazione con il software paghe per importare i ratei"),
                     new("trasferte", @"trasfert", ForbidMode.Affirmed, "Il portale gestisce le trasferte"),
                     new("nativa", @"nativ", ForbidMode.Affirmed, "È prevista un'app mobile nativa"),
                     new("push", @"\bpush\b", ForbidMode.Affirmed, "Il portale invia notifiche push"),
@@ -315,10 +331,11 @@ internal static class AcceptanceCases
                 ],
                 [
                     F("goal", Sec.Goals, "Portale clienti per gli ordini del Colorificio Bianchi", 1, [@"portale", @"ordini"], Sec.Overview),
-                    F("ordini", Sec.Requirements, "I clienti inseriscono gli ordini e ne seguono la spedizione", 1, [@"ordini", @"spedizion"], Sec.Flows),
+                    F("ordini", Sec.Requirements, "I clienti inseriscono gli ordini e ne seguono la spedizione", 1, [@"ordini", @"spedizion"], Sec.Flows)
+                        with { Parts = [[@"client", @"inser", @"ordini"], [@"client", @"spedizion"]] },
                     F("notifiche", Sec.Requirements, "Le notifiche arrivano via SMS e via email, a scelta del cliente", 2, [@"sms", @"email"], Sec.Constraints),
                     F("sms-consegna", Sec.Requirements, "Gli SMS servono per l'avviso di consegna", 2, [@"sms", @"consegna"], Sec.Constraints, Sec.Flows),
-                    F("integrazione", Sec.Dependencies, "Integrazione obbligatoria in tempo reale con il gestionale ordini Colorweb", 3, [@"colorweb", @"tempo reale"], Sec.Requirements, Sec.Included),
+                    F("integrazione", Sec.Dependencies, "Integrazione obbligatoria in tempo reale con il gestionale ordini Colorweb", 3, [@"colorweb", @"tempo reale", @"obbligatori"], Sec.Requirements, Sec.Included),
                     F("sso", Sec.Requirements, "Accesso con SSO aziendale del cliente, senza password locali", 4, [@"\bsso\b"], Sec.Constraints, Sec.Flows),
                     F("propri", Sec.Requirements, "I clienti vedono solo i propri ordini", 5, [@"propri", @"ordini"], Sec.Constraints),
                     F("settembre", Sec.Constraints, "Messa online prevista a settembre", 5, [@"settembre"], Sec.Goals),
@@ -328,6 +345,8 @@ internal static class AcceptanceCases
                 [
                     new("listino", @"listino", ForbidMode.Affirmed, "Il portale gestisce il listino prezzi"),
                     new("password-locali", @"password", ForbidMode.Affirmed, "Accesso con email e password"),
+                    new("colorweb-indebolita", @"colorweb.{0,80}(facoltativ|opzional|non (e )?(obbligatori|necessari)|non (in )?tempo reale|differit|asincron|batch|notturn|periodic|giornalier)|(facoltativ|opzional|non (e )?(obbligatori|necessari)|non (in )?tempo reale|differit|asincron|batch|notturn|periodic|giornalier)\w*.{0,80}colorweb",
+                        ForbidMode.Anywhere, "Integrazione facoltativa con Colorweb, con invio notturno degli ordini"),
                     new("progetto-aurora", @"aurora|verdi|ticket|assistenza|giugno|agenti", ForbidMode.Anywhere, "I ticket dell'assistenza"),
                 ],
                 new Correction(
@@ -437,6 +456,14 @@ internal static class AcceptanceChecker
 
     private static readonly Regex CitationMarker = new(@"\[fonte:[^\]]*\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    // Confini di proposizione per la polarita': punteggiatura forte, avversative, e una coordinata che si apre con una negazione
+    // («calcola le buste paga e non le trasferte»). La virgola semplice NON separa («le buste paga, come i ratei, restano fuori»).
+    private static readonly Regex ClauseBreak = new(
+        @"[.;:!?]|\s(?:ma|mentre|pero|invece|bensi|tuttavia)\s|(?:,|\s(?:e|ed|o|oppure))\s+(?=(?:non|niente|nessun\w*|senza|neanche|no)\b)", RegexOptions.CultureInvariant);
+
+    /// <summary>Il sistema descritto dal progetto come soggetto possibile di un'affermazione.</summary>
+    private static readonly Regex OwnSystem = new(@"\b(portale|sistema|applicazione|app|sito|piattaforma|soluzione)\b", RegexOptions.CultureInvariant);
+
     private static readonly Dictionary<string, Regex> Cache = [];
 
     public static string Norm(string text)
@@ -457,6 +484,39 @@ internal static class AcceptanceChecker
     public static bool HasEstimate(string text) => Estimates.IsMatch(Norm(text));
 
     public static bool Matches(string normalizedText, IEnumerable<string> patterns) => patterns.All(p => Rx(p).IsMatch(normalizedText));
+
+    /// <summary>
+    /// Il fatto e' coperto dai testi (normalizzati): una sola voce soddisfa tutte le espressioni, oppure ogni parte atomica dichiarata
+    /// nelle attese e' soddisfatta da una voce (<see cref="Fact.Parts"/>). Nessuna somma libera di frammenti fra voci.
+    /// </summary>
+    public static bool Covers(string[] match, string[][]? parts, IReadOnlyCollection<string> normalizedTexts) =>
+        normalizedTexts.Any(t => Matches(t, match)) || (parts is not null && parts.All(p => normalizedTexts.Any(t => Matches(t, p))));
+
+    /// <summary>
+    /// Vero se il testo (normalizzato) AFFERMA il divieto: in almeno una proposizione compare il termine vietato senza negazione nella
+    /// stessa proposizione e senza essere attribuito alla responsabilita' esterna dichiarata dal PM (<see cref="Forbid.External"/>) con il
+    /// nostro sistema assente dalla proposizione. Quando il nostro sistema e il termine vietato convivono non negati, il controllo fallisce:
+    /// distinguere «il portale mostra i ratei» da «il portale calcola i ratei» resta alla revisione umana.
+    /// </summary>
+    public static bool Affirms(Forbid forbid, string normalizedText)
+    {
+        foreach (var clause in ClauseBreak.Split(normalizedText))
+        {
+            if (!Rx(forbid.Pattern).IsMatch(clause) || Negation.IsMatch(clause))
+            {
+                continue;
+            }
+
+            if (forbid.External is { } external && Rx(external).IsMatch(clause) && !OwnSystem.IsMatch(Rx(external).Replace(clause, " ")))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
 
     private static Regex Rx(string pattern)
     {
@@ -518,19 +578,25 @@ internal static class AcceptanceChecker
         // Fatti, esclusioni, lacune: presenti nella sezione giusta, con classificazione e fonti corrette.
         foreach (var fact in script.Facts)
         {
-            var candidates = fact.Accept.SelectMany(s => Items(c, s)).Where(i => Matches(Norm(i.Text), fact.Match)).ToList();
-            if (candidates.Count == 0)
+            var accepted = fact.Accept.SelectMany(s => Items(c, s)).ToList();
+            if (!Covers(fact.Match, fact.Parts, accepted.Select(i => Norm(i.Text)).ToList()))
             {
                 var elsewhere = Enum.GetValues<Sec>().Except(fact.Accept)
-                    .Where(s => Items(c, s).Any(i => Matches(Norm(i.Text), fact.Match))).ToList();
+                    .Where(s => Covers(fact.Match, fact.Parts, Items(c, s).Select(i => Norm(i.Text)).ToList())).ToList();
                 f.Failures.Add($"omissione: «{fact.Key}» non presente in {string.Join("/", fact.Accept)}"
-                    + (elsewhere.Count > 0 ? $" (trovata in {string.Join("/", elsewhere)}: sezione sbagliata)" : ""));
+                    + (elsewhere.Count > 0 ? $" (trovata in {string.Join("/", elsewhere)}: sezione sbagliata)" : Closest(fact, c)));
                 continue;
             }
 
+            // Una voce intera, oppure per ogni parte atomica almeno una voce: ciascuna parte deve avere una voce Declared con la fonte giusta.
+            var whole = accepted.Where(i => Matches(Norm(i.Text), fact.Match)).ToList();
+            List<List<AnalysisItem>> groups = whole.Count > 0 || fact.Parts is null
+                ? [whole]
+                : fact.Parts.Select(p => accepted.Where(i => Matches(Norm(i.Text), p)).ToList()).ToList();
+            var candidates = groups.SelectMany(g => g).ToList();
             if (fact.Class == AnalysisClassification.Declared)
             {
-                var good = candidates.Any(i => i.Classification == AnalysisClassification.Declared && Cited(i).Intersect(fact.From).Any());
+                var good = groups.All(g => g.Any(i => i.Classification == AnalysisClassification.Declared && Cited(i).Intersect(fact.From).Any()));
                 if (!good)
                 {
                     var anyDeclared = candidates.Any(i => i.Classification == AnalysisClassification.Declared);
@@ -549,9 +615,16 @@ internal static class AcceptanceChecker
             {
                 foreach (var section in Positive)
                 {
-                    foreach (var item in Items(c, section).Where(i => Matches(Norm(i.Text), pattern) && !Negation.IsMatch(Norm(i.Text))))
+                    foreach (var item in Items(c, section).Where(i => Matches(Norm(i.Text), pattern)))
                     {
-                        f.Failures.Add($"«{forbid.Key}» affermata in {section} (negazione invertita o informazione inventata)");
+                        if (Affirms(forbid, Norm(item.Text)))
+                        {
+                            f.Failures.Add($"«{forbid.Key}» affermata in {section} (negazione invertita o informazione inventata)");
+                        }
+                        else if (section == Sec.Dependencies && forbid.External is not null && !Negation.IsMatch(Norm(item.Text)))
+                        {
+                            f.Notes.Add($"«{forbid.Key}» attribuita a un sistema esterno in Dependencies: responsabilita' esterna, non un'integrazione dichiarata (collocazione da valutare)");
+                        }
                     }
                 }
             }
@@ -612,9 +685,31 @@ internal static class AcceptanceChecker
 
         var expected = script.Facts.Select(x => x.Key).ToHashSet();
         var unexpected = Positive.Concat([Sec.Excluded, Sec.Open, Sec.Assumptions]).Sum(s => Items(c, s)
-            .Count(i => !script.Facts.Any(x => x.Accept.Contains(s) && Matches(Norm(i.Text), x.Match))));
+            .Count(i => !script.Facts.Any(x => x.Accept.Contains(s) && (Matches(Norm(i.Text), x.Match) || (x.Parts ?? []).Any(p => Matches(Norm(i.Text), p))))));
         f.Notes.Add($"voci non corrispondenti ad alcuna attesa: {unexpected} (da valutare: possibili invenzioni o dettagli legittimi); attese={expected.Count}");
         return f;
+    }
+
+    /// <summary>
+    /// Diagnosi di un'omissione: la voce che soddisfa piu' espressioni e, per ciascuna mancante, se compare in un'altra voce (legame perso
+    /// fra voci, es. strumento separato dall'operazione) o in nessuna (qualificatore o dettaglio assente, es. «obbligatoria», «tempo reale»).
+    /// </summary>
+    private static string Closest(Fact fact, AnalysisContent c)
+    {
+        var all = Enum.GetValues<Sec>().SelectMany(s => Items(c, s).Select(i => (Section: s, Item: i, Text: Norm(i.Text)))).ToList();
+        var best = all.Select(x => (x.Section, x.Item, x.Text, Hits: fact.Match.Count(p => Rx(p).IsMatch(x.Text))))
+            .Where(x => x.Hits > 0).OrderByDescending(x => x.Hits).ThenByDescending(x => fact.Accept.Contains(x.Section)).FirstOrDefault();
+        if (best.Item is null)
+        {
+            return " (nessuna voce vicina: fatto assente)";
+        }
+
+        var missing = fact.Match.Where(p => !Rx(p).IsMatch(best.Text))
+            .Select(p => (Pattern: p, Where: all.Where(x => x.Item != best.Item && Rx(p).IsMatch(x.Text)).Select(x => x.Section).Distinct().ToList()))
+            .ToList();
+        var detail = string.Join(", ", missing.Select(m => m.Where.Count > 0 ? $"/{m.Pattern}/ solo in un'altra voce ({string.Join("/", m.Where)})" : $"/{m.Pattern}/ assente ovunque"));
+        var kind = missing.Any(m => m.Where.Count == 0) ? "qualificatore o dettaglio assente" : "legame perso fra voci";
+        return $" (voce piu' vicina in {best.Section}: «{best.Item.Text}»; manca {detail}: {kind})";
     }
 
     public static IEnumerable<string> AllTexts(AnalysisContent c) =>
@@ -677,8 +772,10 @@ internal static class AcceptanceChecker
     }
 
     /// <param name="confirmed">Revisione confermata di input della generazione (fonti valide per le citazioni).</param>
-    /// <param name="resolvedConflictKey">Conflitto risolto dal PM prima della generazione (ne va riportata scelta e motivo).</param>
-    public static AcceptanceFindings CheckDocument(ProjectScript script, string markdown, AnalysisContent confirmed, bool correctionApplied)
+    /// <param name="ai">Analisi prodotta dall'AI prima della correzione PM, se nota: attribuisce un'omissione della bozza all'analisi, alla
+    /// correzione PM o alla generazione. Un fatto presente nell'analisi AI e assente dalla revisione confermata e' stato tolto o riscritto
+    /// dal PM: la bozza segue la revisione (nota, non errore). Senza <paramref name="ai"/> ogni omissione resta un errore.</param>
+    public static AcceptanceFindings CheckDocument(ProjectScript script, string markdown, AnalysisContent confirmed, bool correctionApplied, AnalysisContent? ai = null)
     {
         var f = new AcceptanceFindings();
         if (string.IsNullOrWhiteSpace(markdown))
@@ -691,26 +788,53 @@ internal static class AcceptanceChecker
         var resolve = correctionApplied ? script.Correction.Resolve : null;
 
         // Fatti, esclusioni, lacune e informazioni aggiunte dal PM.
-        var facts = script.Facts.Select(x => (x.Key, x.Section, x.Match, Declared: x.Class == AnalysisClassification.Declared)).ToList();
+        var facts = script.Facts.Select(x => (x.Key, x.Section, x.Match, x.Parts, Declared: x.Class == AnalysisClassification.Declared)).ToList();
         if (correctionApplied)
         {
-            facts.AddRange(script.Correction.Additions.Select(a => (a.Key, a.Section, a.Match, Declared: a.Class == AnalysisClassification.Declared)));
+            facts.AddRange(script.Correction.Additions.Select(a => (a.Key, a.Section, a.Match, Parts: (string[][]?)null, Declared: a.Class == AnalysisClassification.Declared)));
         }
 
+        static List<string> Texts(AnalysisContent content) => AllTexts(content).Select(Norm).ToList();
+        var confirmedTexts = Texts(confirmed);
+        var aiTexts = ai is null ? null : Texts(ai);
+
         var uncited = 0;
-        foreach (var (key, section, match, declared) in facts)
+        foreach (var (key, section, match, parts, declared) in facts)
         {
-            var hits = units.Where(u => Matches(u.Text, match)).ToList();
-            var ok = section switch
+            List<Unit> Ok(string[] patterns)
             {
-                Sec.Excluded => hits.Where(u => u.Region == "excl" || Negation.IsMatch(u.Text)).ToList(),
-                Sec.Open => hits.Where(u => u.Region == "open" || OpenMarker.IsMatch(u.Text)).ToList(),
-                _ => hits,
-            };
-            if (ok.Count == 0)
+                var found = units.Where(u => Matches(u.Text, patterns));
+                return (section switch
+                {
+                    Sec.Excluded => found.Where(u => u.Region == "excl" || Negation.IsMatch(u.Text)),
+                    Sec.Open => found.Where(u => u.Region == "open" || OpenMarker.IsMatch(u.Text)),
+                    _ => found,
+                }).ToList();
+            }
+
+            var hits = units.Where(u => Matches(u.Text, match)).ToList();
+            var ok = Ok(match);
+            if (ok.Count == 0 && parts is not null && parts.Select(Ok).ToList() is var byPart && byPart.All(x => x.Count > 0))
+            {
+                ok = [.. byPart.SelectMany(x => x)];
+            }
+
+            if (ok.Count == 0 && hits.Count > 0)
             {
                 f.Failures.Add($"omissione nella bozza: «{key}»"
-                    + (hits.Count > 0 ? section == Sec.Excluded ? " (presente ma non come esclusione: negazione invertita?)" : " (presente ma non come punto aperto: lacuna trasformata in fatto?)" : ""));
+                    + (section == Sec.Excluded ? " (presente ma non come esclusione: negazione invertita?)" : " (presente ma non come punto aperto: lacuna trasformata in fatto?)"));
+            }
+            else if (ok.Count == 0 && Covers(match, parts, confirmedTexts))
+            {
+                f.Failures.Add($"omissione nella bozza: «{key}» (presente nella revisione confermata: persa nella generazione)");
+            }
+            else if (ok.Count == 0 && aiTexts is not null && Covers(match, parts, aiTexts))
+            {
+                f.Notes.Add($"«{key}» presente nell'analisi AI ma non nella revisione confermata (tolta o riscritta dalla correzione PM): la bozza segue la revisione, da valutare");
+            }
+            else if (ok.Count == 0)
+            {
+                f.Failures.Add($"omissione nella bozza: «{key}» (assente gia' dalla revisione confermata: omissione ereditata dall'analisi)");
             }
             else if (declared && section != Sec.Open && !ok.Any(u => CitationMarker.IsMatch(u.Raw)))
             {
@@ -768,7 +892,7 @@ internal static class AcceptanceChecker
                     break;
                 }
 
-                var exempt = unit.Region == "excl" || Negation.IsMatch(unit.Text)
+                var exempt = unit.Region == "excl" || !Affirms(forbid, unit.Text)
                     || unit.Region == "open" || OpenMarker.IsMatch(unit.Text) || (forbid.ConflictKey is not null && ConflictMarker.IsMatch(unit.Text));
                 if (!exempt)
                 {
@@ -971,6 +1095,17 @@ internal static class AcceptanceE2eData
         static JsonArray Strings(IEnumerable<string> values) => new(values.Select(v => (JsonNode)JsonValue.Create(v)!).ToArray());
         static string Key(Sec s) => s switch { Sec.Flows => "flows", Sec.Open => "questions", _ => s.ToString().ToLowerInvariant() };
 
+        // Campi facoltativi (parts, external) solo dove annotati: il file resta leggibile e il diff limitato alle attese toccate.
+        static JsonObject Optional(JsonObject o, string name, JsonNode? value)
+        {
+            if (value is not null)
+            {
+                o[name] = value;
+            }
+
+            return o;
+        }
+
         var root = new JsonObject
         {
             ["note"] = "Generato da AcceptanceFixtures.cs (AcceptanceE2eData). Non modificare a mano: BPROJECTS_ACCEPTANCE_REGENERATE=1 dotnet test --filter-method *e2e_data*",
@@ -983,7 +1118,7 @@ internal static class AcceptanceE2eData
                     ["key"] = p.Key,
                     ["name"] = p.Name,
                     ["messages"] = Strings(p.Messages),
-                    ["facts"] = new JsonArray(p.Facts.Select(f => (JsonNode)new JsonObject
+                    ["facts"] = new JsonArray(p.Facts.Select(f => (JsonNode)Optional(new JsonObject
                     {
                         ["key"] = f.Key,
                         ["section"] = Key(f.Section),
@@ -992,7 +1127,7 @@ internal static class AcceptanceE2eData
                         ["declared"] = f.Class == AnalysisClassification.Declared,
                         ["from"] = new JsonArray(f.From.Select(i => (JsonNode)JsonValue.Create(i)!).ToArray()),
                         ["match"] = Strings(f.Match),
-                    }).ToArray()),
+                    }, "parts", f.Parts is null ? null : new JsonArray(f.Parts.Select(part => (JsonNode)Strings(part)).ToArray()))).ToArray()),
                     ["conflicts"] = new JsonArray(p.Conflicts.Select(k => (JsonNode)new JsonObject
                     {
                         ["key"] = k.Key,
@@ -1001,14 +1136,14 @@ internal static class AcceptanceE2eData
                         ["altFrom"] = new JsonArray(k.AltFrom.Select(a => (JsonNode)new JsonArray(a.Select(i => (JsonNode)JsonValue.Create(i)!).ToArray())).ToArray()),
                         ["altMatch"] = Strings(k.AltMatch),
                     }).ToArray()),
-                    ["forbids"] = new JsonArray(p.Forbids.Select(x => (JsonNode)new JsonObject
+                    ["forbids"] = new JsonArray(p.Forbids.Select(x => (JsonNode)Optional(new JsonObject
                     {
                         ["key"] = x.Key,
                         ["pattern"] = x.Pattern,
                         ["mode"] = x.Mode == ForbidMode.Anywhere ? "anywhere" : "affirmed",
                         ["sample"] = x.Sample,
                         ["conflictKey"] = x.ConflictKey,
-                    }).ToArray()),
+                    }, "external", x.External is null ? null : JsonValue.Create(x.External))).ToArray()),
                     ["correction"] = new JsonObject
                     {
                         ["editKey"] = p.Correction.EditKey,
