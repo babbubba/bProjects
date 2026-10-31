@@ -217,7 +217,7 @@ rivalidazione usa la pipeline con registro (T072). Milestone M1–M8 del mandato
 
 ### M5 — Rianalisi, confronto versioni, promozione e backfill
 
-- [ ] T064 [US1] Implementare abbinamento e diff in `backend/src/bProjects.App/Evidence/EvidenceVersionComparer.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceVersionComparerTests.cs`: aggiunte, rimosse, invariate, modificate campo per campo, ambigue, nessuna identità per sole parole comuni. Dipende da T057.
+- [x] T064 [US1] Implementare abbinamento e diff in `backend/src/bProjects.App/Evidence/EvidenceVersionComparer.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceVersionComparerTests.cs`: aggiunte, rimosse, invariate, modificate campo per campo, ambigue, nessuna identità per sole parole comuni. Dipende da T057.
 - [ ] T065 [US1] Implementare rianalisi di messaggio e di progetto, retry autorizzato, backfill idempotente con avanzamento e promozione esplicita con concorrenza ottimistica e impatto sulle relazioni in `backend/src/bProjects.App/Evidence/EvidenceCommands.cs`; test su PostgreSQL `backend/tests/bProjects.IntegrationTests/EvidenceReanalysisTests.cs` (artefatti storici invariati, backfill interrotto/ripreso senza duplicati, promozione concorrente → conflitto). Dipende da T059, T064.
 
 ### M6 — Verifica di copertura e provenienza
