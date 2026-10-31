@@ -14,20 +14,36 @@ le omissioni reali, barcode (legame strumento→operazione perso, analisi + bozz
 assenti, analisi + bozza), con messaggi che le distinguono. N2 ferie passa. Verificato da un test che rilegge la traccia
 (`V7_captured_outputs_keep_only_the_real_omissions`).
 
-## 2. Scoperta che corregge il report V2
+## 2. Anomalia aperta: la correzione PM di N2 elimina «rifiuta» (da verificare in 1B)
 
-Il report attribuisce l'omissione «richiesta» nella bozza N2 alla divisione richiesta/approvazione in due voci. **Non è così.** L'analisi AI
-(proxy 56) conteneva «Il responsabile diretto approva o rifiuta la richiesta», che soddisfa l'attesa intera (il controllo sull'analisi era
-infatti passato). È la **correzione PM simulata dall'harness** a cancellare il fatto: `AcceptanceTests.cs` (`target = ... FirstOrDefault`,
-riga ~439) e `project-draft-success.spec.ts` (~330) modificano la *prima* voce che combacia con l'attesa da correggere («responsabile
-diretto») e la sostituiscono con «Le richieste ... sono approvate esclusivamente dal responsabile diretto del dipendente», perdendo
-«rifiuta». La bozza riproduce fedelmente la revisione confermata.
+Il report attribuisce l'omissione «richiesta» nella bozza N2 alla divisione richiesta/approvazione in due voci. Le tracce dicono altro.
 
-- **Fatto qui:** il verificatore della bozza ora distingue (con l'analisi AI disponibile) un fatto *tolto dalla correzione PM* (nota, non
-  errore) da uno *perso dalla generazione* (errore) e da uno *già assente dall'analisi* (errore ereditato).
-- **Non fatto (fuori ambito, proposto come seguito):** scegliere nell'harness la voce da correggere evitando quelle che portano anche altri
-  fatti attesi. Finché non si fa, ogni run reale di N2 può produrre la nota ««richiesta» presente nell'analisi AI ma non nella revisione
-  confermata».
+**Fatti osservati (traccia V7):**
+- L'analisi AI (proxy 56) contiene, fra i requisiti, «Il dipendente invia la richiesta di ferie o permessi» e «Il responsabile diretto approva
+  o rifiuta la richiesta». La seconda voce soddisfa da sola l'attesa `richiesta` (`richiest` + `approva` + `rifiut`): il controllo
+  sull'analisi era infatti passato. Non c'è una voce separata sull'esclusività («solo il responsabile diretto»).
+- La correzione prevista dalla fixture riguarda l'attesa `solo-responsabile` (`Match = ["responsabile diretto"]`). L'harness modifica la
+  **prima** voce che combacia: `AcceptanceTests.cs` (`target = ... FirstOrDefault`, riga ~439); il percorso browser
+  `project-draft-success.spec.ts` (~330-336) usa la stessa regola. Quella voce era «Il responsabile diretto approva o rifiuta la richiesta»,
+  sostituita per intero con «Le richieste di ferie e permessi sono approvate esclusivamente dal responsabile diretto del dipendente».
+- Nella revisione confermata (e quindi nella bozza, che la riproduce fedelmente) «rifiuta» non compare più.
+
+**Due interpretazioni possibili, non ancora decise:**
+
+| | A. Modifica intenzionale dei requisiti | B. Errore dell'harness nell'individuare la voce |
+|---|---|---|
+| Lettura | La correzione PM è autorevole: il PM ha riscritto la voce sull'approvazione e confermato la revisione; la bozza deve seguirla. | La correzione voleva riformulare l'esclusività dell'approvazione, non cancellare il rifiuto; l'harness ha colpito una voce che portava anche un altro fatto atteso. |
+| Indizi a favore | Il server tratta la revisione confermata come unico input della generazione; l'harness esegue esattamente la correzione scritta nella fixture. | `casi-e-attese.md` descrive la correzione come «Modificare la voce «Le richieste sono approvate solo dal responsabile diretto»…», cioè una voce sull'esclusività che l'AI non aveva prodotto; un PM reale avrebbe probabilmente conservato «approva o rifiuta». |
+| Conseguenza sul gold set | Incoerenza da risolvere: dopo la correzione la fixture si aspetta ancora `rifiut` nella bozza; l'autore dovrebbe dichiarare se la correzione toglie il rifiuto. | Gold set coerente; va corretto l'harness (scelta della voce, o correzione che non sostituisca l'intera voce). |
+| Comportamento del checker in `66205ea` | Corretto: nota ««richiesta» presente nell'analisi AI ma non nella revisione confermata», nessun errore. | La stessa nota **maschera** un difetto dell'harness come esito accettabile della bozza. |
+
+**Punti da verificare in 1B, senza presupporre A o B:**
+1. Che l'analisi del proxy 56 e la revisione confermata del proxy 61 siano come descritte sopra.
+2. Quale interpretazione è coerente con fixture, `casi-e-attese.md` e contratto della correzione PM; la decisione spetta all'autore.
+3. Se la regola del checker «presente nell'analisi AI, assente nella confermata ⇒ nota» è troppo permissiva in generale: oggi vale per
+   qualunque fatto, non solo per quelli toccati dalla correzione prevista.
+
+Il checker non è stato cambiato per propendere verso una delle due letture oltre a quanto descritto; l'harness non è stato toccato.
 
 ## 3. Modifiche (diff)
 
@@ -125,7 +141,7 @@ Atteso: nessun nuovo fallimento rispetto alla baseline; non eseguita in questa s
 | Progetto | Prima (V7) | Dopo |
 |---|---|---|
 | officina | PASS | PASS |
-| ferie | FAIL, 5 (4 paghe/ratei, 1 richiesta) | PASS; note: «richiesta» tolta dalla correzione PM, responsabilità esterna in Dependencies |
+| ferie | FAIL, 5 (4 paghe/ratei, 1 richiesta) | PASS; note: «richiesta» tolta dalla correzione PM (anomalia aperta, sezione 2), responsabilità esterna in Dependencies |
 | magazzino | FAIL, 2 | FAIL, 2: `omissione: «barcode» … legame perso fra voci` + bozza `… (assente gia' dalla revisione confermata …)` |
 | fornitori | PASS | PASS |
 | aurora | PASS | PASS |
@@ -145,7 +161,8 @@ Atteso: nessun nuovo fallimento rispetto alla baseline; non eseguita in questa s
 
 ## 7. Seguiti proposti (non eseguiti)
 
-1. Harness: scegliere la voce da correggere che combacia con l'attesa da modificare **e con nessun'altra attesa** (`AcceptanceTests.cs`,
-   `project-draft-success.spec.ts`), poi ripetere N2 sul DGX.
+1. Decidere l'anomalia della sezione 2 (A o B). Solo se B: correggere la scelta della voce nell'harness (`AcceptanceTests.cs`,
+   `project-draft-success.spec.ts`) e ripetere N2 sul DGX; se A: chiarire nella fixture l'effetto della correzione su `richiesta`.
+   In entrambi i casi rivalutare la regola «tolta dalla correzione PM ⇒ nota» del checker.
 2. Rieseguire i sei casi reali con questo verificatore (A1 del protocollo) prima di confrontare prompt V8 (B).
 3. Estendere le annotazioni dei qualificatori (`solo`, `almeno`, eccezioni) ad altri casi: oggi sono coperti solo dove annotati.
