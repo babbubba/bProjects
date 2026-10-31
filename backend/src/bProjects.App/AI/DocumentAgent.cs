@@ -25,7 +25,7 @@ public sealed class DocumentAgent(AgentFactory factory, ChatOptions chatOptions)
     /// <summary>Id stabile dell'agente nel grafo project-document-v1 (identità richiesta dal resume).</summary>
     public const string AgentId = "document";
 
-    public const string PromptVersion = "document-v1";
+    public const string PromptVersion = "document-v2";
 
     /// <summary>Id nativo dell'executor che ospita l'agente: «{Name}_{Id}» come assegnato da MAF.</summary>
     public const string HostExecutorId = $"{AgentName}_{AgentId}";

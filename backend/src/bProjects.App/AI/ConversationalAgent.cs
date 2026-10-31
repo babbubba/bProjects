@@ -37,7 +37,7 @@ public interface IChatTurnCommitter
 public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOptions)
 {
     public const string AgentName = "ConversationalAgent";
-    public const string PromptVersion = "conversation-v1";
+    public const string PromptVersion = "conversation-v2";
 
     /// <summary>Versione della configurazione di chat risolta: cambia con prompt, modello o limiti e invalida gli snapshot.</summary>
     public const string ChatConfigVersion = PromptVersion;
@@ -101,7 +101,7 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
     /// <summary>Id stabile dell'agente di consolidamento nel grafo project-analysis-v2 (identità richiesta dal resume).</summary>
     public const string ConsolidationAgentId = "consolidation";
 
-    public const string ConsolidationPromptVersion = "analysis-v1";
+    public const string ConsolidationPromptVersion = "analysis-v2";
 
     private static readonly Lazy<string> AnalysisPrompt = new(() => LoadPrompt("analysis.md"));
 
