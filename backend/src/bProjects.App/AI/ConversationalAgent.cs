@@ -101,7 +101,7 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
     /// <summary>Id stabile dell'agente di consolidamento nel grafo project-analysis-v2 (identità richiesta dal resume).</summary>
     public const string ConsolidationAgentId = "consolidation";
 
-    public const string ConsolidationPromptVersion = "analysis-v2";
+    public const string ConsolidationPromptVersion = "analysis-v3";
 
     private static readonly Lazy<string> AnalysisPrompt = new(() => LoadPrompt("analysis.md"));
 

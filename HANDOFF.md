@@ -385,3 +385,149 @@ prima della correzione (nessun «rifiuta» nell'analisi AI) resta segnalata in a
    altrove (deve restare sicura); due voci dedicate in sezioni diverse (Ambiguous); fatti con `Parts` divisi fra la candidata e un'altra voce.
 4. Verificare la parita' C#/TS dei messaggi (le prove TS confrontano le stringhe esatte dei casi assente e V7).
 5. Valutare se `Ambiguous` per duplicati letterali in sezioni diverse sia troppo severo per i casi reali (nel V7 non si presenta).
+
+---
+
+# Sessione 2A (Opus) — prompt di consolidamento V8 — 2026-10-31
+
+**Base:** `experiment/requirements-quality` @ `35d9468`. **Esito:** una sola variante V8 del prompt di analisi, versione `analysis-v3`, e un
+helper di replay offline della richiesta Boreale V7. Nessuna inferenza DGX, nessun benchmark, nessuna E2E. **Non toccati:** checker, gold set,
+harness PM, `AnalysisContent`, JSON Schema, grafo MAF (`project-analysis-v2`), compattazione, DocumentAgent (`document-v2`), chat
+(`conversation-v2`), database, modello, sampling, reasoning, promemoria finale del messaggio utente (`AnalysisWorkflow.cs` ~367).
+`bProjects_Studio_Affidabilita_V2.md` non è sul disco (come in 1B): ipotesi prese dall'incarico e dalle sezioni 1A–1C.
+
+## 2A.1 Prompt V7 effettivamente inviato
+
+| | V7 (campagna del commit `2a2ef50`) | V8 (questa sessione) |
+|---|---|---|
+| Versione MAF | `analysis-v2` | `analysis-v3` |
+| SHA-256 del system effettivo (risorsa dopo `Trim`, UTF-8) | `25adffa60b229be87f733061b746dd427ef9095accb83dd06b726b5d0d557c98` | `930d9b41223411b22cd87b8df35bcb7c288088fa33de66e06c79466e14e49588` |
+| Lunghezza | 12 327 caratteri, 1 876 parole | 12 874 caratteri (+547), 1 967 parole (+91) |
+| Token del system (Qwen) | **3 086**, misurati: `/tokenize` del proxy, id 44 | **~3 223 stimati** (+~137, in proporzione ai caratteri); non misurati, nessun DGX |
+
+Ricostruzione: il `messages[0].content` della richiesta Boreale catturata (proxy **id 233**, `2026-10-31T12:59:47.837Z`,
+`calls-qwen3.8-flash-next-smart-v7.jsonl`) è identico byte per byte ad `analysis.md` di `2a2ef50` e di `35d9468` (nessun commit successivo
+ha toccato `backend/src`). Il prompt di `main` è diverso (precedente a `2a2ef50`) e non è stato usato. Lo stesso system è nelle sei
+analisi V7 (proxy 56, 114, 215, 233, 291, 349).
+
+## 2A.2 Perché le istruzioni V7 non bastavano (Colorweb)
+
+Messaggio PM: «Integrazione con il gestionale ordini Colorweb: obbligatoria, gli ordini devono arrivare in tempo reale al gestionale.»
+Voce V7 (dependencies): «Integrazione con il gestionale ordini Colorweb». Istruzioni V7 pertinenti e loro limite:
+
+1. «Le restrizioni («solo», «esclusivamente», «almeno», «al massimo», «per tutti») fanno parte dell'informazione e restano»: è
+   **un elenco lessicale** di esclusività e quantità; obbligo e tempi («obbligatoria», «in tempo reale») non vi rientrano e il modello li ha
+   trattati come accessori.
+2. «Il testo riprende le parole … del project manager»: la voce V7 la rispetta alla lettera copiando il **titolo prima dei due punti**;
+   nessuna istruzione dice che il solo nome del tema è incompleto.
+3. Spinta alla brevità: «una frase breve», regola 7 «Sii essenziale … nessun dettaglio», `dependencies` descritte per nomi («sistemi,
+   integrazioni»), «Una integrazione sta qui e non si ripete»: tutte favoriscono la voce-etichetta.
+4. «soggetto, azione, oggetto e condizione … restano insieme» esiste ma è astratta; il caso magazzino V7 (lettore separato dall'operazione)
+   mostra che non basta per il legame strumento→operazione.
+5. Il promemoria finale (messaggio utente, non system) ricorda fatti, numeri, nomi ed esclusioni, non i qualificatori. Lasciato invariato:
+   fuori perimetro e deve restare identico nel replay.
+
+## 2A.3 Modifica V8 (una sola: sostituzione di una frase nel paragrafo «In quale sezione va ogni informazione»)
+
+```diff
+-Le restrizioni («solo», «esclusivamente», «almeno», «al massimo», «per tutti») fanno parte dell'informazione e restano.
++Accorciare una voce non deve cambiarne il significato: restano chi compie ogni azione, lo strumento insieme all'operazione per cui si usa e ogni qualificatore che vincola il fatto (obbligo, tempi, frequenze, quantità, «solo», «esclusivamente», «almeno», «al massimo», «per tutti», negazioni). Il solo nome del tema non basta: se il project manager scrive «Il rinnovo della tessera è obbligatorio e lo conferma il tesoriere entro 3 giorni», la voce non è «Rinnovo della tessera» ma riporta obbligo, tesoriere e 3 giorni. Se un compito resta a un sistema esterno, la voce dice chi lo svolge, senza trasformarlo in un'integrazione che il project manager non ha chiesto.
+```
+
+Nel file la frase sta dentro la riga 22 (paragrafo unico): `git diff 35d9468 -- backend/src/bProjects.App/AI/Prompts/analysis.md` mostra
+la riga intera; il resto della riga è invariato.
+
+Motivazione: il vincolo diventa **semantico** (non cambiare il significato) invece di un elenco di parole; i qualificatori sono nominati per
+categoria (obbligo, tempi, frequenze, quantità, esclusività, negazioni) e l'elenco V7 resta incluso per non perdere nulla; attore e
+strumento→operazione sono esplicitati; un **contrasto** giusto/sbagliato in un dominio inventato (il circolo, già usato dall'esempio del
+prompt: tessera, tesoriere) colpisce la voce-etichetta senza ricalcare Colorweb, ferie o magazzino; una frase distingue responsabilità
+esterna e integrazione (caso ferie/paghe) senza nominarlo. Invariati: forma JSON, sezioni, classificazioni, fonti, regole, esempio.
+
+Versioning: solo `ConversationalAgent.ConsolidationPromptVersion` `analysis-v2` → `analysis-v3`. È la versione congelata in
+`ProcessingRuns.PromptVersions` al comando (`AnalysisEndpoints.cs` ~175) e confrontata prima di avvio o ripresa (`AnalysisWorkflow.cs` ~250):
+un run o checkpoint nato con `analysis-v2` termina `workflow_incompatible` senza inferenza; i checkpoint appartengono al run, quindi nessun
+checkpoint V7 viene ripreso con V8. Il grafo resta `project-analysis-v2` (la topologia non cambia); chat e documento invariati.
+
+## 2A.4 Ipotesi verificabili con la sola prova Boreale (2B)
+
+Una prova osserva un miglioramento, non ne dimostra la ripetibilità.
+
+- **H1 (principale):** la voce Colorweb contiene `obbligatori` **e** `tempo reale` (attesa `boreale/integrazione`, `Match = [colorweb,
+  tempo reale, obbligatori]`, sezione Dependencies, ammesse Requirements e Included), con fonte il messaggio sequenza 5 (`945031da-…`).
+- **H2 (nessuna regressione):** restano coperte le altre attese Boreale (goal; ordini con `Parts` [client+inser+ordini], [client+spedizion];
+  notifiche SMS/email; SMS per la consegna; SSO; «solo i propri ordini»; settembre; listino escluso) e nessun divieto scatta (`listino`,
+  `password-locali` affermati, `colorweb-indebolita`, `progetto-aurora`); nessuna integrazione o voce inventata.
+- **H3 (costo):** `finish_reason = stop`, JSON valido per lo schema, `completion_tokens` vicino ai 2 153 del V7 (soglia indicativa +15%).
+  `prompt_tokens` V8 − 4 138 = differenza **esatta** di token del system (il resto del payload è identico): misura la stima di 2A.1.
+- **Non verificabili con Boreale:** strumento→operazione (magazzino N3), responsabilità esterna e «solo» (ferie N2). Richiedono la
+  riesecuzione di quei casi, non prevista in 2B.
+
+## 2A.5 Replay della richiesta Boreale V7 (`tests/prompt-replay/replay_analysis.py`)
+
+Script di sola libreria standard: legge il corpo **originale** dal JSONL del proxy, sostituisce soltanto `messages[0].content` con il file
+indicato (dopo `strip()`, come `LoadPrompt`), verifica che tutto il resto coincida (hash canonico del payload col system azzerato, ordine
+delle chiavi) e altrimenti rifiuta. Senza `--send` non usa la rete. Rifiuta cartelle di uscita sotto `docs/`. Scrive `payload.json`,
+`report.json` e, con `--send`, `response.json` e `content.json`.
+
+Verifica a secco eseguita: con il prompt V7 (`git show 2a2ef50:…/analysis.md`) il payload ricostruito è **identico** all'originale in ogni
+chiave e messaggio; con V8 differisce **solo** il messaggio 0. Hash del resto del payload (originale = replay):
+`6c38f81971a054199d2e42e7c337bd3d0a6d715e0975f0a3333c680ccf178239`; `response_format`: `671aa3319a54725eda11d16c33fc3bba0137622a01e1f1e947bc8311dced5350`.
+
+Identici: 11 messaggi (system, 4 coppie user/assistant, user sequenza 9, user con `analysisId 50643b97-…`, `projectId 4360fc79-…`,
+`sourceCutoffSequence 9` e promemoria), ruoli e ordine, `response_format` (schema `analysis_content`), `model Qwen3.8-Flash-Next-Smart`,
+`temperature 0`, `max_completion_tokens 8192`, `chat_template_kwargs.enable_thinking false`; il corpo originale non ha altri campi.
+
+Differenze inevitabili (non di contenuto), dichiarate:
+1. **Byte del corpo HTTP:** il proxy ha registrato il JSON già interpretato, non i byte; il replay lo riserializza (compatto, UTF-8 senza
+   escape). Spazi ed escape possono differire; il contenuto JSON è identico.
+2. **Header HTTP:** non registrati dal proxy. Il replay invia `Content-Type: application/json` e, se `AI_API_KEY` è definita,
+   `Authorization: Bearer …` (come il backend). Nessun header influisce sul campionamento di llama.cpp.
+3. **Stato del server:** la V7 aveva 3 091 token in cache di prefisso (`cache_n`); il nuovo system cambia il prefisso, quindi la cache non
+   coincide. Il server deve essere la stessa build: il report confronta `system_fingerprint` con `b10703-0b5be7e4a` (`sameServerBuild`).
+   Se differisce, il confronto **non** è isolato.
+4. **Percorso:** il replay chiama il DGX direttamente, non tramite backend/MAF né proxy: è voluto (la richiesta non è ricostruita dal nuovo
+   workflow). Il backend con V8 produrrebbe lo stesso corpo salvo il system (stesso grafo, schema e promemoria), ma non è stato verificato.
+
+## 2A.6 File modificati
+
+```
+backend/src/bProjects.App/AI/Prompts/analysis.md                       una frase sostituita (2A.3)
+backend/src/bProjects.App/AI/ConversationalAgent.cs                    ConsolidationPromptVersion analysis-v3
+backend/tests/bProjects.IntegrationTests/AnalysisPromptVersionTests.cs nuovo: hash V8 del prompt incorporato, versioni chat/documento/grafo
+                                                                       invariate, run congelato con analysis-v2 non compatibile
+tests/prompt-replay/replay_analysis.py                                 nuovo: helper di replay (2A.5)
+HANDOFF.md                                                             questa sezione
+```
+
+## 2A.7 Test eseguiti
+
+| Comando | PASS | FAIL | SKIP |
+|---|---|---|---|
+| `dotnet build bProjects.sln` | 0 errori, 0 avvisi | – | – |
+| `dotnet test --solution bProjects.sln --no-build --filter-class "*AnalysisPromptVersionTests"` | 4 | 0 | 0 |
+| `replay_analysis.py` a secco, V7 e V8, id 233 | payload V7 identico; V8 solo messaggio 0 | – | – |
+
+Non eseguiti: DGX, MafReal, Integration (Postgres), E2E, suite completa. Le prove su Postgres che asseriscono `ConsolidationPromptVersion`
+(`AnalysisDispatchTests` ~160) leggono la costante, quindi seguono la nuova versione.
+
+## 2A.8 Istruzioni per la sessione Sonnet 2B (una sola inferenza)
+
+Dalla radice del repository, con la traccia V7 in `docs/acceptance-trace/` (non versionata) e l'host del DGX di `infra/.env`
+(`AI_ENDPOINT` senza il suffisso `/v1/`). Prima a secco:
+
+```bash
+python -I tests/prompt-replay/replay_analysis.py --calls docs/acceptance-trace/calls-qwen3.8-flash-next-smart-v7.jsonl --id 233 --system backend/src/bProjects.App/AI/Prompts/analysis.md --out ../replay-2b
+```
+
+Controllare nel report: `originalSystemSha256 = 25adffa6…`, `replaySystemSha256 = 930d9b41…`, `restOfPayloadIdentical = true`. Poi **una
+sola** chiamata:
+
+```bash
+AI_API_KEY=<chiave> python -I tests/prompt-replay/replay_analysis.py --calls docs/acceptance-trace/calls-qwen3.8-flash-next-smart-v7.jsonl --id 233 --system backend/src/bProjects.App/AI/Prompts/analysis.md --out ../replay-2b --send http://<dgx>:8080
+```
+
+1. Verificare `sameServerBuild = true`; se falso, dichiarare il confronto non isolato.
+2. Confrontare `../replay-2b/content.json` con la risposta V7 (proxy 233, `responseBody.choices[0].message.content`, oppure la traccia md,
+   chiamata 6 di boreale, righe ~6667-7390) voce per voce, secondo H1–H3 di 2A.4.
+3. Riportare `prompt_tokens` (differenza esatta del system), `completion_tokens`, `finish_reason`.
+4. Non ripetere la chiamata, non cambiare prompt, non eseguire altri casi; output fuori da `docs/` e fuori dal repository.
