@@ -7,6 +7,16 @@ export const SSE_BACKOFF_MS = new InjectionToken<readonly number[]>('SSE_BACKOFF
   factory: () => [1000, 2000, 5000, 10000],
 });
 
+/**
+ * Silenzio massimo (ms) di una connessione SSE prima di considerarla morta. Il server scrive almeno un commento
+ * ": keep-alive" ogni 15 s (ProjectEventsEndpoint): 45 s = 3 intervalli. Una rete caduta senza FIN/RST lascia
+ * reader.read() sospeso all'infinito, quindi senza questo watchdog lo stream non si riaprirebbe mai.
+ */
+export const SSE_IDLE_TIMEOUT_MS = new InjectionToken<number>('SSE_IDLE_TIMEOUT_MS', {
+  providedIn: 'root',
+  factory: () => 45_000,
+});
+
 export interface SseFrame {
   event: string;
   data: string;
@@ -75,12 +85,14 @@ interface SharedStream {
 /**
  * Stream SSE del progetto via fetch con bearer in memoria (mai EventSource né token nell'URL).
  * Una sola connessione fisica per progetto, condivisa dai subscriber (ref-count): si chiude
- * quando l'ultimo si disiscrive (cambio progetto/logout). Riconnette con backoff, solo GET.
+ * quando l'ultimo si disiscrive (cambio progetto/logout). Riconnette con backoff, solo GET; una connessione
+ * muta oltre SSE_IDLE_TIMEOUT_MS (rete caduta senza chiusura) viene abortita e riaperta.
  */
 @Injectable({ providedIn: 'root' })
 export class ProjectEventsService {
   private readonly auth = inject(AuthService);
   private readonly backoff = inject(SSE_BACKOFF_MS);
+  private readonly idleMs = inject(SSE_IDLE_TIMEOUT_MS);
   private readonly streams = new Map<string, SharedStream>();
 
   /** Si sottoscrive allo stream del progetto; restituisce la funzione di disiscrizione (idempotente). */
@@ -114,14 +126,25 @@ export class ProjectEventsService {
     try {
       while (!signal.aborted) {
         let connected = false;
+        // Ogni tentativo ha il proprio AbortController: il watchdog d'inattività chiude solo la connessione
+        // vecchia (senza chiudere lo stream condiviso) e nessun suo frame tardivo viene più consegnato.
+        const attempt = new AbortController();
+        const stop = () => attempt.abort();
+        signal.addEventListener('abort', stop, { once: true });
+        let idleTimer: ReturnType<typeof setTimeout> | undefined;
+        const touch = () => {
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(stop, this.idleMs);
+        };
         try {
           const token = this.auth.accessToken();
           if (!token) return;
+          touch(); // copre anche una fetch() che non riceve mai gli header
           const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/events`, {
             method: 'GET',
             headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
             cache: 'no-store',
-            signal,
+            signal: attempt.signal,
           });
           if (response.status === 404) return;
           if (response.status === 401 && !(await this.auth.refresh())) return;
@@ -130,10 +153,14 @@ export class ProjectEventsService {
             shared.connected = true;
             failures = 0;
             each((h) => h.onConnected());
-            await this.read(response.body, each, signal);
+            await this.read(response.body, each, attempt.signal, touch);
           }
         } catch {
           // Errore di trasporto o chiusura: si riconnette (se non annullato) dopo il backoff.
+        } finally {
+          clearTimeout(idleTimer);
+          signal.removeEventListener('abort', stop);
+          attempt.abort(); // rilascia la connessione (anche se già chiusa o scaduta per inattività)
         }
         shared.connected = false;
         if (signal.aborted) return;
@@ -150,6 +177,7 @@ export class ProjectEventsService {
     body: ReadableStream<Uint8Array>,
     each: (fn: (h: ProjectStreamHandlers) => void) => void,
     signal: AbortSignal,
+    touch: () => void,
   ) {
     const decoder = new TextDecoder();
     const parser = new SseParser((frame) => {
@@ -176,6 +204,7 @@ export class ProjectEventsService {
       for (;;) {
         const { done, value } = await reader.read();
         if (done || signal.aborted) return;
+        touch(); // qualunque byte (anche un commento keep-alive) prova che la connessione è viva
         parser.push(decoder.decode(value, { stream: true }));
       }
     } finally {
@@ -188,15 +217,18 @@ export class ProjectEventsService {
     return this.backoff[Math.min(failures, this.backoff.length - 1)];
   }
 
+  /** Attesa del backoff; si interrompe all'abort o quando il browser torna online (riprova subito). */
   private sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
       const done = () => {
         clearTimeout(timer);
         signal.removeEventListener('abort', done);
+        globalThis.removeEventListener?.('online', done);
         resolve();
       };
       const timer = setTimeout(done, ms);
       signal.addEventListener('abort', done, { once: true });
+      globalThis.addEventListener?.('online', done, { once: true });
     });
   }
 }
