@@ -168,6 +168,14 @@ app.Logger.LogInformation(
     "Modello interno configurato: host {Host}, modello {ModelId}, finestra {Window}, budget input chat/analisi/documento/compattazione {Chat}/{Analysis}/{Document}/{Compaction}, output strutturato {Mode}",
     new Uri(ai.Endpoint).Host, ai.ModelId, ai.ContextWindowTokens, ai.ForPhase(AiPhase.Chat).InputBudgetTokens, ai.ForPhase(AiPhase.Analysis).InputBudgetTokens,
     ai.ForPhase(AiPhase.Document).InputBudgetTokens, ai.ForPhase(AiPhase.Compaction).InputBudgetTokens, ai.StructuredOutputMode);
+// Una riga per fase: modello, ragionamento, output e timeout effettivi (solo parametri, nessun contenuto né credenziale).
+foreach (var phase in Enum.GetValues<AiPhase>())
+{
+    var settings = ai.ForPhase(phase);
+    app.Logger.LogInformation(
+        "Fase AI {Phase}: modello {ModelId}, enable_thinking {EnableThinking}, max_completion_tokens {MaxOutputTokens}, timeout richiesta {TimeoutSeconds} s",
+        phase, settings.ModelId, settings.EnableThinking, settings.MaxOutputTokens, settings.RequestTimeoutSeconds);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

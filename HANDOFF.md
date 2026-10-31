@@ -779,3 +779,52 @@ Qualità semantica comparabile a Qwen3.8 con thinking sul caso Boreale (0 omissi
 - **Consolidamento finale:** appare adatto per questo caso, con tempi (134 s a muro) molto più vicini ai limiti pratici. Resta da stabilire ripetibilità e comportamento sugli altri casi (magazzino, ferie) prima di qualsiasi scelta; un solo run a `temperature 0` non è una misura statistica.
 - **Chat conversazionale:** **non valutabile** da questo test (nessuna conversazione, solo analisi con ~5 950 token di ragionamento stimati prima della risposta). La velocità (59,8 tok/s) è favorevole; la latenza con thinking attivo in chat resta da misurare.
 Nessun altro esperimento eseguito o proposto.
+
+---
+
+# Sessione 6 (Opus) — Qwen3.6-35B-Smart predefinito e thinking per fase — 2026-10-31
+
+**Esito: CONFIGURATO, verificato offline.** Nessuna inferenza DGX, `models.ini` non toccato, prompt V8/`analysis-v3`, `AnalysisContent`, checker, correzione PM, formato del documento e frontend invariati.
+
+## 6.1 Stato trovato
+- `Ai:Phases:{Chat,Analysis,Document,Compaction}` esisteva già per `MaxOutputTokens` ed `EnableThinking`; `chat_template_kwargs.enable_thinking` è **sempre** inviato esplicito (`InternalModelClient.CreateRawOptions`), quindi il `reasoning=on` del profilo non prevale mai. Riusato senza modifiche.
+- Mancavano: **modello per fase** (un solo `Ai:ModelId`), **timeout compatibili** con un consolidamento di minuti (`RequestTimeoutSeconds` 150 e `RunDeadlineSeconds` 180 per tutte le fasi, contro 134 s misurati su Boreale e ~550 s di caso peggiore a 32768 token), **errore esplicito** per un modello non esposto dal server (la sonda proseguiva e la richiesta finiva in un generico `model_rejected`).
+
+## 6.2 Modifiche minime
+| File | Modifica |
+|---|---|
+| `AI/AiOptions.cs` | `AiPhaseOptions.ModelId` e `RequestTimeoutSeconds` (vuoto = eredita); `ForPhase` li risolve; `MaxRequestTimeoutSeconds`; validazione dei timeout di fase. |
+| `AI/InternalModelClient.cs` | `ChatOptions.ModelId` = modello della fase (verificato sul corpo HTTP: l'adattatore M.E.AI lo rispetta); timeout di `HttpClient`/`NetworkTimeout` = tetto della fase più lunga. |
+| `AI/AgentFactory.cs` | `PhaseTimeoutChatClient` sotto la telemetria: ogni chiamata ha il timeout della **sua** fase (chat/documento/sintesi restano a 150 s); lo scadere è `TaskCanceledException`+`TimeoutException`, classificato `model_timeout` come prima. |
+| `AI/ModelRuntimeMonitor.cs`, `AI/ModelFailure.cs` | La sonda conserva l'elenco di `/v1/models`; la guardia rifiuta prima dell'invio un modello di fase non elencato con `ModelNotAvailableException` → `model_not_available` **permanente**, dettaglio con modello e fase. Un modello elencato ma `unloaded/sleeping` passa: lo carica il server. Nessun fallback. |
+| `AI/ExecutionOptions.cs`, `Analysis/AnalysisEndpoints.cs` | `Execution:AnalysisRunDeadlineSeconds` (vuoto = `RunDeadlineSeconds`) usato solo per i run di analisi; validazione timeout di fase < deadline della fase. Config congelata del run: modello, timeout e deadline **di fase**. |
+| `AI/InferenceTelemetry.cs`, `Program.cs` | Telemetria con il timeout di fase; all'avvio una riga per fase: modello, `enable_thinking`, `max_completion_tokens`, timeout (nessun contenuto/credenziale). |
+| `infra/compose.yaml`, `infra/.env.example` | Default Qwen3.6, finestra 131072, valori per fase sotto; variabili `AI_*_MODEL_ID`, `AI_*_REQUEST_TIMEOUT_SECONDS`, `EXECUTION_ANALYSIS_RUN_DEADLINE_SECONDS`. |
+| `tests/.../PhaseModelRoutingTests.cs` | 7 test nuovi (sotto). |
+
+## 6.3 Configurazione effettiva (default di compose) e corpo HTTP inviato
+| Fase | `model` | `enable_thinking` | `max_completion_tokens` | `response_format` | Timeout chiamata |
+|---|---|---|---|---|---|
+| Chat PM (streaming SSE) | Qwen3.6-35B-Smart | false | 4096 | — | 150 s |
+| Compattazione (sintesi MAF nativa) | Qwen3.6-35B-Smart | false | 4096 (eredita) | — | 150 s |
+| Consolidamento AnalysisContent | Qwen3.6-35B-Smart | **true** | **32768** | `json_schema` | **900 s** (run: deadline **1200 s**) |
+| Documento Markdown | Qwen3.6-35B-Smart | false | 4096 (invariato) | — | 150 s |
+Finestra `Ai:ContextWindowTokens` 131072 (= ctx-size del profilo con parallel=1): budget di input dell'analisi 131072 − 32768 − 1024 = 97 280. Budget di ragionamento: quello del server (12 288). Chat, documento e turni restano nella deadline comune di 180 s. Il ragionamento non è mai esposto: la chat inoltra solo `update.Text`, l'analisi valida solo `content`.
+**Alternativa Qwen3.8 solo per il consolidamento:** `AI_ANALYSIS_MODEL_ID=Qwen3.8-Flash-Next-Smart`, `AI_ANALYSIS_REQUEST_TIMEOUT_SECONDS=1500`, `EXECUTION_ANALYSIS_RUN_DEADLINE_SECONDS=1800` (~26 tok/s: 32768 token ≈ 1 275 s). Con `parallel=1` ogni passaggio chat↔analisi comporterà un caricamento a freddo: per questo il default è Qwen3.6 ovunque.
+
+## 6.4 Test eseguiti (offline, handler HTTP simulato)
+- `PhaseModelRoutingTests` 7/7 PASS: default di compose risolti e validi; chat/analisi/documento/chat in ordine alternato con modello, `enable_thinking`, `max_completion_tokens`, `response_format` attesi e nessuna contaminazione (anche con Qwen3.8 sulla sola analisi); sintesi nativa scattata **dentro** l'analisi inviata con `enable_thinking=false` mentre la chiamata finale ha `true`; modello di fase non esposto → `model_not_available`, zero richieste; timeout di fase → `model_timeout` transitorio, cancellazione del chiamante non trasformata; timeout dell'analisi rifiutato senza deadline dedicata.
+- Regressione mirata: `AiPhaseOptionsTests`, `ModelRuntimeMonitorTests`, `ResilienceOptionsTests`, `LocalProviderTests`, `InferenceMetricsTests`, `CompactionTests`, `AnalysisContentTests`, `ExecutionFailureTests`, `ContentSecurityTests`: 343 totali, 0 falliti, 239 superati, 104 **Skipped** (richiedono `BPROJECTS_TEST_POSTGRES`/DGX, non impostati: non eseguiti, non superati).
+
+## 6.5 Limiti noti
+- Sonda della finestra (`/props`, `/slots`) e conteggio token (`/tokenize`) usano `Ai:ModelId`: un modello di fase diverso deve avere la stessa finestra (Qwen3.8: 131072, ok) e il tokenizer differisce di ~1% (4 305 vs 4 251 token sul payload Boreale), assorbito dal margine di 1024.
+- Il controllo `model_not_available` dipende dall'elenco di `/v1/models`: con server offline o elenco non leggibile la richiesta parte e l'eventuale rifiuto del server resta `model_rejected`.
+- `infra/.env` locale (non versionato) ha ancora `AI_CONTEXT_WINDOW_TOKENS=32768`: con l'output di analisi 32768 l'avvio fallisce la validazione (budget non positivo, messaggio esplicito). Allinearlo a 131072 insieme a `AI_MODEL_ID`/`AI_ENDPOINT` reali.
+- Non verificabile senza DGX: durata reale dei run lunghi, caricamento a freddo, comportamento di `max_completion_tokens 32768` con `json_schema` su progetti più grandi di Boreale.
+
+## 6.6 Smoke test end-to-end (sessione Sonnet)
+1. `infra/.env`: `AI_ENDPOINT` reale, `AI_MODEL_ID=Qwen3.6-35B-Smart`, `AI_CONTEXT_WINDOW_TOKENS=131072`; nessun override di fase. Avviare e controllare nei log le 4 righe «Fase AI …» (Analysis: thinking True, 32768, 900 s).
+2. Chat: un turno PM; risposta in streaming senza testo di ragionamento; `InferenceCalls` della chat con `ReasoningRequested=false`, modello Qwen3.6.
+3. Analisi su Boreale: stato Running fino al completamento (atteso ~2–3 min), revisione AI valida; `InferenceCalls`: `ReasoningRequested=true`, `MaxOutputTokensRequested=32768`, `finish_reason=stop`; `AgentConfig` del run con `requestTimeoutSeconds 900`, `runDeadlineSeconds 1200`.
+4. Revisione/conferma PM, poi generazione documento: `ReasoningRequested=false`, bozza Markdown generata.
+5. Facoltativo: `AI_ANALYSIS_MODEL_ID=Qwen3.8-Flash-Next-Smart` (con timeout 1500 / deadline 1800) per verificare la selezione; un ID inesistente deve dare `model_not_available` senza chiamate.

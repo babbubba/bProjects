@@ -29,15 +29,25 @@ public enum AiPhase
 /// <summary>Override di una fase; <c>null</c> = eredita il valore globale di <c>Ai</c> (una stringa vuota nella configurazione vale null).</summary>
 public sealed class AiPhaseOptions
 {
+    /// <summary>
+    /// ID del modello della fase (es. Qwen3.8 solo per l'analisi). Deve condividere finestra e tokenizer compatibile con
+    /// <c>Ai:ModelId</c>: sonda della finestra e conteggio dei token restano sul modello globale.
+    /// </summary>
+    public string? ModelId { get; set; }
+
     public int? MaxOutputTokens { get; set; }
 
     public bool? EnableThinking { get; set; }
 
-    // ReasoningBudgetTokens non è previsto: il supporto del runtime interno (llama.cpp su DGX) non è stato verificato.
+    /// <summary>Timeout della singola chiamata della fase (es. analisi con ragionamento: diversi minuti).</summary>
+    public int? RequestTimeoutSeconds { get; set; }
+
+    // ReasoningBudgetTokens non è previsto: il budget di ragionamento resta quello del server (--reasoning-budget).
 }
 
 /// <summary>Impostazioni risolte di una fase (<see cref="AiOptions.ForPhase"/>): override di fase oppure valori globali.</summary>
-public sealed record AiPhaseSettings(AiPhase Phase, int MaxOutputTokens, bool EnableThinking, int InputBudgetTokens);
+public sealed record AiPhaseSettings(
+    AiPhase Phase, int MaxOutputTokens, bool EnableThinking, int InputBudgetTokens, string ModelId = "", int RequestTimeoutSeconds = 0);
 
 /// <summary>Sezione <c>Ai:Phases</c>: un override opzionale per fase.</summary>
 public sealed class AiPhasesOptions
@@ -108,13 +118,22 @@ public sealed class AiOptions
 
     public int EffectiveCompactionTriggerTokens => CompactionTriggerTokens > 0 ? CompactionTriggerTokens : InputBudgetTokens;
 
-    /// <summary>Tetto di output, ragionamento e budget di input (finestra - output di fase - margine) della fase.</summary>
+    /// <summary>Modello, tetto di output, ragionamento, budget di input (finestra - output di fase - margine) e timeout della fase.</summary>
     public AiPhaseSettings ForPhase(AiPhase phase)
     {
         var overrides = Phases.Of(phase);
         var maxOutput = overrides.MaxOutputTokens ?? MaxOutputTokens;
-        return new(phase, maxOutput, overrides.EnableThinking ?? EnableThinking, ContextWindowTokens - maxOutput - SafetyMarginTokens);
+        return new(
+            phase,
+            maxOutput,
+            overrides.EnableThinking ?? EnableThinking,
+            ContextWindowTokens - maxOutput - SafetyMarginTokens,
+            string.IsNullOrWhiteSpace(overrides.ModelId) ? ModelId : overrides.ModelId.Trim(),
+            overrides.RequestTimeoutSeconds ?? RequestTimeoutSeconds);
     }
+
+    /// <summary>Il timeout di fase più lungo: tetto del client HTTP condiviso (ogni chiamata ha poi il timeout della propria fase).</summary>
+    public int MaxRequestTimeoutSeconds => Enum.GetValues<AiPhase>().Max(p => ForPhase(p).RequestTimeoutSeconds);
 }
 
 /// <summary>
@@ -204,6 +223,14 @@ public sealed class AiOptionsValidator : Microsoft.Extensions.Options.IValidateO
         if (o.RequestTimeoutSeconds <= 0)
         {
             errors.Add("Ai:RequestTimeoutSeconds deve essere positivo.");
+        }
+
+        foreach (var phase in Enum.GetValues<AiPhase>())
+        {
+            if (o.Phases.Of(phase).RequestTimeoutSeconds is <= 0)
+            {
+                errors.Add($"Ai:Phases:{phase}:RequestTimeoutSeconds deve essere positivo.");
+            }
         }
 
         if (o.RuntimeCheckSeconds <= 0)

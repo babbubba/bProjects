@@ -33,11 +33,15 @@ public sealed class AgentFactory
         _summarizerOptions = summarizerOptions;
     }
 
-    /// <summary>Modello per una fase: guardia della finestra (se c'è il monitor) sopra la cattura della telemetria, sopra il client reale.</summary>
+    /// <summary>
+    /// Modello per una fase: guardia della finestra e del modello esposto (se c'è il monitor) sopra la cattura della telemetria,
+    /// sopra il timeout della fase, sopra il client reale.
+    /// </summary>
     private IChatClient Model(AiPhase phase, TokenCounter? count)
     {
-        var capture = new InferenceCaptureChatClient(_model, phase, _options, _runtime, count);
-        return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime);
+        var timed = new PhaseTimeoutChatClient(_model, phase, TimeSpan.FromSeconds(_options.ForPhase(phase).RequestTimeoutSeconds));
+        var capture = new InferenceCaptureChatClient(timed, phase, _options, _runtime, count);
+        return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime, phase);
     }
 
     public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null) =>
@@ -117,4 +121,66 @@ public sealed class AgentFactory
     public async Task<ChatClientAgent> CreateCompactingAgentAsync(
         string name, string instructions, CancellationToken cancellationToken = default) =>
         new(await CreateCompactingClientAsync(instructions, cancellationToken), instructions: instructions, name: name);
+}
+
+/// <summary>
+/// Timeout della singola chiamata della fase (<c>Ai:Phases:{fase}:RequestTimeoutSeconds</c>): il client HTTP condiviso ha il tetto
+/// della fase più lunga. Lo scadere è un <see cref="TaskCanceledException"/> con causa <see cref="TimeoutException"/>, come il
+/// timeout di HttpClient, quindi il dispatcher lo classifica model_timeout (transitorio); la cancellazione del chiamante resta sua.
+/// </summary>
+internal sealed class PhaseTimeoutChatClient(IChatClient inner, AiPhase phase, TimeSpan timeout) : DelegatingChatClient(inner)
+{
+    public override async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        using var cts = Start(cancellationToken);
+        try
+        {
+            return await base.GetResponseAsync(messages, options, cts.Token);
+        }
+        catch (OperationCanceledException e) when (Expired(cts, cancellationToken))
+        {
+            throw Timeout(e);
+        }
+    }
+
+    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var cts = Start(cancellationToken);
+        await using var updates = base.GetStreamingResponseAsync(messages, options, cts.Token).GetAsyncEnumerator(cts.Token);
+        while (true)
+        {
+            try
+            {
+                if (!await updates.MoveNextAsync())
+                {
+                    yield break;
+                }
+            }
+            catch (OperationCanceledException e) when (Expired(cts, cancellationToken))
+            {
+                throw Timeout(e);
+            }
+
+            yield return updates.Current;
+        }
+    }
+
+    private CancellationTokenSource Start(CancellationToken cancellationToken)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeout > TimeSpan.Zero)
+        {
+            cts.CancelAfter(timeout);
+        }
+
+        return cts;
+    }
+
+    private static bool Expired(CancellationTokenSource cts, CancellationToken caller) => cts.IsCancellationRequested && !caller.IsCancellationRequested;
+
+    private TaskCanceledException Timeout(OperationCanceledException e) =>
+        new($"Nessuna risposta del modello entro {timeout.TotalSeconds:0} s (fase {phase}).", new TimeoutException(e.Message, e));
 }

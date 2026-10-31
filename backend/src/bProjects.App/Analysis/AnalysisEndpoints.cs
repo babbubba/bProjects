@@ -168,7 +168,7 @@ public static class AnalysisEndpoints
                 RequestedBy = requestedBy,
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
-                DeadlineAt = now + policy.RunDeadline,
+                DeadlineAt = now + policy.AnalysisRunDeadline,
                 WorkflowDefinitionVersion = ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
@@ -376,7 +376,7 @@ public static class AnalysisEndpoints
         var settings = ai.ForPhase(phase);
         return JsonSerializer.Serialize(new
         {
-            modelId = ai.ModelId,
+            modelId = settings.ModelId,
             phase = InferenceMetrics.PhaseName(phase),
             structuredOutputMode = ai.StructuredOutputMode.ToString(),
             contextWindowTokens = ai.ContextWindowTokens,
@@ -386,13 +386,13 @@ public static class AnalysisEndpoints
             compactionTriggerTokens = ai.CompactionTriggerTokens > 0 ? ai.CompactionTriggerTokens : settings.InputBudgetTokens,
             enableThinking = settings.EnableThinking,
             temperature = 0,
-            requestTimeoutSeconds = ai.RequestTimeoutSeconds,
+            requestTimeoutSeconds = settings.RequestTimeoutSeconds,
             leaseSeconds = policy.LeaseDurationSeconds,
             renewSeconds = policy.RenewIntervalSeconds,
             maxAttempts = policy.MaxAttempts,
             retryBaseDelaySeconds = policy.RetryBaseDelaySeconds,
             retryMaxDelaySeconds = policy.RetryMaxDelaySeconds,
-            runDeadlineSeconds = policy.RunDeadlineSeconds,
+            runDeadlineSeconds = phase == AiPhase.Analysis ? policy.EffectiveAnalysisRunDeadlineSeconds : policy.RunDeadlineSeconds,
         });
     }
 

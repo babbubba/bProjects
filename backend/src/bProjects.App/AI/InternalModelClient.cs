@@ -41,7 +41,9 @@ public sealed class InternalModelClient : IDisposable
         _http = handler is null
             ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false })
             : new HttpClient(handler, disposeHandler: false);
-        _http.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        // Tetto del client condiviso = il timeout di fase più lungo (analisi con ragionamento); il timeout di ogni chiamata
+        // è quello della sua fase (PhaseTimeoutChatClient), così chat e documento non ereditano i minuti dell'analisi.
+        _http.Timeout = TimeSpan.FromSeconds(options.MaxRequestTimeoutSeconds);
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
 
         var clientOptions = new OpenAIClientOptions
@@ -50,7 +52,7 @@ public sealed class InternalModelClient : IDisposable
             RetryPolicy = new ClientRetryPolicy(maxRetries: 0),
             // Senza questo il client applica il proprio default di 100 s, più corto di RequestTimeoutSeconds: osservato sul DGX
             // un'analisi da ~6.000 token annullata a 100,0 s (model_timeout) e poi deadline_exceeded.
-            NetworkTimeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds),
+            NetworkTimeout = TimeSpan.FromSeconds(options.MaxRequestTimeoutSeconds),
             Transport = new HttpClientPipelineTransport(_http),
         };
         ChatClient = new OpenAIClient(new ApiKeyCredential(options.ApiKey), clientOptions)
@@ -62,8 +64,8 @@ public sealed class InternalModelClient : IDisposable
     public IChatClient ChatClient { get; }
 
     /// <summary>
-    /// Opzioni di richiesta coerenti con la configurazione della fase (<see cref="AiOptions.ForPhase"/>): output massimo,
-    /// ragionamento nascosto (spento di default) e, se è fornito uno schema e la modalità è JsonSchema,
+    /// Opzioni di richiesta coerenti con la configurazione della fase (<see cref="AiOptions.ForPhase"/>): modello, output massimo,
+    /// ragionamento nascosto (sempre esplicito, mai il default del server) e, se è fornito uno schema e la modalità è JsonSchema,
     /// <c>response_format json_schema</c> nativo. In ValidatedTextJson non si invia alcun vincolo: la validazione tipizzata è del backend.
     /// Lo schema viaggia così com'è nella rappresentazione grezza: l'adattatore OpenAI di M.E.AI (10.10.1) lo riscriverebbe per lo
     /// strict mode spostando <c>pattern</c> e <c>format</c> nella <c>description</c>, e llama.cpp costruirebbe la grammatica senza
@@ -77,7 +79,7 @@ public sealed class InternalModelClient : IDisposable
         var schemaJson = structured ? schema!.Value.GetRawText() : null;
         var options = new ChatOptions
         {
-            ModelId = _options.ModelId,
+            ModelId = settings.ModelId,
             MaxOutputTokens = settings.MaxOutputTokens,
             Temperature = temperature,
             RawRepresentationFactory = _ => CreateRawOptions(settings.EnableThinking, schemaName, schemaJson),
