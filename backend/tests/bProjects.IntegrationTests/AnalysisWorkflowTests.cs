@@ -534,7 +534,7 @@ public sealed class AnalysisWorkflowRealTests : IAsyncLifetime
         TestEnvironment.RequirePostgres();
         var options = TestEnvironment.RequireDgxOptions();
         options.StructuredOutputMode = mode;
-        using var model = new InternalModelClient(options);
+        using var model = new InternalModelClient(options, MafDiagnostics.Wrap());
 
         var services = new ServiceCollection();
         services.AddDbContext<AppDbContext>(o => o.UseNpgsql(_database.ConnectionString));

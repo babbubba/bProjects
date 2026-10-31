@@ -914,7 +914,7 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         TestEnvironment.RequirePostgres();
         var testCase = AcceptanceCases.Nominal.Single(c => c.Id == caseId);
 
-        using var model = new InternalModelClient(options);
+        using var model = new InternalModelClient(options, MafDiagnostics.Wrap());
         var factory = AgentFactory.Create(options, model);
         CallCounter? counter = null;
         await using var app = await ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
@@ -993,7 +993,7 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         };
 
         await using var host = await CompactionHost.StartAsync(
-            _database.ConnectionString, options, new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }, chat: true, analysis: true, prepare: true, requestUsage: true);
+            _database.ConnectionString, options, MafDiagnostics.Wrap(), chat: true, analysis: true, prepare: true, requestUsage: true);
         var (pm, project) = await host.NewProjectAsync();
         using var _ = pm;
 

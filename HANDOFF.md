@@ -941,3 +941,42 @@ Legenda: **[M]** misurato (telemetria, esito automatico, JSON salvati); **[C]** 
 3. Decisioni sul contratto: regola «domanda ripetuta» (dopo risposta o sempre), precondizione della correzione PM, criterio sui conflitti che il modello ripete anche come vincoli.
 4. Rischio di tempo: l'analisi con thinking ha già toccato 178–210 s su un limite nominale di 180 s.
 5. Strumentazione mancante: output rifiutato del documento, tempo di inferenza completo e corpo HTTP effettivo non catturati.
+
+## 8.6 Diagnostica persistente dei test MafReal e N1 (sessione 8, seguito)
+
+Legenda come in 8.5: **[M]** misurato, **[I]** ipotesi, **[?]** non dimostrato. Nessun prompt, checker, attesa o configurazione applicativa modificati; l'app e la sua telemetria pubblica non sono toccate (solo harness di test).
+
+### Come funziona la raccolta (file `DiagnosticsHarness.cs`)
+- **Dove**: cartella locale NON versionata, `BPROJECTS_DIAG_DIR` (altrimenti `%TEMP%\bprojects-diag`); una sottocartella per test (`<timestamp>-<test>-<id>`). Per questa sessione: `C:\source\repos\babbubba\t052-evidence\diag\`. Contiene conversazioni e output completi: mai da committare né da condividere. Nessuna chiave API, nessun `reasoning_content` (verificato con grep sugli artefatti reali e con un test).
+- **Quando**: i file sono scritti durante l'esecuzione, non nel teardown. Il database temporaneo viene esportato in `PostgresDatabaseFixture.DisposeAsync` PRIMA di eliminarlo, quindi anche se il test fallisce o va in timeout il materiale parziale sopravvive.
+- **Aggancio**: `MafDiagnostics.Wrap()` davanti al client HTTP in tutti i siti MafReal (acceptance, analisi, conversazione, documento, LocalProvider, compattazione reale, caso esplorativo); `TestEnvironment.RequireDgxOptions/RequireProductionLikeOptions` registrano `config.json`.
+- **File per test**: `meta.json` (test, commit, orario), `config.json` (modello, thinking, max token, timeout di fase, finestra, trigger, deadline di analisi dell'harness), `events.jsonl` (sent / slots / headers / first-byte / completed / aborted / exception / db / replay), `NNN-request.json` (URL, intestazioni senza Authorization, corpo con prompt, schema, temperatura, `chat_template_kwargs`), `NNN-response.txt` (SSE riga per riga appesa man mano, senza reasoning), `NNN-assistant.txt` (content finale, anche se scartato), `NNN-result.json` (stato, tempi, byte, `finish_reason`, usage, oppure eccezione con tempo trascorso), `db-snapshot.json` (ProcessingRuns / InferenceCalls / ChatTurns ogni 3 s: ultimo stato prima di un'interruzione), `db-final.json` (export completo), `replay-<runId>.json`, `layer-trace.json`.
+- **`invalid_agent_output`**: per ogni run fallito con quel codice, `replay-<runId>.json` ri-valida l'output salvato con gli stessi validatori dell'app (documento: id delle fonti della revisione di input; analisi: messaggi fino al cutoff) e riporta TUTTE le violazioni (la colonna `ErrorMessage` dell'app ne conserva 5). Verificato con test su un output con 8 fonti inventate.
+- **Run ancora `Running`**: `events.jsonl` dice se la richiesta è partita (`sent` con orario), se sono arrivate le intestazioni (`headers`, tempo al primo byte), se sono arrivati dati (`first-byte`), se è finita (`completed`) o è stata interrotta (`aborted`/`exception` con tempo trascorso); prima e dopo un'eccezione registra `/slots?model=…` del DGX (`is_processing`, `n_prompt_tokens`, `id_task`) per distinguere coda da calcolo; `db-snapshot.json` dà lo stato del run nel database. Limiti **[M]**: per le chiamate non in streaming (analisi, documento) il server risponde solo a generazione finita, quindi non c'è alcun byte parziale; e un timeout del client non è distinguibile da una cancellazione del chiamante nell'handler (si confrontano `elapsedMs`, i timeout di `config.json` e `ErrorCode` del run).
+- **Compattazione**: nei test reali sono tracciati i termini SMS / fattur / Aurora in 4 strati: (1) originali PM, (2) sintesi MAF (risposta della chiamata di sintesi), (3) input inviato al modello dopo la compattazione, (4) AnalysisContent prodotto (`layer-trace.json`).
+
+### Verifica con modello HTTP finto (prima di usare il DGX)
+`DiagnosticsHarnessTests` (4 test, PASS) e `DiagnosticsDatabaseTests` (1, PASS su PostgreSQL migrato): (a) output non JSON: richiesta, risposta senza reasoning, assistente, esito e ri-validazione con violazioni; (b) bozza formalmente valida rifiutata dalla validazione: 8 fonti inventate, tutte le violazioni ricostruite (più di 5); (c) timeout del client a 1 s: `sent` ed `exception` presenti, nessun `headers`/`completed`, tempo trascorso, slot dopo l'eccezione; (d) SSE con reasoning: il file contiene già la prima parte mentre lo stream è ancora aperto, nessun reasoning, nessun esito finale prima della fine. Suite non-MafReal dopo le modifiche: 1008 PASS, 0 FAIL, 1 ignorato.
+
+### Correzioni alla strumentazione emerse dal primo uso reale
+Gli stream di chat risultavano «aborted» pur con `finish=stop` (il client chiude dopo `[DONE]`): ora completati. `/slots` del DGX in modalità router risponde 400 senza `?model=`: corretto. Il campo `timeoutLike` era ottimistico: sostituito da `cancellationRequestedOnToken` e nota esplicita.
+
+### Risultato di N1 (Qwen3.6-35B-Smart, configurazione di produzione, un solo test per volta)
+| Campione | Esito | Dettaglio **[M]** |
+|---|---|---|
+| 1 (prima esecuzione, senza diagnostica) | FAIL | documento: `invalid_agent_output`, **causa non dimostrata** (nessuna evidenza salvata) |
+| 2 (rerun, senza diagnostica) | PASS | analisi 137 s, documento 17 s |
+| 3 (con diagnostica) | PASS | analisi 173,5 s per la chiamata HTTP (10 219 token), documento 17,3 s; `finish=stop`, 1 tentativo, thinking solo in Analysis |
+| 4 (con diagnostica) | FAIL | analisi 169,4 s (inferenza 167,0 s, 9775 token): **omissioni** «conferma-email» e «promemoria»; l'analisi non contiene la frase del messaggio 2 «una conferma via email e un promemoria il giorno prima» (omissione del modello, leggibile in `analisi-ai-v1.json`); documento 17,8 s |
+
+Il PASS del campione 3 NON spiega il FAIL del campione 1. N1 non è stabile: 2 PASS e 2 FAIL su 4 campioni, con due cause diverse (la prima ignota, la seconda omissione del modello). Nei due campioni con diagnostica l'analisi ha richiesto 167–174 s di inferenza, vicino al limite di 180 s: **[I]** margine ridotto, nessun superamento ma nessuna sicurezza.
+
+### Informazioni ora recuperabili / ancora mancanti
+- Recuperabili senza rieseguire: richiesta effettiva (modello, thinking, temperatura, max token, prompt, schema), risposta finale anche scartata, violazioni complete, tempi di inferenza e totali, token, `finish_reason`, stato dei run nel database prima dell'interruzione, presenza dei dati nei 4 strati della compattazione.
+- Ancora mancanti: coda lato server oltre a `/slots` (nessun log del server); distinzione fra timeout del client e cancellazione; il motivo del FAIL del campione 1; analisi dei 7 MafReal del run completo e della perdita SMS dopo la compattazione, da ripetere con questa diagnostica.
+
+### Decisioni di contratto ricevute (non ancora implementate)
+N5: non ripetere domande già poste, anche senza risposta (mantenere il controllo). N2: la correzione PM deve preservare gli altri fatti (problema dell'harness, requisiti invariati). N4: conflitti non risolti promossi a requisiti/vincoli sono un FAIL reale. Limite di 180 s invariato.
+
+### Stato
+T052 e T053 restano aperti; PR #3 non mergiata. Stack Docker `bprojects-t053b` fermato con `stop` (volume `bprojects-t053b_pgdata` conservato, mai `down -v`).

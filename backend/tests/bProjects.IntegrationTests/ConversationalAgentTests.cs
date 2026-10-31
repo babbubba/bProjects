@@ -330,7 +330,7 @@ public sealed class ConversationalAgentRealTests : IAsyncLifetime
     {
         var options = TestEnvironment.RequireDgxOptions();
         TestEnvironment.RequirePostgres();
-        using var model = new InternalModelClient(options);
+        using var model = new InternalModelClient(options, MafDiagnostics.Wrap());
         var agent = new ConversationalAgent(AgentFactory.Create(options, model), model.CreateChatOptions(temperature: 0.2f));
 
         using var client = await _app!.LoginAsync();

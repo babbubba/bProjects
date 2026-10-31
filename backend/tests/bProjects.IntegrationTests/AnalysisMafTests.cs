@@ -45,7 +45,7 @@ public sealed class AnalysisMafTests : IAsyncLifetime
         // Nessun ChatTurnExecutor: i messaggi PM restano in coda come turni e solo il run formale usa il modello.
         await using var hosted = await ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
         {
-            var model = new InternalModelClient(options);
+            var model = new InternalModelClient(options, MafDiagnostics.Wrap());
             var agent = new ConversationalAgent(AgentFactory.Create(options, model), model.CreateChatOptions(temperature: 0.2f));
             services.AddSingleton(agent);
             services.AddSingleton(sp => new AnalysisWorkflow(

@@ -82,6 +82,11 @@ public abstract class CompactionScenarios : IAsyncLifetime
         var services = Services();
         var options = observedCase ? Production(services) : await ReducedAsync(services, ConversationalAgent.Instructions);
         var history = Enumerable.Range(0, messages - 1).Select(i => CompactionDialogs.Message(i, chars)).ToList();
+        if (Real)
+        {
+            MafDiagnostics.Watch("SMS", "fattur", "Aurora");
+        }
+
         var finalText = CompactionDialogs.Message(messages - 1, chars, question: true);
 
         // Fase 1 (preparazione, modello finto, nessuna compattazione): lo storico di originali PM e risposte e' persistito dal flusso vero.
@@ -190,6 +195,11 @@ public abstract class CompactionScenarios : IAsyncLifetime
             options.Phases = phased.Phases;
         }
         var texts = Enumerable.Range(0, messages).Select(i => CompactionDialogs.Message(i, chars)).ToList();
+        if (Real)
+        {
+            MafDiagnostics.Watch("SMS", "fattur", "Aurora");   // strati: originali / sintesi / input / AnalysisContent
+        }
+
 
         await using var host = await CompactionHost.StartAsync(connection, options, NewServer(), chat: false, analysis: true, prepare: true, requestUsage: Real);
         var (pm, project) = await host.NewProjectAsync();
@@ -467,5 +477,5 @@ public sealed class CompactionMafTests : CompactionScenarios
 
     protected override AiOptions Services() => TestEnvironment.RequireDgxOptions();
 
-    protected override HttpMessageHandler NewServer() => new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
+    protected override HttpMessageHandler NewServer() => MafDiagnostics.Wrap(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false });
 }

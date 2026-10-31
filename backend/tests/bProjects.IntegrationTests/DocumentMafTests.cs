@@ -48,7 +48,7 @@ public sealed class DocumentMafTests : IAsyncLifetime
         var counter = new CountingChatClient();
         await using var hosted = await ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
         {
-            var model = new InternalModelClient(options);
+            var model = new InternalModelClient(options, MafDiagnostics.Wrap());
             var factory = new AgentFactory(options, counter.Wrap(model.ChatClient), async (t, ct) => await model.CountTokensAsync(t, ct));
             var agent = new ConversationalAgent(AgentFactory.Create(options, model), model.CreateChatOptions(temperature: 0.2f));
             services.AddSingleton(agent);

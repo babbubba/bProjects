@@ -39,7 +39,7 @@ public static class TestEnvironment
         var endpoint = RequireDgx();
         Assert.SkipWhen(DgxApiKey is null, $"{DgxApiKeyVariable} non impostata.");
         Assert.SkipWhen(DgxModel is null, $"{DgxModelVariable} non impostata.");
-        return new AiOptions
+        var baseOptions = new AiOptions
         {
             Endpoint = endpoint.ToString(),
             ApiKey = DgxApiKey!,
@@ -47,6 +47,8 @@ public static class TestEnvironment
             ContextWindowTokens = 131072,   // ctx-size del profilo Qwen3.6-35B-Smart (parallel=1), come infra/compose.yaml
             Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml (AI_ANALYSIS_MAX_OUTPUT_TOKENS)
         };
+        MafDiagnostics.RecordConfig(baseOptions);
+        return baseOptions;
     }
 
     /// <summary>
@@ -66,6 +68,7 @@ public static class TestEnvironment
         options.Phases.Analysis.EnableThinking = true;
         options.Phases.Analysis.MaxOutputTokens = 32768;
         options.Phases.Analysis.RequestTimeoutSeconds = 900;
+        MafDiagnostics.RecordConfig(options);
         return options;
     }
 
