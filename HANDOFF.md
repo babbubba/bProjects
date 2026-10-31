@@ -639,3 +639,25 @@ dotnet test --solution bProjects.sln -- --filter-class "bProjects.IntegrationTes
 dotnet test --solution bProjects.sln --filter-trait "Category=Integration" -- --filter-class "bProjects.IntegrationTests.PreviewRevisionTests"   # richiede BPROJECTS_TEST_POSTGRES
 ```
 Il secondo copre l'attribuzione PM sulla catena di revisioni (invariante 2) e non è stato lanciato qui perché richiede Postgres.
+
+---
+
+# Sessione 4 (Sonnet) — verifica thinking Qwen3.8 — 2026-10-31
+
+**Base:** `experiment/requirements-quality`. **Esito: INCONCLUSIVE — gate tecnico non superato, nessuna inferenza di generazione eseguita.** Nessun codice di produzione modificato, `models.ini` non toccato, server non riavviato.
+Evidenze (fuori dal repository): `C:\source\repos\babbubba\replay-3\` (`props.json`, `chat_template.jinja`, `applytpl_*.json`).
+
+## 4.1 Gate (zero generazioni)
+
+1. **Dal config alla richiesta HTTP — verificato.** `Ai:Phases:Analysis:EnableThinking` (vuoto = eredita `Ai:EnableThinking`, default `false`) → `AiOptions.ForPhase` → `InternalModelClient.CreateRawOptions` imposta con `Patch` `chat_template_kwargs = {"enable_thinking": true|false}`. Non è `reasoning_effort`. La V8 di 2B (`replay-2b/payload.json`) contiene `enable_thinking:false`, `temperature 0`, `max_completion_tokens 8192`, `response_format json_schema`; nessun altro campo di ragionamento.
+2. **Configurazione server (sola lettura, `/v1/models`) — coincide col `models.ini` fornito:** `Qwen3.8-Flash-Next-Smart`, IQ4_XS, build `b10703-0b5be7e4a`, `--jinja`, `--reasoning on`, `--reasoning-budget 12288`, `--reasoning-format deepseek`, ctx 131072, `--n-predict 32768`, `temperature 1.0`/`seed 4242`/top-k 20/top-p 0.95 come default (la richiesta li sovrascrive con `temperature 0`).
+3. **Il template supporta il commutatore per richiesta — verificato.** Il chat template (da `/props`) chiude il prompt con `<think>\n\n</think>\n\n` solo se `enable_thinking is false`; altrimenti (anche non definito) con `<think>\n`. Con `reasoning on` lato server il default sarebbe quindi thinking attivo.
+4. **Applicazione osservata senza generare — verificato per il template.** `POST /apply-template` con il payload V8 completo: `enable_thinking=false` → prompt (16 249 car.) termina con `<think>\n\n</think>\n\n`; `true` → prompt (16 447 car.) termina con `<think>\n`. Il cambio è dunque recepito dal server, non solo trasmesso. Nota di stato: la prima chiamata ha risvegliato il modello (da `sleeping` a `loaded`, 82 s di caricamento); nessun token generato.
+   Limite: `GET /props` riporta `reasoning_format: none` e `chat_format: Content-only` anche a modello caricato, in contrasto con `--reasoning-format deepseek`: **`/props` non è un'osservabilità attendibile** delle impostazioni effettive di parsing. La conferma a posteriori di thinking dipenderebbe solo da `reasoning_content`/token di completamento nella risposta.
+5. **Compatibilità thinking + `response_format: json_schema` — NON dimostrata.** La documentazione non la tratta; la lettura (parziale, 100 000 su 174 534 caratteri) di `common/chat.cpp` al commit della build indica per il percorso Qwen: grammatica eager (non lazy) dal primo token, con un blocco `<think>` *opzionale* che il parser si aspetta di dover aprire il modello stesso. Con il prompt che già termina in `<think>\n` (caso `enable_thinking=true`), il blocco di ragionamento potrebbe non essere ammesso dalla grammatica: la richiesta restituirebbe HTTP 200 con JSON valido **senza** thinking, oppure con ragionamento troncato. È un'inferenza da codice parziale, non una verifica; la parte non letta potrebbe contenere un percorso diverso. Risolverla richiede un'inferenza, ossia proprio ciò che il gate doveva stabilire prima.
+   Rischio aggiuntivo noto, non decisivo: `max_completion_tokens 8192` è inferiore a `reasoning-budget 12288`; il ragionamento consumerebbe lo stesso budget del JSON (~2 136 token), con `finish_reason=length` possibile.
+
+## 4.2 Decisione: **INCONCLUSIVE**
+
+Il commutatore è applicato dal template (punti 3–4), ma l'efficacia del thinking con `json_schema` non è dimostrabile senza generare e le evidenze disponibili suggeriscono che la grammatica eager possa sopprimerlo. Con un esito HTTP 200 non si potrebbe distinguere «thinking attivo» da «thinking soppresso», e il gate richiede che l'attivazione sia dimostrabile. Per questo la richiesta di trattamento **non è stata inviata**: V8 non-thinking resta l'unica misura (sezione 2B, NON MIGLIORATO). Nessun confronto, nessuna metrica di costo del trattamento, nessun diff del trattamento.
+Nessuna ulteriore sperimentazione né modifica proposta in questa sessione.
