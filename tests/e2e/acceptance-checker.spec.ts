@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { acceptanceCases, checkAnalysis, checkDraft, type Content, type Item, type ProjectCase, type UserIndex } from './support/acceptance';
+import { acceptanceCases, checkAnalysis, checkDraft, items, type Content, type Item, type ProjectCase, type UserIndex } from './support/acceptance';
+import { locateEdit } from './support/pm-correction';
 
 // T052 - il verificatore TypeScript dei casi di accettazione (support/acceptance.ts) e' coerente con le fixture condivise e con quello
 // backend: analisi/bozza ideali passano, i difetti tipici sono rilevati. Non richiede stack, modello ne' browser: prova le REGOLE,
@@ -37,7 +38,10 @@ function idealDraft(p: ProjectCase, content: Content) {
   const c = p.correction;
   const cite = (refs: string[]) => refs.map((r) => ` [fonte:${r}]`).join('');
   const line = (t: string, refs: string[] = []) => `- ${t}${cite(refs)}`;
-  const edited = (i: Item) => (p.facts.find((f) => f.key === c.editKey)!.match.every((m) => new RegExp(m, 'i').test(i.text.toLowerCase())) ? { ...i, text: c.editedText, evidenceRefs: [...i.evidenceRefs, pm] } : i);
+  // Stessa scelta della voce del percorso (support/pm-correction.ts): se assente o ambigua la modifica non si applica.
+  const target = locateEdit(p, (s) => items(content, s).map((i) => i.text));
+  const chosen = target.kind === 'found' ? items(content, target.section!)[target.index!] : undefined;
+  const edited = (i: Item) => (i === chosen ? { ...i, text: c.editedText, evidenceRefs: [...i.evidenceRefs, pm] } : i);
   const out: string[] = [`# ${p.name} - bozza da revisionare`, ''];
   const sect = (title: string, lines: string[], level = 2) => { if (lines.length) out.push(`${'#'.repeat(level)} ${title}`, '', ...lines, ''); };
   const all = (xs: Item[]) => xs.map(edited).map((i) => line(i.text, i.evidenceRefs));

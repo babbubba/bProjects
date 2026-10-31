@@ -46,16 +46,11 @@ public sealed class AcceptanceFixtureTests
         var pm = Guid.NewGuid();
         var c = ideal;
         var correction = script.Correction;
-        var edit = script.Facts.Single(f => f.Key == correction.EditKey);
-        foreach (var section in edit.Accept)
+        // Stessa scelta della voce del percorso (PmCorrection): se assente o ambigua la modifica non si applica.
+        if (PmCorrection.Locate(script, c) is { Kind: EditTargetKind.Found } target)
         {
-            var items = AcceptanceChecker.Items(c, section);
-            if (items.Any(i => AcceptanceChecker.Matches(AcceptanceChecker.Norm(i.Text), edit.Match)))
-            {
-                c = With(c, section, [.. items.Select(i => AcceptanceChecker.Matches(AcceptanceChecker.Norm(i.Text), edit.Match)
-                    ? i with { Text = correction.EditedText, EvidenceRefs = [.. i.EvidenceRefs, pm] } : i)]);
-                break;
-            }
+            var items = AcceptanceChecker.Items(c, target.Section);
+            c = With(c, target.Section, [.. items.Select((i, n) => n == target.Index ? i with { Text = correction.EditedText, EvidenceRefs = [.. i.EvidenceRefs, pm] } : i)]);
         }
 
         foreach (var add in correction.Additions)

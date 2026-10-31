@@ -199,18 +199,26 @@ public sealed class AcceptanceCheckerSemanticsTests
     [Fact]
     public void A_fact_removed_by_the_pm_correction_is_noted_while_a_fact_lost_by_the_generator_still_fails()
     {
-        // V7 ferie: la correzione simulata («solo-responsabile») riscrive la prima voce con «responsabile diretto», che era anche l'unica
-        // a dire «approva o rifiuta». La bozza segue la revisione confermata: non e' una perdita del generatore.
+        // V7 ferie: l'unica voce con «responsabile diretto» dice anche «approva o rifiuta». La correzione simulata non la tocca piu'
+        // (PmCorrection, sessione 1C); qui la riscrive un PM in modo deliberato. La bozza segue la revisione confermata: non e' una
+        // perdita del generatore.
+        const string approves = "Il responsabile diretto approva o rifiuta la richiesta";
         var run = Of(N2, "ferie").Remove("richiesta").Remove("solo-responsabile")
             .Add(Sec.Requirements, "Il dipendente invia la richiesta di ferie o permessi")
-            .Add(Sec.Requirements, "Il responsabile diretto approva o rifiuta la richiesta");
+            .Add(Sec.Requirements, approves);
         Assert.False(Flags(run.Analysis(), "richiesta"));
 
-        var withAi = run.Document(withAi: true);
+        var (simulated, _) = run.Confirm();
+        Assert.Contains(simulated.Requirements, i => i.Text == approves);
+        var rewritten = simulated with { Requirements = [.. simulated.Requirements.Select(i => i.Text == approves ? i with { Text = run.Script.Correction.EditedText } : i)] };
+        var rendered = AcceptanceOracle.RenderMarkdown(rewritten, run.Script.Name);
+
+        var withAi = AcceptanceChecker.CheckDocument(run.Script, rendered, rewritten, true, run.Content);
         Assert.False(Flags(withAi, "richiesta"), string.Join("; ", withAi.Failures));
         Assert.Contains(withAi.Notes, n => n.Contains("«richiesta» presente nell'analisi AI ma non nella revisione confermata", StringComparison.Ordinal));
 
-        Assert.Contains(run.Document().Failures, f => f.Contains("«richiesta» (assente gia' dalla revisione confermata", StringComparison.Ordinal));
+        Assert.Contains(AcceptanceChecker.CheckDocument(run.Script, rendered, rewritten, true).Failures,
+            f => f.Contains("«richiesta» (assente gia' dalla revisione confermata", StringComparison.Ordinal));
 
         var ideal = Of(N2, "ferie");
         var (confirmed, markdown) = ideal.Confirm();

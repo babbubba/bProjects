@@ -273,3 +273,115 @@ documentato come limite 1 e il test aggiornato. Non eseguiti: DGX, MafReal, E2E 
 2. Decidere se annotare una variante di `Parts` per ordini/spedizioni senza soggetto «clienti» (passivo).
 3. Restringere `Negation` (ora per proposizione, ma ancora generica) ai verbi vietati; aggiungere «di notte»/«sincronizzat…» a `colorweb-indebolita`.
 4. Restringere la regola «tolta dalla correzione PM ⇒ nota» ai soli fatti che la correzione dichiara di toccare.
+
+---
+
+# Sessione 1C (Opus) — correzione PM dell'harness — 2026-10-31
+
+**Base:** `experiment/requirements-quality` @ `986eaa2`. **Esito:** difetto 1B.5 corretto nell'harness (C# e Playwright). Checker C#/TS,
+gold set, prompt, agenti, schema, backend, DGX, database: **non toccati**. Nessun DGX, nessuna suite completa, nessuna generazione.
+
+## 1C.1 Causa esatta
+
+`AcceptanceTests.ApplyCorrection` (ex righe 438-449) e `project-draft-success.spec.ts` (ex 330-344) sceglievano la **prima** voce delle
+sezioni `Accept` che soddisfa `Match` del fatto da modificare. Per `solo-responsabile` `Match = [responsabile diretto]`: nel V7 l'unica
+voce con quelle parole era «Il responsabile diretto approva o rifiuta la richiesta», l'unica a portare la parte
+`[responsabile, approva, rifiut]` del fatto `richiesta`. La sostituzione integrale con il testo della correzione cancellava «rifiuta».
+Voce assente = nessun errore se un'altra combaciava. Lo stesso difetto era nei simulatori dei test del checker
+(`AcceptanceFixtureTests.Corrected`, che sostituiva **tutte** le voci combacianti della prima sezione, e `idealDraft` in
+`acceptance-checker.spec.ts`).
+
+## 1C.2 Strategia (`PmCorrection.cs` / `support/pm-correction.ts`, stesse regole e messaggi)
+
+Le fixture non hanno id stabili delle voci prodotte dal modello: scelta per contenuto, deterministica, senza nuovo matching semantico.
+
+1. **Candidate:** voci delle sezioni `Accept` del fatto da modificare che soddisfano il suo `Match` (come prima).
+2. **Conservazione:** si scarta ogni candidata la cui sostituzione con `EditedText` renderebbe non coperto un altro fatto atteso che prima
+   lo era, valutato con `AcceptanceChecker.Covers` / `covers` (la regola del checker: `Match` intero o tutte le `Parts`) sulle sezioni
+   `Accept` di quel fatto. I fatti cosi' persi sono riportati (`Lost`).
+3. **Voce dedicata:** fra le candidate sicure prevale quella che non soddisfa da sola nessun'altra attesa nella sua sezione; se nessuna e'
+   dedicata si considerano tutte le sicure.
+4. **Esito:**
+
+| Caso | Esito | Effetto sull'harness |
+|---|---|---|
+| una sola candidata (dopo 2-3) | `Found` (sezione, indice) | sostituito **solo il testo** di quella voce; id, classificazione, `evidenceRefs` invariati; fonte PmRevision assegnata dal server (nel simulatore: aggiunta alla voce e alle integrazioni come prima) |
+| nessuna candidata | `Absent` | `correzione non applicabile: la voce «k» da modificare non e' nell'anteprima (Sezioni)`; nessuna voce toccata |
+| candidate, ma ognuna porta altri fatti | `Absent` con `Lost` | `correzione non applicabile: nessuna voce dedicata a «k» in …; sostituire «…» cancellerebbe «f» (fatti indipendenti dalla correzione)` |
+| piu' candidate equivalenti | `Ambiguous` | `correzione non applicabile: «k» ambigua, N voci candidate (…), nessuna scelta silenziosa` |
+
+`Absent`/`Ambiguous` sono **fallimenti del percorso** (`run.Fail` / `failures.push`), come gia' accadeva per «voce non nell'anteprima»;
+integrazioni e risoluzione del conflitto si applicano comunque, `CorrectionApplied` resta legato all'esito del PUT. Scelta coerente con
+il contratto: la correzione prevista e' una *modifica* («Modificare la voce …», `casi-e-attese.md`), quindi un bersaglio assente si
+segnala; aggiungere la voce mancante avrebbe trasformato la lacuna del modello («solo» non espresso, limite 1B.4.3) in un successo.
+
+## 1C.3 Caso ferie V7
+
+Sulle analisi AI reali della traccia V7 (`V7_captured_analyses_select_the_same_items_except_ferie_which_is_reported`):
+officina, magazzino, fornitori, aurora, boreale → `Found` sulla **stessa** voce che l'harness V7 aveva modificato (verificato sulla
+revisione confermata registrata); ferie → `Absent`, `Lost = [richiesta]`. Con il nuovo harness la revisione confermata conserva
+«Il responsabile diretto approva o rifiuta la richiesta»: **«rifiuta» non sparisce**, la bozza non eredita un'omissione prodotta
+dall'harness e nessuna nota ««richiesta» presente nell'analisi AI ma non nella revisione confermata» la maschera. N2 risulterebbe invece
+**FAIL** con il messaggio esplicito «nessuna voce dedicata a «solo-responsabile» …»: e' la lacuna reale (esclusivita' non espressa dal
+modello), ora visibile invece che nascosta. Da confermare con una nuova esecuzione N2 sul DGX (non eseguita).
+
+Nota: `V7_captured_outputs_keep_only_the_real_omissions` (1A/1B) rilegge la revisione confermata **storica** prodotta dal vecchio harness,
+quindi continua ad attendersi la nota su «richiesta»: documenta il V7 com'era, non il comportamento attuale.
+
+## 1C.4 Modifiche
+
+```
+backend/tests/bProjects.IntegrationTests/PmCorrection.cs                     nuovo: scelta della voce (Found/Absent/Ambiguous)
+backend/tests/bProjects.IntegrationTests/PmCorrectionTests.cs                nuovo: 15 prove (9 + 6 progetti nominali)
+backend/tests/bProjects.IntegrationTests/AcceptanceTests.cs                  ApplyCorrection usa PmCorrection (ora internal, provato direttamente)
+backend/tests/bProjects.IntegrationTests/AcceptanceFixtureTests.cs           Corrected usa PmCorrection (una sola voce, come il percorso)
+backend/tests/bProjects.IntegrationTests/AcceptanceCheckerSemanticsTests.cs  la prova «tolta dalla correzione PM ⇒ nota» costruisce la
+                                                                             riscrittura PM in modo esplicito (il simulatore non la produce
+                                                                             piu'); asserzioni sul checker invariate
+tests/e2e/support/pm-correction.ts                                           nuovo: specchio TS
+tests/e2e/pm-correction.spec.ts                                              nuovo: 11 prove × 2 progetti Playwright, stessi messaggi del C#
+tests/e2e/project-draft-success.spec.ts                                      legge l'anteprima di tutte le sezioni attese e usa locateEdit
+tests/e2e/acceptance-checker.spec.ts                                         idealDraft usa locateEdit
+```
+
+## 1C.5 Test eseguiti
+
+| Comando | PASS | FAIL | SKIP |
+|---|---|---|---|
+| `dotnet build bProjects.sln` | 0 errori, 0 avvisi | – | – |
+| `dotnet test --solution bProjects.sln --filter-class "*PmCorrectionTests" --filter-class "*AcceptanceCheckerSemanticsTests" --filter-class "*AcceptanceFixtureTests" --filter-class "*AcceptanceCheckerIndependentReviewTests"` (traccia V7 presente) | 206 | 0 | 1 (`V7_replay_dump`, richiede `BPROJECTS_REVIEW_OUT`, preesistente) |
+| `npx tsc --noEmit -p .` (tests/e2e) | exit 0 | – | – |
+| `E2E_BASE_URL=http://127.0.0.1:9 npx playwright test acceptance-checker.spec.ts pm-correction.spec.ts` | 58 | 0 | 0 |
+
+Prima esecuzione backend: 2 FAIL, corretti nel codice e non rilanciando i test: la vecchia prova del checker riproduceva il difetto
+dell'harness; una voce ridondante «approva o rifiuta» accanto a quella sull'esclusivita' dava `Ambiguous` (da qui la regola 3).
+Senza traccia V7 le prove di riesecuzione risultano ignorate, mai superate. Non eseguiti: DGX, MafReal, E2E con stack, suite completa.
+
+Copertura delle richieste: (1) voce presente; (2) parole simili, anche con voce ridondante; (3) voce assente; (4) ambigua; (5) «rifiuta»
+conservato, percorso JSON e simulatore; (6) id/classificazione/fonti invariati, fonte PmRevision, validatori PmEdit/PmConfirm, bozza
+conforme; (7) forma V7 sintetica e traccia V7 reale; (8) sei progetti nominali + riesecuzione V7 dei cinque con voce. Un'omissione vera
+prima della correzione (nessun «rifiuta» nell'analisi AI) resta segnalata in analisi e in bozza («assente gia' dalla revisione confermata»).
+
+## 1C.6 Stato dei problemi
+
+**Risolto:** 1B.5 / 1B.7.1 lato harness (scelta della voce, target assente/ambiguo, conservazione dei fatti, parita' C#/TS).
+
+**Aperti (fuori perimetro 1C, invariati):**
+1. 1B.4.1: `Negation` per proposizione ancora generica («senza», «fuori», «no»).
+2. 1B.4.2: `colorweb-indebolita` non conosce «di notte»/«sincronizzat…».
+3. 1B.4.3: qualificatori non annotati; `solo-responsabile` (`Match = [responsabile diretto]`) non verifica l'esclusivita'. E' il motivo
+   per cui serve la regola 3; restringere `Match` (es. `solo|esclusiv|soltanto`) e' una decisione sul gold set, non presa qui.
+4. 1B.4.5 / 1B.7.4: «presente nell'analisi AI, assente nella confermata ⇒ nota» vale per qualunque fatto. L'harness non produce piu'
+   quel caso, ma il checker resta permissivo verso una correzione reale che tolga un fatto.
+5. 1B.7.2: variante passiva di `Parts` per ordini/spedizioni.
+6. Rieseguire N2 (e i sei casi) sul DGX con il nuovo harness per confermare 1C.3.
+
+## 1C.7 Per la sessione Sonnet 1D (verifica indipendente)
+
+1. Diff di questo commit contro `986eaa2`: solo i file di 1C.4; nessun file di checker (`AcceptanceChecker` in `AcceptanceFixtures.cs`,
+   `support/acceptance.ts`), fixture o produzione.
+2. Rilanciare i comandi di 1C.5 (con la traccia V7 in `docs/acceptance-trace/`, non versionata).
+3. Controfattuali propri su `PmCorrection.Locate`/`locateEdit`: voce in sezione non `Accept`; candidata che porta un fatto coperto anche
+   altrove (deve restare sicura); due voci dedicate in sezioni diverse (Ambiguous); fatti con `Parts` divisi fra la candidata e un'altra voce.
+4. Verificare la parita' C#/TS dei messaggi (le prove TS confrontano le stringhe esatte dei casi assente e V7).
+5. Valutare se `Ambiguous` per duplicati letterali in sezioni diverse sia troppo severo per i casi reali (nel V7 non si presenta).

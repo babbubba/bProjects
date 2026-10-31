@@ -416,7 +416,7 @@ internal static class AcceptanceRunner
     }
 
     /// <summary>Corpo del PUT: l'AnalysisContent con la modifica, le integrazioni, l'assunzione e l'eventuale risoluzione (fonti e autore li assegna il server).</summary>
-    private static JsonNode? ApplyCorrection(JsonNode content, ProjectScript script, ProjectRun run)
+    internal static JsonNode? ApplyCorrection(JsonNode content, ProjectScript script, ProjectRun run)
     {
         var correction = script.Correction;
         var changed = false;
@@ -435,17 +435,16 @@ internal static class AcceptanceRunner
             _ => content["openQuestions"]!.AsArray(),
         };
 
-        var edit = script.Facts.Single(f => f.Key == correction.EditKey);
-        var target = edit.Accept.SelectMany(s => Array(s))
-            .FirstOrDefault(i => AcceptanceChecker.Matches(AcceptanceChecker.Norm(i!["text"]!.GetValue<string>()), edit.Match));
-        if (target is not null)
+        // Solo la voce che esprime il fatto da modificare, unica e senza altri fatti attesi (PmCorrection): assente o ambigua = segnalata.
+        var target = PmCorrection.Locate(script, content);
+        if (target.Kind == EditTargetKind.Found)
         {
-            target["text"] = correction.EditedText;
+            Array(target.Section)[target.Index]!["text"] = correction.EditedText;
             changed = true;
         }
         else
         {
-            run.Fail($"correzione non applicabile: la voce «{edit.Key}» da modificare non e' nell'anteprima");
+            run.Fail(target.Message);
         }
 
         foreach (var add in correction.Additions)
