@@ -68,6 +68,9 @@ public static class TestEnvironment
         options.Phases.Analysis.EnableThinking = true;
         options.Phases.Analysis.MaxOutputTokens = 32768;
         options.Phases.Analysis.RequestTimeoutSeconds = 900;
+        options.Phases.Extraction.EnableThinking = false;     // come infra/compose.yaml (AI_EXTRACTION_*)
+        options.Phases.Extraction.MaxOutputTokens = 16384;
+        options.Phases.Extraction.RequestTimeoutSeconds = 600;
         MafDiagnostics.RecordConfig(options);
         return options;
     }

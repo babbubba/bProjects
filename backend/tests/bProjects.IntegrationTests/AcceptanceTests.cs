@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using bProjects.App.AI;
+using bProjects.App.Evidence;
 using bProjects.App.Analysis;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -929,6 +930,11 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
             var documentFactory = new AgentFactory(options, counter, async (t, ct) => await model.CountTokensAsync(t, ct));
             services.AddSingleton(new DocumentAgent(documentFactory, model.CreateChatOptions(temperature: 0.2f)));
             services.AddSingleton(sp => new DocumentWorkflow(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentAgent>()));
+            // Nuova pipeline (T072): l'estrattore reale MAF della fase Extraction, come Program.cs; Analizza attende le sue evidenze.
+            services.AddSingleton<IEvidenceExtractionExecutor>(sp => new EvidenceExtractor(
+                sp.GetRequiredService<IServiceScopeFactory>(), factory,
+                model.CreateChatOptions(EvidenceExtractionSchema.Base, EvidenceExtractionSchema.Name, temperature: 0, phase: AiPhase.Extraction),
+                sp.GetRequiredService<EvidenceEvents>()));
         });
 
         var env = new AcceptanceEnv { App = app, Connection = _database.ConnectionString, DocumentCalls = () => counter!.Calls };
