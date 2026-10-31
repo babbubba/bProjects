@@ -110,6 +110,11 @@ $usage-offset: 1rem;
   }
 }
 
+.project-tabs {
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 .project-title,
 .project-description {
   overflow-wrap: anywhere;

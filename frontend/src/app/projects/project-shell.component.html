@@ -114,9 +114,31 @@
           @if (project.description) {
             <p class="project-description">{{ project.description }}</p>
           }
+          <nav class="nav nav-pills project-tabs" aria-label="Sezioni del progetto">
+            <button
+              type="button"
+              class="nav-link"
+              data-testid="tab-work"
+              [class.active]="section() === 'work'"
+              [attr.aria-current]="section() === 'work' ? 'page' : null"
+              (click)="section.set('work')"
+            >
+              Conversazione e documento
+            </button>
+            <button
+              type="button"
+              class="nav-link"
+              data-testid="tab-evidence"
+              [class.active]="section() === 'evidence'"
+              [attr.aria-current]="section() === 'evidence' ? 'page' : null"
+              (click)="section.set('evidence')"
+            >
+              Evidenze
+            </button>
+          </nav>
         </header>
         <app-context-usage-panel class="project-usage" [projectId]="project.id" />
-        <div class="project-body">
+        <div class="project-body" [hidden]="section() === 'evidence'">
           <app-chat [projectId]="project.id" />
           <app-analysis-preview
             [projectId]="project.id"
@@ -126,6 +148,19 @@
           />
           <app-document-view #doc [projectId]="project.id" [current]="current()" />
         </div>
+        @if (section() === 'evidence') {
+          <div class="project-body">
+            @defer (on immediate) {
+              <app-evidence-view
+                [projectId]="project.id"
+                [analysisId]="current()?.analysisId ?? project.currentAnalysisId ?? null"
+                [revisionId]="current()?.revisionId ?? project.currentRevisionId ?? null"
+              />
+            } @placeholder {
+              <p class="text-secondary small" role="status">Caricamento delle evidenze…</p>
+            }
+          </div>
+        }
       </article>
     } @else if (detailError()) {
       <div class="alert alert-warning" role="alert">{{ detailError() }}</div>
