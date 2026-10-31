@@ -699,3 +699,27 @@ Stessa richiesta di 4.3 (`replay-3/applytpl_true.json`, diff con la V8 di 2B: so
 - **Qualità semantica:** nessun confronto possibile; nessuna delle due frasi critiche è presente in un output.
 
 **Decisione: REGRESSIONE** — output inutilizzabile (nessun JSON), costo ~3,7× la V8 e fallimento per limite di output. Con questa configurazione (limite 8192, reasoning-budget 12288) il thinking non è compatibile con l'analisi Boreale. Non dimostrato se un budget maggiore migliorerebbe la fedeltà: non testato per vincolo dell'incarico. Nessun codice, server, modello, schema, prompt o sampling modificato; nessun'altra prova.
+
+## 4.5 Terza esecuzione (su indicazione esplicita): `max_completion_tokens` 16384, timeout 900 s — **PROMETTENTE** (con costo alto)
+
+Prima della chiamata: modello `loaded`, `/slots` con `is_processing=false` (nessuna richiesta in corso). Corpo = V8 di 2B (`replay-2b/payload.json`); diff automatico: **solo** `chat_template_kwargs.enable_thinking` (false→true) e `max_completion_tokens` (8192→16384), stesso ordine delle chiavi; prompt, schema, modello, `temperature 0` invariati; server invariato (`reasoning-budget 12288`). Una sola chiamata, nessun retry. File: `replay-3/payload_think16k.json`, `response_think16k.json`, `content_think16k_pretty.json`.
+
+| Metrica | V8 senza thinking | V8 con thinking (16384) |
+|---|---|---|
+| `finish_reason` | `stop` | `stop` |
+| Completion tokens | 2 136 | **10 625** (×4,97) |
+| di cui reasoning / output | – / 2 136 | non separati da `usage`; stima ~8 400 / ~2 200 (output stimato dai caratteri: 4 645 vs 4 476 della V8, 2 136 token) |
+| Prompt tokens | 4 269 (0 in cache) | 4 305 (4 301 in cache) |
+| Generazione | 78,9 s (27,1 tok/s) | **414,1 s** (25,7 tok/s), ×5,25 |
+| Durata a muro | 85,6 s lato server | 414,3 s |
+| `reasoning_content` | assente | presente, 31 697 caratteri; **chiuso** (la sua coda dice «Now final… Done.») |
+| `content` | JSON valido | JSON valido, 15 chiavi, 17 ID unici, tutte le `evidenceRefs` fra le 5 fonti |
+| «obbligatoria» | sì | sì |
+| «in tempo reale» | **no** | **sì** |
+
+- **Chiusura del reasoning:** completa e naturale, a ~8 400 token, sotto il `reasoning-budget` 12 288 e sotto il limite 16384. Il fallimento di 4.4 è coerente: 8 192 non bastavano a chiudere il ragionamento (~8 400 token) e a scrivere il JSON. Non emerge un limite della build: il budget non è stato raggiunto.
+- **Voce Colorweb (dependencies, fonte seq. 5):** «Integrazione obbligatoria con il gestionale ordini Colorweb, con gli ordini che devono arrivare in tempo reale al gestionale». Entrambi i vincoli e il legame ordini→gestionale sono conservati (H1 di 2A.4 soddisfatta).
+- **Altri requisiti (H2):** tutti conservati (ordini, spedizione, SMS/email a scelta del cliente, SMS per l'avviso di consegna, SSO, solo i propri ordini, settembre, listino fuori dal portale, niente password locali). In più, rispetto alla V8, riporta «gestito altrove» per il listino, che è nel testo del PM (seq. 9).
+- **Omissioni reali:** 0 (V8: 1). **Affermazioni non supportate:** 0 (nessuna integrazione, ruolo o funzione inventati; fonti = soli messaggi PM). Valutazione manuale, il checker automatico non è stato eseguito.
+- **Decisione: PROMETTENTE.** Thinking attivo e dimostrato, entrambi i vincoli critici conservati, nessuna regressione, costo documentato: ~5× token e ~5× tempo (414 s a muro, oltre i timeout di 240 e 600 s provati prima), con limite di output raddoppiato.
+- **Cautele:** una sola esecuzione a temperatura 0, indicazione esplorativa e non una misura attendibile (nessuna prova di ripetibilità; il ragionamento è vicino alla soglia di 8 192 e potrebbe superare 16384 su analisi più lunghe). Il confronto non è perfettamente isolato rispetto a V8: oltre a `enable_thinking` è cambiato `max_completion_tokens`, necessario per l'attivazione utile; il modello non era `sleeping` (V8 di 2B era freddo), per cui i tempi di generazione sono confrontabili e quelli a muro no. Non verificati: magazzino e ferie. Il prodotto non è stato modificato; tenere 414 s vs `RequestTimeoutSeconds` del backend è una considerazione per chi deciderà, non un'azione di questa sessione.
