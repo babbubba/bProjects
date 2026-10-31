@@ -938,7 +938,7 @@ Legenda: **[M]** misurato (telemetria, esito automatico, JSON salvati); **[C]** 
 ### Problemi ancora bloccanti
 1. T052 non superato: nessuna valutazione umana (due PM, tecnico estraneo) e nominali non tutti PASS nello stesso giro.
 2. Cause non dimostrate: N1 (invalid_agent_output del documento), Boreale a 210 s, 3 MafReal (N5 nel run completo, T047 chat ridotta, T047 10 messaggi grandi), perdita SMS dopo compattazione.
-3. Decisioni sul contratto: regola «domanda ripetuta» (dopo risposta o sempre), precondizione della correzione PM, criterio sui conflitti che il modello ripete anche come vincoli.
+3. ~~Decisioni sul contratto~~ prese e applicate in 9 (domanda ripetuta: sempre; correzione PM: conserva gli altri fatti; conflitti promossi a vincoli: FAIL reale).
 4. Rischio di tempo: l'analisi con thinking ha già toccato 178–210 s su un limite nominale di 180 s.
 5. Strumentazione mancante: output rifiutato del documento, tempo di inferenza completo e corpo HTTP effettivo non catturati.
 
@@ -980,3 +980,48 @@ N5: non ripetere domande già poste, anche senza risposta (mantenere il controll
 
 ### Stato
 T052 e T053 restano aperti; PR #3 non mergiata. Stack Docker `bprojects-t053b` fermato con `stop` (volume `bprojects-t053b_pgdata` conservato, mai `down -v`).
+
+# Sessione 9 — N2/N4/N5: decisioni di contratto applicate — 2026-10-31
+
+**Branch:** `integration/requirements-quality-t052`. **Nessuna inferenza DGX.** Non toccati: prompt V8, modello, schema `AnalysisContent`, pipeline MAF, checker (`AcceptanceChecker` C# e TS), gold set, attese, limite nominale di 180 s.
+
+## 9.1 N2 — correzione PM dell'harness
+**Problema [M]:** per `ferie` l'unica voce con «responsabile diretto» era «Il responsabile diretto approva o rifiuta la richiesta», che porta anche il fatto indipendente `richiesta`. Sostituirla col testo corretto cancellava «rifiuta»; la 1C aveva risolto segnalando la correzione come non applicabile (N2 FAIL per limite dell'harness, non del modello).
+
+**Regola nuova (`PmCorrection.cs` / `support/pm-correction.ts`, stesse regole e stessi messaggi):** invariate le fasi 1C (candidate per `Match`, scarto di quelle che scoprono altri fatti con `Covers`, preferenza per la voce dedicata, `Ambiguous` se più equivalenti). Se **nessuna** candidata è sostituibile senza perdere fatti:
+- per ogni candidata il nuovo testo è `«testo corretto»; «testo originale con iniziale minuscola»` (`Preserving`): nessuna parola nuova, il PM modifica la parte sua e lascia intatto il resto;
+- la candidata è ammessa solo se, **verificato con `Covers`** (regola del checker), nessun altro fatto atteso si perde e il fatto da modificare resta espresso (`Match`);
+- esattamente una ammessa → `Found` con `NewText` e `Preserved` (i fatti conservati), id, classificazione ed `evidenceRefs` invariati;
+- più ammesse → `Ambiguous` («voci candidate a piu' fatti», nessuna scelta silenziosa);
+- nessuna ammessa → `Absent` con il limite esplicito («nessuna voce di «k» … puo' essere riscritta conservando gli altri fatti»). Mai una correzione inventata.
+
+`EditTarget` ora porta `NewText` (sempre il testo da scrivere) e `Preserved`; `ApplyCorrection`, `Corrected` (simulatore), `project-draft-success.spec.ts` e `idealDraft` usano `NewText`. Con una voce dedicata `NewText = EditedText` come prima: nessun cambiamento sui cinque altri progetti nominali.
+
+**Non è un falso PASS:** l'omissione reale del modello non viene creata né colmata dalla correzione (test sotto); `solo-email` resta FAIL, checker invariato.
+
+## 9.2 Decisioni senza modifiche al checker
+- **N2 «solo email»:** FAIL reale del modello (generalizza «solo email» in «Le comunicazioni avvengono esclusivamente via email», perdendo «notifiche»). Nessuna modifica.
+- **N4:** alternative di un conflitto aperto promosse a requisiti/vincoli (5 e 10 giorni, SSO / email+password) = FAIL reale; contratto invariato.
+- **N5:** «domanda ripetuta» vale **sempre**, anche se la precedente non ha ricevuto risposta. Il controllo (`AcceptanceRunner`, `project-draft-success.spec.ts`) era già così. Allineata la documentazione: `quickstart.md` (criterio 1 di chat) e `acceptance/modulo-risultati.md` (voce C1). `spec.md` (FR-018, SC-008 «già risolta/risolti») non toccata: non contraddice il caso più stretto, da riscrivere solo se l'autore lo vuole.
+- **Limite 180 s:** invariato.
+
+## 9.3 Test
+| Test | Cosa prova |
+|---|---|
+| `PmCorrectionTests.A_multi_fact_item_is_rewritten_keeping_the_independent_facts` (+ `pm-correction.spec.ts`) | positivo: forma V7 di ferie → `Found`, `Preserved=[richiesta]`, «rifiuta» conservato, `richiesta` e `solo-responsabile` coperti, nessuna nota/fallimento su «richiesta»; solo il testo di quella voce cambia |
+| `…two_equivalent_candidates_is_reported_not_guessed` | negativo: due voci a più fatti → `Ambiguous`, nessuna voce toccata, fallimento nel percorso |
+| `…simple_replacement_is_kept_when_no_other_fact_is_at_stake` | negativo: senza fatti da conservare resta `EditedText`, senza accodare l'originale |
+| `A_real_omission_before_the_correction…` (esteso) e specchio TS | negativo: se il modello non ha mai detto «rifiuta» la correzione non lo aggiunge (`Preserved` vuoto), l'omissione resta segnalata |
+| `An_absent_target…`, `An_ambiguous_target…`, `Every_nominal_correction…` | invariati nelle attese; i nominali verificano anche il testo scritto |
+| `V7_captured_analyses_select_the_same_items_and_ferie_keeps_the_independent_fact` | sulla traccia V7 locale: ferie → `Found` con `richiesta` conservata |
+| `A_fact_removed_by_the_pm_correction_is_noted…` | stessa semantica del checker; la riscrittura «solo testo corretto» è ora costruita esplicitamente dal test |
+
+Eseguiti solo i pertinenti: C# `PmCorrectionTests|Acceptance*` 235 totali, 218 PASS, 0 FAIL, 17 ignorati (MafReal/PostgreSQL non disponibili); Playwright senza stack (`E2E_BASE_URL` fittizio, nessun browser) `pm-correction.spec.ts` + `acceptance-checker.spec.ts` 64/64 su desktop e mobile; `tsc --noEmit` pulito.
+
+## 9.4 Difetti ancora attribuibili al modello [M] (dati già raccolti; N2 con il nuovo harness NON rieseguito sul DGX)
+1. **N2 «solo email»:** qualificatore «notifiche» perso («Le comunicazioni avvengono esclusivamente via email»), ambito allargato.
+2. **N4:** conflitto aperto ripetuto anche come vincoli (5 e 10 giorni, con il «10 giorni» riferito alle certificazioni invece che all'approvazione) e requisiti (SSO / email+password). Il superamento di 0,6 s (180,6 s) è coerente con più token a velocità invariata: limite non modificato.
+3. **N5 Aurora:** stessa domanda ai turni 3 e 5, riprodotta in rerun (+ omissione «solo-email»); ora FAIL reale confermato dalla regola «sempre».
+4. **N3:** lettore di codici a barre in Goals senza legame con carichi/scarichi (legame strumento→operazione perso).
+5. **N1 (campione 4):** omissioni «conferma-email» e «promemoria».
+**Non attribuibili (cause non dimostrate [?]):** N1 `invalid_agent_output` (campione 1), N5 Boreale ancora Running a 210 s, MafReal T047 (chat ridotta, 10 messaggi grandi), perdita SMS dopo compattazione. **Atteso ma non verificato:** con l'harness corretto N2 dovrebbe fallire solo per `solo-email`; richiede una nuova esecuzione DGX (non fatta, come da istruzioni).

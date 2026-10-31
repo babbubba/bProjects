@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { acceptanceCases, covers, norm, type ProjectCase } from './support/acceptance';
-import { locateEdit } from './support/pm-correction';
+import { locateEdit, preserving } from './support/pm-correction';
 
 // T052 - scelta della voce nella correzione PM simulata (support/pm-correction.ts), specchio di PmCorrectionTests.cs con gli stessi
 // messaggi. Non richiede stack, modello ne' browser: prova l'harness, non il modello ne' il verificatore.
@@ -45,7 +45,7 @@ test.describe('correzione PM simulata: scelta della voce (senza stack)', () => {
 
   test('una voce assente non fa sostituire un\'altra voce', () => {
     const target = locateEdit(project('ferie'), preview(project('ferie'), ['solo-responsabile']));
-    expect(target).toEqual({ kind: 'absent', lost: [], message: "correzione non applicabile: la voce «solo-responsabile» da modificare non e' nell'anteprima (Requirements/Constraints)" });
+    expect(target).toEqual({ kind: 'absent', lost: [], preserved: [], message: "correzione non applicabile: la voce «solo-responsabile» da modificare non e' nell'anteprima (Requirements/Constraints)" });
   });
 
   test('una voce ambigua non e\' scelta in silenzio', () => {
@@ -55,13 +55,51 @@ test.describe('correzione PM simulata: scelta della voce (senza stack)', () => {
     expect(target.section).toBeUndefined();
   });
 
-  test('forma V7 di ferie: correzione segnalata, «rifiuta» conservato', () => {
+  test("voce a piu' fatti: riscritta conservando i fatti indipendenti (forma V7 di ferie)", () => {
     const ferie = project('ferie');
-    const target = locateEdit(ferie, preview(ferie, ['richiesta', 'solo-responsabile'], [['requirements', 0, SENDS], ['requirements', 1, APPROVES]]));
-    expect(target).toEqual({
-      kind: 'absent', lost: ['richiesta'],
-      message: `correzione non applicabile: nessuna voce dedicata a «solo-responsabile» in Requirements/Constraints; sostituire «${APPROVES}» cancellerebbe «richiesta» (fatti indipendenti dalla correzione)`,
-    });
+    const texts = preview(ferie, ['richiesta', 'solo-responsabile'], [['requirements', 0, SENDS], ['requirements', 1, APPROVES]]);
+    const target = locateEdit(ferie, texts);
+    expect(target.kind).toBe('found');
+    expect(target.preserved).toEqual(['richiesta']);
+    expect(target.newText).toBe(preserving(ferie.correction.editedText, APPROVES));
+    expect(target.newText!.startsWith(ferie.correction.editedText)).toBe(true);
+    expect(texts(target.section!)[target.index!]).toBe(APPROVES);
+    // dopo la riscrittura «richiesta» (con «rifiuta») e «solo-responsabile» sono entrambi coperti
+    const after = (s: string) => texts(s).map((t, n) => (s === target.section && n === target.index ? target.newText! : t));
+    for (const key of ['richiesta', 'solo-responsabile']) {
+      const f = ferie.facts.find((x) => x.key === key)!;
+      expect(covers(f.match, f.parts, f.accept.flatMap(after).map(norm)), key).toBe(true);
+    }
+  });
+
+  test("due voci a piu' fatti equivalenti: segnalate, non scelte in silenzio", () => {
+    const ferie = project('ferie');
+    const target = locateEdit(ferie, preview(ferie, ['richiesta', 'solo-responsabile', 'ufficio-riepilogo'], [
+      ['requirements', 0, APPROVES], ['requirements', 1, "L'ufficio personale vede soltanto il riepilogo, non il responsabile diretto"],
+    ]));
+    expect(target.kind).toBe('ambiguous');
+    expect(target.message).toContain("voci candidate a piu' fatti");
+    expect(target.newText).toBeUndefined();
+    expect(target.section).toBeUndefined();
+  });
+
+  test('senza fatti da conservare resta la sostituzione semplice', () => {
+    const ferie = project('ferie');
+    const target = locateEdit(ferie, preview(ferie));
+    expect(target.kind).toBe('found');
+    expect(target.preserved).toEqual([]);
+    expect(target.newText).toBe(ferie.correction.editedText);
+  });
+
+  test("un'omissione reale del modello non viene aggiunta dalla correzione", () => {
+    const ferie = project('ferie');
+    const texts = preview(ferie, ['richiesta'], [['requirements', 0, SENDS]]);
+    const target = locateEdit(ferie, texts);
+    expect(target.kind).toBe('found');
+    expect(target.preserved).toEqual([]);
+    const after = (s: string) => texts(s).map((t, n) => (s === target.section && n === target.index ? target.newText! : t));
+    const f = ferie.facts.find((x) => x.key === 'richiesta')!;
+    expect(covers(f.match, f.parts, f.accept.flatMap(after).map(norm))).toBe(false);
   });
 
   for (const { caseId, p } of projects) {
@@ -71,7 +109,7 @@ test.describe('correzione PM simulata: scelta della voce (senza stack)', () => {
       const target = locateEdit(p, texts);
       expect(target.kind, target.message).toBe('found');
       expect(texts(target.section!)[target.index!]).toBe(edit.text);
-      const after = (s: string) => texts(s).map((t, n) => (s === target.section && n === target.index ? p.correction.editedText : t));
+      const after = (s: string) => texts(s).map((t, n) => (s === target.section && n === target.index ? target.newText! : t));
       for (const f of p.facts) expect(covers(f.match, f.parts, f.accept.flatMap(after).map(norm)), f.key).toBe(true);
     });
   }

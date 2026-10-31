@@ -50,7 +50,7 @@ public sealed class AcceptanceFixtureTests
         if (PmCorrection.Locate(script, c) is { Kind: EditTargetKind.Found } target)
         {
             var items = AcceptanceChecker.Items(c, target.Section);
-            c = With(c, target.Section, [.. items.Select((i, n) => n == target.Index ? i with { Text = correction.EditedText, EvidenceRefs = [.. i.EvidenceRefs, pm] } : i)]);
+            c = With(c, target.Section, [.. items.Select((i, n) => n == target.Index ? i with { Text = target.NewText!, EvidenceRefs = [.. i.EvidenceRefs, pm] } : i)]);
         }
 
         foreach (var add in correction.Additions)

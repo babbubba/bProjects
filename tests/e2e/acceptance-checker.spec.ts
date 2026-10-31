@@ -41,7 +41,7 @@ function idealDraft(p: ProjectCase, content: Content) {
   // Stessa scelta della voce del percorso (support/pm-correction.ts): se assente o ambigua la modifica non si applica.
   const target = locateEdit(p, (s) => items(content, s).map((i) => i.text));
   const chosen = target.kind === 'found' ? items(content, target.section!)[target.index!] : undefined;
-  const edited = (i: Item) => (i === chosen ? { ...i, text: c.editedText, evidenceRefs: [...i.evidenceRefs, pm] } : i);
+  const edited = (i: Item) => (i === chosen ? { ...i, text: target.newText!, evidenceRefs: [...i.evidenceRefs, pm] } : i);
   const out: string[] = [`# ${p.name} - bozza da revisionare`, ''];
   const sect = (title: string, lines: string[], level = 2) => { if (lines.length) out.push(`${'#'.repeat(level)} ${title}`, '', ...lines, ''); };
   const all = (xs: Item[]) => xs.map(edited).map((i) => line(i.text, i.evidenceRefs));

@@ -210,27 +210,71 @@ public sealed class PmCorrectionTests
     }
 
     [Fact]
-    public void The_v7_ferie_shape_reports_the_missing_exclusivity_item_instead_of_creating_an_omission()
+    public void A_multi_fact_item_is_rewritten_keeping_the_independent_facts()
     {
-        // V7 proxy 56: nessuna voce sull'esclusivita'; l'unica con «responsabile diretto» porta anche «approva o rifiuta».
+        // V7 proxy 56: nessuna voce sull'esclusivita'; l'unica con «responsabile diretto» porta anche «approva o rifiuta» (fatto «richiesta»).
         var s = Ferie;
         var (json, _) = Analysis(s, ["richiesta", "solo-responsabile"], (Sec.Requirements, 0, Sends), (Sec.Requirements, 1, Approves));
         var ai = Content(json);
 
         var target = PmCorrection.Locate(s, json);
 
-        Assert.Equal(EditTargetKind.Absent, target.Kind);
-        Assert.Equal(["richiesta"], target.Lost);
-        var (body, run) = Apply(s, json);
-        Assert.Equal([$"correzione non applicabile: nessuna voce dedicata a «solo-responsabile» in Requirements/Constraints; sostituire «{Approves}» cancellerebbe «richiesta» (fatti indipendenti dalla correzione)"],
-            run.Findings.Failures);
-        OnlyTextChanged(json, body!, null, -1);
+        Assert.Equal(EditTargetKind.Found, target.Kind);
+        Assert.Equal(["richiesta"], target.Preserved);
+        Assert.Equal(PmCorrection.Preserving(s.Correction.EditedText, Approves), target.NewText);
+        Assert.StartsWith(s.Correction.EditedText, target.NewText, StringComparison.Ordinal);
+        Assert.Contains("rifiuta la richiesta", target.NewText, StringComparison.Ordinal);
+        var again = PmCorrection.Locate(s, ai);
+        Assert.Equal((target.Kind, target.Section, target.Index, target.NewText), (again.Kind, again.Section, again.Index, again.NewText));
 
-        // La revisione confermata conserva «rifiuta»: la bozza non eredita un'omissione prodotta dall'harness, e nessuna nota la maschera.
+        var (body, run) = Apply(s, json);
+        Assert.Empty(run.Findings.Failures);
+        Assert.Equal(target.NewText, PmCorrection.Items(body!, target.Section)[target.Index]!["text"]!.GetValue<string>());
+        OnlyTextChanged(json, body!, target.Section, target.Index);
+
+        // Nella revisione confermata «rifiuta» e il fatto «richiesta» sono conservati, l'esclusivita' e' espressa e nessuna nota li maschera.
         var confirmed = AcceptanceFixtureTests.Corrected(ai, s, Guid.NewGuid(), AnalysisContentState.PmConfirmed);
+        var texts = AcceptanceChecker.AllTexts(confirmed).Select(AcceptanceChecker.Norm).ToList();
+        foreach (var key in new[] { "richiesta", "solo-responsabile" })
+        {
+            var fact = s.Facts.Single(f => f.Key == key);
+            Assert.True(AcceptanceChecker.Covers(fact.Match, fact.Parts, texts), $"«{key}» non coperto dopo la correzione");
+        }
+
         var document = AcceptanceChecker.CheckDocument(s, AcceptanceOracle.RenderMarkdown(confirmed, s.Name), confirmed, correctionApplied: true, ai);
         Assert.DoesNotContain(document.Failures, f => f.Contains("«richiesta»", StringComparison.Ordinal));
         Assert.DoesNotContain(document.Notes, n => n.Contains("«richiesta»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_multi_fact_item_with_two_equivalent_candidates_is_reported_not_guessed()
+    {
+        // Due voci distinte portano ciascuna «responsabile diretto» e un fatto proprio non coperto altrove: nessuna scelta silenziosa.
+        var s = Ferie;
+        var (json, _) = Analysis(s, ["richiesta", "solo-responsabile", "ufficio-riepilogo"],
+            (Sec.Requirements, 0, Approves), (Sec.Requirements, 1, "L'ufficio personale vede soltanto il riepilogo, non il responsabile diretto"));
+
+        var target = PmCorrection.Locate(s, json);
+
+        Assert.Equal(EditTargetKind.Ambiguous, target.Kind);
+        Assert.Contains("voci candidate a piu' fatti", target.Message, StringComparison.Ordinal);
+        Assert.Null(target.NewText);
+        var (body, run) = Apply(s, json);
+        Assert.Equal([target.Message], run.Findings.Failures);
+        Assert.DoesNotContain(Texts(body!), t => t.StartsWith(s.Correction.EditedText, StringComparison.Ordinal));
+        OnlyTextChanged(json, body!, null, -1);
+    }
+
+    [Fact]
+    public void A_simple_replacement_is_kept_when_no_other_fact_is_at_stake()
+    {
+        // Nessun fatto indipendente da conservare: il testo resta quello della correzione, senza accodare l'originale.
+        var s = Ferie;
+        var (json, _) = Analysis(s, []);
+        var target = PmCorrection.Locate(s, json);
+        Assert.Equal(EditTargetKind.Found, target.Kind);
+        Assert.Empty(target.Preserved!);
+        Assert.Equal(s.Correction.EditedText, target.NewText);
     }
 
     [Fact]
@@ -240,7 +284,10 @@ public sealed class PmCorrectionTests
         var s = Ferie;
         var (json, ids) = Analysis(s, ["richiesta"], (Sec.Requirements, 0, Sends));
         var ai = Content(json);
-        Assert.Equal(EditTargetKind.Found, PmCorrection.Locate(s, json).Kind);
+        var located = PmCorrection.Locate(s, json);
+        Assert.Equal(EditTargetKind.Found, located.Kind);
+        Assert.Empty(located.Preserved!);
+        Assert.Equal(s.Correction.EditedText, located.NewText);
 
         Assert.Contains(AcceptanceChecker.CheckAnalysis(s, ai, ids.Index, ids.All).Failures, f => f.StartsWith("omissione: «richiesta»", StringComparison.Ordinal));
         var confirmed = AcceptanceFixtureTests.Corrected(ai, s, Guid.NewGuid(), AnalysisContentState.PmConfirmed);
@@ -265,6 +312,7 @@ public sealed class PmCorrectionTests
         Assert.Equal(edit.Text, PmCorrection.Items(json, target.Section)[target.Index]!["text"]!.GetValue<string>());
         var (body, run) = Apply(s, json);
         Assert.Empty(run.Findings.Failures);
+        Assert.Equal(s.Correction.EditedText, PmCorrection.Items(body!, target.Section)[target.Index]!["text"]!.GetValue<string>());
         OnlyTextChanged(json, body!, target.Section, target.Index);
         foreach (var fact in s.Facts)
         {
@@ -275,10 +323,10 @@ public sealed class PmCorrectionTests
 
     /// <summary>
     /// Scelta della voce sulle analisi AI reali V7 (traccia locale non versionata, ignorata se assente): nei cinque progetti con la voce
-    /// la scelta coincide con quella registrata nella revisione confermata V7; in ferie la correzione e' segnalata, non applicata.
+    /// la scelta coincide con quella registrata nella revisione confermata V7; in ferie la voce a piu' fatti e' riscritta conservando «richiesta».
     /// </summary>
     [Fact]
-    public void V7_captured_analyses_select_the_same_items_except_ferie_which_is_reported()
+    public void V7_captured_analyses_select_the_same_items_and_ferie_keeps_the_independent_fact()
     {
         var path = Environment.GetEnvironmentVariable("BPROJECTS_ACCEPTANCE_TRACE")
             ?? Path.Combine(AcceptanceFixtureTests.RepoRoot(), "docs", "acceptance-trace", "trace-qwen3.8-flash-next-smart-v7.md");
@@ -295,8 +343,8 @@ public sealed class PmCorrectionTests
         }
 
         var ferie = PmCorrection.Locate(runs["ferie"].Script, runs["ferie"].Ai);
-        Assert.Equal(EditTargetKind.Absent, ferie.Kind);
-        Assert.Equal(["richiesta"], ferie.Lost);
+        Assert.Equal(EditTargetKind.Found, ferie.Kind);
+        Assert.Equal(["richiesta"], ferie.Preserved);
         var confirmed = AcceptanceFixtureTests.Corrected(runs["ferie"].Ai, runs["ferie"].Script, Guid.NewGuid(), AnalysisContentState.PmConfirmed);
         Assert.Contains(AcceptanceChecker.AllTexts(confirmed), t => AcceptanceChecker.Norm(t).Contains("rifiut", StringComparison.Ordinal));
     }

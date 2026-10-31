@@ -120,8 +120,8 @@ vincoli, flussi ed evidenze attesi; non basarsi sullo stile dell'output.
 Servizio disponibile, nessun guasto indotto e nessun'altra coda per le soglie nominali.
 
 1. **Chat riuscita**: cinque scambi con risposte reali, ciascuno entro 180 secondi;
-   chiarimenti pertinenti, al massimo uno per turno e nessuna domanda ripetuta dopo
-   risposta. Originali e assistant distinguibili. Nessun ProcessingRun formale.
+   chiarimenti pertinenti, al massimo uno per turno e nessuna domanda ripetuta, anche se la
+   precedente non ha ricevuto risposta. Originali e assistant distinguibili. Nessun ProcessingRun formale.
 2. **Analisi riuscita**: Analizza crea solo Kind=Analysis. Entro 180 secondi restituisce
    revisione AnalysisContent 1.0.0 valida, Unvalidated, e anteprima leggibile. Nessun
    Markdown o chiamata DocumentAgent. Tutti i casi nominali devono riuscire.

@@ -328,7 +328,7 @@ for (const nominal of acceptanceCases) {
 
       // --- correzione e salvataggio (nuova revisione PM), poi conferma esplicita
       const form = (section: string) => page.locator(`[data-section=${section}] [data-testid=item-text]`);
-      // Solo la voce che esprime il fatto da modificare, unica e senza altri fatti attesi (support/pm-correction.ts): assente o ambigua = segnalata.
+      // Solo la voce che esprime il fatto da modificare, unica; una voce a piu' fatti e' riscritta conservando gli altri (support/pm-correction.ts): assente o ambigua = segnalata.
       const preview = new Map<string, string[]>();
       for (const section of new Set(p.facts.flatMap((f) => f.accept))) {
         const fields = form(section);
@@ -337,7 +337,7 @@ for (const nominal of acceptanceCases) {
         preview.set(section, values);
       }
       const target = locateEdit(p, (section) => preview.get(section) ?? []);
-      if (target.kind === 'found') await form(target.section!).nth(target.index!).fill(p.correction.editedText);
+      if (target.kind === 'found') await form(target.section!).nth(target.index!).fill(target.newText!);
       else failures.push(target.message);
       for (const add of p.correction.additions) {
         await page.getByTestId(`add-${add.section}`).click();

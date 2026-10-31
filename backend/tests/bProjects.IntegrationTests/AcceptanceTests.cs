@@ -435,11 +435,11 @@ internal static class AcceptanceRunner
             _ => content["openQuestions"]!.AsArray(),
         };
 
-        // Solo la voce che esprime il fatto da modificare, unica e senza altri fatti attesi (PmCorrection): assente o ambigua = segnalata.
+        // Solo la voce che esprime il fatto da modificare, unica; una voce a piu' fatti e' riscritta conservando gli altri (PmCorrection): assente o ambigua = segnalata.
         var target = PmCorrection.Locate(script, content);
         if (target.Kind == EditTargetKind.Found)
         {
-            Array(target.Section)[target.Index]!["text"] = correction.EditedText;
+            Array(target.Section)[target.Index]!["text"] = target.NewText;
             changed = true;
         }
         else

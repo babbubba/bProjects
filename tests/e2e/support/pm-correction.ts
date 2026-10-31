@@ -4,7 +4,9 @@ import { covers, matches, norm, type Fact, type ProjectCase } from './acceptance
 // backend/tests/bProjects.IntegrationTests/PmCorrection.cs, stesse regole e stessi messaggi. La voce si individua per contenuto
 // (le fixture non conoscono gli id prodotti dal modello) e solo se: combacia con l'attesa da modificare, sostituirla non scopre altri
 // fatti attesi (covers, la regola del verificatore) ed e' unica; una voce dedicata al fatto prevale su una che porta anche altri fatti.
-// Altrimenti la correzione non si applica e il percorso lo segnala: mai un'altra voce riscritta al suo posto.
+// Se l'unica voce che esprime il fatto ne porta anche altri, e' riscritta conservando il testo originale dopo quello corretto. Se la
+// scelta non e' univoca o la conservazione non e' verificabile la correzione non si applica e il percorso lo segnala: mai un'altra voce
+// riscritta al suo posto.
 
 export type EditTargetKind = 'found' | 'absent' | 'ambiguous';
 
@@ -13,8 +15,12 @@ export interface EditTarget {
   /** Sezione e posizione della voce (solo per 'found'). */
   section?: string;
   index?: number;
-  /** Fatti che la sostituzione delle candidate cancellerebbe ('absent' con candidate). */
+  /** Fatti che la sostituzione semplice delle candidate cancellerebbe ('absent' con candidate, o 'found' con voce a piu' fatti). */
   lost: string[];
+  /** Testo della voce dopo la correzione (solo 'found'): il testo corretto, seguito dall'originale se la voce porta altri fatti. */
+  newText?: string;
+  /** Fatti indipendenti conservati dalla riscrittura (voce a piu' fatti); vuoto se la sostituzione semplice basta. */
+  preserved: string[];
   /** Esito per il report; per 'absent' e 'ambiguous' e' il motivo del fallimento. */
   message: string;
 }
@@ -30,14 +36,18 @@ const carries = (p: ProjectCase, edit: Fact, section: string, text: string) =>
   p.facts.some((f) => f.key !== edit.key && f.accept.includes(section) && (matches(norm(text), f.match) || (f.parts ?? []).some((part) => matches(norm(text), part))));
 
 /** Fatti attesi (diversi da quello modificato) coperti prima della sostituzione e non piu' coperti dopo. */
-function lost(p: ProjectCase, edit: Fact, texts: (section: string) => string[], section: string, index: number): string[] {
+function lost(p: ProjectCase, edit: Fact, texts: (section: string) => string[], section: string, index: number, replacement: string): string[] {
   const of = (f: Fact, replaced: boolean) =>
-    f.accept.flatMap((s) => texts(s).map((t, n) => (replaced && s === section && n === index ? p.correction.editedText : t))).map(norm);
+    f.accept.flatMap((s) => texts(s).map((t, n) => (replaced && s === section && n === index ? replacement : t))).map(norm);
   return p.facts
     .filter((f) => f.key !== edit.key && f.accept.includes(section))
     .filter((f) => covers(f.match, f.parts, of(f, false)) && !covers(f.match, f.parts, of(f, true)))
     .map((f) => f.key);
 }
+
+/** Testo corretto seguito dal testo originale (iniziale minuscola): il PM modifica la parte sua e lascia intatto il resto. */
+export const preserving = (editedText: string, originalText: string) =>
+  `${editedText.replace(/[. ]+$/, '')}; ${originalText[0].toLowerCase()}${originalText.slice(1)}`;
 
 /** Individua la voce da modificare; `texts` restituisce i testi di una sezione nell'ordine dell'anteprima. */
 export function locateEdit(p: ProjectCase, texts: (section: string) => string[]): EditTarget {
@@ -45,26 +55,44 @@ export function locateEdit(p: ProjectCase, texts: (section: string) => string[])
   const where = edit.accept.map((s) => SEC[s]).join('/');
   const candidates = edit.accept.flatMap((section) => texts(section).map((text, index) => ({ section, index, text })))
     .filter((x) => matches(norm(x.text), edit.match));
-  if (!candidates.length) return { kind: 'absent', lost: [], message: `correzione non applicabile: la voce «${edit.key}» da modificare non e' nell'anteprima (${where})` };
+  if (!candidates.length) return { kind: 'absent', lost: [], preserved: [], message: `correzione non applicabile: la voce «${edit.key}» da modificare non e' nell'anteprima (${where})` };
 
-  const assessed = candidates.map((c) => ({ c, lost: lost(p, edit, texts, c.section, c.index) }));
+  const assessed = candidates.map((c) => ({ c, lost: lost(p, edit, texts, c.section, c.index, p.correction.editedText) }));
   const safe = assessed.filter((x) => !x.lost.length).map((x) => x.c);
   const dedicated = safe.filter((x) => !carries(p, edit, x.section, x.text));
   const pool = dedicated.length ? dedicated : safe;
   if (pool.length === 1) {
     const [t] = pool;
-    return { kind: 'found', section: t.section, index: t.index, lost: [], message: `correzione: «${edit.key}» in ${SEC[t.section]} («${t.text}»)` };
+    return { kind: 'found', section: t.section, index: t.index, lost: [], preserved: [], newText: p.correction.editedText, message: `correzione: «${edit.key}» in ${SEC[t.section]} («${t.text}»)` };
   }
   if (pool.length > 1) {
     return {
-      kind: 'ambiguous', lost: [],
+      kind: 'ambiguous', lost: [], preserved: [],
       message: `correzione non applicabile: «${edit.key}» ambigua, ${pool.length} voci candidate (${pool.map((x) => `${SEC[x.section]}: «${x.text}»`).join('; ')}), nessuna scelta silenziosa`,
+    };
+  }
+
+  // Nessuna candidata e' sostituibile senza perdere altri fatti: voce a piu' fatti riscritta conservando l'originale, se verificato e unica.
+  const repairable = assessed
+    .map((x) => ({ ...x, newText: preserving(p.correction.editedText, x.c.text) }))
+    .filter((x) => !lost(p, edit, texts, x.c.section, x.c.index, x.newText).length && matches(norm(x.newText), edit.match));
+  if (repairable.length === 1) {
+    const [r] = repairable;
+    return {
+      kind: 'found', section: r.c.section, index: r.c.index, lost: r.lost, preserved: r.lost, newText: r.newText,
+      message: `correzione: «${edit.key}» in ${SEC[r.c.section]} («${r.c.text}»), voce con piu' fatti riscritta conservando ${r.lost.map((k) => `«${k}»`).join(', ')}`,
+    };
+  }
+  if (repairable.length > 1) {
+    return {
+      kind: 'ambiguous', lost: [], preserved: [],
+      message: `correzione non applicabile: «${edit.key}» ambigua, ${repairable.length} voci candidate a piu' fatti (${repairable.map((x) => `${SEC[x.c.section]}: «${x.c.text}»`).join('; ')}), nessuna scelta silenziosa`,
     };
   }
   const all = [...new Set(assessed.flatMap((x) => x.lost))];
   return {
-    kind: 'absent', lost: all,
-    message: `correzione non applicabile: nessuna voce dedicata a «${edit.key}» in ${where}; sostituire ${assessed.map((x) => `«${x.c.text}»`).join(', ')} `
+    kind: 'absent', lost: all, preserved: [],
+    message: `correzione non applicabile: nessuna voce di «${edit.key}» in ${where} puo' essere riscritta conservando gli altri fatti; sostituire ${assessed.map((x) => `«${x.c.text}»`).join(', ')} `
       + `cancellerebbe ${all.map((k) => `«${k}»`).join(', ')} (fatti indipendenti dalla correzione)`,
   };
 }
