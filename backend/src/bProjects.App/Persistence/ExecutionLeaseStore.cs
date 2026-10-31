@@ -1,5 +1,6 @@
 using bProjects.App.AI;
 using bProjects.App.Analysis;
+using bProjects.App.Evidence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
@@ -29,8 +30,11 @@ public enum TurnTransition
 
 public readonly record struct TurnRelease(TurnTransition Outcome, DateTimeOffset? NextAttemptAt = null, string? ErrorCode = null);
 
-/// <summary>Lavoro AI preso in carico: esattamente uno fra un ChatTurn, un ProcessingRun di Analysis e un ProcessingRun di Document.</summary>
-public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run, DocumentRunClaim? Document = null);
+/// <summary>
+/// Lavoro AI preso in carico: esattamente uno fra un ChatTurn, un ProcessingRun di Analysis, un ProcessingRun di Document e un lavoro
+/// di estrazione delle evidenze.
+/// </summary>
+public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run, DocumentRunClaim? Document = null, ExtractionJobClaim? Extraction = null);
 
 /// <summary>
 /// Claim, lease e transizioni dei ChatTurn e dei ProcessingRun di Analysis su PostgreSQL (contracts/ai-workflow.md §2).
@@ -55,6 +59,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     {
         Turns,
         Runs,
+        Extractions,
     }
 
     /// <summary>
@@ -62,9 +67,14 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     /// Kind di cui il chiamante ha un esecutore (parametro <c>@kinds</c>): Analysis e Document non si toccano a vicenda.
     /// </summary>
     private static string Sql(Table table, string template) => template
-        .Replace("{TABLE}", table == Table.Turns ? "\"ChatTurns\"" : "\"ProcessingRuns\"", StringComparison.Ordinal)
-        .Replace("{KIND}", table == Table.Turns ? "" : " AND x.\"Kind\" = ANY(@kinds)", StringComparison.Ordinal)
-        .Replace("{UPDATED}", table == Table.Turns ? "" : ",\n                \"UpdatedAt\" = clock_timestamp()", StringComparison.Ordinal);
+        .Replace("{TABLE}", table switch
+        {
+            Table.Turns => "\"ChatTurns\"",
+            Table.Runs => "\"ProcessingRuns\"",
+            _ => "\"EvidenceExtractionJobs\"",
+        }, StringComparison.Ordinal)
+        .Replace("{KIND}", table == Table.Runs ? " AND x.\"Kind\" = ANY(@kinds)" : "", StringComparison.Ordinal)
+        .Replace("{UPDATED}", table == Table.Runs ? ",\n                \"UpdatedAt\" = clock_timestamp()" : "", StringComparison.Ordinal);
 
     private static string[] KindsOf(bool analysis, bool document) =>
         [.. new[] { analysis ? nameof(ProcessingRunKind.Analysis) : null, document ? nameof(ProcessingRunKind.Document) : null }.OfType<string>()];
@@ -84,7 +94,18 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     /// Queued con NextAttemptAt raggiunto oppure Running con lease scaduto (reclaim). Ogni tipo viene fatto fallire per sweep
     /// e preso in carico solo se il chiamante ha chi lo esegue. Un solo lavoro può avere un lease valido nell'istanza, qualunque sia il tipo.
     /// </summary>
-    public async Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, CancellationToken ct)
+    public Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, CancellationToken ct) =>
+        ClaimNextWorkAsync(owner, turns, runs, documents, extractions: false, ct);
+
+    /// <summary>
+    /// Come <see cref="ClaimNextWorkAsync(string, bool, bool, bool, CancellationToken)"/> anche per i lavori di estrazione delle evidenze
+    /// (<paramref name="extractions"/>, contracts/ai-workflow.md §10.1): stesso lock, stesso limite globale, stesse regole di sweep, lease e
+    /// fencing. Un'estrazione è presa in carico soltanto se nessun turno o run è eleggibile, quindi la chat non viene mai sorpassata; fra le
+    /// estrazioni prima quelle che bloccano un'analisi in coda, poi le iniziali, poi rianalisi e backfill, e nella stessa conversazione in
+    /// ordine di sequenza (il contesto di un messaggio comprende le evidenze dei precedenti). I run di Analysis attendono che nessuna
+    /// estrazione aperta riguardi messaggi entro il loro cutoff.
+    /// </summary>
+    public async Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, bool extractions, CancellationToken ct)
     {
         await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
 
@@ -104,6 +125,11 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             await SweepAsync(Table.Runs, kinds, ct);
         }
 
+        if (extractions)
+        {
+            await SweepAsync(Table.Extractions, [], ct);
+        }
+
         WorkClaim? claim = null;
         if (await RunningCountAsync(ct) < MaxConcurrentRuns)
         {
@@ -116,6 +142,10 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             else if (runCandidate is { } run)
             {
                 claim = await ClaimRunAsync(run.Id, run.Kind, owner, ct);
+            }
+            else if (extractions && await ExtractionCandidateAsync(ct) is { } job)
+            {
+                claim = await ClaimExtractionAsync(job, owner, ct) is { } extraction ? new WorkClaim(null, null, null, extraction) : null;
             }
         }
 
@@ -145,7 +175,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               AND (x."DeadlineAt" <= clk.t OR x."AttemptCount" >= x."MaxAttempts"){KIND}
             """),
             ct,
-            table == Table.Turns ? [("message", ExhaustedMessage)] : [("message", ExhaustedMessage), ("kinds", kinds)]);
+            table == Table.Runs ? [("message", ExhaustedMessage), ("kinds", kinds)] : [("message", ExhaustedMessage)]);
         await sweep.ExecuteNonQueryAsync(ct);
     }
 
@@ -155,6 +185,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             """
             SELECT (SELECT count(*) FROM "ChatTurns" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
                  + (SELECT count(*) FROM "ProcessingRuns" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
+                 + (SELECT count(*) FROM "EvidenceExtractionJobs" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
             """,
             ct);
         return (long)(await command.ExecuteScalarAsync(ct))!;
@@ -195,6 +226,12 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                    OR (r."Status" = 'Running' AND r."LeaseUntil" <= clk.t))
               AND r."AttemptCount" < r."MaxAttempts"
               AND r."DeadlineAt" > clk.t
+              -- Gate del registro: un'analisi parte quando le estrazioni dei messaggi PM entro il suo cutoff sono concluse.
+              AND NOT (r."Kind" = 'Analysis' AND EXISTS (
+                    SELECT 1 FROM "EvidenceExtractionJobs" j
+                    WHERE j."ConversationId" = r."ConversationId"
+                      AND j."Status" IN ('Queued', 'Running')
+                      AND j."MessageSequence" <= r."SourceCutoffSequence"))
             ORDER BY r."RequestedAt", r."Id"
             LIMIT 1
             """,
@@ -290,6 +327,64 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             : new WorkClaim(null, new AnalysisRunClaim(runId, owner, fence, attempt));
     }
 
+    private async Task<Guid?> ExtractionCandidateAsync(CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            """
+            WITH clk AS (SELECT clock_timestamp() AS t)
+            SELECT j."Id"
+            FROM "EvidenceExtractionJobs" j, clk
+            WHERE ((j."Status" = 'Queued' AND (j."NextAttemptAt" IS NULL OR j."NextAttemptAt" <= clk.t))
+                   OR (j."Status" = 'Running' AND j."LeaseUntil" <= clk.t))
+              AND j."AttemptCount" < j."MaxAttempts"
+              AND j."DeadlineAt" > clk.t
+              AND NOT EXISTS (
+                    SELECT 1 FROM "EvidenceExtractionJobs" p
+                    WHERE p."ConversationId" = j."ConversationId"
+                      AND p."Status" IN ('Queued', 'Running')
+                      AND p."MessageSequence" < j."MessageSequence")
+            ORDER BY
+              CASE WHEN EXISTS (
+                     SELECT 1 FROM "ProcessingRuns" r
+                     WHERE r."Kind" = 'Analysis' AND r."Status" IN ('Queued', 'Running')
+                       AND r."ConversationId" = j."ConversationId" AND j."MessageSequence" <= r."SourceCutoffSequence") THEN 0
+                   WHEN j."Reason" = 'Initial' THEN 1
+                   ELSE 2 END,
+              j."RequestedAt", j."MessageSequence", j."Id"
+            LIMIT 1
+            """,
+            ct);
+        return await command.ExecuteScalarAsync(ct) is Guid id ? id : null;
+    }
+
+    private async Task<ExtractionJobClaim?> ClaimExtractionAsync(Guid id, string owner, CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            """
+            WITH clk AS (SELECT clock_timestamp() AS t)
+            UPDATE "EvidenceExtractionJobs" t SET
+                "Status" = 'Running',
+                "LeaseOwner" = @owner,
+                "LeaseUntil" = clk.t + make_interval(secs => @lease),
+                "FencingToken" = t."FencingToken" + 1,
+                "AttemptCount" = t."AttemptCount" + 1,
+                "StartedAt" = COALESCE(t."StartedAt", clk.t),
+                "NextAttemptAt" = NULL
+            FROM clk
+            WHERE t."Id" = @id
+              -- Stessa idoneità del candidato, ricontrollata dopo l'attesa sul lock di riga.
+              AND ((t."Status" = 'Queued' AND (t."NextAttemptAt" IS NULL OR t."NextAttemptAt" <= clk.t))
+                   OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
+              AND t."AttemptCount" < t."MaxAttempts"
+              AND t."DeadlineAt" > clk.t
+            RETURNING t."Id", t."FencingToken", t."AttemptCount"
+            """,
+            ct,
+            ("id", id), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? new ExtractionJobClaim(reader.GetGuid(0), owner, reader.GetInt64(1), reader.GetInt32(2)) : null;
+    }
+
     /// <summary>Estende LeaseUntil dell'owner corrente; DeadlineAt non si sposta. False se owner/fencing non sono più validi o la deadline è passata.</summary>
     public Task<bool> RenewAsync(ChatTurnClaim claim, CancellationToken ct) =>
         RenewAsync(Table.Turns, claim.TurnId, claim.LeaseOwner, claim.FencingToken, ct);
@@ -301,6 +396,10 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     /// <summary>Come <see cref="RenewAsync(ChatTurnClaim, CancellationToken)"/> per un ProcessingRun di Document.</summary>
     public Task<bool> RenewAsync(DocumentRunClaim claim, CancellationToken ct) =>
         RenewAsync(Table.Runs, claim.RunId, claim.LeaseOwner, claim.FencingToken, ct);
+
+    /// <summary>Come <see cref="RenewAsync(ChatTurnClaim, CancellationToken)"/> per un lavoro di estrazione delle evidenze.</summary>
+    public Task<bool> RenewAsync(ExtractionJobClaim claim, CancellationToken ct) =>
+        RenewAsync(Table.Extractions, claim.JobId, claim.LeaseOwner, claim.FencingToken, ct);
 
     private async Task<bool> RenewAsync(Table table, Guid id, string owner, long fence, CancellationToken ct)
     {
@@ -333,6 +432,11 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     public Task<TurnRelease> ReleaseAfterFailureAsync(
         DocumentRunClaim claim, ModelFailure failure, string permanentCode, string permanentMessage, CancellationToken ct) =>
         ReleaseAfterFailureAsync(Table.Runs, claim.RunId, claim.LeaseOwner, claim.FencingToken, claim.AttemptCount, failure, permanentCode, permanentMessage, ct);
+
+    /// <summary>Come <see cref="ReleaseAfterFailureAsync(ChatTurnClaim, ModelFailure, string, string, CancellationToken)"/> per un lavoro di estrazione.</summary>
+    public Task<TurnRelease> ReleaseAfterFailureAsync(
+        ExtractionJobClaim claim, ModelFailure failure, string permanentCode, string permanentMessage, CancellationToken ct) =>
+        ReleaseAfterFailureAsync(Table.Extractions, claim.JobId, claim.LeaseOwner, claim.FencingToken, claim.AttemptCount, failure, permanentCode, permanentMessage, ct);
 
     private async Task<TurnRelease> ReleaseAfterFailureAsync(
         Table table, Guid id, string owner, long fence, int attemptCount, ModelFailure failure, string permanentCode, string permanentMessage, CancellationToken ct)

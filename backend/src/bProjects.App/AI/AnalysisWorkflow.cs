@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -73,6 +74,7 @@ public static class AnalysisSchema
             ConstrainEvidence(node, messages);
         }
 
+        AddEvidenceKeys(node, input.Evidence?.Aliases ?? []);
         Reorder(node);
         using var document = JsonDocument.Parse(node.ToJsonString());
         return document.RootElement.Clone();
@@ -154,6 +156,126 @@ public static class AnalysisSchema
 
                 break;
         }
+    }
+
+    /// <summary>Proprietà interna della mappa elemento→evidenze: rimossa prima della validazione, mai persistita in AnalysisContent.</summary>
+    public const string EvidenceKeysProperty = "evidenceKeys";
+
+    /// <summary>
+    /// Ogni oggetto elemento (id, text, classification, evidenceRefs) riceve <c>evidenceKeys</c> obbligatorio: alias della vista congelata
+    /// del run, vincolati in enum dalla grammatica. La risoluzione dei conflitti (senza testo) non ne riceve.
+    /// </summary>
+    private static void AddEvidenceKeys(System.Text.Json.Nodes.JsonNode? node, IReadOnlyList<string> aliases)
+    {
+        switch (node)
+        {
+            case System.Text.Json.Nodes.JsonObject obj:
+                if (obj["properties"] is System.Text.Json.Nodes.JsonObject props && props.ContainsKey("evidenceRefs") && props.ContainsKey("text")
+                    && !props.ContainsKey(EvidenceKeysProperty))
+                {
+                    props[EvidenceKeysProperty] = aliases.Count == 0
+                        ? new System.Text.Json.Nodes.JsonObject { ["type"] = "array", ["maxItems"] = 0 }
+                        : new System.Text.Json.Nodes.JsonObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = new System.Text.Json.Nodes.JsonObject
+                            {
+                                ["type"] = "string",
+                                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. aliases.Select(a => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(a)!)]),
+                            },
+                        };
+                    if (obj["required"] is System.Text.Json.Nodes.JsonArray required)
+                    {
+                        required.Add(EvidenceKeysProperty);
+                    }
+                }
+
+                foreach (var child in obj.Select(p => p.Value).ToList())
+                {
+                    AddEvidenceKeys(child, aliases);
+                }
+
+                break;
+            case System.Text.Json.Nodes.JsonArray array:
+                foreach (var child in array)
+                {
+                    AddEvidenceKeys(child, aliases);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Separa la mappa elemento→evidenze dal JSON del modello: toglie <c>evidenceKeys</c> da ogni elemento e restituisce il testo
+    /// AnalysisContent da validare. Un testo non JSON resta invariato (lo rifiuterà la validazione). Alias non presenti nella vista:
+    /// violazioni (con la grammatica attiva non possono comparire).
+    /// </summary>
+    public static (string Content, Dictionary<Guid, IReadOnlyList<string>> Keys, List<string> Violations) SplitEvidenceKeys(string text, IReadOnlyCollection<string> aliases)
+    {
+        var keys = new Dictionary<Guid, IReadOnlyList<string>>();
+        var violations = new List<string>();
+        System.Text.Json.Nodes.JsonNode? root;
+        try
+        {
+            root = System.Text.Json.Nodes.JsonNode.Parse(text.Trim());
+        }
+        catch (JsonException)
+        {
+            return (text, keys, violations);
+        }
+
+        void Walk(System.Text.Json.Nodes.JsonNode? node)
+        {
+            switch (node)
+            {
+                case System.Text.Json.Nodes.JsonObject obj:
+                    if (obj.ContainsKey(EvidenceKeysProperty))
+                    {
+                        var raw = obj[EvidenceKeysProperty];
+                        obj.Remove(EvidenceKeysProperty);
+                        if (obj["id"] is System.Text.Json.Nodes.JsonValue idValue && idValue.TryGetValue<string>(out var idText) && Guid.TryParse(idText, out var id)
+                            && raw is System.Text.Json.Nodes.JsonArray list)
+                        {
+                            var found = new List<string>();
+                            foreach (var entry in list)
+                            {
+                                if (entry is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var alias) && aliases.Contains(alias))
+                                {
+                                    found.Add(alias);
+                                }
+                                else
+                                {
+                                    violations.Add($"evidenceKeys dell'elemento {idText}: alias «{entry}» non presente nel registro del run");
+                                }
+                            }
+
+                            keys[id] = [.. found.Distinct()];
+                        }
+                        else if (raw is not null and not System.Text.Json.Nodes.JsonArray)
+                        {
+                            violations.Add("evidenceKeys deve essere un array di alias");
+                        }
+                    }
+
+                    foreach (var child in obj.Select(p => p.Value).ToList())
+                    {
+                        Walk(child);
+                    }
+
+                    break;
+                case System.Text.Json.Nodes.JsonArray array:
+                    foreach (var child in array)
+                    {
+                        Walk(child);
+                    }
+
+                    break;
+            }
+        }
+
+        Walk(root);
+        return (root?.ToJsonString() ?? text, keys, violations);
     }
 
     private const string UuidPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
@@ -252,6 +374,26 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
             // Nessuna migrazione implicita di un vecchio grafo: errore esplicito e permanente.
             await FailAsync(claim, "workflow_incompatible", "La definizione del workflow del run non è compatibile con quella corrente.", ct);
             return await ReadAsync(claim.RunId, ct);
+        }
+
+        // Registro delle evidenze (contracts/ai-workflow.md §10.6): la selezione si congela al primo tentativo, prima di costruire il grafo
+        // (lo schema del run dipende dagli alias); i tentativi successivi e il resume la rileggono identica.
+        SelectionResult selection;
+        using (var evidenceScope = scopes.CreateScope())
+        {
+            selection = await evidenceScope.ServiceProvider.GetRequiredService<IAnalysisRunStore>().FreezeEvidenceAsync(claim, ct);
+        }
+
+        switch (selection.Outcome)
+        {
+            case SelectionOutcome.Rejected:
+                // Come EnsureWorkflowSessionAsync: un run senza lease valido non è nostro e non tocca il modello.
+                throw new OperationCanceledException("Selezione delle evidenze rifiutata: il lease del run non è più valido.");
+            case SelectionOutcome.Missing:
+                await FailAsync(claim, EvidenceLedgerStore.EvidenceUnavailable,
+                    "Estrazione delle evidenze non disponibile per i messaggi PM di sequenza " + string.Join(", ", selection.MissingSequences!)
+                    + ": ritentare l'estrazione e avviare una nuova analisi.", ct);
+                return await ReadAsync(claim.RunId, ct);
         }
 
         var sessionId = await EnsureWorkflowSessionAsync(db, claim, ct);
@@ -359,7 +501,14 @@ internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRu
                 m.Role == AnalysisMessageRole.User ? ChatRole.User : ChatRole.Assistant,
                 $"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}"))
             .ToList();
-        messages.Add(new ChatMessage(ChatRole.User, new StringBuilder()
+        var final = new StringBuilder();
+        if (run.Evidence is { } evidence)
+        {
+            // Nel messaggio finale, che la compattazione nativa preserva sempre: il registro non dipende dalla sintesi della history.
+            final.AppendLine(evidence.ToPromptText());
+        }
+
+        messages.Add(new ChatMessage(ChatRole.User, final
             .AppendLine("Dati affidabili del server per questa analisi:")
             .AppendLine($"- analysisId: {run.AnalysisId}")
             .AppendLine($"- projectId: {run.ProjectId}")
@@ -367,6 +516,7 @@ internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRu
             .AppendLine("Promemoria: compila le proprietà nell'ordine dello schema; ogni informazione in una sola sezione, con le parole del project manager; "
                 + "negazioni ed esclusioni («non», «niente», «senza», «no») in contextAndScope.excluded; posizioni incompatibili solo in conflicts, mai anche come requisiti o vincoli; "
                 + "openQuestions solo per ciò che il project manager dichiara di non sapere o di non aver deciso; nessuna informazione dei messaggi dell'assistente; non omettere nessuna frase del project manager che porti un fatto, un numero, un nome o un'esclusione; una frase con contrasto («mentre», «invece») resta in una voce sola.")
+            .AppendLine(run.Evidence is null ? "" : "In ogni voce, evidenceKeys elenca gli alias E… delle evidenze che la voce rappresenta; ogni evidenza del registro deve comparire in almeno una voce.")
             .AppendLine("Produci ora l'unico oggetto JSON AnalysisContent 1.0.0.")
             .ToString()));
 
@@ -396,17 +546,20 @@ internal sealed class ValidatePersistAnalysisExecutor(IServiceScopeFactory scope
         using var scope = scopes.CreateScope();
         var committer = scope.ServiceProvider.GetRequiredService<IAnalysisRunStore>();
         var input = await committer.LoadInputAsync(claim.RunId, cancellationToken);
-        var validation = AnalysisContentValidator.ValidateText(text, input.ToValidationContext(), AnalysisActorKind.Ai);
+        // La mappa elemento→evidenze (evidenceKeys) è interna: separata prima della validazione, AnalysisContent 1.0.0 resta il contratto.
+        var (content, keys, keyViolations) = AnalysisSchema.SplitEvidenceKeys(text, input.Evidence?.Aliases ?? []);
+        var validation = AnalysisContentValidator.ValidateText(content, input.ToValidationContext(), AnalysisActorKind.Ai);
 
-        if (!validation.Accepted)
+        if (!validation.Accepted || keyViolations.Count > 0)
         {
-            var summary = $"L'output del modello non è un'analisi valida ({validation.Violations.Count} violazioni): " +
-                string.Join(" | ", validation.Violations.Take(5));
+            var violations = validation.Violations.Concat(keyViolations).ToList();
+            var summary = $"L'output del modello non è un'analisi valida ({violations.Count} violazioni): " +
+                string.Join(" | ", violations.Take(5));
             await committer.FailAsync(claim, validation.Code ?? AnalysisContentValidator.InvalidAgentOutput, summary, cancellationToken);
             return;
         }
 
-        var commit = await committer.CommitAsync(claim, validation.Content!, cancellationToken);
+        var commit = await committer.CommitAsync(claim, validation.Content!, keys, cancellationToken);
         if (commit.Outcome == AnalysisCommitOutcome.Rejected)
         {
             if (commit.Reason == "lease_lost")

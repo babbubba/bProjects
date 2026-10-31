@@ -19,7 +19,7 @@ public sealed record ContextRuntimeView(
 
 public sealed record PhaseLimitsView(int MaxOutputTokens, bool EnableThinking, int InputBudgetTokens);
 
-public sealed record PhasesLimitsView(PhaseLimitsView Chat, PhaseLimitsView Analysis, PhaseLimitsView Document, PhaseLimitsView Compaction);
+public sealed record PhasesLimitsView(PhaseLimitsView Chat, PhaseLimitsView Analysis, PhaseLimitsView Document, PhaseLimitsView Compaction, PhaseLimitsView Extraction);
 
 public sealed record ContextLimitsView(int SafetyMarginTokens, PhasesLimitsView Phases);
 
@@ -90,7 +90,8 @@ public static class ContextUsageEndpoint
         // Il monitor (e il client del modello) si risolvono solo per un progetto esistente: un 404 non tocca alcuna risorsa AI.
         var options = ai.Value;
         var snapshot = await RuntimeAsync(http.RequestServices.GetRequiredService<ModelRuntimeMonitor>(), ct);
-        var finals = db.InferenceCalls.AsNoTracking().Where(c => c.ProjectId == projectId && c.IsFinal);
+        // Il monitor descrive il contesto di chat, analisi e documento: le estrazioni del registro hanno contesto proprio e non lo sostituiscono.
+        var finals = db.InferenceCalls.AsNoTracking().Where(c => c.ProjectId == projectId && c.IsFinal && c.EvidenceExtractionJobId == null);
         var last = await finals.OrderByDescending(c => c.StartedAt).FirstOrDefaultAsync(ct);
         var withHistory = await finals.Where(c => c.History != null).OrderByDescending(c => c.StartedAt).FirstOrDefaultAsync(ct);
         var withCompaction = await finals.Where(c => c.Compaction != null).OrderByDescending(c => c.StartedAt).FirstOrDefaultAsync(ct);
@@ -106,7 +107,7 @@ public static class ContextUsageEndpoint
                 snapshot.Status == ModelRuntimeStatus.Online ? snapshot.ServerDefaultNPredict : null,
                 snapshot.WindowMismatch),
             new ContextLimitsView(options.SafetyMarginTokens, new PhasesLimitsView(
-                Limits(options, AiPhase.Chat), Limits(options, AiPhase.Analysis), Limits(options, AiPhase.Document), Limits(options, AiPhase.Compaction))),
+                Limits(options, AiPhase.Chat), Limits(options, AiPhase.Analysis), Limits(options, AiPhase.Document), Limits(options, AiPhase.Compaction), Limits(options, AiPhase.Extraction))),
             last is null ? null : await LastAsync(db, projectId, conversationId.Value, last, ct),
             last is null ? null : Composition(last),
             await HistoryAsync(db, conversationId.Value, withHistory, ct),

@@ -1,4 +1,5 @@
 using bProjects.App.AI;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,8 +23,12 @@ public enum AnalysisCommitOutcome
 /// <summary>Messaggio originale della conversazione, ammesso dal cutoff.</summary>
 public sealed record AnalysisDialogMessage(Guid Id, AnalysisMessageRole Role, long Sequence, string Body);
 
-/// <summary>Input immutabile del run: identità fidate e dialogo fino al cutoff.</summary>
-public sealed record AnalysisRunInput(Guid ProjectId, Guid AnalysisId, long SourceCutoffSequence, IReadOnlyList<AnalysisDialogMessage> Dialog)
+/// <summary>
+/// Input immutabile del run: identità fidate, dialogo fino al cutoff e, una volta congelata, la vista delle evidenze selezionate
+/// (contracts/ai-workflow.md §10.6), riletta identica da ogni tentativo.
+/// </summary>
+public sealed record AnalysisRunInput(
+    Guid ProjectId, Guid AnalysisId, long SourceCutoffSequence, IReadOnlyList<AnalysisDialogMessage> Dialog, EvidenceSelectionView? Evidence = null)
 {
     public AnalysisValidationContext ToValidationContext() => new(
         ProjectId,
@@ -41,7 +46,19 @@ public interface IAnalysisRunStore
     /// <summary>Input fidato del run: la conversazione fino al cutoff immutabile, mai oltre.</summary>
     Task<AnalysisRunInput> LoadInputAsync(Guid runId, CancellationToken ct);
 
-    Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct);
+    /// <summary>
+    /// Commit atomico della revisione AI, di Completed e della mappa interna elemento→evidenze (<paramref name="evidenceKeys"/>: id
+    /// dell'elemento → alias della vista congelata del run).
+    /// </summary>
+    Task<AnalysisCommitResult> CommitAsync(
+        AnalysisRunClaim claim, AnalysisContent content, IReadOnlyDictionary<Guid, IReadOnlyList<string>> evidenceKeys, CancellationToken ct);
+
+    /// <summary>Commit senza mappa elemento→evidenze (nessun elemento collegato dal modello).</summary>
+    Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct) =>
+        CommitAsync(claim, content, new Dictionary<Guid, IReadOnlyList<string>>(), ct);
+
+    /// <summary>Congela (al primo tentativo) o rilegge la selezione delle evidenze del run, sotto lease/fencing.</summary>
+    Task<SelectionResult> FreezeEvidenceAsync(AnalysisRunClaim claim, CancellationToken ct);
 
     /// <summary>Failed terminale deciso dall'owner. False se owner/fencing non sono più validi.</summary>
     Task<bool> FailAsync(AnalysisRunClaim claim, string errorCode, string errorMessage, CancellationToken ct);
@@ -74,10 +91,17 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
             run.Id,
             run.SourceCutoffSequence!.Value,
             [.. messages.Select(m => new AnalysisDialogMessage(
-                m.Id, m.Role == Conversations.MessageRole.User ? AnalysisMessageRole.User : AnalysisMessageRole.Assistant, m.Sequence, m.Body))]);
+                m.Id, m.Role == Conversations.MessageRole.User ? AnalysisMessageRole.User : AnalysisMessageRole.Assistant, m.Sequence, m.Body))],
+            await new EvidenceLedgerStore(db).LoadSelectionAsync(runId, ct));
     }
 
-    public async Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct)
+    public Task<SelectionResult> FreezeEvidenceAsync(AnalysisRunClaim claim, CancellationToken ct) => new EvidenceLedgerStore(db).FreezeSelectionAsync(claim, ct);
+
+    public Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct) =>
+        CommitAsync(claim, content, new Dictionary<Guid, IReadOnlyList<string>>(), ct);
+
+    public async Task<AnalysisCommitResult> CommitAsync(
+        AnalysisRunClaim claim, AnalysisContent content, IReadOnlyDictionary<Guid, IReadOnlyList<string>> evidenceKeys, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(content);
@@ -148,6 +172,18 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
         run.LeaseUntil = null;
         run.ErrorCode = null;
         run.ErrorMessage = null;
+        // Mappa interna elemento→evidenze nella stessa transazione: solo alias della selezione congelata del run, solo elementi esistenti.
+        if (await new EvidenceLedgerStore(db).LoadSelectionAsync(run.Id, ct) is { } selection)
+        {
+            var aliases = selection.Evidences.ToDictionary(e => e.Alias, e => e.EvidenceId, StringComparer.Ordinal);
+            var items = Evidence.EvidenceCoverage.Items(content).Select(i => i.Item.Id).ToHashSet();
+            db.AnalysisEvidenceLinks.AddRange(evidenceKeys
+                .Where(k => items.Contains(k.Key))
+                .SelectMany(k => k.Value.Where(aliases.ContainsKey).Select(a => (Item: k.Key, Evidence: aliases[a])))
+                .Distinct()
+                .Select(x => new AnalysisEvidenceLink { RunId = run.Id, ItemId = x.Item, EvidenceId = x.Evidence, ProjectId = run.ProjectId }));
+        }
+
         // Telemetria del tentativo vincente nella stessa transazione del risultato (stesso controllo di lease/fencing).
         var inference = InferenceScope.Current;
         InferenceCallLog.Stage(db, inference, run.ProjectId, new(null, run.Id, claim.AttemptCount, claim.FencingToken), result: true);

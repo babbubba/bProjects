@@ -24,6 +24,9 @@ public enum AiPhase
 
     /// <summary>Sintesi nativa della compattazione.</summary>
     Compaction,
+
+    /// <summary>Estrazione delle evidenze atomiche di un messaggio PM (registro delle evidenze).</summary>
+    Extraction,
 }
 
 /// <summary>Override di una fase; <c>null</c> = eredita il valore globale di <c>Ai</c> (una stringa vuota nella configurazione vale null).</summary>
@@ -60,12 +63,15 @@ public sealed class AiPhasesOptions
 
     public AiPhaseOptions Compaction { get; set; } = new();
 
+    public AiPhaseOptions Extraction { get; set; } = new();
+
     public AiPhaseOptions Of(AiPhase phase) => phase switch
     {
         AiPhase.Chat => Chat,
         AiPhase.Analysis => Analysis,
         AiPhase.Document => Document,
         AiPhase.Compaction => Compaction,
+        AiPhase.Extraction => Extraction,
         _ => throw new ArgumentOutOfRangeException(nameof(phase)),
     };
 }
@@ -110,7 +116,7 @@ public sealed class AiOptions
     /// <summary>Validità in secondi dello stato verificato del runtime (<see cref="ModelRuntimeMonitor"/>).</summary>
     public int RuntimeCheckSeconds { get; set; } = 60;
 
-    /// <summary>Override per fase (<c>Ai:Phases:{Chat,Analysis,Document,Compaction}</c>); le fasi senza override ereditano i valori globali.</summary>
+    /// <summary>Override per fase (<c>Ai:Phases:{Chat,Analysis,Document,Compaction,Extraction}</c>); le fasi senza override ereditano i valori globali.</summary>
     public AiPhasesOptions Phases { get; set; } = new();
 
     /// <summary>ContextWindowTokens - MaxOutputTokens - SafetyMarginTokens con i soli valori globali (contracts/ai-workflow.md §7); per fase usare <see cref="ForPhase"/>.</summary>

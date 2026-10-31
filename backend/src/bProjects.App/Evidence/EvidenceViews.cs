@@ -1,0 +1,405 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace bProjects.App.Evidence;
+
+/// <summary>Evidenza persistita letta dal database, con il contenuto deserializzato.</summary>
+public sealed record EvidenceSnapshot(
+    Guid Id,
+    Guid VersionId,
+    Guid MessageId,
+    long MessageSequence,
+    int Ordinal,
+    string Key,
+    EvidenceKind Kind,
+    EvidencePolarity Polarity,
+    EvidenceCertainty Certainty,
+    string Statement,
+    EvidenceContent Content)
+{
+    public static EvidenceSnapshot From(EvidenceItem item, long sequence) => new(
+        item.Id, item.VersionId, item.MessageId, sequence, item.Ordinal, item.Key, item.Kind, item.Polarity, item.Certainty, item.Statement,
+        EvidenceJson.Deserialize<EvidenceContent>(item.Content));
+}
+
+public enum DiffStatus
+{
+    Added,
+    Removed,
+    Unchanged,
+    Modified,
+    Ambiguous,
+}
+
+public sealed record FieldChange(string Field, string? From, string? To);
+
+public sealed record DiffEntry(DiffStatus Status, EvidenceSnapshot? From, EvidenceSnapshot? To, IReadOnlyList<FieldChange> Changes, IReadOnlyList<Guid> Candidates, double Overlap);
+
+public sealed record VersionDiff(IReadOnlyList<DiffEntry> Entries)
+{
+    public int Count(DiffStatus status) => Entries.Count(e => e.Status == status);
+}
+
+/// <summary>
+/// Confronto fra due versioni dello stesso messaggio (contracts/http-api.md §Registro). L'identità di due evidenze è ancorata alla
+/// sovrapposizione delle loro citazioni primarie sullo stesso originale (IoU dei caratteri ≥ <see cref="MinOverlap"/>, migliore
+/// reciproco e unico), mai a parole comuni dell'enunciato. Gli abbinamenti non univoci sono esposti come ambigui: nessun automatismo
+/// li risolve né approva modifiche per conto del PM.
+/// </summary>
+public static class EvidenceVersionComparer
+{
+    public const double MinOverlap = 0.5;
+
+    /// <summary>Abbinamenti univoci from → to; gli altri restano fuori (aggiunte, rimozioni o ambiguità).</summary>
+    public static IReadOnlyDictionary<Guid, Guid> Match(IReadOnlyList<EvidenceSnapshot> from, IReadOnlyList<EvidenceSnapshot> to)
+    {
+        var scores = Scores(from, to);
+        var result = new Dictionary<Guid, Guid>();
+        foreach (var a in from)
+        {
+            var best = Best(scores, a.Id, to.Select(b => b.Id), (x, y) => (x, y));
+            if (best.Count == 1)
+            {
+                var b = best[0];
+                var back = Best(scores, b, from.Select(x => x.Id), (x, y) => (y, x));
+                if (back.Count == 1 && back[0] == a.Id)
+                {
+                    result[a.Id] = b;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static VersionDiff Compare(
+        IReadOnlyList<EvidenceSnapshot> from,
+        IReadOnlyList<EvidenceSnapshot> to,
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>>? relations = null)
+    {
+        var scores = Scores(from, to);
+        var matches = Match(from, to);
+        var matchedTo = matches.Values.ToHashSet();
+        var involved = new HashSet<Guid>();
+        var entries = new List<DiffEntry>();
+        foreach (var a in from.OrderBy(e => e.Ordinal))
+        {
+            if (matches.TryGetValue(a.Id, out var bId))
+            {
+                var b = to.Single(e => e.Id == bId);
+                var changes = Changes(a, b, relations);
+                entries.Add(new(changes.Count == 0 ? DiffStatus.Unchanged : DiffStatus.Modified, a, b, changes, [], Round(scores[(a.Id, b.Id)])));
+                continue;
+            }
+
+            var candidates = to.Where(b => !matchedTo.Contains(b.Id) && scores.GetValueOrDefault((a.Id, b.Id)) >= MinOverlap)
+                .Select(b => b.Id).ToList();
+            if (candidates.Count > 0)
+            {
+                involved.UnionWith(candidates);
+                entries.Add(new(DiffStatus.Ambiguous, a, null, [], candidates, Round(candidates.Max(c => scores[(a.Id, c)]))));
+            }
+            else
+            {
+                entries.Add(new(DiffStatus.Removed, a, null, [], [], 0));
+            }
+        }
+
+        foreach (var b in to.OrderBy(e => e.Ordinal).Where(b => !matchedTo.Contains(b.Id) && !involved.Contains(b.Id)))
+        {
+            entries.Add(new(DiffStatus.Added, null, b, [], [], 0));
+        }
+
+        return new(entries);
+    }
+
+    private static Dictionary<(Guid, Guid), double> Scores(IReadOnlyList<EvidenceSnapshot> from, IReadOnlyList<EvidenceSnapshot> to)
+    {
+        var scores = new Dictionary<(Guid, Guid), double>();
+        foreach (var a in from)
+        {
+            var spansA = Primary(a);
+            foreach (var b in to)
+            {
+                var overlap = Overlap(spansA, Primary(b));
+                if (overlap >= MinOverlap)
+                {
+                    // A parità di sovrapposizione preferisce lo stesso tipo: entrambe proprietà strutturali, non lessicali.
+                    scores[(a.Id, b.Id)] = overlap + (a.Kind == b.Kind ? 0.001 : 0);
+                }
+            }
+        }
+
+        return scores;
+    }
+
+    private static List<Guid> Best(
+        Dictionary<(Guid, Guid), double> scores, Guid id, IEnumerable<Guid> others, Func<Guid, Guid, (Guid, Guid)> key)
+    {
+        var list = others.Select(o => (o, s: scores.GetValueOrDefault(key(id, o)))).Where(x => x.s >= MinOverlap).ToList();
+        if (list.Count == 0)
+        {
+            return [];
+        }
+
+        var max = list.Max(x => x.s);
+        return [.. list.Where(x => Math.Abs(x.s - max) < 1e-9).Select(x => x.o)];
+    }
+
+    private static List<(int Start, int End)> Primary(EvidenceSnapshot e) =>
+        [.. e.Content.Sources.Where(s => s.Role == EvidenceSourceRole.Primary && s.MessageId == e.MessageId).Select(s => (s.Start, s.End))];
+
+    /// <summary>Intersection over union dei caratteri coperti dalle citazioni primarie (intervalli semiaperti).</summary>
+    public static double Overlap(IReadOnlyList<(int Start, int End)> a, IReadOnlyList<(int Start, int End)> b)
+    {
+        var ua = Union(a);
+        var ub = Union(b);
+        var intersection = 0;
+        foreach (var x in ua)
+        {
+            foreach (var y in ub)
+            {
+                intersection += Math.Max(0, Math.Min(x.End, y.End) - Math.Max(x.Start, y.Start));
+            }
+        }
+
+        var union = ua.Sum(x => x.End - x.Start) + ub.Sum(y => y.End - y.Start) - intersection;
+        return union <= 0 ? 0 : (double)intersection / union;
+    }
+
+    private static List<(int Start, int End)> Union(IReadOnlyList<(int Start, int End)> spans)
+    {
+        var result = new List<(int Start, int End)>();
+        foreach (var s in spans.Where(s => s.End > s.Start).OrderBy(s => s.Start))
+        {
+            if (result.Count > 0 && s.Start <= result[^1].End)
+            {
+                result[^1] = (result[^1].Start, Math.Max(result[^1].End, s.End));
+            }
+            else
+            {
+                result.Add(s);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<FieldChange> Changes(EvidenceSnapshot a, EvidenceSnapshot b, IReadOnlyDictionary<Guid, IReadOnlyList<string>>? relations)
+    {
+        var changes = new List<FieldChange>();
+        void Check(string field, string? x, string? y)
+        {
+            if (!string.Equals(x, y, StringComparison.Ordinal))
+            {
+                changes.Add(new(field, x, y));
+            }
+        }
+
+        Check("kind", a.Kind.ToString(), b.Kind.ToString());
+        Check("polarity", a.Polarity.ToString(), b.Polarity.ToString());
+        Check("certainty", a.Certainty.ToString(), b.Certainty.ToString());
+        Check("statement", a.Statement, b.Statement);
+        var (sa, sb) = (a.Content.Structure, b.Content.Structure);
+        Check("subject", sa.Subject, sb.Subject);
+        Check("action", sa.Action, sb.Action);
+        Check("object", sa.Object, sb.Object);
+        Check("scope", sa.Scope, sb.Scope);
+        Check("purpose", sa.Purpose, sb.Purpose);
+        Check("instrument", sa.Instrument, sb.Instrument);
+        Check("channel", sa.Channel, sb.Channel);
+        Check("recipient", sa.Recipient, sb.Recipient);
+        Check("qualifiers", Qualifiers(a), Qualifiers(b));
+        Check("sources", Sources(a), Sources(b));
+        if (relations is not null)
+        {
+            Check("relations", Join(relations.GetValueOrDefault(a.Id)), Join(relations.GetValueOrDefault(b.Id)));
+        }
+
+        return changes;
+    }
+
+    private static string? Join(IReadOnlyList<string>? values) => values is null || values.Count == 0 ? null : string.Join("; ", values.Order(StringComparer.Ordinal));
+
+    private static string? Qualifiers(EvidenceSnapshot e) =>
+        e.Content.Qualifiers.Count == 0 ? null : string.Join("; ", e.Content.Qualifiers.Select(q => $"{q.Type}: {q.Text}").Order(StringComparer.Ordinal));
+
+    private static string Sources(EvidenceSnapshot e) =>
+        string.Join("; ", e.Content.Sources.Select(s => $"{s.Role} seq {s.Sequence} [{s.Start},{s.End}) «{s.Quote}»"));
+
+    private static double Round(double value) => Math.Round(Math.Min(1, value), 3);
+}
+
+/// <summary>Versione selezionata per un messaggio PM entro il cutoff.</summary>
+public sealed record SelectionItem(Guid MessageId, long Sequence, Guid VersionId, int Version, int EvidenceCount, string? NoEvidenceReason);
+
+public sealed record ViewEvidence(
+    string Alias,
+    Guid EvidenceId,
+    Guid MessageId,
+    long Sequence,
+    int Ordinal,
+    EvidenceKind Kind,
+    EvidencePolarity Polarity,
+    EvidenceCertainty Certainty,
+    string Statement,
+    EvidenceContent Content);
+
+public sealed record ViewRelation(string FromAlias, string ToAlias, EvidenceRelationType Type, EvidenceRelationBasis Basis, string? Rationale, bool Open, bool Remapped);
+
+public sealed record StaleRelation(Guid RelationId, Guid FromEvidenceId, Guid ToEvidenceId, EvidenceRelationType Type, string Reason);
+
+/// <summary>Relazione persistita con il messaggio e la versione del bersaglio.</summary>
+public sealed record RelationRecord(
+    Guid Id, Guid VersionId, Guid FromEvidenceId, Guid ToEvidenceId, Guid ToVersionId, Guid ToMessageId,
+    EvidenceRelationType Type, EvidenceRelationBasis Basis, string? Rationale);
+
+/// <summary>
+/// Vista deterministica delle evidenze selezionate per un run (contracts/ai-workflow.md §10.6): alias E1…En in ordine di sequenza e
+/// ordinale, relazioni asserite dalle sole versioni selezionate, bersagli in versioni non selezionate rimappati per abbinamento univoco
+/// oppure dichiarati stale. Serializzata e congelata nel run; il suo hash identifica l'input del consolidamento.
+/// </summary>
+public sealed record EvidenceSelectionView(
+    IReadOnlyList<SelectionItem> Items,
+    IReadOnlyList<ViewEvidence> Evidences,
+    IReadOnlyList<ViewRelation> Relations,
+    IReadOnlyList<StaleRelation> StaleRelations)
+{
+    public const string SchemaVersion = "evidence-view-1";
+
+    public static EvidenceSelectionView Build(
+        IReadOnlyList<SelectionItem> items,
+        IReadOnlyList<EvidenceSnapshot> selected,
+        IReadOnlyList<RelationRecord> relations,
+        IReadOnlyDictionary<Guid, IReadOnlyList<EvidenceSnapshot>> otherVersions)
+    {
+        var ordered = selected.OrderBy(e => e.MessageSequence).ThenBy(e => e.Ordinal).ToList();
+        var aliases = new Dictionary<Guid, string>();
+        var evidences = new List<ViewEvidence>();
+        foreach (var e in ordered)
+        {
+            var alias = $"E{evidences.Count + 1}";
+            aliases[e.Id] = alias;
+            evidences.Add(new(alias, e.Id, e.MessageId, e.MessageSequence, e.Ordinal, e.Kind, e.Polarity, e.Certainty, e.Statement, e.Content));
+        }
+
+        var selectedVersions = items.Select(i => i.VersionId).ToHashSet();
+        var selectedByMessage = ordered.GroupBy(e => e.MessageId).ToDictionary(g => g.Key, g => (IReadOnlyList<EvidenceSnapshot>)[.. g]);
+        var resolved = new List<(RelationRecord Relation, string From, string To, bool Remapped)>();
+        var stale = new List<StaleRelation>();
+        foreach (var r in relations.Where(r => selectedVersions.Contains(r.VersionId)).OrderBy(r => aliases.GetValueOrDefault(r.FromEvidenceId)).ThenBy(r => r.Id))
+        {
+            if (!aliases.TryGetValue(r.FromEvidenceId, out var from))
+            {
+                continue;
+            }
+
+            if (aliases.TryGetValue(r.ToEvidenceId, out var to))
+            {
+                resolved.Add((r, from, to, false));
+                continue;
+            }
+
+            if (!selectedByMessage.TryGetValue(r.ToMessageId, out var current) || !otherVersions.TryGetValue(r.ToVersionId, out var old))
+            {
+                stale.Add(new(r.Id, r.FromEvidenceId, r.ToEvidenceId, r.Type, "il messaggio del bersaglio non ha evidenze nella selezione"));
+                continue;
+            }
+
+            if (EvidenceVersionComparer.Match(old, current).TryGetValue(r.ToEvidenceId, out var mapped) && aliases.TryGetValue(mapped, out var remapped))
+            {
+                resolved.Add((r, from, remapped, true));
+            }
+            else
+            {
+                stale.Add(new(r.Id, r.FromEvidenceId, r.ToEvidenceId, r.Type, "bersaglio in una versione non selezionata senza abbinamento univoco"));
+            }
+        }
+
+        // Un'alternativa o una contraddizione resta aperta finché un'evidenza Decision dichiarata dal PM non la rettifica o sostituisce.
+        var byAlias = evidences.ToDictionary(e => e.Alias);
+        var settled = resolved
+            .Where(x => x.Relation.Basis == EvidenceRelationBasis.Declared
+                && x.Relation.Type is EvidenceRelationType.Corrects or EvidenceRelationType.Supersedes
+                && byAlias[x.From].Kind == EvidenceKind.Decision && byAlias[x.From].Certainty == EvidenceCertainty.Declared)
+            .Select(x => x.To)
+            .ToHashSet();
+        var view = resolved
+            .Select(x => new ViewRelation(
+                x.From, x.To, x.Relation.Type, x.Relation.Basis, x.Relation.Rationale,
+                Open: x.Relation.Type is EvidenceRelationType.AlternativeTo or EvidenceRelationType.Contradicts
+                    && !settled.Contains(x.From) && !settled.Contains(x.To),
+                x.Remapped))
+            .ToList();
+
+        return new([.. items.OrderBy(i => i.Sequence)], evidences, view, stale);
+    }
+
+    public string Serialize() => EvidenceJson.Serialize(this);
+
+    public static EvidenceSelectionView Deserialize(string json) => EvidenceJson.Deserialize<EvidenceSelectionView>(json);
+
+    public string Hash() => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Serialize())));
+
+    /// <summary>Alias delle evidenze ammessi in <c>evidenceKeys</c> dello schema del run.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<string> Aliases => [.. Evidences.Select(e => e.Alias)];
+
+    /// <summary>Testo per il consolidamento: compatto, stabile, senza id interni delle evidenze (gli alias bastano al modello).</summary>
+    public string ToPromptText()
+    {
+        var text = new StringBuilder()
+            .AppendLine("Registro delle evidenze selezionate per questa analisi (versioni congelate). Ogni evidenza è un'interpretazione")
+            .AppendLine("strutturata della frase PM citata, che resta l'autorità; usala per non perdere fatti, qualificatori, negazioni e legami.");
+        foreach (var e in Evidences)
+        {
+            var message = Items.First(i => i.MessageId == e.MessageId);
+            text.Append(e.Alias).Append(" · messaggio sequenza ").Append(e.Sequence.ToString(CultureInfo.InvariantCulture))
+                .Append(" (id ").Append(message.MessageId).Append(") · ").Append(e.Kind).Append(" · ").Append(e.Polarity)
+                .Append(" · ").Append(e.Certainty).AppendLine();
+            text.Append("  enunciato: ").AppendLine(e.Statement);
+            var s = e.Content.Structure;
+            var parts = new[]
+            {
+                ("soggetto", s.Subject), ("azione", s.Action), ("oggetto", s.Object), ("ambito", s.Scope), ("scopo", s.Purpose),
+                ("strumento", s.Instrument), ("canale", s.Channel), ("destinatario", s.Recipient),
+            }.Where(p => p.Item2 is not null).Select(p => $"{p.Item1}: {p.Item2}").ToList();
+            if (parts.Count > 0)
+            {
+                text.Append("  ").AppendLine(string.Join("; ", parts));
+            }
+
+            if (e.Content.Qualifiers.Count > 0)
+            {
+                text.Append("  qualificatori: ").AppendLine(string.Join("; ", e.Content.Qualifiers.Select(q => $"{q.Type} «{q.Text}»")));
+            }
+
+            foreach (var span in e.Content.Sources)
+            {
+                text.Append("  citazione ").Append(span.Role == EvidenceSourceRole.Primary ? "" : $"({span.Role}, sequenza {span.Sequence}) ")
+                    .Append('«').Append(span.Quote).AppendLine("»");
+            }
+        }
+
+        if (Relations.Count > 0)
+        {
+            text.AppendLine("Relazioni fra evidenze:");
+            foreach (var r in Relations)
+            {
+                text.Append("- ").Append(r.FromAlias).Append(' ').Append(r.Type).Append(' ').Append(r.ToAlias)
+                    .Append(r.Basis == EvidenceRelationBasis.Declared ? " (dichiarata dal PM)" : " (inferita, da verificare)")
+                    .AppendLine(r.Open ? " — conflitto aperto: le posizioni restano alternative" : "");
+            }
+        }
+
+        var empty = Items.Where(i => i.EvidenceCount == 0).ToList();
+        if (empty.Count > 0)
+        {
+            text.AppendLine("Messaggi PM senza evidenze (esito validato): " + string.Join("; ",
+                empty.Select(i => $"sequenza {i.Sequence.ToString(CultureInfo.InvariantCulture)} ({i.NoEvidenceReason})")));
+        }
+
+        return text.ToString();
+    }
+}

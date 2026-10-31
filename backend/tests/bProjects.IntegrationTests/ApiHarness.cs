@@ -37,7 +37,17 @@ public sealed class ApiHarness : IAsyncDisposable
             services.RemoveAll<bProjects.App.AI.AnalysisWorkflow>(); // dipende dal client AI, che qui non deve esistere
             services.RemoveAll<bProjects.App.AI.DocumentWorkflow>(); // idem: dipende dal client AI
             services.RemoveAll<bProjects.App.AI.DocumentAgent>();
+            services.RemoveAll<IEvidenceExtractionExecutor>(); // l'estrattore reale dipende dal client AI
             configure?.Invoke(services);
+
+            // Chi chiede l'esecuzione reale dell'analisi attraversa il gate delle evidenze: se configure non registra un estrattore, un
+            // esecutore deterministico completa le estrazioni con il dispatcher e il commit reali del registro. Senza analisi il
+            // dispatcher resta inattivo come prima; le prove che preparano le evidenze a mano usano EvidenceTestSeed.
+            if (services.Any(d => d.ServiceType == typeof(bProjects.App.AI.AnalysisWorkflow))
+                && !services.Any(d => d.ServiceType == typeof(IEvidenceExtractionExecutor)))
+            {
+                services.AddSingleton<IEvidenceExtractionExecutor, SeedExtractionExecutor>();
+            }
         }));
     }
 

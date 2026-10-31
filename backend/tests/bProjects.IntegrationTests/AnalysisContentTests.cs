@@ -543,7 +543,12 @@ internal sealed class InMemoryAnalysisStore(TrustedInput trusted) : IAnalysisRun
             .OrderBy(m => m.Sequence)
             .Select(m => new AnalysisDialogMessage(m.Id, m.Role == "user" ? AnalysisMessageRole.User : AnalysisMessageRole.Assistant, m.Sequence, $"Messaggio {m.Sequence}"))]));
 
-    public Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct)
+    /// <summary>Senza database il registro è vuoto: la prova riguarda schema e validazione, non le evidenze.</summary>
+    public Task<bProjects.App.Evidence.SelectionResult> FreezeEvidenceAsync(AnalysisRunClaim claim, CancellationToken ct) =>
+        Task.FromResult(new bProjects.App.Evidence.SelectionResult(bProjects.App.Evidence.SelectionOutcome.Existing, new bProjects.App.Evidence.EvidenceSelectionView([], [], [], [])));
+
+    public Task<AnalysisCommitResult> CommitAsync(
+        AnalysisRunClaim claim, AnalysisContent content, IReadOnlyDictionary<Guid, IReadOnlyList<string>> evidenceKeys, CancellationToken ct)
     {
         Committed = content;
         return Task.FromResult(new AnalysisCommitResult(AnalysisCommitOutcome.Committed, Guid.NewGuid()));

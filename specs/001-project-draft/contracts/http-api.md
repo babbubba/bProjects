@@ -239,7 +239,7 @@ interface ContextUsage {
              configuredContextWindowTokens: number;   // Ai:ContextWindowTokens
              serverDefaultNPredict: number | null; windowMismatch: boolean };
   limits: { safetyMarginTokens: number;
-            phases: Record<'chat' | 'analysis' | 'document' | 'compaction',
+            phases: Record<'chat' | 'analysis' | 'document' | 'compaction' | 'extraction',
                            { maxOutputTokens: number; enableThinking: boolean; inputBudgetTokens: number }> };
   last: null | { kind: 'chat' | 'analysis' | 'document'; refId: string; at: string; metrics: InferenceMetrics;
                  usedPercent: number | null;          // calculated: promptTokens / contextWindowTokens * 100, mai > 100 se la richiesta è rientrata

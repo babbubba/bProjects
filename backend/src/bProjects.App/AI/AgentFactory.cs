@@ -118,6 +118,36 @@ public sealed class AgentFactory
     public ValueTask EnsureDocumentWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>
         ContextBudget.From(_options, AiPhase.Document).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
 
+    /// <summary>
+    /// Client dell'estrattore delle evidenze: come quello del DocumentAgent (nessuna history né compattazione: un solo messaggio costruito
+    /// dal server), con il budget, il modello, il timeout e la telemetria della fase Extraction.
+    /// </summary>
+    public IChatClient CreateExtractionClient()
+    {
+        var measured = new MeasuredTokens(_count);
+        return new ChatClientBuilder(Model(AiPhase.Extraction, measured.CountAsync))
+            .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options, AiPhase.Extraction), measured.CountAsync, monitor: null))
+            .Build();
+    }
+
+    /// <summary>Vero se istruzioni e messaggi rientrano nel budget di input della fase Extraction (conteggio del tokenizer reale).</summary>
+    public async ValueTask<bool> FitsExtractionBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await ContextBudget.From(_options, AiPhase.Extraction).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
+            return true;
+        }
+        catch (ContextOverflowException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Come <see cref="FitsExtractionBudgetAsync"/>, ma fuori budget lancia <see cref="ContextOverflowException"/> (context_overflow).</summary>
+    public ValueTask EnsureExtractionWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>
+        ContextBudget.From(_options, AiPhase.Extraction).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
+
     public async Task<ChatClientAgent> CreateCompactingAgentAsync(
         string name, string instructions, CancellationToken cancellationToken = default) =>
         new(await CreateCompactingClientAsync(instructions, cancellationToken), instructions: instructions, name: name);

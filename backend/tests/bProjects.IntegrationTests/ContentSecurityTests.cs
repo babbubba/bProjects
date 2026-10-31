@@ -278,12 +278,30 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"POST {p}/analyses/{{analysisId:guid}}/document-generations",
             $"GET {p}/draft",
             $"GET {p}/context-usage",
+            // Registro atomico delle evidenze (contracts/http-api.md §Registro).
+            $"GET {p}/evidence/status",
+            $"GET {p}/evidence",
+            $"GET {p}/evidence/{{evidenceId:guid}}",
+            $"GET {p}/messages/{{messageId:guid}}/evidence/versions",
+            $"GET {p}/evidence/versions/{{versionId:guid}}",
+            $"GET {p}/evidence/versions/{{fromId:guid}}/compare/{{toId:guid}}",
+            $"POST {p}/messages/{{messageId:guid}}/evidence/reanalyses",
+            $"POST {p}/evidence/jobs/{{jobId:guid}}/retry",
+            $"GET {p}/evidence/jobs/{{jobId:guid}}",
+            $"POST {p}/evidence/reanalyses",
+            $"POST {p}/evidence/backfills",
+            $"GET {p}/evidence/batches/{{batchId:guid}}",
+            $"POST {p}/messages/{{messageId:guid}}/evidence/promotions",
+            $"GET {p}/analyses/{{analysisId:guid}}/evidence-selection",
+            $"POST {p}/analyses/{{analysisId:guid}}/coverage-reports",
+            $"GET {p}/analyses/{{analysisId:guid}}/coverage-reports",
+            $"GET {p}/analyses/{{analysisId:guid}}/coverage-reports/{{reportId:guid}}",
         ];
         var actual = routes.Select(r => $"{r.Method} {r.Pattern}{(r.Anonymous ? " (anonimo)" : "")}").ToList();
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(16, protectedRoutes.Count);
+        Assert.Equal(33, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {

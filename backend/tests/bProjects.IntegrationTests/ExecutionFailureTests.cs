@@ -653,15 +653,17 @@ public sealed class ExecutionFailureTests : IAsyncLifetime
         {
             using var pm = await App.LoginAsync();
             LastKey = Guid.NewGuid();
-            switch (what)
+            var work = what switch
             {
-                case Kind.Chat:
-                    return await PostMessage(pm, $"Messaggio {++_messages}", LastKey);
-                case Kind.Analysis:
-                    return await Formal(pm, $"/api/projects/{_project}/analyses", null, LastKey, HttpStatusCode.Accepted);
-                default:
-                    return await Formal(pm, $"/api/projects/{_project}/analyses/{_analysis}/document-generations", new { revisionId = _revision }, LastKey, HttpStatusCode.Accepted);
-            }
+                Kind.Chat => await PostMessage(pm, $"Messaggio {++_messages}", LastKey),
+                Kind.Analysis => await Formal(pm, $"/api/projects/{_project}/analyses", null, LastKey, HttpStatusCode.Accepted),
+                _ => await Formal(pm, $"/api/projects/{_project}/analyses/{_analysis}/document-generations", new { revisionId = _revision }, LastKey, HttpStatusCode.Accepted),
+            };
+
+            // Le estrazioni delle evidenze accodate dal comando si completano subito (percorso reale del registro, uscita deterministica):
+            // queste prove contano i claim del solo lavoro sotto guasto, e il gate di Analizza attende le estrazioni entro il cutoff.
+            await EvidenceTestSeed.CompleteAsync(App.Services, Ct);
+            return work;
         }
 
         /// <summary>Stesso comando con la stessa chiave: lo stesso lavoro, senza un nuovo tentativo.</summary>

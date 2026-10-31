@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using bProjects.App.AI;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -66,7 +67,9 @@ public static class ConversationEndpoints
         ClaimsPrincipal user,
         AppDbContext db,
         IOptions<ExecutionOptions> execution,
+        IOptions<AiOptions> ai,
         ChatTurnEvents events,
+        EvidenceEvents evidenceEvents,
         CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
@@ -156,13 +159,19 @@ public static class ConversationEndpoints
             MaxAttempts = policy.MaxAttempts,
         };
 
-        // Un solo SaveChanges: messaggio, turno e LastSequence sono scritti nella stessa transazione.
+        // Lavoro durevole di estrazione delle evidenze (contracts/ai-workflow.md §10.1): nella stessa transazione, mai dipendente dal modello.
+        var extraction = EvidenceLedgerStore.NewJob(projectId, conversation.Id, message.Id, message.Sequence, ExtractionJobReason.Initial, now,
+            policy, EvidenceLedgerStore.ExtractorConfig(ai.Value, policy));
+
+        // Un solo SaveChanges: messaggio, turno, lavoro di estrazione e LastSequence sono scritti nella stessa transazione.
         db.ConversationMessages.Add(message);
         db.ChatTurns.Add(turn);
+        db.EvidenceExtractionJobs.Add(extraction);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
         await events.PublishStateAsync(turn.Id); // post-commit; legge lo stato corrente, mai uno vecchio
+        await evidenceEvents.PublishStateAsync(extraction.Id);
         var view = await ViewOf(db, message, ct);
         return Results.Created($"/api/projects/{projectId}/messages/{message.Id}", new PostMessageResponse(view, turn.Id));
     }

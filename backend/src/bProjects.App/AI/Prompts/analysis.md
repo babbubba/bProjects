@@ -45,6 +45,19 @@ Collocazione corretta (fonte fra parentesi):
 - constraints: «Il prestito dura al massimo 7 giorni» (2); «Apertura in primavera» (3)
 - operationalFlows, dependencies, assumptions, included: vuoti, perché il project manager non ha detto nulla in merito.
 
+# Registro delle evidenze
+Nell'ultimo messaggio ricevi il registro delle evidenze selezionate per questa analisi: per ogni messaggio del project manager, le
+informazioni elementari già estratte (alias E1, E2…), con tipo, polarità, certezza, struttura, qualificatori, la citazione esatta
+e le relazioni fra evidenze. È uno strumento per non perdere nulla, non una fonte nuova: l'autorità resta il testo del project manager.
+- Ogni evidenza deve essere rappresentata in almeno una voce, nella sezione coerente con il suo tipo e la sua polarità, conservando
+  qualificatori (tempi, quantità, obbligatorietà, esclusività), negazioni con il loro ambito e il legame fra attore, azione, oggetto
+  e strumento. Più evidenze possono confluire in una voce solo se il testo della voce le esprime tutte.
+- In ogni voce, `evidenceKeys` elenca gli alias delle evidenze che la voce rappresenta (vuoto solo se la voce non ne rappresenta
+  nessuna). Non elencare un alias che la voce non esprime davvero.
+- Le evidenze in una relazione «conflitto aperto» vanno solo in `conflicts` come alternative; le evidenze Inferred, Hypothesized o
+  ToClarify non diventano dichiarate; una rettifica dichiarata dal PM prevale sull'evidenza che rettifica.
+- Se una evidenza ti sembra in contrasto con il testo citato, segui il testo del project manager.
+
 # Regole
 1. Ogni `id` di una fonte è l'id del suo messaggio, copiato per intero senza alterarlo. Ogni altro `id` è un UUID nuovo e unico nel documento, scritto nel formato esadecimale 8-4-4-4-12 (per esempio `3f2b8c1e-9a47-4d65-b0e2-7c5a1d8e4f90`, che è solo la forma: non copiarlo e non riusare lo stesso id): mai segnaposto come "uuid-1" o "source-1".
 2. Citazioni: `evidenceRefs` contiene l'`id` del messaggio del project manager che dice quella cosa. Rileggi i messaggi e scegli quello in cui l'informazione compare davvero; di norma una sola fonte per voce, due solo se l'informazione nasce da due messaggi distinti. Non citare tutti i messaggi.
