@@ -1101,3 +1101,54 @@ può consumare budget in modo significativo: tempi e token vanno misurati su N1�
 
 Restano: T056 (persistenza), T055 upgrade con dati esistenti, T057 casi fuori BMP, T058 variabili compose e prova HTTP della
 richiesta, T063, T064/T065/T067 test, T066, T069 E2E, poi T070 (suite completa) e T071–T073 sul DGX in seriale.
+
+## 10.3 Registro oltre il budget, test mancanti, full suite, DGX (2026-11-01)
+
+Commit `991da02`…`669c018` (più questo). Nessun nuovo branch, nessun merge, nessun Co-Authored-By.
+
+**Registro grande nel contesto (T062).** Non più «vista nel messaggio finale e basta»: `AnalysisConsolidation.PlanAsync` pianifica con
+i token reali. Passo singolo (grafo invariato) se dialogo + vista stanno nel budget della fase Analysis, anche con la compattazione
+nativa purché la sua sintesi stia nel budget della fase Compaction; altrimenti grafo MAF incrementale (un agente per passo, executor di
+passo con checkpoint) per intervalli di sequenza entro il cutoff: originali interi, evidenze intere una sola volta, analisi corrente da
+aggiornare. Un passo che perde evidenze già rappresentate ⇒ `invalid_agent_output` (scoperto dal test con 120 evidenze: senza questa
+regola la mappa finale ne copriva 24). Nessun limite al numero di evidenze; overflow strutturale esplicito (`context_overflow`).
+Contratto: ai-workflow §10.7, plan.md §Consolidamento. **Attese cambiate di proposito (non per ottenere PASS):** T047 «dieci messaggi
+grandi», T047 «dialogo oltre la finestra» e il caso deterministico «contesto grande» ora sono incrementali (prima la sintesi superava
+il budget della fase Compaction di ~440 token, accettata solo dalla tolleranza n_ctx del server finto; il dialogo oltre la finestra era
+`compaction_failed`). Restano budget, originali, fonti, esclusioni; si aggiungono nessuna sintesi, originali interi, passi entro il budget.
+
+**Test aggiunti (tutti verdi in esecuzione mirata).** `AnalysisConsolidationPlanTests` (5), `EvidenceAnalysisIntegrationTests` (4:
+registro grande, perdita rifiutata, selezione identica al retry dopo rianalisi e promozione concorrenti, vista intatta con la
+compattazione e cutoff), `EvidenceLedgerPersistenceTests` (4: vincoli, numerazione, promozione automatica e concorrente, append-only,
+migrazione giù/su con dati invariati e backfill), `EvidenceApiTests` (4), `PhaseModelRoutingTests` (default Extraction di compose),
+`tests/e2e/evidence-ledger.spec.ts` (offline: 1 PASS su stack isolato `bprojects-ledger-e2e`, fermato; reale: non eseguito).
+Config: `AI_EXTRACTION_*` (output 16384, thinking off, 600 s) ed `EXECUTION_EXTRACTION_DEADLINE_SECONDS` (3600) in compose/.env.example.
+
+**Full suite (una sola, senza DGX).** Backend 1101: 1062 PASS, 38 SKIP (MafReal), 1 FAIL (`AcceptanceDeterministicTests` contesto
+grande: stesso scenario T047, attese aggiornate come sopra, poi 10/10 due volte). Un'esecuzione mirata della stessa classe si è chiusa
+una volta con crash del testhost (0xC0000409) dopo un test; non riprodotto in due riesecuzioni: da tenere d'occhio. Frontend `test:ci`
+209/209. Log: `t052-evidence/ledger-logs/`. T070 resta aperto: gli altri E2E non sono stati rieseguiti.
+
+**DGX reale, seriale, `Qwen3.6-35B-Smart`, fasi come compose (T071).** `EvidenceExtractorMafTests` 4/5 con `extraction-v1`: N2 produceva
+un'unica evidenza Prohibited con `channel=email` (divieto e obbligo fusi, leggibile come email vietata). Regola generica nel prompt
+(polarità e campi descrivono lo stesso fatto) ⇒ `extraction-v2`: 5/5, più rettifica (`Corrects` Declared verso il messaggio 1) PASS.
+Estrazione: ~10–18 s per messaggio, prompt 1,5–2,6k, completion 0,5–1k, nessun retry.
+
+**N1–N5 sulla nuova pipeline (T072, un'esecuzione, attese invariate; export in `t052-evidence/ledger-n1n5`).**
+
+| Caso | Esito | Chat (s) | Analizza (s, attesa estrazioni inclusa) | Causa |
+| --- | --- | --- | --- | --- |
+| N1 officina | PASS | 3–20 | 151,5 | — |
+| N2 ferie | FAIL | 3–20 | >210 (Running) | tempo; rerun: 171,6 s, analisi OK, poi Genera `invalid_agent_output` (marcatore `[fonte:]` del DocumentAgent) |
+| N3 magazzino | PASS | 2–16 | 140,6 | in sessione 9 FAIL (strumento staccato dall'operazione) |
+| N4 fornitori | FAIL | 3–13 | 140,0 | correzione PM non applicabile + ripetizione nella bozza |
+| N5 aurora / boreale | FAIL | 2–11 | 158,7 / 141,0 | chat: domanda ripetuta / «ordini» in Goals |
+
+Costo del registro con `parallel=1`: un'estrazione in corso occupa il modello, quindi i turni di chat dopo il primo salgono a 8–20 s
+(prima 2–5 s) e Analizza attende l'ultima estrazione (~15 s) prima di un consolidamento da 130–155 s: margine sul criterio dei 180 s
+ridotto o assente (N2). Limite non modificato. Possibili interventi da decidere: estrazione differita mentre un turno di chat è atteso,
+uscita di estrazione più compatta, modello più veloce per la fase Extraction.
+
+Restano aperti: T065 (impatto delle promozioni sulle relazioni non testato), T066 (esempi negativi per ogni codice di copertura), T070,
+T073, T052/T053. Una modifica di sola formattazione (Prettier) in `frontend/src/app/projects/evidence-view.component.spec.ts` non è mia
+e non è committata.

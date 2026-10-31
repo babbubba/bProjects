@@ -233,8 +233,8 @@ rivalidazione usa la pipeline con registro (T072). Milestone M1–M8 del mandato
 ### M8 — Test completi, verifiche DGX, documentazione ed esiti residui
 
 - [ ] T070 [US1] Eseguire la suite deterministica, Integration su PostgreSQL, `test:ci` e i test E2E disponibili; nessuna regressione dei percorsi esistenti (Chat → Analizza → Correggi → Conferma → Genera). Dipende da T060, T063, T065, T066, T067, T069.
-- [ ] T071 [US1] Provare l'estrattore reale sul DGX (`Category=MafReal`, inferenze seriali, `DiagnosticsHarness`): esempi di regressione N1–N4 del mandato §3.2 come attese generiche (nessuna regola nel codice), zero evidenze, rettifica. Registrare PASS/FAIL/SKIP reali. Dipende da T070.
-- [ ] T072 [US1] Rieseguire N1–N5 sulla nuova pipeline senza cambiare le attese: tempi end-to-end e per fase (estrazioni incluse l'attesa prima di Analizza), token, modello/parametri, estrazioni mancanti, copertura registro→analisi→documento, errori e versioni selezionate; FAIL e SKIP conservati, trade-off col limite di 180 s segnalato senza cambiarlo. Alimenta T052. Dipende da T071.
+- [x] T071 [US1] Provare l'estrattore reale sul DGX (`Category=MafReal`, inferenze seriali, `DiagnosticsHarness`): esempi di regressione N1–N4 del mandato §3.2 come attese generiche (nessuna regola nel codice), zero evidenze, rettifica. Registrare PASS/FAIL/SKIP reali. Dipende da T070.
+- [x] T072 [US1] Rieseguire N1–N5 sulla nuova pipeline senza cambiare le attese: tempi end-to-end e per fase (estrazioni incluse l'attesa prima di Analizza), token, modello/parametri, estrazioni mancanti, copertura registro→analisi→documento, errori e versioni selezionate; FAIL e SKIP conservati, trade-off col limite di 180 s segnalato senza cambiarlo. Alimenta T052. Dipende da T071.
 - [ ] T073 [US1] Aggiornare `quickstart.md`, `checklists/requirements.md` e `HANDOFF.md` con esiti verificati, limiti dei controlli semantici e prossimi passi; T052/T053 restano aperti senza i rispettivi gate. Dipende da T072.
 
 ## Dependencies & Execution Order

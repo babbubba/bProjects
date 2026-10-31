@@ -95,6 +95,27 @@ public sealed class EvidenceExtractorMafTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_explicit_correction_is_a_new_evidence_that_declares_Corrects_towards_the_corrected_one()
+    {
+        var (items, client) = await ExtractAsync("rettifica",
+            "Le richieste di ferie vanno presentate con 5 giorni di anticipo.",
+            "Correggo: intendevo 10 giorni di anticipo, non 5.");
+
+        var later = items.Where(e => e.GetProperty("messageSequence").GetInt64() > 1).ToList();
+        Assert.Contains(later, e => Text(e).Contains("10", StringComparison.Ordinal));
+        var relations = new List<JsonElement>();
+        foreach (var e in later)
+        {
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/projects/{_project}/evidence/{e.GetProperty("id").GetGuid()}", Ct);
+            relations.AddRange(detail.GetProperty("relations").EnumerateArray().Where(r => r.GetProperty("direction").GetString() == "outgoing").Select(r => r.Clone()));
+        }
+
+        Assert.Contains(relations, r => r.GetProperty("type").GetString() is "Corrects" or "Supersedes"
+            && r.GetProperty("basis").GetString() == "Declared" && r.GetProperty("otherMessageSequence").GetInt64() == 1);
+        Assert.Contains(items, e => e.GetProperty("messageSequence").GetInt64() == 1);   // il fatto corretto resta nel registro, non è riscritto
+    }
+
+    [Fact]
     public async Task A_message_without_facts_is_completed_with_a_reasoned_zero_and_not_as_a_failure()
     {
         var (items, client) = await ExtractAsync("vuoto", "Grazie, ci sentiamo domani.");
