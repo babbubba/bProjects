@@ -675,3 +675,27 @@ Cosa si può dire e cosa no:
 - Costo operativo documentato: con timeout di 240 s e lo stesso `max_completion_tokens 8192`, il trattamento non è completabile nei tempi della V8 su questa configurazione.
 
 Evidenza: `C:\source\repos\babbubba\replay-3\applytpl_true.json` (corpo inviato). Nessun codice, modello, schema, prompt o sampling modificato; nessun ulteriore esperimento.
+
+## 4.4 Seconda esecuzione (su indicazione esplicita): timeout 600 s — **REGRESSIONE**
+
+Stessa richiesta di 4.3 (`replay-3/applytpl_true.json`, diff con la V8 di 2B: solo `enable_thinking`), unica modifica il timeout HTTP 240 → 600 s. Una sola chiamata, nessun retry, modello già `loaded`. Risposta: `replay-3/response_thinking.json`.
+
+| Metrica | V8 senza thinking (2B) | V8 con thinking |
+|---|---|---|
+| HTTP / durata a muro | 200 / server 85,6 s (prefill 6,7 + generazione 78,9) | 200 / **313,3 s** (prefill 0,10 s; generazione 312,9 s) |
+| `finish_reason` | `stop` | **`length`** |
+| Completion tokens | 2 136 | **8 192** (= `max_completion_tokens`) |
+| Prompt tokens | 4 269 (0 in cache) | 4 305 (4 301 in cache: prefisso già in cache) |
+| Velocità di generazione | 27,1 tok/s | 26,2 tok/s |
+| `reasoning_content` | assente | **presente, 31 304 caratteri** |
+| `content` finale | JSON AnalysisContent valido | **vuoto (0 caratteri)** |
+| JSON valido / schema | sì | **no: nessun JSON prodotto** |
+| «obbligatoria» / «in tempo reale» | «obbligatoria» sì, «in tempo reale» no | non valutabile (nessun output) |
+| Fingerprint | `b10703-0b5be7e4a` | `b10703-0b5be7e4a` |
+
+- **Thinking effettivamente attivo:** sì, dimostrato da `reasoning_content` non vuoto (il ragionamento inizia con «We need answer user's request: produce only JSON object…» ed è in inglese; elenca gli ID delle fonti e abbozza la struttura). Quindi la grammatica `json_schema` non ha soppresso il ragionamento (chiude il dubbio di 4.1, punto 5), ma lo ha lasciato libero di consumare tutto il budget.
+- **Ripartizione dei token:** `usage` non separa reasoning e output; poiché `content` è vuoto, tutti gli 8 192 token sono ragionamento (~3,8 caratteri/token). Il tempo è dunque ~3,7 volte quello della V8 senza produrre alcun risultato.
+- **Causa dell'insuccesso:** il ragionamento esaurisce `max_completion_tokens=8192` (inferiore a `reasoning-budget=12288`) prima di chiudere `</think>` e di emettere il JSON, che da solo ne richiede ~2 100. Come da incarico il budget non è stato aumentato e non è stata fatta una seconda prova.
+- **Qualità semantica:** nessun confronto possibile; nessuna delle due frasi critiche è presente in un output.
+
+**Decisione: REGRESSIONE** — output inutilizzabile (nessun JSON), costo ~3,7× la V8 e fallimento per limite di output. Con questa configurazione (limite 8192, reasoning-budget 12288) il thinking non è compatibile con l'analisi Boreale. Non dimostrato se un budget maggiore migliorerebbe la fedeltà: non testato per vincolo dell'incarico. Nessun codice, server, modello, schema, prompt o sampling modificato; nessun'altra prova.
