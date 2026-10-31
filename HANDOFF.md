@@ -557,7 +557,7 @@ prompt invariato dopo l'osservazione.
 |---|---|---|
 | Integrazione obbligatoria | **No** («Integrazione con il gestionale ordini Colorweb») | **Sì** («Integrazione obbligatoria con il gestionale ordini Colorweb», Dependencies, fonte seq. 5) |
 | Trasferimento ordini in tempo reale | No | **No**: «tempo reale» e «ordini che arrivano al gestionale» assenti in tutto il JSON |
-| Altri requisiti conservati | 7/7 | 7/7 (ordini, spedizione, SMS/email a scelta, SMS avviso consegna, SSO, solo propri ordini, settembre, listino escluso, niente password locali) |
+| Altri requisiti conservati | tutti | tutti (ordini, spedizione, SMS/email a scelta, SMS avviso consegna, SSO, solo propri ordini, settembre, listino escluso, niente password locali) |
 | Omissioni reali | 2 (obbligo, tempo reale) | 1 (tempo reale / modalità di trasferimento ordini) |
 | Affermazioni non supportate | 0 | 0 (nessuna integrazione, ruolo o funzione inventati; nessuna informazione dell'assistente promossa) |
 | Validità JSON | valida, 14 ID unici | valida, stessa struttura AnalysisContent (15 chiavi, 14 ID unici) |
