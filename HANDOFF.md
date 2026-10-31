@@ -895,12 +895,12 @@ Evidenze (fuori dal repository, senza segreti): `C:\source\repos\babbubba\smoke-
 ## 8.2 T052 nominale reale (N1–N5), prima esecuzione, un solo campione per caso
 | Caso | Esito | Causa | Classificazione |
 |---|---|---|---|
-| N1 | FAIL | generazione: `invalid_agent_output` (motivo non registrato: il messaggio non era propagato; ora lo è) | modello/output non valido, **intermittente**: rieseguito da solo → PASS (analisi 137 s, documento 17 s) |
+| N1 | FAIL | generazione: `invalid_agent_output` (motivo non registrato: il messaggio non era propagato; ora lo è) | **causa NON dimostrata** (output rifiutato non salvato); intermittente: rieseguito da solo → PASS (analisi 137 s, documento 17 s). Vedi 8.5 |
 | N2 | FAIL | «solo email» riscritto come «Le comunicazioni avvengono esclusivamente via email» (perde «notifiche»); la correzione PM prevista non è applicabile (nessuna voce dedicata a «solo responsabile») | errore del modello (allarga l'ambito); checker non modificato |
 | N3 | FAIL | lettore di codici a barre messo in Goals, non legato a carichi/scarichi | errore del modello (legame perso), checker non modificato |
 | N4 | FAIL | analisi 180,6 s (oltre 180 s); 5 e 10 giorni e SSO/email+password affermati come vincoli/requisiti oltre al conflitto Open | errore del modello + limite di tempo superato di 0,6 s |
-| N5 | FAIL | Aurora: «domanda ripetuta» in chat; Boreale: analisi ancora Running a 210 s | modello (Aurora, riprodotto in rerun, con in più un'omissione sulle notifiche); Boreale rerun: PASS |
-Durate: chat 1,9–5,9 s; analisi 90–178 s (completion 5,4–10,6 k token, finish `stop`, 1 tentativo, thinking richiesto/effettivo ON solo per Analysis); documento 12,7–19,4 s (thinking OFF, `stop`). Nessun overflow/timeout infrastrutturale. Nessuna attesa modificata.
+| N5 | FAIL | Aurora: «domanda ripetuta» in chat; Boreale: analisi ancora Running a 210 s | Aurora: ripetizione riprodotta in rerun, ma regola del checker forse più rigida del requisito (8.5); Boreale: **causa NON dimostrata**, rerun PASS |
+Durate: chat 1,9–5,9 s; analisi 90–178 s (completion 5,4–10,6 k token, finish `stop`, 1 tentativo, thinking richiesto/effettivo ON solo per Analysis); documento 12,7–19,4 s (thinking OFF, `stop`). Nessun overflow/timeout infrastrutturale. Nessuna attesa modificata. **Le classificazioni di questa tabella sono precisate in 8.5 (diagnosi comparativa): dove 8.5 e 8.2 differiscono vale 8.5.**
 
 ## 8.3 Compattazione reale (regressione mirata)
 Nuovo test `Analysis_with_production_phases_…` (soglia ridotta ~6000 token, finestra 131072, fasi di produzione). Verifica sulla rete: richiesta di sintesi `enable_thinking=false`, consolidamento finale `true`, strategia attivata, budget finale entro il limite, originali invariati, SMS/fatturazione/ID fonte nella sintesi. Esiti: **1 FAIL + 1 PASS**: nel FAIL la sintesi conserva SMS ma l'analisi finale non lo riporta in nessuna sezione (perdita nel consolidamento, intermittente). Baseline T047 con Smart: chat a soglia ridotta PASS, analisi a soglia ridotta PASS (thinking OFF). Nel run MafReal completo (suite in parallelo su un DGX con `parallel=1`) i due test T047 chat-ridotta e analisi-10-messaggi sono falliti: non indagati, quindi non verificato se per contesa del DGX o del modello.
@@ -908,3 +908,36 @@ Nuovo test `Analysis_with_production_phases_…` (soglia ridotta ~6000 token, fi
 ## 8.4 Stato
 - T052 resta aperto: 0/5 nominali al primo giro, nessuna valutazione umana (due PM + tecnico) disponibile; il modulo `acceptance/modulo-risultati.md` non è compilato.
 - Strumenti aggiunti ai test: `RequireProductionLikeOptions`, dump telemetria per chiamata, `BPROJECTS_ACCEPTANCE_ONLY`, messaggio d'errore del run nei fallimenti, `Thinking` nel recorder; `RequireDgxOptions` ora con finestra 131072 (l'attesa 32768 era superata).
+
+## 8.5 Diagnosi comparativa N1–N5 (nessuna nuova inferenza; solo dati già raccolti e lettura del codice)
+
+Legenda: **[M]** misurato (telemetria, esito automatico, JSON salvati); **[C]** ricavato dal codice, non catturato sulla rete; **[I]** ipotesi; **[?]** causa non dimostrata.
+
+### Configurazione: sessione 7 contro `AcceptanceMafTests` con `RequireProductionLikeOptions`
+- **[M]** Modello Smart, Analysis thinking ON/32768 token, Chat/Document thinking OFF/4096 token, `finish=stop` ovunque, 1 tentativo ovunque. Corrisponde alla sessione 7. Prompt token dell'analisi 4238–4370 contro 4258–4282. Velocità di generazione 58,6–59,8 tok/s contro circa 60 della sessione 7: nessun rallentamento di infrastruttura.
+- **[C]** Temperatura chat/documento 0,2 e analisi 0 (`Program.cs:54-69`), prompt `analysis-v3` e `AnalysisSchema` identici; nell'harness le opzioni di chat e documento sono create senza `phase:` (valori effettivi uguali, solo l'etichetta di fase nelle opzioni differisce). Temperatura, prompt e schema NON sono stati catturati sulla rete in questa sessione.
+- **[M]** Differenza reale: la sessione 7 ha provato un solo progetto (Boreale); N1–N5 sono quattro progetti mai provati con Smart e la configurazione di produzione. Harness in-process anziché stack Docker; stesso modello e stessa configurazione.
+- **[I]** Nessuna regressione applicativa o di configurazione è emersa, ma non è provata da un confronto sul corpo HTTP.
+
+### Per caso (secondi: inferenza / totale a muro)
+| Caso | Fase e causa | Output e validazione | Durate / token | Stato della conoscenza |
+|---|---|---|---|---|
+| N1 | Generazione: `invalid_agent_output` | **[?]** output rifiutato non salvato, violazioni non registrate, database eliminato | analisi 127,1/129,4 (7591 tok); documento 16,9/18,1; rerun PASS | **[?] Causa non dimostrata.** Non attribuibile al modello: potrebbe essere output del modello, validatore del documento o altro. Intermittente [M]. |
+| N2 | Analisi: «solo-email» assente; correzione non applicabile | **[M]** modello: «Le comunicazioni avvengono esclusivamente via email» + «Niente notifiche push» (qualificatore «notifiche» perso). Correzione: l'unica voce «Il responsabile diretto approva o rifiuta la richiesta» serve anche al fatto «richiesta» | analisi 137,3/139,5 (8039 tok); documento 18,0/19,7 | «solo-email»: **[M]** omissione del qualificatore nel testo del modello. Correzione non applicabile: **[I]** limite del contratto del verificatore (dipende dal raggruppamento delle voci). |
+| N3 | Analisi: «barcode» non in Requirements/Flows | **[M]** il lettore compare solo in Goals; i requisiti dicono «registrano carichi e scarichi» | analisi 133,7/135,8 (7829 tok); documento 14,6/15,9 | **[M]** legame perso; **[I]** caso al limite, il checker applica l'attesa così com'è. |
+| N4 | Analisi 180,6 s; «tempi-5», «accesso-scelto» affermati | **[M]** oltre al conflitto Open, 5 e 10 giorni tra i vincoli e SSO / email+password tra i requisiti come Declared; il vincolo «10 giorni» è riferito alle certificazioni mentre il PM lo riferiva all'approvazione | analisi 178,4/180,6 (10 641 tok, il massimo); documento 19,4/20,9 | **[M]** contenuto non conforme all'attesa; il superamento di 0,6 s è coerente con più token a velocità invariata. |
+| N5 Aurora | Chat: «domanda ripetuta» | **[M]** stessa domanda ai turni 3 e 5; il PM scriptato non risponde mai alle domande. Rerun: stesso esito, più omissione «solo-email» | analisi 90,5/92,7 (5411 tok); documento 12,7/14,0 | Ripetizione **[M]** riprodotta. Il checker segnala ogni ripetizione, il quickstart dice «dopo risposta»: **[I]** possibile rigidità del checker/contratto, decisione da prendere. |
+| N5 Boreale | Analisi ancora Running a 210,1 s | **[?]** nessun output, nessuna riga di telemetria (chiamata non completata alla chiusura del test) | muro 210,1; rerun PASS | **[?] Causa non dimostrata.** Ipotesi non provate: ragionamento più lungo del solito (N4 ha già fatto 10,6 mila token), accodamento sul DGX `parallel=1`. |
+
+### Altri risultati misurati (T053 preliminare)
+- **[M]** Backend senza MafReal: restore/build 0 errori 0 avvisi, 1002 PASS, 0 FAIL, 1 ignorato (`V7_replay_dump`, richiede una traccia V7).
+- **[M]** MafReal completo (32 test, un solo run, suite in parallelo su un DGX `parallel=1`): 25 PASS, 7 FAIL, 0 SKIP. I 7 FAIL: `LocalProviderTests` (attesa finestra 32768 obsoleta; corretta in `RequireDgxOptions`, rieseguito 8/8 PASS), N2, N3, N5, caso esplorativo grande, T047 chat a soglia ridotta, T047 analisi con 10 messaggi grandi. **[?]** Gli ultimi tre non sono stati indagati: non si sa se per contesa del DGX in parallelo o per il modello. N1 e N4 nel run completo risultano passati: il run completo e il primo giro nominale sono due campioni diversi sullo stesso modello.
+- **[M]** Vitest 168/168 (13 file, Node 24.22.1). Playwright (desktop-1440 e mobile-390, stack Docker isolato, `E2E_MODEL_MODE=offline`): 177 PASS, 0 FAIL, 33 SKIP; gli SKIP (percorsi con modello reale e prove solo desktop) non sono PASS.
+- **[M]** Compattazione reale: chat a soglia ridotta PASS e analisi a soglia ridotta PASS (thinking OFF, baseline T047); test con fasi di produzione 1 PASS + 1 FAIL (SMS presente nella sintesi, assente nell'analisi finale). **[?]** Causa della perdita non dimostrata (consolidamento con thinking ON, sintesi o altro).
+
+### Problemi ancora bloccanti
+1. T052 non superato: nessuna valutazione umana (due PM, tecnico estraneo) e nominali non tutti PASS nello stesso giro.
+2. Cause non dimostrate: N1 (invalid_agent_output del documento), Boreale a 210 s, 3 MafReal (N5 nel run completo, T047 chat ridotta, T047 10 messaggi grandi), perdita SMS dopo compattazione.
+3. Decisioni sul contratto: regola «domanda ripetuta» (dopo risposta o sempre), precondizione della correzione PM, criterio sui conflitti che il modello ripete anche come vincoli.
+4. Rischio di tempo: l'analisi con thinking ha già toccato 178–210 s su un limite nominale di 180 s.
+5. Strumentazione mancante: output rifiutato del documento, tempo di inferenza completo e corpo HTTP effettivo non catturati.
