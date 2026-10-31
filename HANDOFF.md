@@ -166,3 +166,110 @@ Atteso: nessun nuovo fallimento rispetto alla baseline; non eseguita in questa s
    In entrambi i casi rivalutare la regola «tolta dalla correzione PM ⇒ nota» del checker.
 2. Rieseguire i sei casi reali con questo verificatore (A1 del protocollo) prima di confrontare prompt V8 (B).
 3. Estendere le annotazioni dei qualificatori (`solo`, `almeno`, eccezioni) ad altri casi: oggi sono coperti solo dove annotati.
+
+---
+
+# Verifica indipendente 1B (Sonnet) — 2026-10-31
+
+**Esito del checker: PASS** (con limiti dichiarati sotto). **Difetto separato dell'harness: sì** (sezione 1B.5), da passare a una sessione 1C.
+Commit verificato: `66205ea` (HEAD era `bf92286`, solo `HANDOFF.md`). Nessun DGX, nessun MafReal, nessuna suite completa. Codice di produzione intatto.
+Il file `bProjects_Studio_Affidabilita_V2.md` non è stato trovato sul disco: le regole sono state ricostruite da questo HANDOFF e dal codice.
+
+## 1B.1 Perimetro (`git diff 2a2ef50 66205ea`)
+
+10 file, tutti nel perimetro: checker C# e fixture (`AcceptanceFixtures.cs`), test di regressione, specchio TS (`acceptance.ts`,
+`acceptance-cases.json`, due spec), `casi-e-attese.md`, `HANDOFF.md`. **Non toccati:** prompt MAF, codice degli agenti, pipeline,
+schema `AnalysisContent`, configurazione DGX. Le due modifiche all'harness (`AcceptanceTests.cs`, `project-draft-success.spec.ts`)
+sono di una riga ciascuna e passano solo l'analisi AI al checker; la logica di applicazione della correzione PM è invariata.
+
+## 1B.2 Replay V7 sulle tracce originali
+
+Traccia: `docs/acceptance-trace/trace-qwen3.8-flash-next-smart-v7.md` (6 progetti; il test legge analisi AI, revisione confermata e bozza
+reali, nessun dato sintetico). Il «prima» è stato misurato in uno snapshot di `2a2ef50` (`git archive`, fuori dal repo) con lo stesso lettore.
+
+| Progetto | Prima (2a2ef50) | Dopo (66205ea) | FP rimossi | Omissioni reali conservate | FN introdotti |
+|---|---|---|---|---|---|
+| officina | PASS | PASS | 0 | – | 0 |
+| ferie | FAIL 5 | PASS (3 note) | 4 (paghe/ratei ×2 voci) + 1 riclassificata a nota («richiesta», vedi 1B.5) | – | 0 |
+| magazzino | FAIL 2 | FAIL 2 | 0 | barcode: legame lettore→operazione perso (analisi + bozza) | 0 |
+| fornitori | PASS | PASS | 0 | – | 0 |
+| aurora | PASS | PASS | 0 | – | 0 |
+| boreale | FAIL 4 | FAIL 2 | 2 (ordini/spedizione in due voci col soggetto «clienti») | integrazione Colorweb: «tempo reale» e «obbligatori» assenti ovunque (analisi + bozza) | 0 |
+| **Totale** | **11 segnalazioni, 3 PASS / 3 FAIL** | **4 segnalazioni, 4 PASS / 2 FAIL** | **6 FP + 1 riclassificata** | **4 segnalazioni (2 omissioni × analisi/bozza)** | **0 dimostrati** |
+
+Le cifre di Opus 1A sono **confermate**. Verificato a mano sulla traccia: il boreale AI contiene «I clienti inseriscono gli ordini» e
+«I clienti seguono la spedizione» (FP legittimo rimosso) ed «Integrazione con il gestionale ordini Colorweb» senza «tempo reale» né
+«obbligator» (omissione reale); il magazzino ha il lettore di codici a barre solo negli obiettivi e «registrano carichi e scarichi» nei requisiti.
+
+## 1B.3 Controfattuali indipendenti (`AcceptanceCheckerIndependentReviewTests.cs`, nuovo)
+
+| Frase | Esito | Atteso |
+|---|---|---|
+| «Il software paghe calcola i ratei» | non violazione | ok |
+| «Il portale calcola i ratei» | violazione | ok |
+| «Il portale non calcola i ratei» | non violazione | ok |
+| «Il portale calcola le paghe ma non le trasferte» | violazione | ok |
+| «Il portale integra il software paghe» (anche «importa i ratei dal…») | `integrazione-paghe` segnalata | ok |
+| «Colorweb è integrato in tempo reale ed è obbligatorio» | conforme | ok |
+| «Colorweb è integrato ma può essere sincronizzato di notte» (in sostituzione) | omissione, «qualificatore assente» | ok |
+| «…in tempo reale, ma non è obbligatorio» | `colorweb-indebolita` | ok |
+| «Gli ordini… dai clienti» + «I clienti monitorano le spedizioni nel portale» | conforme | ok |
+| «Gli ordini… dai clienti» + «spedizioni monitorate dal corriere esterno» | omissione | ok |
+| «Gli ordini… dai clienti» + «le spedizioni sono monitorate **dal portale**» | **omissione (non conforme)** | **diverge dall'incarico** |
+
+Ultima riga: la parte atomica richiede il soggetto «client». La frase dell'incarico non lo contiene e il soggetto è diverso («il portale»
+anziché i clienti): scelta restrittiva, nessun falso negativo, ma possibile falso positivo se il modello usa il passivo. Da decidere se annotare
+una variante di `Parts`. La sensibilità non è peggiorata: tutte le omissioni e violazioni dei test precedenti restano rilevate.
+
+## 1B.4 Limiti del checker emersi (falsi negativi **dimostrati**, non nel replay V7)
+
+Asseriti in `Known_limits_of_the_checker`, così un cambiamento futuro è visibile. Sono precedenti o ristretti rispetto a V7, non regressioni.
+
+1. Una parola della lista `Negation` ovunque nella stessa proposizione esenta la violazione: «Il portale calcola i ratei **senza** intervento
+   manuale», «…anche **fuori** orario», «Il portale calcola i ratei, il software paghe **no**» non sono segnalate. (Prima la lista valeva per l'intera voce.)
+2. `colorweb-indebolita` non conosce «di notte» né «sincronizzat…»: «Colorweb può essere sincronizzato di notte», aggiunta a un'analisi
+   per il resto ideale, passa. Solo in sostituzione dell'item corretto viene colta (come omissione).
+3. Qualificatori non annotati («solo», «almeno», eccezioni) non sono verificati. Esempio concreto in 1B.5: `solo-responsabile` è soddisfatto
+   da «Il responsabile diretto approva o rifiuta la richiesta», che non esprime l'esclusività.
+4. Soggetti impliciti, pronomi, predicati diversi con lo stesso soggetto («mostra» vs «calcola»): restano alla revisione umana (già dichiarato).
+5. La regola «presente nell'analisi AI, assente nella confermata ⇒ nota» vale per **qualunque** fatto, non solo per quelli toccati
+   dalla correzione prevista.
+
+## 1B.5 Anomalia della correzione PM (N2 ferie): diagnosi
+
+**Conclusione: difetto di selezione della voce nell'harness (interpretazione B), non modifica lecita del PM.** Evidenze:
+
+- `casi-e-attese.md` (righe 106-107) descrive la correzione come «Modificare la voce «Le richieste sono approvate solo dal responsabile diretto»
+  in: «…approvate esclusivamente dal responsabile diretto…»». Nel V7 il modello **non ha prodotto** quella voce: aveva «Il responsabile diretto
+  approva o rifiuta la richiesta».
+- L'harness seleziona la **prima** voce (sezioni di `Accept` in ordine, Requirements per prima) che soddisfa `Match = [responsabile diretto]`:
+  `AcceptanceTests.cs` ~439-441 e `project-draft-success.spec.ts` ~328-336. La regex è troppo generica e ha colpito la voce sull'approvazione,
+  sostituendola per intero. Se il bersaglio non esiste, non c'è errore: si riscrive un'altra voce.
+- La fixture dopo la correzione continua ad aspettarsi `rifiut` nella bozza (fatto `richiesta`): sotto A il gold set sarebbe incoerente.
+- Il checker classifica correttamente quel che accade (nota «tolta o riscritta dalla correzione PM», nessun errore), perché la bozza segue
+  fedelmente la revisione confermata. Ma la nota **maschera** il difetto dell'harness come esito accettabile: è una conseguenza, non un errore del checker.
+- Doppio effetto: il vincolo «solo» non è stato né prodotto dal modello né verificato dal checker (limite 3 sopra).
+
+**Serve una sessione 1C** (harness, non checker): rendere la selezione della voce specifica (es. scegliere solo voci che esprimono l'esclusività, oppure
+fallire/aggiungere se l'anteprima non la contiene), allineare la fixture, rieseguire N2 sul DGX. La decisione A/B spetta all'autore; l'evidenza favorisce B.
+Difetto indipendente dall'esito PASS del checker.
+
+## 1B.6 Test eseguiti (PASS / FAIL / SKIP separati)
+
+| Comando | PASS | FAIL | SKIP |
+|---|---|---|---|
+| `dotnet build bProjects.sln` | 0 errori, 0 avvisi | – | – |
+| `dotnet test` classi `AcceptanceCheckerSemanticsTests` + `AcceptanceFixtureTests` (replay V7 incluso, traccia presente) | 168 | 0 | 0 |
+| idem con `AcceptanceCheckerIndependentReviewTests` in più | 191 | 0 | 1 (`V7_replay_dump`, richiede `BPROJECTS_REVIEW_OUT`: stampa, non asserisce) |
+| `npx tsc --noEmit -p .` (tests/e2e) | exit 0 | – | – |
+| `playwright test acceptance-checker.spec.ts` (E2E_BASE_URL fittizio) | 36 | 0 | 0 |
+
+Una mia aspettativa errata («…, il software paghe no» come violazione) ha fatto fallire un test in scrittura: il comportamento reale è
+documentato come limite 1 e il test aggiornato. Non eseguiti: DGX, MafReal, E2E con modello, suite completa, carico, riavvii Docker.
+
+## 1B.7 Da passare a Opus
+
+1. Sessione 1C: correzione PM dell'harness (C# e Playwright) e coerenza di `richiesta`/`solo-responsabile`.
+2. Decidere se annotare una variante di `Parts` per ordini/spedizioni senza soggetto «clienti» (passivo).
+3. Restringere `Negation` (ora per proposizione, ma ancora generica) ai verbi vietati; aggiungere «di notte»/«sincronizzat…» a `colorweb-indebolita`.
+4. Restringere la regola «tolta dalla correzione PM ⇒ nota» ai soli fatti che la correzione dichiara di toccare.
