@@ -179,10 +179,63 @@ Concludere la stessa slice senza aggiungere funzionalità; gli esiti si raccolgo
 - [x] T050 Completare E2E di errore/retry/recovery SSE in `tests/e2e/project-draft-errors.spec.ts`: POST incerto riusa chiave, disconnessione/logout/cambio progetto, delta duplicati o vecchio attempt, polling dopo reconnect, generazione senza conferma vietata, salvataggio PM fallito conserva testo; UI non inventa fasi/percentuali né dichiara riuscito un errore. Dipende da T022, T042, T044, T046.
 - [x] T051 [P] Verificare/adattare responsive e accessibilità in `tests/e2e/accessibility.spec.ts` e `frontend/src/styles.scss`: 1440/390px senza scroll orizzontale pagina, sidebar richiudibile, tastiera/focus, label/errori/live region senza annuncio token, contrasto e target WCAG2.2AA, reduced-motion e una primaria per fase; affiancare controllo manuale agli automatismi, senza conformità presunta. Dipende da T019, T035, T042.
 - [ ] T052 Eseguire cinque casi nominali e revisione qualitativa da due PM e tecnico estraneo al dialogo in `backend/tests/bProjects.IntegrationTests/AcceptanceFixtures.cs` e `tests/e2e/project-draft-success.spec.ts`: frammenti/negazioni/lacune/conflitti/progetti distinti, tutte le analisi e generazioni riuscite entro180s, <=5min interazione attiva per PM, zero omissioni/contraddizioni/ripetizioni sostanziali; attestare criteri SC-001–SC-012, capacità tecnica solo in token. Dipende da T043, T044, T045, T046, T047, T048, T049, T050, T051.
+  - Estensione 2026-10-31: la rivalidazione dei nominali usa la pipeline con registro delle evidenze (T054–T073, esiti in T072); attese invariate.
   - Stato 2026-10-31 (sessione 8): NON superato. Nominali reali con Qwen3.6-35B-Smart: 0/5 al primo giro (N1 e Boreale passano al rerun; N2, N3, N4, Aurora falliscono per errori del modello), compattazione reale 1 PASS + 1 FAIL, nessuna valutazione umana. Dettagli in `HANDOFF.md` sessione 8.
   - Stato: preparata, NON eseguita né attestata. Pronti fixture/verificatore, prove deterministiche (modello finto) e documento di revisione in `specs/001-project-draft/acceptance/`; mancano i test con DGX reale (MafReal ed E2E reale, ignorati senza endpoint/chiave/modello), la revisione umana (due PM e tecnico estraneo) e la chiusura di T047.
 - [ ] T053 Eseguire avvio/restore/build e suite Integration/MafReal/test:ci/test:e2e indicati in `specs/001-project-draft/quickstart.md`; aggiornare soltanto istruzioni/esiti verificati in quel file e `specs/001-project-draft/checklists/requirements.md`, distinguendo PASS reali, fallimenti e prove mancanti; nessun nuovo registro/checklist/ADR e nessuna attestazione runtime senza evidenza. Dipende da T052.
   - Stato: verifica tecnica senza DGX ESEGUITA il 2026-10-28 (Node 24.22.1): build, suite deterministica 423 PASS, Integration su PostgreSQL 477/477 PASS, test:ci 83/83, test:e2e 120 PASS e 18 SKIP, Docker Compose con riavvio (`down` e `kill app`) PASS. MafReal e prove con DGX reale: SKIP (DGX 401), non PASS. Dettagli in `quickstart.md`. T053 resta aperto: dipende da T047/T052 (DGX e accettazione umana).
+
+## Phase 5 — Estensione: Registro atomico delle evidenze (2026-10-31)
+
+Mandato [atomic-evidence-ledger.md](atomic-evidence-ledger.md); requisiti FR-029–FR-038 e SC-013–SC-016; disegno in [plan.md](plan.md)
+§Registro, [data-model.md](data-model.md) §Registro, [AI §10](contracts/ai-workflow.md) e [HTTP §Registro](contracts/http-api.md).
+Stessa US1: i task T001–T051 restano chiusi e invariati; T052/T053 restano aperti finché non soddisfano i propri criteri e la loro
+rivalidazione usa la pipeline con registro (T072). Milestone M1–M8 del mandato; ogni milestone si chiude con i test pertinenti,
+`HANDOFF.md` aggiornato e commit coerenti. Le prove su PostgreSQL/DGX risultano ignorate senza le variabili d'ambiente, mai superate.
+
+### M1 — Contratti e Spec Kit
+
+- [x] T054 [US1] Allineare in modo non distruttivo `spec.md` (scenari 26–33, FR-029–FR-038, entità, SC-013–SC-016), `plan.md`, `data-model.md`, `research.md` §10, `contracts/ai-workflow.md` §10, `contracts/http-api.md` §Registro, questo elenco di task, `checklists/requirements.md`, `quickstart.md` e `HANDOFF.md`; nessuna ADR, nessun task chiuso riaperto. Dipende da T051.
+
+### M2 — Persistenza e versionamento
+
+- [ ] T055 [US1] Mappare entità e migrazione additiva `EvidenceLedger` in `backend/src/bProjects.App/Evidence/EvidenceEntities.cs`, `backend/src/bProjects.App/Persistence/AppDbContext.cs` e `backend/src/bProjects.App/Persistence/Migrations/`: tabelle, FK, check e indici di data-model §Registro (un lavoro aperto per messaggio, NoEvidenceReason ⇔ zero evidenze, Completed ⇒ risultato, Failed ⇒ errore), terzo proprietario di `InferenceCalls`. Verificare migrazione da zero e upgrade con dati esistenti invariati. Dipende da T054.
+- [ ] T056 [US1] Scrivere ed eseguire su PostgreSQL reale `backend/tests/bProjects.IntegrationTests/EvidenceLedgerPersistenceTests.cs`: vincoli, unicità, append-only applicativo, isolamento per progetto, commit di versione con numerazione sotto lock, promozione automatica della prima versione, concorrenza ottimistica della promozione. Dipende da T055.
+
+### M3 — Estrattore MAF incrementale, coda durevole, scheduling, recupero e telemetria
+
+- [ ] T057 [US1] Definire DTO, schema per lavoro e validatore in `backend/src/bProjects.App/Evidence/EvidenceExtraction.cs` e `backend/src/bProjects.App/Evidence/EvidenceExtractionValidator.cs` con test unitari `backend/tests/bProjects.IntegrationTests/EvidenceExtractionValidatorTests.cs`: più fatti per messaggio, zero evidenze motivato distinto dal fallimento, struttura/qualificatori/negazioni, fonti multiple e ruoli, offset UTF-16 (anche con caratteri fuori BMP), citazioni/ID/ruoli inventati, fonti oltre la sequenza o assistant come primaria rifiutati. Dipende da T054.
+- [ ] T058 [US1] Implementare l'estrattore in `backend/src/bProjects.App/AI/EvidenceExtractor.cs` e `backend/src/bProjects.App/AI/Prompts/extraction.md`: `ChatClientAgent` MAF, fase `Extraction` con `Ai:Phases:Extraction` (modello, thinking, output, timeout) e variabili compose, contesto mirato (evidenze precedenti, originali PM precedenti entro budget, assistant solo referente), nessun dato futuro; prove con modello HTTP finto della richiesta effettiva (schema, enum, thinking, nessuna sequenza successiva). Dipende da T057.
+- [ ] T059 [US1] Rendere durevole e schedulare il lavoro in `backend/src/bProjects.App/Conversations/ConversationEndpoints.cs`, `backend/src/bProjects.App/Persistence/ExecutionLeaseStore.cs`, `backend/src/bProjects.App/AI/AiDispatchService.cs` e `backend/src/bProjects.App/Evidence/EvidenceExtractionCompletion.cs`: lavoro Initial nella transazione del messaggio, claim con priorità inferiore a chat/run e fra estrazioni secondo AI §10.1, lease/rinnovo/reclaim/fencing/sweep/backoff/deadline, commit fenced di versione+evidenze+relazioni+Completed+telemetria, Failed esplicito. Dipende da T055, T058.
+- [ ] T060 [US1] Verificare su PostgreSQL con modello finto `backend/tests/bProjects.IntegrationTests/EvidenceExtractionDispatchTests.cs`: salvataggio con modello offline, doppio invio, retry transitorio, permanente, crash/reclaim, worker obsoleto rifiutato, deadline, backlog e priorità della chat, telemetria `Extraction` ed evento `evidence.state`. Dipende da T059.
+
+### M4 — Riconciliazione e integrazione reale nel consolidamento
+
+- [ ] T061 [US1] Implementare la vista deterministica in `backend/src/bProjects.App/Evidence/EvidenceSelectionView.cs`: alias, ordinamento, relazioni aperte/risolte, rimappatura o `stale` verso versioni non selezionate, hash; test `backend/tests/bProjects.IntegrationTests/EvidenceSelectionViewTests.cs` (rettifiche, duplicati/conferme, alternative aperte, esclusioni). Dipende da T057.
+- [ ] T062 [US1] Integrare il registro in Analizza: in `backend/src/bProjects.App/Analysis/AnalysisEndpoints.cs` accodare i lavori mancanti entro il cutoff; nel claim del run attendere le estrazioni aperte; in `backend/src/bProjects.App/AI/AnalysisWorkflow.cs` congelare la selezione al primo tentativo (`evidence_unavailable` esplicito), passare la vista nel messaggio finale di LoadDialog, `evidenceKeys` nello schema del run, estrazione della mappa prima della validazione e `AnalysisEvidenceLinks` nel commit in `backend/src/bProjects.App/Analysis/AnalysisRunCompletion.cs`; `project-analysis-v3`, prompt `analysis-v4` in `backend/src/bProjects.App/AI/Prompts/analysis.md`. Dipende da T059, T061.
+- [ ] T063 [US1] Verificare l'integrazione in `backend/tests/bProjects.IntegrationTests/EvidenceAnalysisIntegrationTests.cs`: vista realmente inviata al modello (corpo HTTP), mappa persistita, selezione identica fra retry/resume anche dopo una rianalisi e una promozione concorrenti, cutoff rispettato, estrazione fallita → run Failed esplicito senza revisione, conferma PM e documento invariati, vista preservata quando la compattazione nativa scatta. Aggiornare i test esistenti che fissano versioni di grafo/prompt. Dipende da T062.
+
+### M5 — Rianalisi, confronto versioni, promozione e backfill
+
+- [ ] T064 [US1] Implementare abbinamento e diff in `backend/src/bProjects.App/Evidence/EvidenceVersionComparer.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceVersionComparerTests.cs`: aggiunte, rimosse, invariate, modificate campo per campo, ambigue, nessuna identità per sole parole comuni. Dipende da T057.
+- [ ] T065 [US1] Implementare rianalisi di messaggio e di progetto, retry autorizzato, backfill idempotente con avanzamento e promozione esplicita con concorrenza ottimistica e impatto sulle relazioni in `backend/src/bProjects.App/Evidence/EvidenceCommands.cs`; test su PostgreSQL `backend/tests/bProjects.IntegrationTests/EvidenceReanalysisTests.cs` (artefatti storici invariati, backfill interrotto/ripreso senza duplicati, promozione concorrente → conflitto). Dipende da T059, T064.
+
+### M6 — Verifica di copertura e provenienza
+
+- [ ] T066 [US1] Implementare `backend/src/bProjects.App/Evidence/EvidenceCoverageService.cs` (`coverage-v1`) e la persistenza dei report: codici e categorie di AI §10.8, input esatti e hash, nessuna regola specifica dei casi N1–N5; test `backend/tests/bProjects.IntegrationTests/EvidenceCoverageTests.cs` con un esempio positivo e negativo per ogni codice e separazione deterministico/stimato/PM. Dipende da T062.
+
+### M7 — API, UI e controlli di sicurezza
+
+- [ ] T067 [US1] Esporre gli endpoint di HTTP §Registro in `backend/src/bProjects.App/Evidence/EvidenceEndpoints.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceApiTests.cs`: percorsi, payload, codici, idempotenza, 401/403, ID di altri progetti 404, nessun output non validato o ragionamento nelle risposte. Dipende da T065, T066.
+- [ ] T068 [US1] Realizzare la vista Evidenze in `frontend/src/app/projects/evidence-view.component.ts` (+ template/SCSS) e `frontend/src/app/projects/project-api.service.ts`: stato reale dei lavori, filtri essenziali, frase originale con lo span evidenziato, storico, confronto e promozione, rianalisi/retry/backfill con avanzamento, report di copertura; accessibile e responsive come la slice; test Vitest. Dipende da T067.
+- [ ] T069 [US1] Aggiungere il percorso browser `tests/e2e/evidence-ledger.spec.ts`: navigazione alla vista, stato dei lavori con modello offline, errori e retry, fonti; con modello reale l'estrazione e il confronto. Dipende da T068.
+
+### M8 — Test completi, verifiche DGX, documentazione ed esiti residui
+
+- [ ] T070 [US1] Eseguire la suite deterministica, Integration su PostgreSQL, `test:ci` e i test E2E disponibili; nessuna regressione dei percorsi esistenti (Chat → Analizza → Correggi → Conferma → Genera). Dipende da T060, T063, T065, T066, T067, T069.
+- [ ] T071 [US1] Provare l'estrattore reale sul DGX (`Category=MafReal`, inferenze seriali, `DiagnosticsHarness`): esempi di regressione N1–N4 del mandato §3.2 come attese generiche (nessuna regola nel codice), zero evidenze, rettifica. Registrare PASS/FAIL/SKIP reali. Dipende da T070.
+- [ ] T072 [US1] Rieseguire N1–N5 sulla nuova pipeline senza cambiare le attese: tempi end-to-end e per fase (estrazioni incluse l'attesa prima di Analizza), token, modello/parametri, estrazioni mancanti, copertura registro→analisi→documento, errori e versioni selezionate; FAIL e SKIP conservati, trade-off col limite di 180 s segnalato senza cambiarlo. Alimenta T052. Dipende da T071.
+- [ ] T073 [US1] Aggiornare `quickstart.md`, `checklists/requirements.md` e `HANDOFF.md` con esiti verificati, limiti dei controlli semantici e prossimi passi; T052/T053 restano aperti senza i rispettivi gate. Dipende da T072.
 
 ## Dependencies & Execution Order
 
@@ -205,7 +258,12 @@ flowchart TD
   R1 --> X[T050-T053 accettazione finale]
   R2 --> X
   D --> X
+  X -. rivalidazione .-> L[Phase 5 registro T054-T073]
+  L --> X
 ```
+
+Phase 5: T054 → T055 → T056; T057 → T058 → T059 → T060; T057 → T061 → T062 (con T059) → T063; T057 → T064 → T065 (con T059);
+T062 → T066; T065+T066 → T067 → T068 → T069; T060/T063/T065/T066/T067/T069 → T070 → T071 → T072 → T073. T052/T053 attendono T072.
 
 Per il primo incremento progetto servono setup e T007/T008, non i gate AI:
 eseguire T010–T012 e T019 e superare il checkpoint browser senza DGX.
@@ -258,6 +316,7 @@ I vincoli citati V11/V25/V28 sono parte dei rispettivi task; restano autorevoli
 i documenti collegati, incluso il JSON Schema completo nel contratto AI §4.
 
 **Riepilogo**: 53 task (setup4, fondazioni5, US1 40, rifinitura4).
+**Estensione 2026-10-31**: +20 task T054–T073 (Phase 5, registro atomico delle evidenze, milestone M1–M8), dipendenze nelle righe e nel grafo sotto.
 Nessun controllo runtime è stato eseguito durante questa generazione; nessun task
 è segnato completato. Non modificare gli artefatti di progetto per far passare
 una prova che non soddisfa i requisiti. Nessuna nuova checklist o registrazione

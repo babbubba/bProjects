@@ -240,6 +240,30 @@ assistant come unica fonte fattuale, PmConfirmed inventato dall'AI, conflitto ri
 dall'AI, revisione PM attribuita erroneamente, alternative o risoluzioni incoerenti.
 PUT/confirm devono validare nuovamente; revisione AI iniziale e originali rimangono intatti.
 
+## Registro atomico delle evidenze — validazione (estensione 2026-10-31)
+
+Prerequisiti come sopra; variabili opzionali della fase di estrazione in `infra/.env` (`AI_EXTRACTION_MODEL_ID`,
+`AI_EXTRACTION_ENABLE_THINKING`, `AI_EXTRACTION_MAX_OUTPUT_TOKENS`, `AI_EXTRACTION_REQUEST_TIMEOUT_SECONDS`,
+`EXECUTION_EXTRACTION_DEADLINE_SECONDS`); senza override valgono i default documentati in `infra/compose.yaml`.
+
+1. **Durabilità**: con il modello offline inviare un messaggio PM: risposta 201 immediata; `GET /api/projects/{p}/evidence/status`
+   mostra il messaggio `pending` (lavoro Queued). Riavviare `app`: il lavoro resta; a modello disponibile passa a `extracted` o `empty`.
+2. **Estrazione**: nella vista Evidenze ogni evidenza mostra tipo, polarità, certezza e la frase originale con lo span evidenziato;
+   un messaggio di sola cortesia risulta «zero evidenze» con motivo, distinto da un lavoro `failed` (che mostra errore e Riprova).
+3. **Analizza**: con un'estrazione ancora in coda il run resta Queued finché le estrazioni entro il cutoff non terminano; con
+   un'estrazione fallita il run termina Failed `evidence_unavailable`. `GET .../analyses/{a}/evidence-selection` riporta versioni,
+   vista e mappa elementi→evidenze del run.
+4. **Rianalisi e confronto**: «Rianalizza» su un messaggio crea una versione candidata; il confronto mostra aggiunte, rimosse,
+   modificate e ambigue; la promozione richiede la revisione attesa (una seconda promozione concorrente risponde 409). Analisi,
+   revisioni e bozze già prodotte restano invariate.
+5. **Backfill**: in un progetto con messaggi antecedenti al registro, «Backfill» accoda solo i messaggi senza versione; ripeterlo con
+   la stessa chiave restituisce lo stesso batch; interrompere e riavviare non crea duplicati.
+6. **Copertura**: «Verifica copertura» su analisi, revisione confermata e bozza produce un report con errori deterministici, rischi
+   stimati e valutazioni PM separati; i rischi stimati sono euristiche, non giudizi certi.
+
+Test: `dotnet test --solution bProjects.sln --filter-class "*Evidence*"` (deterministici e, con `BPROJECTS_TEST_POSTGRES`, su
+PostgreSQL); `--filter-trait "Category=MafReal"` per l'estrattore reale e i nominali N1–N5. Esiti registrati in T070–T073 e in `HANDOFF.md`.
+
 ## Esito da raccogliere
 
 Per ogni caso: risultato atteso/osservato, versioni, ID di run/revisione/bozza,

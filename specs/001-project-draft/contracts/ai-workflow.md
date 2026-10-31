@@ -325,3 +325,131 @@ permessi sono verificati prima del retrieval, non scelti dal modello.
 AsAIFunction restituisce testo: un payload strutturato futuro richiederà validazione.
 Docling: parsing → chunking → indicizzazione nell'ingestion futura.
 Nessun tool/provider, schema KB o adapter placeholder è registrato nella slice.
+
+## 10. Registro atomico delle evidenze — estrazione, selezione e consolidamento (2026-10-31)
+
+Mandato: [atomic-evidence-ledger.md](../atomic-evidence-ledger.md). Le evidenze sono interpretazioni verificabili, mai verità:
+l'originale PM resta l'autorità e nessuna evidenza ha come fonte primaria un messaggio dell'assistente.
+
+### 10.1 Lavoro di estrazione e scheduling
+
+- Stessa macchina a stati, lease, rinnovo, reclaim, fencing, sweep, backoff e `MaxAttempts` di §2, sulla tabella
+  `EvidenceExtractionJobs`; stesso lock di claim e stesso limite AI globale (uno). Deadline: `Execution:ExtractionDeadlineSeconds`
+  (default 3600) dalla richiesta.
+- Priorità al claim: turni e run eleggibili come in §1–§3; un'estrazione solo se nessuno dei due è eleggibile. Fra le estrazioni:
+  quelle che bloccano un run di Analysis Queued, poi `Initial`, poi `Reanalysis`/`Backfill`; a parità FIFO per richiesta.
+- Un run di Analysis non è eleggibile finché esiste un lavoro di estrazione Queued/Running per un messaggio PM con
+  `Sequence <= SourceCutoffSequence` della sua conversazione.
+- Errori del modello: stessa classificazione di `ModelFailure` (transitorio → Queued con backoff; permanente → Failed). Output non
+  valido: Failed `invalid_agent_output` con le violazioni (troncate a 1.000 caratteri), nessuna riparazione né seconda chiamata.
+
+### 10.2 Agente e input (fase `Extraction`, prompt `extraction-v1`, schema `evidence-1.0.0`)
+
+`ChatClientAgent` MAF senza history né strumenti, temperatura 0, `json_schema` per lavoro; configurazione `Ai:Phases:Extraction`
+(modello, `enable_thinking`, `max_completion_tokens`, timeout) risolta e congelata in `ExtractorConfig` alla richiesta del lavoro.
+Un solo messaggio utente con, nell'ordine: dati del server; le evidenze correnti dei messaggi PM precedenti (alias `P1…Pn`, tipo,
+polarità, enunciato, sequenza: solo per collegare anafore, conferme, rettifiche e alternative); gli originali PM precedenti più recenti
+entro il budget della fase (marcati come contesto); l'eventuale ultimo messaggio dell'assistente precedente al messaggio (marcato come
+«referente, non fonte di fatti»); infine il messaggio da estrarre. Nessun messaggio con sequenza maggiore entra mai. Le omissioni dovute
+al budget sono registrate in `Parameters` della versione.
+
+### 10.3 Output del modello (JSON Schema per lavoro)
+
+Generato dai DTO di `Evidence/EvidenceExtraction.cs`; forma normativa:
+
+```json
+{
+  "type": "object", "additionalProperties": false, "required": ["evidences", "noEvidenceReason"],
+  "properties": {
+    "evidences": { "type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key","kind","kindRationale","statement","subject","action","object","scope","purpose","instrument","channel",
+                   "recipient","qualifiers","polarity","certainty","sources","relations"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^e[1-9][0-9]*$" },
+        "kind": { "enum": ["Goal","Context","Requirement","Action","Constraint","Exclusion","Dependency","Assumption","Gap",
+                           "Alternative","Decision","Other"] },
+        "kindRationale": { "type": ["string","null"] },
+        "statement": { "type": "string", "minLength": 1 },
+        "subject|action|object|scope|purpose|instrument|channel|recipient": { "type": ["string","null"] },
+        "qualifiers": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["type","text"],
+          "properties": { "type": { "enum": ["Quantity","Deadline","Duration","Frequency","Minimum","Maximum","Condition",
+                                             "Exception","Obligation","Optionality","Exclusivity","Timing","Other"] },
+                          "text": { "type": "string", "minLength": 1 } } } },
+        "polarity": { "enum": ["Affirmed","Negated","Excluded","Prohibited","Undefined"] },
+        "certainty": { "enum": ["Declared","Inferred","Hypothesized","ToClarify"] },
+        "sources": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false,
+          "required": ["messageId","quote","occurrence","role"],
+          "properties": { "messageId": { "enum": ["<id del messaggio estratto e dei messaggi forniti>"] },
+                          "quote": { "type": "string", "minLength": 1 },
+                          "occurrence": { "type": "integer", "minimum": 1 },
+                          "role": { "enum": ["Primary","Context","Referent"] } } } },
+        "relations": { "type": "array", "items": { "type": "object", "additionalProperties": false,
+          "required": ["type","target","basis","rationale"],
+          "properties": { "type": { "enum": ["Qualifies","Confirms","Contradicts","Corrects","Supersedes","DependsOn",
+                                             "AlternativeTo","SameRule"] },
+                          "target": { "type": "string", "pattern": "^(e[1-9][0-9]*|P[1-9][0-9]*)$" },
+                          "basis": { "enum": ["Declared","Inferred"] },
+                          "rationale": { "type": ["string","null"] } } } }
+      } } },
+    "noEvidenceReason": { "type": ["string","null"] }
+  }
+}
+```
+
+La riga `subject|…|recipient` abbrevia otto proprietà con lo stesso tipo.
+
+### 10.4 Validazione (deterministica, prima del commit)
+
+1. JSON stretto (nessuna proprietà extra, enum per nome); `key` univoche; `statement` non whitespace; `kind = Other` ⇒ `kindRationale`
+   non whitespace; testi opzionali vuoti trattati come assenti.
+2. Zero evidenze ⇔ `noEvidenceReason` non whitespace; con evidenze `noEvidenceReason` è null.
+3. Ogni fonte: `messageId` è il messaggio estratto, un messaggio PM precedente fornito (ruolo `Context`) o il messaggio assistant
+   fornito (solo ruolo `Referent`); `quote` è sottostringa dell'originale (esatta, oppure con la sola normalizzazione di spazi e
+   maiuscole: gli offset si ricalcolano sull'originale); l'occorrenza `occurrence` esiste. Offset persistiti in unità UTF-16, `start`
+   incluso, `end` escluso; `Body.Substring(start, end - start)` è la citazione persistita.
+4. Ogni evidenza ha almeno una fonte `Primary`, e `Primary` è ammesso solo sul messaggio estratto.
+5. Relazioni: `target` è una `key` di questa uscita o un alias `P…` fornito; niente autoreferenze né duplicati.
+6. Il server non può verificare che i campi non siano stati «completati» con valori generici: il prompt chiede `null` per l'assente e
+   il report di copertura segnala gli scarti misurabili.
+
+### 10.5 Commit dell'estrazione
+
+Una transazione sotto owner/fencing/lease/deadline del lavoro: lock del messaggio, `Version = max + 1`, inserimento di versione,
+evidenze, relazioni (target `P…` risolti nelle evidenze correnti fornite), lavoro Completed con `ResultVersionId`, telemetria del
+tentativo. Se il messaggio non ha versione corrente: stato creato con la nuova versione corrente e `EvidencePromotion` automatica
+(`PromotedBy = null`, motivo «prima estrazione valida»). Un worker obsoleto non scrive nulla.
+
+### 10.6 Selezione del run e vista per il consolidamento
+
+Al primo tentativo del run (prima di costruire il grafo) si scrive una sola volta, sotto fencing, `AnalysisEvidenceSelection` con le
+versioni correnti dei messaggi PM ≤ cutoff; i tentativi successivi la rileggono. Messaggio senza versione corrente ⇒ Failed
+`evidence_unavailable` (permanente) con l'elenco delle sequenze. La vista è deterministica (ordine per sequenza, poi ordinale; alias
+`E1…En`): per ogni evidenza tipo, polarità, certezza, enunciato, struttura non nulla, qualificatori, citazioni e relazioni verso altri
+alias (con la base e, per `AlternativeTo`/`Contradicts`, lo stato «aperto» finché nessuna evidenza `Declared` di tipo `Decision` le
+rettifica o sostituisce). Relazioni verso versioni non selezionate: rimappate se l'abbinamento del confronto è univoco, altrimenti `stale`
+(escluse dalla vista, riportate nella selezione). La vista entra nel messaggio finale di LoadDialog, che la compattazione nativa
+preserva sempre.
+
+### 10.7 Consolidamento `project-analysis-v3` / `analysis-v4`
+
+Il contratto persistito resta `AnalysisContent 1.0.0`. Lo schema del run aggiunge a ogni oggetto elemento (`id`, `text`,
+`classification`, `evidenceRefs`) la proprietà obbligatoria `evidenceKeys`: array di alias della vista (enum). ValidatePersist estrae
+la mappa, rimuove `evidenceKeys` e valida il resto con le regole di §4. Alias inesistenti (modalità ValidatedTextJson) ⇒
+`invalid_agent_output`. Il commit della revisione AI scrive nella stessa transazione `AnalysisEvidenceLinks`. Le istruzioni chiedono di
+rappresentare ogni evidenza selezionata nella sezione coerente con tipo e polarità, di riportare le alternative aperte solo in
+`conflicts` e di non promuovere `Inferred`/`Hypothesized` a dichiarato; la verifica resta del report di copertura (§10.8).
+
+### 10.8 Verifica di copertura e provenienza (`coverage-v1`)
+
+Input esatti: selezione e vista del run, mappa, revisione AI, revisione target (default: corrente), bozza opzionale (deve derivare
+dalla revisione target). Esiti per categoria:
+
+| Categoria | Codici |
+| --- | --- |
+| Errore deterministico | `evidence_unrepresented` (nessun elemento collegato), `evidence_source_mismatch` (l'elemento collegato non cita il messaggio dell'evidenza), `evidence_span_invalid`, `open_conflict_as_decision` (alternativa aperta collegata a requisiti/flussi/vincoli/dipendenze), `relation_stale`, `revision_source_not_cited` (fonte di un elemento confermato assente dai marcatori della bozza) |
+| Rischio semantico stimato | `qualifier_changed` (numero del qualificatore assente dal testo collegato), `negation_inverted` (evidenza negativa collegata a testo senza marcatori di negazione fuori da esclusioni, o evidenza affermativa collegata solo a esclusioni), `instrument_detached` (strumento e azione mai nello stesso elemento collegato), `revision_item_missing_in_document` (parole significative dell'elemento confermato in gran parte assenti dalla bozza) |
+| Valutazione PM | `item_removed_by_pm`, `item_rewritten_by_pm` (elementi collegati assenti o con testo cambiato nella revisione target) |
+
+I rischi sono euristiche lessicali con incertezza dichiarata, mai giudizi semantici certi; nessun LLM li valuta in questa versione.
+Il report non modifica analisi, revisioni o bozze ed è persistito con `CheckerVersion` e hash degli input.

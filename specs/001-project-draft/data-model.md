@@ -223,6 +223,78 @@ turno/run (indici univoci filtrati). Il risultato espone la riga finale e quelle
 (calls, sintesi aggregate); turni/run senza righe → metrics null. Nessun testo, prompt o
 ragionamento nelle colonne. Una metrica storica copia i valori del momento della chiamata.
 
+## Registro atomico delle evidenze (migrazione additiva EvidenceLedger, 2026-10-31)
+
+Metadati relazionali indicizzati + `jsonb` per il contenuto semantico di ciascuna evidenza; nessuna colonna per campo semantico.
+Tutte le tabelle hanno `ProjectId` FK e ogni lettura filtra per progetto. Nessuna tabella esistente perde vincoli; `InferenceCalls`
+acquisisce un terzo proprietario possibile.
+
+**EvidenceExtractionJob** (lavoro durevole, stesse regole di claim di ChatTurn/ProcessingRun)
+
+| Campo | Regola |
+| --- | --- |
+| Id / ProjectId / ConversationId / MessageId | UUID e FK; il messaggio è `User` della conversazione del progetto |
+| MessageSequence | Sequenza del messaggio, copiata per ordinamento e gate di Analizza |
+| Reason | `Initial` (POST messaggio), `Reanalysis` (PM), `Backfill` (PM o Analizza) |
+| BatchId | FK opzionale a EvidenceBatch (rianalisi di progetto/backfill) |
+| RetryOfJobId | FK opzionale al lavoro Failed di cui è il retry autorizzato |
+| Status | Queued, Running, Completed, Failed |
+| RequestedBy | Utente richiedente; null per il lavoro iniziale creato dal salvataggio |
+| RequestedAt / StartedAt / CompletedAt / DeadlineAt | Tempo del database; DeadlineAt = RequestedAt + `Execution:ExtractionDeadlineSeconds` |
+| AttemptCount / MaxAttempts / NextAttemptAt / LeaseOwner / LeaseUntil / FencingToken | Come ChatTurn |
+| ExtractorConfig | JSONB congelato alla richiesta: modello, fase, prompt, schema, thinking, max output, temperatura, timeout |
+| ResultVersionId | FK alla versione prodotta; obbligatoria se Completed |
+| ErrorCode / ErrorMessage | Obbligatori se Failed (`invalid_agent_output`, `model_*`, `deadline_exceeded`, `attempts_exhausted`…) |
+
+Indici: univoco parziale `MessageId` per Queued/Running (un solo lavoro aperto per messaggio); FIFO parziale sui lavori aperti;
+`(ProjectId, MessageSequence)`; `BatchId`.
+
+**EvidenceExtractionVersion** (append-only: nessun UPDATE/DELETE applicativo)
+
+| Campo | Regola |
+| --- | --- |
+| Id / ProjectId / ConversationId / MessageId / MessageSequence | Origine esatta |
+| Version | ≥ 1, univoco per MessageId, assegnato sotto lock del messaggio |
+| JobId | FK univoca al lavoro che l'ha prodotta |
+| SchemaVersion / PromptVersion / ModelId | `evidence-1.0.0`, `extraction-v1`, modello effettivo |
+| Parameters | JSONB: configurazione effettiva (ExtractorConfig) e contesto usato (`contextThroughSequence`, id dei messaggi e versioni precedenti fornite, omissioni per budget) |
+| EvidenceCount / NoEvidenceReason | `NoEvidenceReason` obbligatorio se e solo se `EvidenceCount = 0` |
+| CreatedAt | Tempo del database |
+
+**Evidence**: Id, VersionId FK, ProjectId, MessageId, Ordinal (univoco per versione), Key (`e1`…, univoca per versione), Kind
+(Goal, Context, Requirement, Action, Constraint, Exclusion, Dependency, Assumption, Gap, Alternative, Decision, Other), Polarity
+(Affirmed, Negated, Excluded, Prohibited, Undefined), Certainty (Declared, Inferred, Hypothesized, ToClarify), Statement, Content
+JSONB (`kindRationale`, struttura soggetto/azione/oggetto/ambito/scopo/strumento/canale/destinatario, qualificatori `{type,text}`,
+fonti `{messageId, sequence, role Primary|Context|Referent, start, end, quote}`). Indici `(ProjectId, MessageId)`, `(VersionId, Ordinal)`.
+
+**EvidenceRelation** (immutabile): Id, ProjectId, VersionId (versione che asserisce la relazione), FromEvidenceId, ToEvidenceId (FK
+Evidence: stessa versione oppure evidenza corrente di un messaggio precedente al momento dell'estrazione), Type (Qualifies, Confirms,
+Contradicts, Corrects, Supersedes, DependsOn, AlternativeTo, SameRule), Basis (Declared = enunciata dal PM nel testo, Inferred =
+interpretazione dell'AI), Rationale opzionale. Univoco `(VersionId, FromEvidenceId, ToEvidenceId, Type)`.
+
+**EvidenceMessageState**: MessageId PK/FK, ProjectId, CurrentVersionId FK (versione dello stesso messaggio), Revision (intero, +1 a ogni
+promozione: concorrenza ottimistica), UpdatedAt. Creata con la prima versione valida (regola automatica).
+
+**EvidencePromotion** (append-only): Id, ProjectId, MessageId, FromVersionId (null alla prima), ToVersionId, PromotedBy (null = regola
+automatica della prima versione valida), PromotedAt, Reason, RelationImpact JSONB (relazioni rimappate/stale verso il messaggio).
+
+**EvidenceBatch**: Id, ProjectId, Kind (Reanalysis, Backfill), RequestKey (univoca per progetto e Kind), RequestedBy, RequestedAt,
+ThroughSequence (ultimo messaggio PM al momento della richiesta), JobCount, SkippedCount. L'avanzamento è contato dai lavori.
+
+**AnalysisEvidenceSelection** (una per run di Analysis, scritta una sola volta sotto fencing): RunId PK/FK, ProjectId, CreatedAt,
+ViewHash (SHA-256 della vista), View JSONB (alias, evidenze, relazioni risolte/rimappate/stale). **AnalysisEvidenceSelectionItem**:
+(RunId, MessageId) PK, VersionId FK: la versione selezionata per ciascun messaggio PM ≤ cutoff.
+
+**AnalysisEvidenceLink**: (RunId, ItemId, EvidenceId) PK, ProjectId; ItemId = id dell'elemento di `AnalysisContent` della revisione AI;
+scritte nella stessa transazione della revisione AI, mai modificate.
+
+**EvidenceCoverageReport**: Id, ProjectId, AnalysisId FK, RevisionId FK opzionale, DraftId FK opzionale, CheckerVersion, InputHash,
+CreatedBy, CreatedAt, contatori (DeterministicErrors, SemanticRisks, PmAssessments), Report JSONB. Univoco
+`(AnalysisId, RevisionId, DraftId, CheckerVersion)`: la stessa richiesta rilegge il report esistente.
+
+**InferenceCalls**: colonna `EvidenceExtractionJobId` FK opzionale; il vincolo di proprietà diventa «esattamente uno fra ChatTurnId,
+ProcessingRunId, EvidenceExtractionJobId»; un solo `IsFinal` per lavoro. Fase `Extraction`.
+
 ## Invarianti e confini
 
 1. Chat usa cutoff rigoroso; analisi usa dialogo user/assistant <= cutoff con ruoli distinti.
@@ -233,3 +305,9 @@ ragionamento nelle colonne. Una metrica storica copia i valori del momento della
 6. Retry/recovery possono ripetere chiamate ma non originali, revisione AI o bozza.
 7. Gli originali, JSON confermati e riferimenti non vengono ridotti dalla compattazione.
 8. Nessun contenuto integrale o segreto nei log; DB e serializzazioni derivati sono riservati.
+9. Un'evidenza è un'interpretazione verificabile, non una verità: l'originale PM resta l'autorità; versioni, relazioni, promozioni,
+   selezioni e mappe sono append-only o scritte una volta.
+10. Nessun dato con sequenza superiore al messaggio estratto entra nella sua estrazione; nessun dato oltre il cutoff entra nella
+    selezione di un run; nessun messaggio assistant è fonte primaria di un'evidenza.
+11. Un lavoro Failed non è una versione con zero evidenze; una selezione non può contenere un messaggio senza versione corrente.
+12. Una promozione cambia solo `EvidenceMessageState`; run, selezioni, revisioni e bozze esistenti non cambiano.

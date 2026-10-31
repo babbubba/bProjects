@@ -1040,3 +1040,29 @@ Eseguiti solo i pertinenti: C# `PmCorrectionTests|Acceptance*` 235 totali, 218 P
 **Esecuzione (solo deterministici):** C# `PmCorrectionTests|Acceptance*` 239 totali, 222 PASS, 0 FAIL, 17 ignorati (MafReal/PostgreSQL); Playwright senza stack `pm-correction` + `acceptance-checker` 70/70; `tsc --noEmit` pulito. Nessun DGX; prompt V8, modello e checker semantici non toccati. `spec.md`: FR-018, SC-008 e lo scenario 3 di US1 riscritti — «non ripete domande già poste, anche se rimaste senza risposta». T052/T053 restano aperti; PR #3 non mergiata.
 
 **Autenticazione GitHub per i prossimi push:** `gh auth status` mostra due account: `fcavallari-italcom` (attivo, `GITHUB_TOKEN` d'ambiente, 403 su `babbubba/bProjects`) e `babbubba` (keyring, non attivo). Il `git user.name/email` non c'entra con l'autorizzazione: serve il token dell'account `babbubba`. Remote non modificato.
+
+---
+
+# Sessione 10 (Opus) — Registro atomico delle evidenze — 2026-10-31
+
+**Branch:** `integration/requirements-quality-t052` (esistente; nessun nuovo branch/worktree, nessun merge). **Mandato:**
+`specs/001-project-draft/atomic-evidence-ledger.md` (ora versionato). T052/T053 restano aperti.
+
+## 10.1 M1 — Allineamento Spec Kit (T054) — completato
+
+Integrazione non distruttiva, nessun task chiuso riaperto, nessuna ADR:
+- `spec.md`: scenari 26–33, FR-029–FR-038, entità, SC-013–SC-016.
+- `plan.md` §Registro: moduli, lavoro durevole, scheduling con `parallel=1` (estrazioni solo se nessun turno/run è eleggibile),
+  gate di Analizza, selezione congelata, `project-analysis-v3`/`analysis-v4` con `evidenceKeys`, versioni/promozione, confronto,
+  copertura, costi.
+- `data-model.md` §Registro: 10 tabelle nuove + terzo proprietario di `InferenceCalls`; invarianti 9–12.
+- `contracts/ai-workflow.md` §10 (estrazione, schema `evidence-1.0.0`, validazione, commit, selezione, consolidamento, copertura
+  `coverage-v1`); `contracts/http-api.md` §Registro (percorsi, viste, codici); `research.md` §10.
+- `tasks.md` Phase 5: T054–T073 in milestone M1–M8 con dipendenze; nota su T052 (rivalidazione con la nuova pipeline in T072).
+- `checklists/requirements.md`: DOC25–DOC27 (documentali), TEC10–TEC13 (aperti); `quickstart.md`: validazione del registro.
+
+Decisioni principali (motivate in `plan.md`): nessun nuovo `ProcessingRunKind` (l'indice «un run formale attivo per progetto»
+impedirebbe estrazioni durante un'analisi) ma una tabella di lavori nello stesso `ExecutionLeaseStore`; estrazione con un
+`ChatClientAgent` MAF senza workflow (chiamata singola ripetibile); offset calcolati dal server dalla citazione; riconciliazione
+incrementale all'estrazione + rimappatura deterministica dopo promozione; mappa elementi→evidenze tramite `evidenceKeys` rimossi
+prima della validazione, quindi `AnalysisContent 1.0.0` invariato; rischi semantici solo lessicali (nessun giudice AI).
