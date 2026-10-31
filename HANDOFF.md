@@ -1066,3 +1066,38 @@ impedirebbe estrazioni durante un'analisi) ma una tabella di lavori nello stesso
 `ChatClientAgent` MAF senza workflow (chiamata singola ripetibile); offset calcolati dal server dalla citazione; riconciliazione
 incrementale all'estrazione + rimappatura deterministica dopo promozione; mappa elementi→evidenze tramite `evidenceKeys` rimossi
 prima della validazione, quindi `AnalysisContent 1.0.0` invariato; rischi semantici solo lessicali (nessun giudice AI).
+
+## 10.2 M2–M7 — Backend del registro, gate di Analizza, vista Evidenze (in corso)
+
+Commit `e03a5bf` (backend), `f67293d` (test di dispatch), `985baeb` (frontend). Implementati: entità e migrazione
+`20261031210114_EvidenceLedger`; DTO/schema/validatore (`Evidence/EvidenceExtraction.cs`, il validatore non è in un file
+separato); estrattore MAF `extraction-v1`; lavori durevoli nello stesso `ExecutionLeaseStore` (il commit fenced è in
+`Evidence/EvidenceLedgerStore.cs`, non in un `EvidenceExtractionCompletion.cs`); gate e selezione congelata; vista e confronto in
+`Evidence/EvidenceViews.cs`; copertura in `Evidence/EvidenceCoverage.cs`; API del registro; vista Evidenze nel frontend.
+
+Verificato senza DGX (test mirati, nessuna full suite):
+- `EvidenceExtractionDispatchTests` 10/10: Queued → Running → Completed osservati da API, eventi `evidence.state` e telemetria
+  `Extraction`; modello offline → Queued in backoff, non riprendibile prima di `NextAttemptAt` e senza nuove chiamate al modello
+  (nessun busy polling: `RunOnceAsync` = false, il ciclo attende `PollInterval`); tentativi esauriti; errore permanente; output non
+  valido senza riparazione; retry autorizzato; doppio invio; crash/reclaim con nuovo fence, worker obsoleto rifiutato; deadline;
+  FIFO per conversazione senza starvation delle altre; chat prima delle estrazioni, estrazione che blocca l'analisi prima delle più
+  vecchie, run prima delle estrazioni oltre il cutoff; `evidence_unavailable` senza revisioni, selezione né collegamenti.
+- `EvidenceLedgerUnitTests` (validatore, schema, prompt, confronto, vista, `evidenceKeys`, copertura) verdi.
+- Classi esistenti che attraversano Analizza/Document (AnalysisDispatch, AnalysisWorkflow, DocumentContract, ChatTurnDispatch,
+  WorkflowRecovery, ExecutionFailure, RevisionConcurrency, CompactionFlow, InferenceMetrics, PreviewRevision, Acceptance
+  deterministici, PmCorrection, DocumentWorkflow, ProjectEvents, AnalysisContract, ContentSecurity, AnalysisPromptVersion,
+  AnalysisContent, ProjectChatContract, ChatRecovery): 236 + 348 test verdi. Frontend: build e 209/209 Vitest.
+
+Rig dei test (nessuna assertion indebolita): le evidenze si preparano con `EvidenceTestSeed` attraverso claim, validazione e commit
+reali del registro; l'esecutore deterministico `SeedExtractionExecutor` esiste solo nel progetto di test e `ApiHarness` lo registra
+soltanto quando un test chiede l'esecuzione reale dell'analisi (altrimenti il dispatcher in background resta inattivo come prima:
+registrarlo sempre rendeva i claim manuali non deterministici). Aggiornate solo attese tecniche di versione (`project-analysis-v3`,
+`analysis-v4`, SHA del prompt) e l'elenco delle rotte protette.
+
+Rischio da misurare in T072: la vista delle evidenze entra nel messaggio finale, che la compattazione non riduce. Con un seed che
+citava 300 caratteri per messaggio il caso «dieci messaggi grandi» di `CompactionFlowTests` superava la finestra del server finto
+nella chiamata di sintesi (`compaction_failed`); con citazioni di una frase passa. Su conversazioni con molte evidenze reali la vista
+può consumare budget in modo significativo: tempi e token vanno misurati su N1–N5 prima di dichiarare il criterio dei 180 s.
+
+Restano: T056 (persistenza), T055 upgrade con dati esistenti, T057 casi fuori BMP, T058 variabili compose e prova HTTP della
+richiesta, T063, T064/T065/T067 test, T066, T069 E2E, poi T070 (suite completa) e T071–T073 sul DGX in seriale.
