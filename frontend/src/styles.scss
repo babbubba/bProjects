@@ -1,0 +1,51 @@
+// Design system minimale "Modern Enterprise SaaS": tema chiaro, palette sobria.
+// Soglie WCAG 2.2 AA: testo >= 4,5:1, componenti e focus >= 3:1.
+
+// Palette
+$bp-primary: #1d4ed8;
+$bp-secondary: #475569;
+$bp-success: #15803d;
+$bp-warning: #a16207;
+$bp-danger: #b91c1c;
+$bp-info: #0e7490;
+
+// Tipografia e spaziature
+$bp-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$bp-spacer: 1rem;
+
+// Variabili Bootstrap sovrascritte prima dell'import
+$primary: $bp-primary;
+$secondary: $bp-secondary;
+$success: $bp-success;
+$warning: $bp-warning;
+$danger: $bp-danger;
+$info: $bp-info;
+$body-bg: #f6f8fb;
+$body-color: #1f2937;
+$font-family-sans-serif: $bp-font-family;
+$font-size-base: 1rem;
+$spacer: $bp-spacer;
+$border-radius: 0.5rem;
+$focus-ring-width: 0.25rem;
+$focus-ring-opacity: 0.6;
+$focus-ring-color: rgba($bp-primary, $focus-ring-opacity);
+$enable-shadows: false;
+
+@import 'bootstrap/scss/bootstrap';
+
+// Focus sempre visibile da tastiera
+:focus-visible {
+  outline: 3px solid $bp-primary;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,49 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+TestResults/
+*.trx
+coverage/
+*.binlog
+
+# Node / Angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/out-tsc/
+npm-debug.log*
+*.tsbuildinfo
+
+# Playwright
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/e2e/blob-report/
+tests/e2e/playwright/.cache/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Docker / segreti e configurazione locale
+infra/.env
+infra/secrets/
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+
+# Varie
+*.log
+.DS_Store
+Thumbs.db
+
+# Claude Code (impostazioni locali)
+.claude/settings.local.json
+.claude/worktrees/

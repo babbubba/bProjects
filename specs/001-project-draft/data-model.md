@@ -203,6 +203,26 @@ una seconda copia nella Conversation. Solo la chat viva usa lo snapshot Conversa
 L'attesa umana è in AnalysisRevision e non richiede un checkpoint sospeso.
 Nessuna tabella di stato per ogni executor; niente entità future KB.
 
+## InferenceCall (telemetria tecnica, migrazione additiva InferenceCalls)
+
+Una riga per richiesta reale al modello: ProjectId FK; ChatTurnId oppure ProcessingRunId
+(esattamente uno); Attempt e FencingToken del lease; Phase (Chat/Analysis/Document/Compaction);
+ModelId, StartedAt, DurationMs; ContextWindowTokens (/props n_ctx solo se runtime Online, altrimenti
+null); MaxOutputTokensRequested (max_tokens inviato, non confermato); ServerDefaultNPredict;
+ReasoningRequested/Effective (on/off/unknown, mai il testo); Prompt/Completion/Total/CachedTokens
+solo dall'usage del runtime (null se assente, mai stimati); FinishReason; State
+(Running→Completed/Failed/Interrupted); IsFinal; Config JSONB numerico senza segreti.
+Solo sulla riga finale: Composition JSONB {items[key,tokens,messageCount]} contata con /tokenize
+sulla richiesta inviata, History JSONB {messageCount, originalTokens} dello storico entrato nella
+compattazione, Compaction JSONB {at, tokensBefore, tokensAfter, messagesSummarized}.
+
+Le righe del tentativo vincente si scrivono nella transazione del commit del risultato (stesso
+controllo lease/fencing: commit rifiutato = nessuna riga); quelle di un tentativo fallito o
+rifiutato dal validatore nella transazione del rilascio/Failed, mai finali. Un solo IsFinal per
+turno/run (indici univoci filtrati). Il risultato espone la riga finale e quelle del suo tentativo
+(calls, sintesi aggregate); turni/run senza righe → metrics null. Nessun testo, prompt o
+ragionamento nelle colonne. Una metrica storica copia i valori del momento della chiamata.
+
 ## Invarianti e confini
 
 1. Chat usa cutoff rigoroso; analisi usa dialogo user/assistant <= cutoff con ruoli distinti.

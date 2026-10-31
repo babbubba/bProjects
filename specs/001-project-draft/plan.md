@@ -92,7 +92,7 @@ Riesame documentale dopo il consolidamento; i riferimenti di evidenza sono nella
 | V. LLM interni | Endpoint esplicito autorizzato, nessun fallback esterno |
 | VI. Slice complete | Chat → anteprima correggibile/confermata → generazione → lettura |
 | VII. Autorizzazione | Conferma PM e generazione sono atti distinti; nessuna pubblicazione esterna |
-| VIII. Integrazioni reali | Gate tecnici identificati nel quickstart, ancora da eseguire |
+| VIII. Integrazioni reali | Gate tecnici nel quickstart. Verificati senza DGX il 2026-10-28 (Integration su PostgreSQL 18, Docker, E2E, riavvio; vedi quickstart); MafReal e prove con DGX reale ancora da eseguire (SKIP, non PASS) |
 | IX. ADR proporzionati | Decisioni approvate documentate qui; nessuna ADR nuova |
 
 Non sono richieste deroghe costituzionali; disponibilità runtime e qualità del
@@ -307,6 +307,144 @@ autorizzato; TextSearchProvider/function tools, citazioni, provenienza/versioni,
 conflitti e lacune. Docling nell'ingestion prima dell'indicizzazione.
 ReviewAgent, pubblicazione Jira/GitHub e human-in-the-loop esteso restano futuri.
 Nessun adapter placeholder, schema KB o infrastruttura viene introdotto ora.
+
+### Osservazioni dal primo test manuale — 2026-10-28
+
+Il percorso reale con 10 messaggi PM (circa 185.000 caratteri complessivi, stima
+45–60 mila token) ha prodotto `context_overflow` su chat e analisi con modello
+configurato a 32.768 token. Questa prova esplorativa non dimostra da sola se la
+compattazione nativa si sia attivata, sia fallita o non possa gestire un singolo
+messaggio molto esteso. L'originale PM resta persistito; non è accettabile eliminare
+o troncare contenuti per nascondere l'errore.
+
+Interventi **nell'ambito della slice attuale**, senza creare nuovi task o alterare
+i contratti:
+- **T047 (obbligatorio):** aggiungere la riproduzione con contesto grande e
+  diagnostica di token input/budget, trigger ed esito della compattazione per chat
+  e Analysis, distinguendo errore inevitabile da regressione; non registrare
+  contenuti o segreti nei log. Controllare singolo messaggio oltre budget,
+  storico compattabile e negazioni/fonti preservate.
+- **T050 (UX guasti):** rappresentare `context_overflow` con messaggio specifico e
+  azione praticabile, senza descriverlo genericamente come rifiuto del modello.
+  Esporre valori di token e superamento soltanto se misurati e disponibili in
+  forma sicura nel contratto; nessuna percentuale o diagnosi inventata.
+- **T052 (accettazione):** includere il caso esplorativo come prova di limite
+  separata dai cinque casi nominali richiesti. Un errore gestito non è
+  un successo nominale e non certifica gestione di documenti lunghi.
+
+**Esito T047 (DGX Spark, Qwen3.6-35B, finestra 32768).** Il caso osservato era una
+regressione, non un limite: dieci messaggi da ~5k token sono uno storico compattabile,
+ma la strategia nativa preservava di default gli ultimi 8 gruppi e la soglia usava la
+stima byte/4 del provider. Correzioni native: si preserva solo l'ultimo gruppo, soglia e
+target leggono i token del tokenizer del modello lasciando sotto soglia lo spazio della
+sintesi, la richiesta di sintesi è sempre l'ultimo messaggio (altrimenti il modello
+proseguiva lo storico), la sintesi usa le opzioni dell'applicazione (senza ragionamento
+nascosto, tetto di output) e una sintesi troncata è `compaction_failed`; il prompt di
+sintesi richiede negazioni, esclusioni, id e ruoli per intero. Misurati su Qwen: caso
+osservato chat 51.253 -> 21.256 token (server 21.313), analisi 51.867 -> 22.396 (server
+22.437), budget 27.648. Restano limiti strutturali con errore esplicito e valori misurati:
+ultimo messaggio oltre il budget (`context_overflow`, solo con finestra piccola: 65.536
+caratteri stanno sotto 27.648 token) e gruppi da riassumere oltre n_ctx in una sola
+chiamata (`compaction_failed`, HTTP 400 del runtime). La generazione strutturata
+dell'analisi che falliva con id non validi (`invalid_agent_output`) non dipendeva dalla
+compattazione: vedi l'esito seguente.
+
+**Esito `invalid_agent_output` dell'analisi (DGX, Qwen3.6-35B, 2026-10-29).** Progetto reale
+a 9 scambi (~4.890 token di prompt, compattazione non attiva): prima della correzione 5/5
+`invalid_agent_output` (`$.sources[0].id`, riga 9) e 2/5 troncati a 4096 (`length`);
+ricostruita la stessa richiesta, il modello scriveva id come `src-1` (42/42 id non UUID).
+Causa: l'adattatore OpenAI di M.E.AI 10.10.1 riscrive lo schema per lo strict mode
+spostando `pattern`/`format` nella `description`, quindi la grammatica di llama.cpp non
+vincolava gli UUID (lo stesso schema inviato invariato è applicato). Correzioni: schema
+inviato invariato nel response_format grezzo; schema per run con i soli valori fidati
+(un `analysisId` copiato sotto il solo pattern perdeva un carattere, 1 run su 2); fonti
+Message con l'id del messaggio ed evidenze solo dirette (con UUID validi, ~35 token
+ciascuno, 136 riferimenti portavano l'output a 9.591 token e 156 s; una richiesta di JSON
+compatto è stata scartata perché il modello entrava in ripetizione); tetto di output
+dell'analisi 8192 in compose; timeout di rete del client allineato a
+`RequestTimeoutSeconds` (il default di 100 s del client ha annullato un'analisi a 100,0 s,
+poi `deadline_exceeded`). Esito sullo stack: 10/10 analisi completate (completion
+4.593–6.063 token, `stop`, 79–103 s), 3/3 documenti e 2/2 analisi del caso breve
+(~1.800 token, ~30 s). Limite residuo: l'output cresce con il numero di elementi e di
+UUID; a ~61 token/s il tetto di 8192 token vale ~135 s, entro i 150 s della chiamata e i
+180 s della deadline, ma un'analisi più ricca può ancora finire troncata (`length`) ed è
+allora `invalid_agent_output`, senza retry. Il `compaction_failed` osservato con
+`CompactionTriggerTokens=3000` è un artefatto della soglia di prova: il tetto della
+sintesi è min(budget/6, output Compaction, soglia messaggi/2), cioè 1.297 token in chat e
+972 in analisi invece di 4096; le sintesi misurate occupano il 12–32% del prompt e
+l'unica chat troncata (1.851 -> 1.297, 70%) è un'uscita anomala del modello, non un
+difetto del calcolo.
+
+### Telemetria di inferenza e monitor del contesto
+
+Estensione autorizzata dopo la prima slice (contratto: `contracts/http-api.md`, dati: `data-model.md` «InferenceCall»).
+
+* **Significato dei valori.** `ctx-size` = finestra per slot allocata dal server (`/props` `n_ctx`, misurata); `n-predict` =
+  default di generazione del server (distinto; -1 = illimitato, mostrato come assente); `max_tokens` = massimo richiesto dal
+  client per la singola chiamata (limite *richiesto*, mai confermato dal runtime); `prompt_tokens`, `completion_tokens` (include i
+  token di reasoning consumati, mai il loro testo), `total_tokens`, `cached_tokens`, `finish_reason` = `usage` del runtime.
+  Ogni valore ha provenienza `measured` / `calculated` (formula esplicita, es. quota non attribuita = prompt misurato − somma dei
+  componenti tokenizzati) / `estimated` / `unavailable`. Nessun `lunghezza/4` è presentato come misura.
+* **Parametri.** `Ai:ContextWindowTokens/MaxOutputTokens/SafetyMarginTokens/CompactionTriggerTokens/EnableThinking`, override di
+  fase `Ai:Phases:{Chat,Analysis,Document,Compaction}:{MaxOutputTokens,EnableThinking}` (vuoto = eredita), budget di input di fase =
+  finestra − output di fase − margine, `Ai:RuntimeCheckSeconds` (cache della sonda, 60 s). `ReasoningBudgetTokens` non è
+  implementato: il supporto del runtime non è verificato. Con finestra configurata maggiore di quella reale (`/props`) le chiamate
+  falliscono con `context_window_mismatch` (non transitorio); con DGX offline o modello non caricato nessun blocco e nessuna
+  capacità inventata (`runtime.status` offline/unverified).
+* **Cattura e persistenza.** OpenAI .NET imposta `stream_options.include_usage`; il chunk finale di llama.cpp porta l'usage. Una
+  riga `InferenceCalls` per chiamata, scritta nella transazione di commit del risultato (con lease/fencing) o dal percorso di
+  fallimento; i tentativi sono righe distinte, il risultato espone solo quelle del tentativo vincente. Nessun prompt, testo o
+  reasoning in tabella.
+* **Monitor.** `GET /api/projects/{p}/context-usage` alimenta `ContextUsagePanelComponent` (colonna destra sticky da 1200px,
+  compatto sotto); si aggiorna su `chat.state`/`processing.state`/riconnessione SSE esistenti. Il breakdown rende solo categorie
+  con sorgente reale (`system_instructions`, `user_messages`, `assistant_messages`, `derived_summary`, `analysis_structured`).
+* **Limiti.** Un'analisi ripresa da checkpoint successivo alla chiamata al modello non ha chiamate nel tentativo vincente
+  (`metrics` null); arresto dell'app o lease perso non scrivono righe del tentativo; `effective` del reasoning è on/off solo se
+  deducibile dalla risposta; `modelId` è quello inviato nella richiesta.
+
+### Backlog funzionale successivo alla prima vertical slice (DEFERRED)
+
+Queste voci sono **decisioni di roadmap**, non T054+ e non condizioni aggiuntive
+di completamento di T044–T053. Prima di implementarle serviranno specifica,
+contratti, criteri di accettazione e task separati. Ordine proposto:
+
+1. **P1 — Allegati come fonti autonome.** Caricamento PDF, Markdown e testo, con
+   file originale conservato, hash/versione, metadati, autore e appartenenza al
+   progetto. Estrazione tracciabile (Docling dove appropriato), segmenti/pagine
+   indirizzabili, errori di parsing espliciti e fonti navigabili. Non incollare il
+   contenuto nell'ordinaria cronologia chat; nessuna KB implicita.
+2. **P1 — Analisi di materiale oltre la finestra del modello.** Elaborazione per
+   segmenti e consolidamento gerarchico verificabile con provenienza fino al
+   documento e alle posizioni originali; mantenere esclusioni, vincoli, negazioni,
+   evidenze e conflitti. Rilevare omissioni e copertura insufficiente anziché
+   presentare un risultato parziale come completo. Distinguere ingestion,
+   estrazione, consolidamento e successiva generazione dalla normale compattazione
+   conversazionale. Non introdurre un semplice riassunto lossy come sostituzione
+   dell'analisi strutturata.
+3. ~~P2 — Indicatori di capienza del contesto.~~ **Realizzato e verificato** (vedi
+   «Telemetria di inferenza e monitor del contesto»): metriche misurate per
+   risposta/run e monitor sticky con composizione reale. Restano differiti i
+   contatori per PDF, Markdown e Knowledge Base (nessuna sorgente esiste: nessuna
+   riga simulata) e la previsione del prossimo prompt prima dell'invio (voce 4).
+4. **P2 — Avviso sugli incollaggi estesi.** Avvertire prima di inviare un messaggio
+   potenzialmente superiore al budget; non abbassare automaticamente il limite di
+   trasporto di 65.536 caratteri, non troncare e non impedire senza motivo
+   documenti che potrebbero essere elaborati dalla pipeline di ingestion.
+5. **P2 — Profili di modello e contesto.** Valutare configurazioni DGX a 64k/131k
+   soltanto con modello ID, `ctx-size` effettivo, tokenizer, budget e risorse
+   coerenti. Benchmark di latenza, completezza, provenienza e qualità sullo
+   stesso insieme di casi prima di modificare il modello di riferimento;
+   una finestra maggiore da sola non garantisce affidabilità.
+6. **P3 — Ottimizzazione degli snapshot di sessione.** Misurare dimensioni,
+   latenza e contenuto serializzato MAF prima di ottimizzare; conservare originali
+   e provenienza in PostgreSQL, mantenendo restore compatibile e nessuna
+   perdita silenziosa. Non usare la dimensione di 138 KB del primo snapshot come
+   prova sufficiente di un problema prestazionale.
+
+La prossima milestone funzionale prioritaria è **allegati + ingestion tracciabile
++ analisi gerarchica**, prima di KB/RAG generale, ricerca web o pubblicazioni.
+I test di crash, idempotenza, sicurezza e compattazione della slice corrente
+rimangono prioritari per stabilire una baseline affidabile.
 
 ## Phase 0 — Research
 

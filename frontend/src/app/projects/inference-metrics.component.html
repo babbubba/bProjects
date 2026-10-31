@@ -1,0 +1,38 @@
+@if (view(); as v) {
+  <div
+    class="inference-metrics text-secondary"
+    role="group"
+    aria-label="Metriche della richiesta AI"
+    data-testid="inference-metrics"
+    [attr.data-state]="v.kind"
+  >
+    @if (v.kind === 'unavailable') {
+      <span data-testid="metrics-unavailable">Metriche non disponibili</span>
+    } @else if (v.kind === 'failed') {
+      <span data-testid="metrics-failed">Metriche non attribuite: richiesta non completata</span>
+    } @else {
+      @for (f of v.figures; track f.id; let last = $last) {
+        <span
+          class="metric"
+          [attr.data-testid]="'metric-' + f.id"
+          [attr.data-source]="f.source"
+          [attr.title]="f.tip"
+        >
+          <span aria-hidden="true">{{ f.label }} {{ f.text }}{{ f.suffix }}</span>
+          <span class="visually-hidden">{{ f.sr }}</span>
+        </span>
+        @if (!last || v.kind === 'running') {
+          <span aria-hidden="true">·</span>
+        }
+      }
+      @if (v.kind === 'running') {
+        <span class="metric" data-testid="metrics-running">generazione in corso…</span>
+      }
+      @if (v.truncated) {
+        <span class="badge text-bg-warning" data-testid="metrics-truncated"
+          >Risposta troncata dal limite di output</span
+        >
+      }
+    }
+  </div>
+}

@@ -1,0 +1,157 @@
+$sidebar-width: 20rem;
+
+.shell {
+  display: grid;
+  grid-template-columns: $sidebar-width minmax(0, 1fr);
+  min-height: calc(100vh - 3.5rem);
+}
+
+.shell-toggle {
+  display: none;
+}
+
+.shell-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid var(--bs-border-color);
+  min-width: 0;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.new-project {
+  padding: 1rem;
+  background: var(--bs-light);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.project-item {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+  overflow-wrap: anywhere;
+
+  &:hover {
+    background: var(--bs-light);
+  }
+
+  &.active {
+    background: #eff4ff;
+    border-left-color: var(--bs-primary);
+  }
+}
+
+.project-name {
+  display: block;
+  font-weight: 600;
+}
+
+.project-meta {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  padding: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.shell-main {
+  padding: 2rem;
+  min-width: 0;
+}
+
+// Colonna destra del monitor del contesto: sticky rispetto alla finestra (nessun antenato con overflow).
+$usage-width: 22rem;
+$usage-offset: 1rem;
+
+.project-usage {
+  margin-top: 1rem;
+}
+
+@media (min-width: 1200px) {
+  .project-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) $usage-width;
+    grid-template-rows: auto 1fr;
+    column-gap: 1.5rem;
+    align-items: start;
+  }
+
+  .project-head {
+    grid-column: 1;
+  }
+
+  .project-body {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .project-usage {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    position: sticky;
+    top: $usage-offset;
+    margin-top: 0;
+    max-height: calc(100vh - 2 * #{$usage-offset});
+    overflow-y: auto;
+  }
+}
+
+.project-title,
+.project-description {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.chat-placeholder,
+.empty-state {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-secondary-color);
+  background: #fff;
+}
+
+.empty-state {
+  border-style: solid;
+}
+
+@media (max-width: 991.98px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell-toggle {
+    display: block;
+    margin: 0.75rem 1rem 0;
+    justify-self: start;
+  }
+
+  .shell-sidebar {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--bs-border-color);
+
+    &.is-open {
+      display: flex;
+    }
+  }
+
+  .shell-main {
+    padding: 1rem;
+  }
+}
