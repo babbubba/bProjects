@@ -197,6 +197,7 @@ public static class AnalysisEndpoints
             return Problem(StatusCodes.Status409Conflict, "Un'elaborazione formale è già attiva", "processing_active", other);
         }
 
+        http.RequestServices.GetService<bProjects.App.AI.DispatchWakeup>()?.Notify();
         await events.PublishStateAsync(runId); // post-commit; legge lo stato corrente, mai uno vecchio
         var created = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == runId, ct);
         return Results.Accepted(LocationOf(projectId, runId), ToView(created));

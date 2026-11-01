@@ -44,6 +44,7 @@ builder.Services.AddProblemDetails();
 // Dispatch dei ChatTurn (T014) con ConversationalAgent (T017) e commit atomico della risposta (T018).
 builder.Services.AddSingleton<ProjectEventHub>(); // notifiche SSE effimere in-process (T021)
 builder.Services.AddSingleton<ChatTurnEvents>();
+builder.Services.AddSingleton<bProjects.App.AI.DispatchWakeup>();
 builder.Services.AddSingleton<ProcessingRunEvents>();
 builder.Services.AddScoped<ExecutionLeaseStore>();
 builder.Services.AddSingleton(sp =>

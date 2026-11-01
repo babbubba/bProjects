@@ -70,7 +70,8 @@ public static class ConversationEndpoints
         IOptions<AiOptions> ai,
         ChatTurnEvents events,
         EvidenceEvents evidenceEvents,
-        CancellationToken ct)
+        CancellationToken ct,
+        bProjects.App.AI.DispatchWakeup? wakeup = null)
     {
         var errors = new Dictionary<string, string[]>();
         if (request.ClientMessageId is null || request.ClientMessageId == Guid.Empty)
@@ -170,6 +171,7 @@ public static class ConversationEndpoints
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
+        wakeup?.Notify(); // il turno è eleggibile adesso: nessuna attesa del prossimo giro di polling
         await events.PublishStateAsync(turn.Id); // post-commit; legge lo stato corrente, mai uno vecchio
         await evidenceEvents.PublishStateAsync(extraction.Id);
         var view = await ViewOf(db, message, ct);

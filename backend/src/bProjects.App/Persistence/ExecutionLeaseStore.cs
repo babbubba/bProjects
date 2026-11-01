@@ -327,6 +327,9 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             : new WorkClaim(null, new AnalysisRunClaim(runId, owner, fence, attempt));
     }
 
+    /// <summary>Un'estrazione non prende il posto di un turno o run il cui retry scade entro questo intervallo (il backoff massimo è 10 s).</summary>
+    public static readonly TimeSpan ExtractionBackoffHold = TimeSpan.FromSeconds(30);
+
     private async Task<Guid?> ExtractionCandidateAsync(CancellationToken ct)
     {
         await using var command = await CommandAsync(
@@ -343,6 +346,16 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                     WHERE p."ConversationId" = j."ConversationId"
                       AND p."Status" IN ('Queued', 'Running')
                       AND p."MessageSequence" < j."MessageSequence")
+              -- Un turno o un run in backoff di retry è atteso a breve: non gli si fa trovare il modello occupato da un'estrazione
+              -- avviata nella finestra di attesa (nessun lavoro in corso viene interrotto; vale solo per i claim futuri).
+              AND NOT EXISTS (
+                    SELECT 1 FROM "ChatTurns" b
+                    WHERE b."Status" = 'Queued' AND b."NextAttemptAt" > clk.t AND b."NextAttemptAt" <= clk.t + make_interval(secs => @hold)
+                      AND b."AttemptCount" < b."MaxAttempts" AND b."DeadlineAt" > clk.t)
+              AND NOT EXISTS (
+                    SELECT 1 FROM "ProcessingRuns" b
+                    WHERE b."Status" = 'Queued' AND b."NextAttemptAt" > clk.t AND b."NextAttemptAt" <= clk.t + make_interval(secs => @hold)
+                      AND b."AttemptCount" < b."MaxAttempts" AND b."DeadlineAt" > clk.t)
             ORDER BY
               CASE WHEN EXISTS (
                      SELECT 1 FROM "ProcessingRuns" r
@@ -353,7 +366,8 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               j."RequestedAt", j."MessageSequence", j."Id"
             LIMIT 1
             """,
-            ct);
+            ct,
+            ("hold", ExtractionBackoffHold.TotalSeconds));
         return await command.ExecuteScalarAsync(ct) is Guid id ? id : null;
     }
 

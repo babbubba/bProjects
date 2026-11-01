@@ -35,7 +35,8 @@ public sealed class AiDispatchService(
     ProcessingRunEvents? runEvents = null,
     DocumentWorkflow? documentWorkflow = null,
     IEvidenceExtractionExecutor? extractor = null,
-    EvidenceEvents? evidenceEvents = null) : BackgroundService
+    EvidenceEvents? evidenceEvents = null,
+    DispatchWakeup? wakeup = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
@@ -58,7 +59,7 @@ public sealed class AiDispatchService(
                 {
                     if (!await RunOnceAsync(stoppingToken))
                     {
-                        await Task.Delay(PollInterval, stoppingToken);
+                        await IdleAsync(stoppingToken);
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -74,6 +75,12 @@ public sealed class AiDispatchService(
             // Arresto dell'applicazione.
         }
     }
+
+    /// <summary>
+    /// Attesa a riposo: al massimo un intervallo di polling, interrotta subito da un endpoint che ha appena accodato un turno o un run.
+    /// Il lavoro resta comunque letto dal database, quindi un segnale perso costa al più <see cref="PollInterval"/>.
+    /// </summary>
+    private Task IdleAsync(CancellationToken ct) => wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct);
 
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
