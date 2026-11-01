@@ -628,6 +628,34 @@ public sealed class DocumentArchiveApiTests : ArchiveTestBase
     }
 
     [Fact]
+    public async Task A_snapshot_of_an_unready_pinned_source_keeps_the_pinned_version_identity_even_after_a_later_version_and_selection_change()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var v1 = await Json(await Upload(client, project, Text("v1 in coda"), "p.txt"));
+        var document = v1.GetProperty("documentId").GetGuid();
+        var v1Id = v1.GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await PutSelection(client, project, "\"0\"", Item(document, mode: "Pinned", versionId: v1Id))).StatusCode);
+
+        var turn = (await Json(await Message(client, project))).GetProperty("chatTurnId").GetGuid();
+        var snapshot = await Scalar<Guid>("SELECT \"SourceSnapshotId\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn));
+        var hash = await Scalar<string>("SELECT \"Hash\" FROM \"SourceSnapshots\" WHERE \"Id\" = @s", ("s", snapshot));
+        var pinnedRows = "SELECT count(*) FROM \"SourceSnapshotItems\" WHERE \"SnapshotId\" = @s AND \"Availability\" = 'Unavailable' AND \"DocumentVersionId\" = @v AND \"PreparationId\" IS NULL AND \"EvidenceVersionId\" IS NULL";
+
+        // Il snapshot registra QUALE versione era fissata, pur senza preparazione/evidenza Ready.
+        Assert.Equal(1, await Count(pinnedRows, ("s", snapshot), ("v", v1Id)));
+
+        // Una v2 successiva e un cambio di selezione non riscrivono retroattivamente lo snapshot.
+        Assert.Equal(HttpStatusCode.Created, (await Upload(client, project, Text("v2 in coda"), "p2.txt", documentId: document)).StatusCode);
+        var revision = (await Selection(client, project)).GetProperty("revision").GetInt64();
+        Assert.Equal(HttpStatusCode.OK, (await PutSelection(client, project, $"\"{revision}\"", Item(document, included: false))).StatusCode);
+
+        Assert.Equal(1, await Count(pinnedRows, ("s", snapshot), ("v", v1Id)));
+        Assert.Equal(hash, await Scalar<string>("SELECT \"Hash\" FROM \"SourceSnapshots\" WHERE \"Id\" = @s", ("s", snapshot)));
+        Assert.Equal(snapshot, await Scalar<Guid>("SELECT \"SourceSnapshotId\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+    }
+
+    [Fact]
     public async Task A_chat_message_in_a_project_without_documents_has_no_snapshot()
     {
         using var client = await App.LoginAsync();

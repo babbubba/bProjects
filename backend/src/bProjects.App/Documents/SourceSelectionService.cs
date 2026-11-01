@@ -228,7 +228,7 @@ public sealed class SourceSelectionService(AppDbContext db)
 
     /// <summary>
     /// Fissa la selezione alla richiesta (chat o Analizza): un SourceSnapshot immutabile con una riga per documento. Chiamare sotto il
-    /// lock di progetto e nella transazione del comando. Solo Ready porta un riferimento di estrazione.
+    /// lock di progetto e nella transazione del comando. Solo Ready porta preparazione ed evidenza; la versione è registrata anche se non pronta e risolta.
     /// </summary>
     public SourceSnapshot AddSnapshot(Guid projectId, SourceEvaluation evaluation, DateTimeOffset now)
     {
@@ -241,7 +241,9 @@ public sealed class SourceSelectionService(AppDbContext db)
             DocumentId = e.Document.Id,
             Included = e.Included,
             Availability = e.Availability,
-            DocumentVersionId = e.Availability == SourceAvailability.Ready ? e.Resolved!.Id : null,
+            // Identità della versione selezionata, ove determinabile: una Pinned non pronta la conserva (senza preparazione né evidenza),
+            // così una v2 successiva non cambia retroattivamente cosa il PM aveva scelto. Esclusa o senza versione risolta: nessuna.
+            DocumentVersionId = e.Availability == SourceAvailability.Excluded ? null : e.Resolved?.Id,
             PreparationId = e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.Id : null,
             EvidenceVersionId = e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.CurrentEvidenceVersionId : null,
         }).ToList();
