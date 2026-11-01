@@ -5,7 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using bProjects.App.Conversations;
+using bProjects.App.AI;
 using bProjects.App.Documents;
+using bProjects.App.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace bProjects.IntegrationTests;
@@ -653,6 +656,43 @@ public sealed class DocumentArchiveApiTests : ArchiveTestBase
         Assert.Equal(1, await Count(pinnedRows, ("s", snapshot), ("v", v1Id)));
         Assert.Equal(hash, await Scalar<string>("SELECT \"Hash\" FROM \"SourceSnapshots\" WHERE \"Id\" = @s", ("s", snapshot)));
         Assert.Equal(snapshot, await Scalar<Guid>("SELECT \"SourceSnapshotId\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+    }
+
+    [Fact]
+    public async Task A_chat_turn_with_an_unready_source_tells_the_model_it_has_no_document_content_and_still_appends_the_notice()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await Upload(client, project, Text("non pronto"), "u.txt");
+        var turn = (await Json(await Message(client, project))).GetProperty("chatTurnId").GetGuid();
+        var model = new ConversationalAgentTests.FakeModel(["Il contratto prevede una penale del 10%."]);
+        var committer = new CapturingCommitter();
+        using var scope = App.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var t = await db.ChatTurns.AsNoTracking().SingleAsync(x => x.Id == turn, Ct);
+        var claim = new ChatTurnClaim(t.Id, t.ConversationId, t.TriggerMessageId, t.SourceCutoffSequence, "test-owner", 1, 1,
+            DateTimeOffset.UtcNow.AddMinutes(1), DateTimeOffset.UtcNow.AddMinutes(3));
+        var services = new ServiceCollection().AddScoped(_ => db).AddSingleton<IChatTurnCommitter>(committer).BuildServiceProvider();
+
+        await new ConversationalTurnExecutor(services.GetRequiredService<IServiceScopeFactory>(), ConversationalAgentTests.Agent(model)).ExecuteAsync(claim, Ct);
+
+        // Protezione a monte della generazione: il modello sa che nessun documento è leggibile, non solo la nota a posteriori.
+        var instructions = model.LastOptions!.Instructions!;
+        Assert.StartsWith(ConversationalAgent.Instructions, instructions);
+        Assert.Contains(ChatSourceNotice.ModelGuardMarker, instructions);
+        Assert.DoesNotContain("u.txt", instructions);
+        Assert.Contains("Nota sulle fonti: 1 documento", committer.Reply!.Text);
+    }
+
+    private sealed class CapturingCommitter : IChatTurnCommitter
+    {
+        public ConversationalReply? Reply { get; private set; }
+
+        public Task<ChatTurnCommitResult> CommitAsync(ChatTurnClaim claim, ConversationalReply reply, CancellationToken ct)
+        {
+            Reply = reply;
+            return Task.FromResult(new ChatTurnCommitResult(ChatTurnCommitOutcome.Committed));
+        }
     }
 
     [Fact]

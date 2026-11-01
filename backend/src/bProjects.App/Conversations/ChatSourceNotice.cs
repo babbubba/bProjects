@@ -20,6 +20,22 @@ public static class ChatSourceNotice
             : await db.SourceSnapshotItems.AsNoTracking().CountAsync(i => i.SnapshotId == snapshotId && i.Availability == SourceAvailability.Unavailable, ct);
     }
 
+    /// <summary>Intestazione della sezione di istruzioni aggiunta al modello quando il turno ha fonti indisponibili.</summary>
+    public const string ModelGuardMarker = "# Fonti documentali indisponibili";
+
+    /// <summary>
+    /// Istruzioni aggiuntive per il modello, solo per i turni con fonti indisponibili (ramo senza snapshot o senza indisponibili: nessuna
+    /// aggiunta). Nel dialogo il modello non legge mai il contenuto dei documenti: la nota a posteriori non basta, perché una risposta
+    /// apparentemente documentale verrebbe comunque generata. Non contiene i nomi dei documenti.
+    /// </summary>
+    public static string ModelGuard(int unavailable) =>
+        ModelGuardMarker + "\n"
+        + (unavailable == 1 ? "In questo turno 1 documento incluso nel progetto non è disponibile" : $"In questo turno {unavailable} documenti inclusi nel progetto non sono disponibili")
+        + " (in preparazione o non utilizzabili) e in questa conversazione non hai accesso al contenuto di alcun documento. "
+        + "Se il messaggio del project manager chiede o presuppone il contenuto, i dati o le conclusioni di un documento, non rispondere nel merito: "
+        + "non riassumere, non citare e non attribuire informazioni a un documento. Di' chiaramente che quel contenuto non è ancora disponibile "
+        + "e che puoi lavorare solo su quanto è scritto nel dialogo. Per il resto del messaggio prosegui normalmente.";
+
     public static string Append(string text, int unavailable) => unavailable <= 0
         ? text
         : text.TrimEnd() + "\n\n" + (unavailable == 1

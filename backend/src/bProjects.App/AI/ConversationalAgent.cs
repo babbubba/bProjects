@@ -55,16 +55,20 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
         var trigger = await db.ConversationMessages.AsNoTracking()
             .SingleAsync(m => m.Id == turn.TriggerMessageId && m.ConversationId == conversation.Id && m.Role == MessageRole.User, ct);
 
+        // Fonti documentali indisponibili nello snapshot del turno: il modello lo sa prima di generare (la nota finale non basta da sola).
+        // Senza snapshot o senza fonti indisponibili le istruzioni restano esattamente quelle del dialogo 001.
+        var unavailable = await ChatSourceNotice.UnavailableCountAsync(db, turn.Id, ct);
+        var instructions = unavailable > 0 ? Instructions + "\n\n" + ChatSourceNotice.ModelGuard(unavailable) : Instructions;
         var options = new ChatOptions
         {
             ModelId = chatOptions.ModelId,
             MaxOutputTokens = chatOptions.MaxOutputTokens,
             Temperature = chatOptions.Temperature,
             RawRepresentationFactory = chatOptions.RawRepresentationFactory,
-            Instructions = Instructions,
+            Instructions = instructions,
         };
         var agent = new ChatClientAgent(
-            await factory.CreateCompactingClientAsync(Instructions, ct),
+            await factory.CreateCompactingClientAsync(instructions, ct),
             new ChatClientAgentOptions
             {
                 Name = AgentName,
