@@ -11,6 +11,12 @@ public sealed class DocumentOptions
 {
     public const string SectionName = "Documents";
 
+    /// <summary>
+    /// Radice privata degli originali (volume persistente, fuori da webroot e senza URL pubblica). Vuota = sottocartella di LocalApplicationData
+    /// (sviluppo); nei container si imposta Documents__StorageRoot sul volume dedicato. Non è un limite né modificabile dall'Admin.
+    /// </summary>
+    public string? StorageRoot { get; set; }
+
     public long MaxFileBytes { get; set; } = 50_000_000;
     public long ProjectQuotaBytes { get; set; } = 1_000_000_000;
 
@@ -43,7 +49,12 @@ public sealed class DocumentOptionsValidator : IValidateOptions<DocumentOptions>
 {
     public ValidateOptionsResult Validate(string? name, DocumentOptions options)
     {
-        var errors = options.ToLimits().Validate();
+        var errors = options.ToLimits().Validate().ToList();
+        if (!string.IsNullOrWhiteSpace(options.StorageRoot) && !Path.IsPathFullyQualified(options.StorageRoot))
+        {
+            return ValidateOptionsResult.Fail($"{DocumentOptions.SectionName}:StorageRoot deve essere un percorso assoluto.");
+        }
+
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors.Select(e => $"{DocumentOptions.SectionName}:{e}"));
     }
 }

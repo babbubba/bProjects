@@ -35,6 +35,7 @@ builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(A
 builder.Services.AddSingleton<IValidateOptions<DocumentOptions>, DocumentOptionsValidator>();
 builder.Services.AddOptions<DocumentOptions>().Bind(builder.Configuration.GetSection(DocumentOptions.SectionName)).ValidateOnStart();
 builder.Services.AddScoped<DocumentPolicyService>();
+builder.Services.AddSingleton<DocumentFileStore>();   // originali su volume privato (T011); la radice si valida al primo uso
 builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSection(ExecutionOptions.SectionName)).ValidateOnStart();
 builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
 // Stato verificato del runtime (cache a TTL, sonda lazy alla prima lettura): non blocca mai l'avvio né i progetti con il DGX offline.
@@ -123,6 +124,7 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(AccountBootstrap.AdminPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(AccountBootstrap.AdminRole));
 
 var app = builder.Build();
+_ = app.Services.GetRequiredService<DocumentFileStore>();   // radice fuori webroot: un errore di configurazione emerge all'avvio, non al primo upload
 
 // Operazioni esplicite e non distruttive, mai eseguite all'avvio del server.
 if (args.Contains("migrate"))
