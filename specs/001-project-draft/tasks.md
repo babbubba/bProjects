@@ -218,24 +218,24 @@ rivalidazione usa la pipeline con registro (T072). Milestone M1–M8 del mandato
 ### M5 — Rianalisi, confronto versioni, promozione e backfill
 
 - [x] T064 [US1] Implementare abbinamento e diff in `backend/src/bProjects.App/Evidence/EvidenceVersionComparer.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceVersionComparerTests.cs`: aggiunte, rimosse, invariate, modificate campo per campo, ambigue, nessuna identità per sole parole comuni. Dipende da T057.
-- [ ] T065 [US1] Implementare rianalisi di messaggio e di progetto, retry autorizzato, backfill idempotente con avanzamento e promozione esplicita con concorrenza ottimistica e impatto sulle relazioni in `backend/src/bProjects.App/Evidence/EvidenceCommands.cs`; test su PostgreSQL `backend/tests/bProjects.IntegrationTests/EvidenceReanalysisTests.cs` (artefatti storici invariati, backfill interrotto/ripreso senza duplicati, promozione concorrente → conflitto). Dipende da T059, T064.
+- [x] T065 [US1] Implementare rianalisi di messaggio e di progetto, retry autorizzato, backfill idempotente con avanzamento e promozione esplicita con concorrenza ottimistica e impatto sulle relazioni in `backend/src/bProjects.App/Evidence/EvidenceCommands.cs`; test su PostgreSQL `backend/tests/bProjects.IntegrationTests/EvidenceReanalysisTests.cs` (artefatti storici invariati, backfill interrotto/ripreso senza duplicati, promozione concorrente → conflitto). Dipende da T059, T064.
 
 ### M6 — Verifica di copertura e provenienza
 
-- [ ] T066 [US1] Implementare `backend/src/bProjects.App/Evidence/EvidenceCoverageService.cs` (`coverage-v1`) e la persistenza dei report: codici e categorie di AI §10.8, input esatti e hash, nessuna regola specifica dei casi N1–N5; test `backend/tests/bProjects.IntegrationTests/EvidenceCoverageTests.cs` con un esempio positivo e negativo per ogni codice e separazione deterministico/stimato/PM. Dipende da T062.
+- [x] T066 [US1] Implementare `backend/src/bProjects.App/Evidence/EvidenceCoverageService.cs` (`coverage-v1`) e la persistenza dei report: codici e categorie di AI §10.8, input esatti e hash, nessuna regola specifica dei casi N1–N5; test `backend/tests/bProjects.IntegrationTests/EvidenceCoverageTests.cs` con un esempio positivo e negativo per ogni codice e separazione deterministico/stimato/PM. Dipende da T062.
 
 ### M7 — API, UI e controlli di sicurezza
 
 - [x] T067 [US1] Esporre gli endpoint di HTTP §Registro in `backend/src/bProjects.App/Evidence/EvidenceEndpoints.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceApiTests.cs`: percorsi, payload, codici, idempotenza, 401/403, ID di altri progetti 404, nessun output non validato o ragionamento nelle risposte. Dipende da T065, T066.
-- [ ] T068 [US1] Realizzare la vista Evidenze in `frontend/src/app/projects/evidence-view.component.ts` (+ template/SCSS) e `frontend/src/app/projects/project-api.service.ts`: stato reale dei lavori, filtri essenziali, frase originale con lo span evidenziato, storico, confronto e promozione, rianalisi/retry/backfill con avanzamento, report di copertura; accessibile e responsive come la slice; test Vitest. Dipende da T067.
+- [x] T068 [US1] Realizzare la vista Evidenze in `frontend/src/app/projects/evidence-view.component.ts` (+ template/SCSS) e `frontend/src/app/projects/project-api.service.ts`: stato reale dei lavori, filtri essenziali, frase originale con lo span evidenziato, storico, confronto e promozione, rianalisi/retry/backfill con avanzamento, report di copertura; accessibile e responsive come la slice; test Vitest. Dipende da T067.
 - [ ] T069 [US1] Aggiungere il percorso browser `tests/e2e/evidence-ledger.spec.ts`: navigazione alla vista, stato dei lavori con modello offline, errori e retry, fonti; con modello reale l'estrazione e il confronto. Dipende da T068.
 
 ### M8 — Test completi, verifiche DGX, documentazione ed esiti residui
 
-- [ ] T070 [US1] Eseguire la suite deterministica, Integration su PostgreSQL, `test:ci` e i test E2E disponibili; nessuna regressione dei percorsi esistenti (Chat → Analizza → Correggi → Conferma → Genera). Dipende da T060, T063, T065, T066, T067, T069.
+- [x] T070 [US1] Eseguire la suite deterministica, Integration su PostgreSQL, `test:ci` e i test E2E disponibili; nessuna regressione dei percorsi esistenti (Chat → Analizza → Correggi → Conferma → Genera). Dipende da T060, T063, T065, T066, T067, T069.
 - [x] T071 [US1] Provare l'estrattore reale sul DGX (`Category=MafReal`, inferenze seriali, `DiagnosticsHarness`): esempi di regressione N1–N4 del mandato §3.2 come attese generiche (nessuna regola nel codice), zero evidenze, rettifica. Registrare PASS/FAIL/SKIP reali. Dipende da T070.
 - [x] T072 [US1] Rieseguire N1–N5 sulla nuova pipeline senza cambiare le attese: tempi end-to-end e per fase (estrazioni incluse l'attesa prima di Analizza), token, modello/parametri, estrazioni mancanti, copertura registro→analisi→documento, errori e versioni selezionate; FAIL e SKIP conservati, trade-off col limite di 180 s segnalato senza cambiarlo. Alimenta T052. Dipende da T071.
-- [ ] T073 [US1] Aggiornare `quickstart.md`, `checklists/requirements.md` e `HANDOFF.md` con esiti verificati, limiti dei controlli semantici e prossimi passi; T052/T053 restano aperti senza i rispettivi gate. Dipende da T072.
+- [x] T073 [US1] Aggiornare `quickstart.md`, `checklists/requirements.md` e `HANDOFF.md` con esiti verificati, limiti dei controlli semantici e prossimi passi; T052/T053 restano aperti senza i rispettivi gate. Dipende da T072.
 
 ## Dependencies & Execution Order
 

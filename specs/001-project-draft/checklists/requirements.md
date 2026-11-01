@@ -57,9 +57,9 @@
 - [ ] TEC08 Casi nominali con analisi e Markdown riusciti, comprensione del tecnico ed errori separati; rubriche ed evidenze reali. **Riferimento**: Quickstart §Prove nominali/Esito; Spec SC-002/003/006/007.
 - [ ] TEC09 Auth/sessioni, egress solo interno, integrità originali e redazione/sanitizzazione con stack effettivo. **Riferimento**: Quickstart §Errori dedicati; Spec SC-004/007.
 
-- [ ] TEC10 Registro: lavoro durevole con modello offline, crash/reclaim/fencing e nessuna versione duplicata su PostgreSQL reale. **Riferimento**: Spec SC-013; Tasks T060.
-- [ ] TEC11 Selezione congelata fra retry/resume con rianalisi e promozione concorrenti; mappa elementi→evidenze persistita. **Riferimento**: Spec SC-014; Tasks T063.
-- [ ] TEC12 Rianalisi, backfill, confronto e promozione senza alterare artefatti storici. **Riferimento**: Spec SC-015; Tasks T065.
+- [x] TEC10 Registro: lavoro durevole con modello offline, crash/reclaim/fencing e nessuna versione duplicata su PostgreSQL reale. **Riferimento**: Spec SC-013; Tasks T060.
+- [x] TEC11 Selezione congelata fra retry/resume con rianalisi e promozione concorrenti; mappa elementi→evidenze persistita. **Riferimento**: Spec SC-014; Tasks T063.
+- [x] TEC12 Rianalisi, backfill, confronto e promozione senza alterare artefatti storici. **Riferimento**: Spec SC-015; Tasks T065.
 - [ ] TEC13 Estrazione reale sul DGX e N1–N5 sulla nuova pipeline con tempi per fase e copertura. **Riferimento**: Spec SC-016; Tasks T071/T072.
 
 ## Copertura F-01–F-07

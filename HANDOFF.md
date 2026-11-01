@@ -885,7 +885,8 @@ Evidenze (fuori dal repository, senza segreti): `C:\source\repos\babbubba\smoke-
 
 # Sessione 8 (Sonnet) — accettazione finale T052/T053, verificatore Colorweb, compattazione reale — 2026-10-31
 
-**Esito: T052 NON superato, T053 solo preliminare. Nessun merge.** Modello `Qwen3.6-35B-Smart`, configurazione di produzione (chat/compattazione/documento thinking OFF, analisi thinking ON, 32768 token, timeout 900 s, deadline di run 1200 s, finestra 131072). Evidenze locali (non versionate): `C:\sourceeposabbubba	052-evidence\`.
+**Esito: T052 NON superato, T053 solo preliminare. Nessun merge.** Modello `Qwen3.6-35B-Smart`, configurazione di produzione (chat/compattazione/documento thinking OFF, analisi thinking ON, 32768 token, timeout 900 s, deadline di run 1200 s, finestra 131072). Evidenze locali (non versionate): `C:\source
+eposabbubba	052-evidence\`.
 
 ## 8.1 Verificatore Colorweb (ripetizione 3)
 - I JSON originali (`smoke-qwen36/state3.json`) conservano tutte e tre le informazioni: «Integrazione obbligatoria con il gestionale ordini Colorweb» (Dependencies) e «Gli ordini devono arrivare in tempo reale al gestionale» (Requirements), entrambe con fonte = messaggio PM 3 (quello che nomina Colorweb). Non era un'ambiguità: era una formulazione distribuita.
@@ -1152,3 +1153,44 @@ uscita di estrazione più compatta, modello più veloce per la fase Extraction.
 Restano aperti: T065 (impatto delle promozioni sulle relazioni non testato), T066 (esempi negativi per ogni codice di copertura), T070,
 T073, T052/T053. Una modifica di sola formattazione (Prettier) in `frontend/src/app/projects/evidence-view.component.spec.ts` non è mia
 e non è committata.
+
+## 10.4 T065/T066/T068, latenza di Chat, T070, T073 (2026-11-01)
+
+Commit `6cf96db` (test copertura/rianalisi, UI) e `0eab4f9` (scheduling), più questo. Nessun nuovo branch/ADR, nessun merge.
+
+**T065/T066.** `EvidenceReanalysisTests` (6) e `EvidenceCoverageTests` (37 unitari + 8 su PostgreSQL), 51/51 PASS: impatto della promozione sulle
+relazioni (rimappata/stale, relazioni non riscritte), selezione/legami/revisioni/bozze storici identici dopo rianalisi e promozione,
+promozione concorrente → un solo vincitore, replay idempotente, backfill interrotto (worker morto, nuovo fence, commit obsoleto rifiutato)
+e ripreso senza duplicati, artefatti confermati dal PM non modificati. Copertura: positivo e negativo per ognuno dei 13 codici
+(più guard che fa fallire un codice nuovo senza test e verifica la tabella §10.8, che mancava di `pm_decided_alternative`), separazione
+deterministico / rischio semantico stimato / valutazione PM, e prova che un legame per ID o una corrispondenza lessicale **non** certifica
+la fedeltà semantica (falso negativo documentato; nel report non esiste un campo «verificato»). La UI non presenta più «Nessuna
+segnalazione» del gruppo semantico come conferma. Nessun difetto di produzione trovato.
+
+**Latenza (scheduling).** Analisi del codice: la chat precede già ogni estrazione a ogni claim (turno/run eleggibile ⇒ nessuna estrazione),
+il salvataggio del messaggio non attende l'estrattore (turno + lavoro nella stessa transazione), il gate di Analizza guarda solo la propria
+conversazione e il proprio cutoff e il run è chiuso da `deadline_exceeded` (180 s) se il gate resta chiuso. Non si può avere una nuova
+estrazione avviata mentre un turno è eleggibile; il turno attende solo l'estrazione già in corso (non preemptibile) e, finora, l'intervallo
+di polling (0–1 s) e le estrazioni avviate nella finestra di backoff di un retry. Modifiche: `DispatchWakeup` (segnale coalescente dagli
+endpoint di messaggio/Analizza/Genera) e nessuna estrazione se un turno o run ha un retry entro 30 s. Test: `AiSchedulingTests` (6) +
+138 test dei dispatcher esistenti, tutti PASS. **Misure** (telemetria N1, `Qwen3.6-35B-Smart`, `parallel=1`): chat inferenza 1,5–2,2 s;
+estrazione inferenza 6,0–17,8 s con completion 348–1081 token (~58 token/s: la durata è proporzionale ai token generati); la «coda» di
+8–20 s del turno successivo è il resto dell'estrazione precedente quando i messaggi arrivano a raffica. Non c'è un confronto
+prima/dopo sul DGX: i due interventi eliminano al più ~0,5 s di polling medio per turno e il caso del backoff, che sul DGX sano non si
+verifica; non è una riduzione dei 8–20 s. **Limite intrinseco**: con uno slot il lavoro totale si conserva; rinviare le estrazioni
+sposterebbe il costo su Analizza (peggiorando i 180 s), quindi non è stato fatto. Leve residue che richiedono misure di qualità: uscita
+dell'estrattore più compatta (campi null, GUID dei messaggi), modello Extraction più veloce, un secondo slot GPU. Modello e limite 180 s
+invariati; fixture N1–N5 non toccate; nessun ciclo N1–N5. Verifica DGX seriale dell'estrattore (`EvidenceExtractorMafTests`, 6/6 PASS, 62 s).
+
+**T068.** La vista aveva già elenco, filtri, fonte con span, storico, confronto, rianalisi/retry/backfill, stati e copertura. Lacune
+chiuse: l'impatto della promozione sulle relazioni ora è mostrato; il gruppo semantico vuoto non è una conferma. Vitest 210/210.
+
+**T070 (log in `t052-evidence/t070-logs/`).** Backend, una sola full suite senza DGX: 1159 test, **1120 PASS, 0 FAIL, 39 SKIP** (MafReal e
+simili, non PASS). Frontend: `ng build` OK, Vitest 210/210. Compose: `config -q` OK. Playwright su stack isolato `bprojects-t070`
+(offline, desktop+mobile, rimosso con `down -v`): prima esecuzione 226 test: **189 PASS, 1 FAIL, 36 SKIP**. Il FAIL è
+`project-persistence.spec.ts:122` (desktop): il mio `E2E_RESTART_COMMAND` era `restart app` senza attesa, diverso da quello documentato
+(`down` + `up -d --wait`); il FAIL resta tale per quella esecuzione. Rerun mirato della sola spec con il comando documentato: 13 PASS,
+1 SKIP (mobile, per progetto). Il percorso con modello reale della vista Evidenze (T069) non è stato eseguito: T069 resta aperto.
+
+**Stato.** Chiusi: T065, T066, T068, T070, T073. Aperti: T069 (parte con modello reale), T052, T053. I FAIL N2/N4/N5 restano problemi
+distinti (T072). Il container `bprojects-close-pg18` (PostgreSQL di prova) è preesistente e lasciato attivo.

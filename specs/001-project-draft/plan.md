@@ -468,6 +468,19 @@ un'estrazione già in corso occupa il modello per la sua durata (una chiamata, s
 visibile (`GET .../evidence/status`, batch con conteggi per stato) e limitata dalle deadline dei lavori (`Execution:ExtractionDeadlineSeconds`,
 default 3600 s); nessun lavoro si rigenera da solo dopo Failed.
 
+**Latenza di Chat con lo slot unico (misurata, 2026-11-01).** Un solo slot GPU e nessuna preemption: una chiamata in corso non si
+interrompe e nessun lavoro avviato viene cancellato per simulare una priorità. Interventi applicati, tutti sul claim e sull'attesa del
+dispatcher: (1) il dispatcher non attende più l'intero intervallo di polling quando un endpoint accoda un turno o un run
+(`DispatchWakeup`, segnale in-process coalescente; il polling di 1 s resta come rete di sicurezza e per altre istanze); (2) un'estrazione
+non è presa in carico se un turno o un run ha un retry (backoff) entro 30 s, così il retry non trova il modello occupato da un lavoro
+avviato nella finestra di attesa. Invariati: chat/run prima delle estrazioni a ogni claim, FIFO per conversazione, lease/fencing/deadline.
+Non applicato di proposito: rinviare le estrazioni «mentre la conversazione è calda». Con uno slot il lavoro totale si conserva, quindi lo
+rinvio sposterebbe il costo dalla chat ad Analizza (che attenderebbe tutte le estrazioni accumulate invece dell'ultima) e peggiorerebbe
+il margine dei 180 s. La coda di 8–20 s osservata in N1–N5 è il resto dell'estrazione del messaggio precedente (10–18 s, 348–1081 token di
+completion a ~58 token/s: decode-bound) quando i messaggi si inviano a raffica; un PM che legge la risposta prima di scrivere la assorbe.
+Leve residue non applicate perché richiedono una misura di qualità: uscita dell'estrattore più compatta, modello più veloce per la fase
+Extraction, uno slot GPU in più.
+
 **Gate di Analizza.** Un run di Analysis è eleggibile al claim solo quando nessun lavoro di estrazione aperto riguarda messaggi PM entro
 il suo cutoff (dunque le estrazioni necessarie passano prima, con priorità). Al primo claim il workflow congela la selezione
 (`AnalysisEvidenceSelection`: per ogni messaggio PM ≤ cutoff la versione corrente in quel momento) e la vista; retry e resume rileggono

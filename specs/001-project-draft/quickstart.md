@@ -260,6 +260,12 @@ Prerequisiti come sopra; variabili opzionali della fase di estrazione in `infra/
    la stessa chiave restituisce lo stesso batch; interrompere e riavviare non crea duplicati.
 6. **Copertura**: «Verifica copertura» su analisi, revisione confermata e bozza produce un report con errori deterministici, rischi
    stimati e valutazioni PM separati; i rischi stimati sono euristiche, non giudizi certi.
+   «Nessun rischio rilevato» non significa significato conservato: nessun modello valuta la semantica e la verifica resta del PM.
+7. **Promozione e relazioni**: promuovere una versione candidata mostra quante relazioni di altri messaggi sono state rimappate e
+   quante non sono più risolvibili; le relazioni e le analisi già prodotte non vengono riscritte.
+8. **Latenza**: con lo slot unico la risposta di chat attende al più l'estrazione già in corso; l'estrazione non occupa il modello
+   quando un turno o run ha un retry imminente. I tempi di coda e di inferenza si ricavano da `ChatTurns.RequestedAt/StartedAt` e da
+   `InferenceCalls.DurationMs`.
 
 Test: `dotnet test --solution bProjects.sln --filter-class "*Evidence*"` (deterministici e, con `BPROJECTS_TEST_POSTGRES`, su
 PostgreSQL); `--filter-trait "Category=MafReal"` per l'estrattore reale e i nominali N1–N5. Esiti registrati in T070–T073 e in `HANDOFF.md`.
