@@ -533,6 +533,62 @@ describe('ProjectDocumentsComponent', () => {
     expect(el.querySelector(`#${toggle.getAttribute('aria-controls')}`)).not.toBeNull();
   });
 
+  it('opens the prepared content of a not-ready version without presenting it as ready (T030)', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ processingStatus: 'Extracting' })]));
+    await settle();
+
+    q('docs-read')!.click();
+    await settle();
+    const prefix = `${BASE}/documents/d-1/versions/1/preparations/latest`;
+    http.expectOne(prefix).flush({
+      id: 'g-1',
+      documentVersionId: 'v-1',
+      documentId: 'd-1',
+      version: 1,
+      generation: 1,
+      processingStatus: 'Extracting',
+      isReady: false,
+      contentState: 'Parsed',
+      blockCount: 1,
+      retryOfId: null,
+      requestedAt: '2030-01-01T10:00:00Z',
+      issuesSummary: null,
+      issues: [],
+      allowedActions: ['download'],
+    });
+    await settle();
+    http.expectOne((r) => r.url === `${prefix}/blocks`).flush({
+      preparationId: 'g-1',
+      processingStatus: 'Extracting',
+      isReady: false,
+      items: [
+        {
+          id: 'b-0', ref: 'r0', ordinal: 0, parentId: null, type: 'Paragraph', text: 'Testo letto',
+          headingPath: [], page: 1, bbox: null, lines: null, tableCells: null,
+        },
+      ],
+      nextCursor: null,
+    });
+    await settle();
+
+    expect(q('docs-read')!.getAttribute('aria-expanded')).toBe('true');
+    expect(q('passage-block')!.textContent).toContain('Testo letto');
+    expect(q('passage-status')!.textContent).not.toContain('Pronto');
+    expect(q('passage-notready')).not.toBeNull();
+  });
+
+  it('offers no content reader for a version that was never prepared', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ processingStatus: 'NotPrepared' })]));
+    await settle();
+    expect(q('docs-read')).toBeNull();
+  });
+
   function component() {
     return fixture.componentInstance as unknown as { selectionRevision(): number | null };
   }

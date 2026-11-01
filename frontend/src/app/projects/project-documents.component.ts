@@ -1,5 +1,6 @@
 import { Component, ElementRef, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DocumentPassageComponent } from './document-passage.component';
 import { Observable } from 'rxjs';
 import {
   DocumentDetailView,
@@ -58,7 +59,7 @@ interface PendingUpload {
  */
 @Component({
   selector: 'app-project-documents',
-  imports: [FormsModule],
+  imports: [FormsModule, DocumentPassageComponent],
   templateUrl: './project-documents.component.html',
   styleUrl: './project-documents.component.scss',
 })
@@ -77,6 +78,9 @@ export class ProjectDocumentsComponent {
   protected readonly expanded = signal<string | null>(null);
   protected readonly detail = signal<DocumentDetailView | null>(null);
   protected readonly detailError = signal('');
+
+  /** Versione di cui si sta leggendo il contenuto preparato (T030); una sola alla volta. */
+  protected readonly reading = signal<string | null>(null);
 
   /** Destinazione dell'upload in corso: 'new' oppure l'id del documento che riceve una nuova versione. */
   protected readonly uploading = signal<string | null>(null);
@@ -98,6 +102,7 @@ export class ProjectDocumentsComponent {
       const id = this.projectId();
       untracked(() => {
         this.expanded.set(null);
+        this.reading.set(null);
         this.detail.set(null);
         this.pending.clear();
         void this.reload(id);
@@ -219,6 +224,14 @@ export class ProjectDocumentsComponent {
       this.selection.set(null);
       this.loadError.set(documentFailure(e).message);
     }
+  }
+
+  protected toggleReading(version: DocumentVersionView): void {
+    this.reading.set(this.reading() === version.id ? null : version.id);
+  }
+
+  protected readingPreparation(version: DocumentVersionView): string {
+    return version.currentPreparationId ?? 'latest';
   }
 
   protected async toggleVersions(documentId: string): Promise<void> {

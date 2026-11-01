@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using bProjects.App.Persistence;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.WebUtilities;
@@ -32,6 +34,9 @@ public static class ProjectDocumentEndpoints
         group.MapGet("/documents/{documentId:guid}", GetDocument);
         group.MapGet("/documents/{documentId:guid}/versions/{version}", GetVersion);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/download", Download);
+        group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}", GetPreparation);
+        group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/blocks", ListBlocks);
+        group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/passages/{blockId:guid}", GetPassage);
         return app;
     }
 
@@ -326,9 +331,166 @@ public static class ProjectDocumentEndpoints
         }
     }
 
+    // ================================================================ preparazione, blocchi, passaggi (T030)
+
+    private const int DefaultBlockLimit = 50;
+    private const int MaxBlockLimit = 100;
+
+    private static async Task<IResult> GetPreparation(
+        Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var found = await FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        var (v, p) = found.Value;
+        var artifact = await db.ParsedArtifacts.AsNoTracking().Where(a => a.PreparationId == p.Id).Select(a => new { a.BlockCount }).SingleOrDefaultAsync(ct);
+        var issues = await db.PreparationIssues.AsNoTracking().Where(i => i.PreparationId == p.Id).OrderBy(i => i.Code).ThenBy(i => i.Id).ToListAsync(ct);
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new PreparationView(
+            p.Id, v.Id, v.DocumentId, v.Version, p.Generation, p.Status.ToString(), p.Status == PreparationStatus.Ready,
+            // «Parsed»: il parsing è pubblicato e leggibile, ma finché lo stato non è Ready la fonte non è utilizzabile.
+            artifact is null ? "NotParsed" : p.Status == PreparationStatus.Ready ? "Ready" : "Parsed",
+            artifact?.BlockCount, p.RetryOfId, p.RequestedAt,
+            p.ErrorCode is { } code ? new IssuesSummary(code, IssuesSummary.FixedMessage) : null,
+            issues.Select(i => new PreparationIssueView(i.Code, i.Severity.ToString(), i.Page, i.BlockId, i.Reason, i.AffectsCompleteness)).ToList(),
+            ["download"]));
+    }
+
+    private static async Task<IResult> ListBlocks(
+        Guid projectId, Guid documentId, string version, string generation, string? cursor, int? limit, DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var size = limit ?? DefaultBlockLimit;
+        if (size is < 1 or > MaxBlockLimit)
+        {
+            return Problem(StatusCodes.Status400BadRequest, "invalid_limit", $"limit deve essere compreso tra 1 e {MaxBlockLimit}");
+        }
+
+        var after = -1;
+        if (cursor is not null && (!int.TryParse(cursor, NumberStyles.None, CultureInfo.InvariantCulture, out after) || after < 0))
+        {
+            return Problem(StatusCodes.Status400BadRequest, "invalid_cursor", "Cursore non valido");
+        }
+
+        var found = await FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        var (_, p) = found.Value;
+        var artifactId = await db.ParsedArtifacts.AsNoTracking().Where(a => a.PreparationId == p.Id).Select(a => (Guid?)a.Id).SingleOrDefaultAsync(ct);
+        if (artifactId is null)
+        {
+            return Problem(StatusCodes.Status409Conflict, "parsing_not_completed", "Il contenuto del documento non è ancora disponibile");
+        }
+
+        var rows = await db.DocumentBlocks.AsNoTracking().Where(b => b.ArtifactId == artifactId && b.Ordinal > after)
+            .OrderBy(b => b.Ordinal).Take(size + 1).ToListAsync(ct);
+        var more = rows.Count > size;
+        var page = rows.Take(size).ToList();
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new BlockPage(
+            p.Id, p.Status.ToString(), p.Status == PreparationStatus.Ready, page.Select(BlockOf).ToList(),
+            more ? page[^1].Ordinal.ToString(CultureInfo.InvariantCulture) : null));
+    }
+
+    private static async Task<IResult> GetPassage(
+        Guid projectId, Guid documentId, string version, string generation, Guid blockId, int? start, int? end,
+        DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var found = await FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        var (v, p) = found.Value;
+        var block = await db.DocumentBlocks.AsNoTracking()
+            .Where(b => b.Id == blockId && b.ProjectId == projectId && db.ParsedArtifacts.Any(a => a.Id == b.ArtifactId && a.PreparationId == p.Id))
+            .SingleOrDefaultAsync(ct);
+        if (block is null)
+        {
+            return Results.NotFound();
+        }
+
+        QuoteRange? quote = null;
+        var text = block.CanonicalText;
+        if (start is not null || end is not null)
+        {
+            // Range [start,end) UTF-16 sul testo canonico: entrambi i limiti, non vuoto, dentro il blocco, mai in mezzo a una coppia surrogata.
+            if (start is not { } s || end is not { } e || s < 0 || e <= s || e > text.Length
+                || (s > 0 && char.IsLowSurrogate(text[s]) && char.IsHighSurrogate(text[s - 1]))
+                || (e < text.Length && char.IsLowSurrogate(text[e]) && char.IsHighSurrogate(text[e - 1])))
+            {
+                return Problem(StatusCodes.Status422UnprocessableEntity, "invalid_range", "Intervallo non valido per il blocco");
+            }
+
+            quote = new QuoteRange(s, e, text[..s], text[s..e], text[e..]);
+        }
+
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new PassageView(
+            BlockOf(block), p.Id, p.Status.ToString(), p.Status == PreparationStatus.Ready, quote,
+            new OriginalLink(v.OriginalName, $"/api/projects/{projectId}/documents/{documentId}/versions/{v.Version}/download")));
+    }
+
+    private static async Task<(DocumentVersion Version, DocumentPreparation Preparation)?> FindPreparationAsync(
+        Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, CancellationToken ct)
+    {
+        var v = await catalog.FindVersionAsync(projectId, documentId, version, ct);
+        if (v is null)
+        {
+            return null;
+        }
+
+        // Generazione numerica, id della preparazione oppure «latest» (la più recente, anche non pronta).
+        var query = db.DocumentPreparations.AsNoTracking().Where(x => x.ProjectId == projectId && x.DocumentVersionId == v.Id);
+        var p = generation == "latest" ? await query.OrderByDescending(x => x.Generation).FirstOrDefaultAsync(ct)
+            : int.TryParse(generation, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? await query.SingleOrDefaultAsync(x => x.Generation == number, ct)
+            : Guid.TryParse(generation, out var id) ? await query.SingleOrDefaultAsync(x => x.Id == id, ct) : null;
+        return p is null ? null : (v, p);
+    }
+
+    private static BlockView BlockOf(DocumentBlock b) => new(
+        b.Id, b.Ref, b.Ordinal, b.ParentId, b.Type.ToString(), b.CanonicalText,
+        JsonSerializer.Deserialize<string[]>(b.HeadingPathJson) ?? [],
+        b.Page,
+        b.BboxJson is null ? null : new BboxView(JsonSerializer.Deserialize<double[]>(b.BboxJson)!, b.CoordinateSystem),
+        b.LineStart is { } ls && b.LineEnd is { } le ? new LineRange(ls, le) : null,
+        b.TableCellsJson is null ? null : JsonSerializer.Deserialize<JsonElement>(b.TableCellsJson));
+
     private static IResult IdempotencyConflict() => Problem(
         StatusCodes.Status409Conflict, "idempotency_conflict", "La chiave di idempotenza è già stata usata con un contenuto diverso");
 
     private static IResult Problem(int status, string code, string title) =>
         Results.Problem(statusCode: status, title: title, extensions: new Dictionary<string, object?> { ["code"] = code });
 }
+
+// ---- viste (T030): solo testo e metadati; mai HTML, chiavi di storage o prompt ---------------------------------------------------------
+
+public sealed record PreparationIssueView(string Code, string Severity, int? Page, Guid? BlockId, string Reason, bool AffectsCompleteness);
+
+/// <summary><c>ProcessingStatus</c> è lo stato reale; <c>IsReady</c> è vero solo per Ready. <c>ContentState</c>: NotParsed, Parsed (blocchi leggibili ma non pronto) o Ready.</summary>
+public sealed record PreparationView(
+    Guid Id, Guid DocumentVersionId, Guid DocumentId, int Version, int Generation, string ProcessingStatus, bool IsReady, string ContentState,
+    int? BlockCount, Guid? RetryOfId, DateTimeOffset RequestedAt, IssuesSummary? IssuesSummary,
+    IReadOnlyList<PreparationIssueView> Issues, IReadOnlyList<string> AllowedActions);
+
+public sealed record BboxView(double[] Values, string? CoordinateSystem);
+
+public sealed record LineRange(int Start, int End);
+
+public sealed record BlockView(
+    Guid Id, string Ref, int Ordinal, Guid? ParentId, string Type, string Text, string[] HeadingPath, int? Page,
+    BboxView? Bbox, LineRange? Lines, JsonElement? TableCells);
+
+public sealed record BlockPage(Guid PreparationId, string ProcessingStatus, bool IsReady, IReadOnlyList<BlockView> Items, string? NextCursor);
+
+public sealed record QuoteRange(int Start, int End, string Before, string Text, string After);
+
+public sealed record OriginalLink(string OriginalName, string DownloadUrl);
+
+public sealed record PassageView(BlockView Block, Guid PreparationId, string ProcessingStatus, bool IsReady, QuoteRange? Quote, OriginalLink Original);

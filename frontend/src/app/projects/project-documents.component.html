@@ -193,6 +193,18 @@
                       >
                         Scarica originale
                       </button>
+                      @if (v.processingStatus !== 'NotPrepared') {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          data-testid="docs-read"
+                          [attr.aria-expanded]="reading() === v.id"
+                          [attr.aria-controls]="'read-' + v.id"
+                          (click)="toggleReading(v)"
+                        >
+                          {{ reading() === v.id ? 'Nascondi contenuto' : 'Leggi contenuto' }}
+                        </button>
+                      }
                       <button
                         type="button"
                         class="btn btn-sm btn-outline-secondary"
@@ -207,6 +219,17 @@
                         <span class="small text-secondary" [id]="'pin-note-' + v.id" data-testid="docs-pin-note">
                           Non ancora pronta: puoi fissarla, ma non sarà utilizzabile in Analizza finché non è pronta.
                         </span>
+                      }
+                      @if (reading() === v.id) {
+                        <div class="docs-read w-100" [id]="'read-' + v.id">
+                          <app-document-passage
+                            [projectId]="projectId()"
+                            [documentId]="doc.documentId"
+                            [version]="v.version"
+                            [preparation]="readingPreparation(v)"
+                            (downloadRequested)="download(doc.documentId, v)"
+                          />
+                        </div>
                       }
                     </li>
                   }

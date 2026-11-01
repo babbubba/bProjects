@@ -160,6 +160,66 @@ export interface DocumentFailure {
   retrySameKey: boolean;
 }
 
+// ---- Contenuto preparato (T030): testo strutturato, mai HTML ------------------------------------------------------------------------
+
+export interface PreparationIssueView {
+  code: string;
+  severity: string;
+  page: number | null;
+  blockId: string | null;
+  reason: string;
+  affectsCompleteness: boolean;
+}
+
+/** `processingStatus` è lo stato reale; `isReady` è vero solo per Ready (Parsing/Extracting non lo sono mai). */
+export interface PreparationView {
+  id: string;
+  documentVersionId: string;
+  documentId: string;
+  version: number;
+  generation: number;
+  processingStatus: PreparationState;
+  isReady: boolean;
+  contentState: 'NotParsed' | 'Parsed' | 'Ready';
+  blockCount: number | null;
+  retryOfId: string | null;
+  requestedAt: string;
+  issuesSummary: IssuesSummary | null;
+  issues: PreparationIssueView[];
+  allowedActions: string[];
+}
+
+export interface BlockView {
+  id: string;
+  ref: string;
+  ordinal: number;
+  parentId: string | null;
+  type: string;
+  text: string;
+  headingPath: string[];
+  page: number | null;
+  bbox: { values: number[]; coordinateSystem: string | null } | null;
+  lines: { start: number; end: number } | null;
+  tableCells: unknown;
+}
+
+export interface BlockPage {
+  preparationId: string;
+  processingStatus: PreparationState;
+  isReady: boolean;
+  items: BlockView[];
+  nextCursor: string | null;
+}
+
+export interface PassageView {
+  block: BlockView;
+  preparationId: string;
+  processingStatus: PreparationState;
+  isReady: boolean;
+  quote: { start: number; end: number; before: string; text: string; after: string } | null;
+  original: { originalName: string; downloadUrl: string };
+}
+
 const enc = encodeURIComponent;
 
 /** UUID v4 per Idempotency-Key. Una chiave per ogni azione dell'utente; si riusa solo per ripetere lo stesso upload. */
@@ -392,6 +452,66 @@ export class DocumentsApiService {
           return { kind: 'done', version: response.body!, replayed: response.status === 200 };
         }),
       );
+  }
+
+  /** `preparation`: generazione, id della preparazione o `latest`. Sola lettura: non avvia lavori. */
+  getPreparation(
+    projectId: string,
+    documentId: string,
+    version: number | string,
+    preparation: number | string,
+  ): Promise<PreparationView> {
+    return firstValueFrom(
+      this.http.get<PreparationView>(
+        this.preparationUrl(projectId, documentId, version, preparation),
+      ),
+    );
+  }
+
+  listBlocks(
+    projectId: string,
+    documentId: string,
+    version: number | string,
+    preparation: number | string,
+    cursor: string | null = null,
+    limit?: number,
+  ): Promise<BlockPage> {
+    let params = new HttpParams();
+    if (cursor) params = params.set('cursor', cursor);
+    if (limit) params = params.set('limit', limit);
+    return firstValueFrom(
+      this.http.get<BlockPage>(
+        `${this.preparationUrl(projectId, documentId, version, preparation)}/blocks`,
+        { params },
+      ),
+    );
+  }
+
+  getPassage(
+    projectId: string,
+    documentId: string,
+    version: number | string,
+    preparation: number | string,
+    blockId: string,
+    range: { start: number; end: number } | null = null,
+  ): Promise<PassageView> {
+    let params = new HttpParams();
+    if (range) params = params.set('start', range.start).set('end', range.end);
+    return firstValueFrom(
+      this.http.get<PassageView>(
+        `${this.preparationUrl(projectId, documentId, version, preparation)}/passages/${enc(blockId)}`,
+        { params },
+      ),
+    );
+  }
+
+  private preparationUrl(
+    projectId: string,
+    documentId: string,
+    version: number | string,
+    preparation: number | string,
+  ): string {
+    return `${this.base(projectId)}/documents/${enc(documentId)}/versions/${enc(String(version))}/preparations/${enc(String(preparation))}`;
   }
 
   /** Scarica i byte originali verificati; il nome arriva da Content-Disposition. */
