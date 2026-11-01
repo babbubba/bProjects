@@ -391,6 +391,10 @@ public sealed class AnalysisWorkflowTests : IAsyncLifetime
                 VALUES ('{world.U2.Id}','{conversation}', 3, 'User', 'Gli agenti del supporto, da browser desktop.', now(), '{Guid.NewGuid()}', '{user}');
             INSERT INTO "ConversationMessages" ("Id","ConversationId","Sequence","Role","Body","CreatedAt","ClientMessageId","AuthorId")
                 VALUES ('{world.BeyondCutoff.Id}','{conversation}', 9, 'User', 'Messaggio successivo al cutoff.', now(), '{Guid.NewGuid()}', '{user}');
+            """);
+        // Le evidenze dei messaggi PM si estraggono prima che il run prenda il lease (stesso ordine del gate del dispatcher).
+        await EvidenceTestSeed.CompleteAsync(_database.ConnectionString, Ct);
+        await ExecuteAsync($"""
             INSERT INTO "ProcessingRuns" ("Id","ProjectId","Kind","ConversationId","SourceCutoffSequence","RequestKey","RequestedBy","RequestedAt","Status","StartedAt","DeadlineAt",
                 "WorkflowDefinitionVersion","MafVersion","AttemptCount","MaxAttempts","LeaseOwner","LeaseUntil","FencingToken","UpdatedAt")
             VALUES ('{world.AnalysisId}','{world.ProjectId}','Analysis','{conversation}',5,'{Guid.NewGuid()}','{user}',now(),'Running',now(),now() + interval '3 minutes',
@@ -432,7 +436,10 @@ public sealed class AnalysisWorkflowTests : IAsyncLifetime
     {
         public Task<AnalysisRunInput> LoadInputAsync(Guid runId, CancellationToken ct) => inner.LoadInputAsync(runId, ct);
 
-        public Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct)
+        public Task<bProjects.App.Evidence.SelectionResult> FreezeEvidenceAsync(AnalysisRunClaim claim, CancellationToken ct) => inner.FreezeEvidenceAsync(claim, ct);
+
+        public Task<AnalysisCommitResult> CommitAsync(
+            AnalysisRunClaim claim, AnalysisContent content, IReadOnlyDictionary<Guid, IReadOnlyList<string>> evidenceKeys, CancellationToken ct)
         {
             if (flaky.FailNextCommit)
             {
@@ -440,7 +447,7 @@ public sealed class AnalysisWorkflowTests : IAsyncLifetime
                 throw new IOException("guasto iniettato prima del commit");
             }
 
-            return inner.CommitAsync(claim, content, ct);
+            return inner.CommitAsync(claim, content, evidenceKeys, ct);
         }
 
         public Task<bool> FailAsync(AnalysisRunClaim claim, string errorCode, string errorMessage, CancellationToken ct) => inner.FailAsync(claim, errorCode, errorMessage, ct);
@@ -534,7 +541,7 @@ public sealed class AnalysisWorkflowRealTests : IAsyncLifetime
         TestEnvironment.RequirePostgres();
         var options = TestEnvironment.RequireDgxOptions();
         options.StructuredOutputMode = mode;
-        using var model = new InternalModelClient(options);
+        using var model = new InternalModelClient(options, MafDiagnostics.Wrap());
 
         var services = new ServiceCollection();
         services.AddDbContext<AppDbContext>(o => o.UseNpgsql(_database.ConnectionString));
@@ -577,12 +584,16 @@ public sealed class AnalysisWorkflowRealTests : IAsyncLifetime
                 SELECT '{Guid.NewGuid()}','{conversation}', 1, 'User',
                   'Vogliamo un portale web dove i clienti aprono ticket di assistenza e ne vedono lo stato. Non è chiaro se serva integrare il gestionale. Il go-live è previsto per giugno.',
                   now(), '{Guid.NewGuid()}', u."Id" FROM "AspNetUsers" u LIMIT 1;
+            """, connection);
+        await command.ExecuteNonQueryAsync(Ct);
+        await EvidenceTestSeed.CompleteAsync(_database.ConnectionString, Ct);
+        await using var runCommand = new NpgsqlCommand($"""
             INSERT INTO "ProcessingRuns" ("Id","ProjectId","Kind","ConversationId","SourceCutoffSequence","RequestKey","RequestedBy","RequestedAt","Status","StartedAt","DeadlineAt",
                 "WorkflowDefinitionVersion","MafVersion","AttemptCount","MaxAttempts","LeaseOwner","LeaseUntil","FencingToken","UpdatedAt")
             SELECT '{run}','{project}','Analysis','{conversation}',1,'{Guid.NewGuid()}',u."Id",now(),'Running',now(),now() + interval '3 minutes',
-                'project-analysis-v2','1.26.0',1,3,'real-worker', now() + interval '10 minutes', 1, now() FROM "AspNetUsers" u LIMIT 1;
+                '{ProcessingRun.AnalysisWorkflowVersion}','1.26.0',1,3,'real-worker', now() + interval '10 minutes', 1, now() FROM "AspNetUsers" u LIMIT 1;
             """, connection);
-        await command.ExecuteNonQueryAsync(Ct);
+        await runCommand.ExecuteNonQueryAsync(Ct);
         return new AnalysisRunClaim(run, "real-worker", 1);
     }
 }

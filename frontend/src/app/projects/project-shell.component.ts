@@ -7,6 +7,7 @@ import { AnalysisPreviewComponent } from './analysis-preview.component';
 import { CurrentRevision, DocumentViewComponent } from './document-view.component';
 import { ChatComponent } from './chat.component';
 import { ContextUsagePanelComponent } from './context-usage-panel.component';
+import { EvidenceViewComponent } from './evidence-view.component';
 import { ProjectApiService, ProjectView } from './project-api.service';
 
 const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
@@ -19,6 +20,7 @@ const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeS
     ChatComponent,
     ContextUsagePanelComponent,
     DocumentViewComponent,
+    EvidenceViewComponent,
     FormsModule,
     RouterLink,
   ],
@@ -41,6 +43,8 @@ export class ProjectShellComponent {
   protected readonly selected = signal<ProjectView | null>(null);
   protected readonly current = signal<CurrentRevision | null>(null);
   protected readonly detailError = signal('');
+  /** Sezione del progetto: lavoro (chat, anteprima, documento) oppure registro delle evidenze. */
+  protected readonly section = signal<'work' | 'evidence'>('work');
 
   protected readonly sidebarOpen = signal(false);
   protected readonly formOpen = signal(false);
@@ -122,6 +126,7 @@ export class ProjectShellComponent {
   private async open(id: string | undefined): Promise<void> {
     this.detailError.set('');
     this.sidebarOpen.set(false);
+    this.section.set('work');
     if (!id) {
       this.selected.set(null);
       return;

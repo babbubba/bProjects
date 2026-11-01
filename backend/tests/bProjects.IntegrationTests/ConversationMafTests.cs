@@ -120,7 +120,7 @@ public sealed class ConversationMafTests : IAsyncLifetime
     private Task<ApiHarness> StartHostedAsync(AiOptions options) =>
         ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
         {
-            var model = new InternalModelClient(options);
+            var model = new InternalModelClient(options, MafDiagnostics.Wrap());
             services.AddSingleton(new ConversationalAgent(AgentFactory.Create(options, model), model.CreateChatOptions(temperature: 0.2f)));
             services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
         });

@@ -43,7 +43,7 @@ Rispondere **Sì / No / Con riserve** e motivare ogni No o riserva (cosa, dove).
 
 | # | Domanda | Sì/No/Riserve | Note |
 | --- | --- | --- | --- |
-| C1 | Le risposte della chat erano pertinenti, con al massimo una domanda per turno e nessuna domanda già risolta ripetuta? | | |
+| C1 | Le risposte della chat erano pertinenti, con al massimo una domanda per turno e nessuna domanda ripetuta (anche se già posta e rimasta senza risposta)? | | |
 | C2 | L'anteprima contiene tutto ciò che avevo scritto (requisiti, vincoli, decisioni, flussi)? Omissioni: | | |
 | C3 | Negazioni ed esclusioni sono riportate come tali, nessuna invertita? | | |
 | C4 | Le vere lacune sono punti aperti e ciò che sapevo non è stato ridotto a punto aperto? | | |

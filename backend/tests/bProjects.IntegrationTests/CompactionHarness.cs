@@ -13,7 +13,7 @@ namespace bProjects.IntegrationTests;
 
 /// <summary>Una richiesta di completamento arrivata al server del modello, come l'ha vista la rete (nessun contenuto nei log).</summary>
 internal sealed record ModelCall(
-    bool Summarizer, IReadOnlyList<(string Role, string Text)> Messages, int? PromptTokens, int Status, bool Stream, bool Structured)
+    bool Summarizer, IReadOnlyList<(string Role, string Text)> Messages, int? PromptTokens, int Status, bool Stream, bool Structured, bool? Thinking = null)
 {
     public IEnumerable<string> Texts => Messages.Select(m => m.Text);
 }
@@ -64,7 +64,8 @@ internal sealed class ModelRecorder(HttpMessageHandler inner, bool requestUsage)
             usage.Count > 0 ? int.Parse(usage[^1].Groups[1].Value) : null,
             (int)response.StatusCode,
             stream,
-            root["response_format"] is not null));
+            root["response_format"] is not null,
+            root["chat_template_kwargs"]?["enable_thinking"]?.GetValue<bool>()));
         return response;
     }
 }
@@ -85,6 +86,12 @@ internal sealed class FakeModelServer : HttpMessageHandler
 
     /// <summary>Risposta fissa dei turni chat (storico di preparazione); null = risposta che riporta i fatti se il contesto li contiene.</summary>
     public string? ChatReply { get; set; }
+
+    /// <summary>Risposta delle richieste con output strutturato (consolidamento); null = <see cref="WorkflowRecoveryTests.AnalysisReply"/>.</summary>
+    public Func<string, string>? StructuredReply { get; set; }
+
+    /// <summary>Richieste strutturate da rifiutare con 503 prima di rispondere (errore transitorio del runtime).</summary>
+    public int FailStructured { get; set; }
 
     public static int Tokens(string text) => (text.Length + 3) / 4;
 
@@ -119,11 +126,17 @@ internal sealed class FakeModelServer : HttpMessageHandler
             };
         }
 
+        if (body["response_format"] is not null && FailStructured > 0)
+        {
+            FailStructured--;
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        }
+
         var user = string.Join("\n", messages.Where(m => m.Role is not ("system" or "developer")).Select(m => m.Text));
         var summarizer = messages.Any(m => m.Role == "system" && m.Text.StartsWith(AgentFactory.SummarizationPrompt, StringComparison.Ordinal));
         var reply =
             summarizer ? SummaryOverride ?? Summary(user)
-            : body["response_format"] is not null ? WorkflowRecoveryTests.AnalysisReply(user)
+            : body["response_format"] is not null ? (StructuredReply ?? WorkflowRecoveryTests.AnalysisReply)(user)
             : ChatReply ?? (Regex.IsMatch(user, "SMS") ? "Esclusi dal primo rilascio: SMS e fatturazione. Il portale si chiama Aurora." : "Risposta.");
 
         return body["stream"]?.GetValue<bool>() == true ? Stream(reply, prompt) : Json(Completion(reply, prompt));
@@ -239,7 +252,8 @@ internal sealed class CompactionHost : IAsyncDisposable
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     public static async Task<CompactionHost> StartAsync(
-        string connectionString, AiOptions options, HttpMessageHandler server, bool chat, bool analysis, bool prepare, bool requestUsage = false)
+        string connectionString, AiOptions options, HttpMessageHandler server, bool chat, bool analysis, bool prepare, bool requestUsage = false,
+        Action<IServiceCollection>? configure = null)
     {
         var recorder = new ModelRecorder(server, requestUsage);
         var model = new InternalModelClient(options, recorder);
@@ -255,8 +269,16 @@ internal sealed class CompactionHost : IAsyncDisposable
             if (analysis)
             {
                 services.AddSingleton(sp => new AnalysisWorkflow(
-                    sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
+                    sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis)));
             }
+
+            // Come compose: il consolidamento con ragionamento ha una deadline di run propria (senza override resta 180 s come prima).
+            if (options.Phases.Analysis.RequestTimeoutSeconds is not null)
+            {
+                services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
+            }
+
+            configure?.Invoke(services);
         });
         return new CompactionHost(app, model, recorder, options);
     }

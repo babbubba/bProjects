@@ -158,7 +158,7 @@ public sealed class AnalysisDispatchTests : IAsyncLifetime
         Assert.DoesNotContain("test-key", config);
         Assert.DoesNotContain("127.0.0.1", config);
         Assert.Contains(ConversationalAgent.ConsolidationPromptVersion, await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", id)));
-        Assert.Equal("project-analysis-v2", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", id)));
+        Assert.Equal("project-analysis-v3", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", id)));
     }
 
     // ---------------------------------------------------------------- fallimento non nasconde l'ultima analisi
@@ -579,11 +579,13 @@ public sealed class AnalysisDispatchTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
-    private static Task<HttpResponseMessage> Analyze(HttpClient client, Guid project, Guid key)
+    /// <summary>Analizza dopo aver completato le estrazioni accodate (esecutore deterministico, percorso reale del registro).</summary>
+    private async Task<HttpResponseMessage> Analyze(HttpClient client, Guid project, Guid key)
     {
+        await EvidenceTestSeed.CompleteAsync(App.Services, Ct);
         var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
         request.Headers.Add("Idempotency-Key", key.ToString());
-        return client.SendAsync(request, Ct);
+        return await client.SendAsync(request, Ct);
     }
 
     private static async Task<JsonElement> Json(HttpResponseMessage response) =>

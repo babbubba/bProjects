@@ -2,7 +2,7 @@
 
 **Purpose**: Qualità/coerenza documentale prima dei task e verifiche tecniche della futura implementazione.
 **Created**: 2026-10-27
-**Updated**: 2026-10-28
+**Updated**: 2026-10-31 (registro atomico delle evidenze)
 **Feature**: [spec.md](../spec.md)
 **Baseline**: decisioni approvate F-01–F-07 e nuovo flusso con anteprima/conferma.
 
@@ -41,6 +41,10 @@
 - [x] DOC23 Anteprima modificabile, conferma esplicita corrente e conflitti aperti ammessi hanno concorrenza e provenienza definite. **Evidenza**: Spec FR-012/021/025; HTTP §Modifica; Data §AnalysisRevision.
 - [x] DOC24 Generazione separata usa una revisione confermata immutabile; edit successivi richiedono nuova conferma e non retargettano run avviati. **Evidenza**: Spec FR-022/023; HTTP §Generazione; AI §5.
 
+- [x] DOC25 Registro atomico delle evidenze: requisiti, scenari e criteri FR-029–FR-038/SC-013–SC-016 coerenti con mandato, piano, modello dati e contratti; T001–T051 invariati, T052/T053 aperti. **Evidenza**: Spec §Estensione 2026-10-31; Plan §Registro; Data §Registro; AI §10; HTTP §Registro; Tasks Phase 5.
+- [x] DOC26 Estrazione successiva e durevole, priorità rispetto alla chat, gate di Analizza, selezione congelata ed errori espliciti (`evidence_unavailable`) definiti senza un secondo motore di orchestrazione. **Evidenza**: Plan §Registro; AI §10.1/10.6.
+- [x] DOC27 Copertura: categorie deterministico/stimato/PM, codici e limiti dichiarati; nessuna regola specifica N1–N5 né modifica delle attese. **Evidenza**: AI §10.8; Spec FR-036/SC-016.
+
 ## Verifiche tecniche da eseguire durante l'implementazione
 
 - [ ] TEC01 Compilazione e round-trip con i package MAF 1.26.0 effettivi e le primitive C# scelte. **Riferimento**: Research §1; Quickstart §Avvio.
@@ -52,6 +56,11 @@
 - [ ] TEC07 Anteprima/edit/conferma/generazione, race If-Match, immutabilità dello snapshot e divieto di generare senza validazione. **Riferimento**: Quickstart §Guardie; Spec SC-005/011.
 - [ ] TEC08 Casi nominali con analisi e Markdown riusciti, comprensione del tecnico ed errori separati; rubriche ed evidenze reali. **Riferimento**: Quickstart §Prove nominali/Esito; Spec SC-002/003/006/007.
 - [ ] TEC09 Auth/sessioni, egress solo interno, integrità originali e redazione/sanitizzazione con stack effettivo. **Riferimento**: Quickstart §Errori dedicati; Spec SC-004/007.
+
+- [x] TEC10 Registro: lavoro durevole con modello offline, crash/reclaim/fencing e nessuna versione duplicata su PostgreSQL reale. **Riferimento**: Spec SC-013; Tasks T060.
+- [x] TEC11 Selezione congelata fra retry/resume con rianalisi e promozione concorrenti; mappa elementi→evidenze persistita. **Riferimento**: Spec SC-014; Tasks T063.
+- [x] TEC12 Rianalisi, backfill, confronto e promozione senza alterare artefatti storici. **Riferimento**: Spec SC-015; Tasks T065.
+- [ ] TEC13 Estrazione reale sul DGX e N1–N5 sulla nuova pipeline con tempi per fase e copertura. **Riferimento**: Spec SC-016; Tasks T071/T072.
 
 ## Copertura F-01–F-07
 

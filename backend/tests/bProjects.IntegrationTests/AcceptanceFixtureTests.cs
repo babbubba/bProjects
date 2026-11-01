@@ -46,16 +46,11 @@ public sealed class AcceptanceFixtureTests
         var pm = Guid.NewGuid();
         var c = ideal;
         var correction = script.Correction;
-        var edit = script.Facts.Single(f => f.Key == correction.EditKey);
-        foreach (var section in edit.Accept)
+        // Stessa scelta della voce del percorso (PmCorrection): se assente o ambigua la modifica non si applica.
+        if (PmCorrection.Locate(script, c) is { Kind: EditTargetKind.Found } target)
         {
-            var items = AcceptanceChecker.Items(c, section);
-            if (items.Any(i => AcceptanceChecker.Matches(AcceptanceChecker.Norm(i.Text), edit.Match)))
-            {
-                c = With(c, section, [.. items.Select(i => AcceptanceChecker.Matches(AcceptanceChecker.Norm(i.Text), edit.Match)
-                    ? i with { Text = correction.EditedText, EvidenceRefs = [.. i.EvidenceRefs, pm] } : i)]);
-                break;
-            }
+            var items = AcceptanceChecker.Items(c, target.Section);
+            c = With(c, target.Section, [.. items.Select((i, n) => n == target.Index ? i with { Text = target.NewText!, EvidenceRefs = [.. i.EvidenceRefs, pm] } : i)]);
         }
 
         foreach (var add in correction.Additions)
@@ -145,6 +140,15 @@ public sealed class AcceptanceFixtureTests
             Assert.All(f.From, i => Assert.InRange(i, 1, s.Messages.Length));
             Assert.True(AcceptanceChecker.Matches(AcceptanceChecker.Norm(f.Text), f.Match), $"{f.Key}: il testo ideale non soddisfa le proprie espressioni");
             Assert.True(f.Section != Sec.Excluded || Regex.IsMatch(AcceptanceChecker.Norm(f.Text), @"\b(non|esclus\w*|fuori|resta fuori)\b"), $"{f.Key}: l'esclusione ideale deve essere negata");
+
+            // Una scomposizione atomica non indebolisce l'attesa: ogni espressione di Match resta in almeno una parte, ogni parte ha
+            // soggetto e oggetto (almeno due espressioni) e il testo ideale soddisfa ciascuna parte.
+            Assert.All(f.Parts ?? [], part =>
+            {
+                Assert.True(part.Length >= 2, $"{f.Key}: una parte atomica nomina soggetto e azione/oggetto");
+                Assert.True(AcceptanceChecker.Matches(AcceptanceChecker.Norm(f.Text), part), $"{f.Key}: il testo ideale non soddisfa la parte {string.Join(" ", part)}");
+            });
+            Assert.All(f.Parts is null ? [] : f.Match, p => Assert.Contains(f.Parts!, part => part.Contains(p)));
         });
         Assert.Contains(s.Facts, f => f.Key == s.Correction.EditKey);
         var edit = s.Facts.Single(f => f.Key == s.Correction.EditKey);
@@ -182,7 +186,16 @@ public sealed class AcceptanceFixtureTests
             var sample = AcceptanceChecker.Norm(forbid.Sample);
             Assert.True(AcceptanceChecker.Matches(sample, [forbid.Pattern]), $"{forbid.Key}: l'esempio non viola il divieto");
             Assert.False(Regex.IsMatch(sample, @"\b(non|niente|nessun\w*|senza|esclus\w*|fuori|no|neanche)\b"), $"{forbid.Key}: l'esempio contiene una negazione");
+            Assert.True(AcceptanceChecker.Affirms(forbid, sample), $"{forbid.Key}: l'esempio non e' un'affermazione per il verificatore");
+            if (forbid.External is { } external)
+            {
+                // La responsabilita' esterna e' dichiarata dal PM, non dedotta: un messaggio la contiene, l'esempio vietato no.
+                Assert.Contains(s.Messages, m => Regex.IsMatch(AcceptanceChecker.Norm(m), external));
+                Assert.DoesNotMatch(external, sample);
+            }
         }
+
+        Assert.All(s.Forbids.Where(f => f.External is not null), f => Assert.Equal(ForbidMode.Affirmed, f.Mode));
     }
 
     [Fact]

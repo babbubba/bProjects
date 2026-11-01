@@ -1,6 +1,6 @@
 # Contratto HTTP — chat, anteprima e generazione
 
-**Updated**: 2026-10-28. Base /api, JSON camelCase, UUID stringa, timestamp UTC ISO 8601.
+**Updated**: 2026-10-31 (registro delle evidenze, §Registro). Base /api, JSON camelCase, UUID stringa, timestamp UTC ISO 8601.
 PM autorizzato per tutte le risorse; tutti i PM vedono tutti i progetti.
 Ruolo, autore, scope, cutoff e riferimenti di revisione sono validati dal backend.
 
@@ -239,7 +239,7 @@ interface ContextUsage {
              configuredContextWindowTokens: number;   // Ai:ContextWindowTokens
              serverDefaultNPredict: number | null; windowMismatch: boolean };
   limits: { safetyMarginTokens: number;
-            phases: Record<'chat' | 'analysis' | 'document' | 'compaction',
+            phases: Record<'chat' | 'analysis' | 'document' | 'compaction' | 'extraction',
                            { maxOutputTokens: number; enableThinking: boolean; inputBudgetTokens: number }> };
   last: null | { kind: 'chat' | 'analysis' | 'document'; refId: string; at: string; metrics: InferenceMetrics;
                  usedPercent: number | null;          // calculated: promptTokens / contextWindowTokens * 100, mai > 100 se la richiesta è rientrata
@@ -262,3 +262,74 @@ aggiungono solo quando esiste la sorgente; il pannello rende qualunque `items[]`
 finale. `history` descrive lo storico originale letto dall'ultima inferenza di chat/analisi (somma dei token misurati, *calculated*);
 senza un'inferenza misurata riporta il numero di messaggi conservati e `originalTokens` unavailable. `compaction` è l'ultimo evento
 di compattazione del progetto (prima = storico originale, dopo = messaggi della chiamata finale; risparmio solo se dopo ≤ prima).
+
+## Registro atomico delle evidenze (2026-10-31)
+
+Mandato: [atomic-evidence-ledger.md](../atomic-evidence-ledger.md); regole AI in [ai-workflow.md §10](ai-workflow.md).
+Stessa autenticazione (bearer, ruolo PM) e stesse convenzioni: ogni ID è cercato **dentro** il progetto `{p}` e un ID di un altro
+progetto risponde 404, mai 403 o il dato altrui. Idempotency-Key UUID obbligatoria sui POST di comando (400 `idempotency_key_required`);
+stessa chiave → stessa risorsa (202 se ancora attiva, 200 se terminale). Nessun endpoint espone prompt, ragionamento o output non
+validato del modello.
+
+| Metodo e percorso | Input | Esito |
+| --- | --- | --- |
+| GET /api/projects/{p}/evidence/status | — | 200 `EvidenceStatusView` |
+| GET /api/projects/{p}/evidence | `messageId`, `kind`, `polarity`, `certainty` opzionali | 200 `{ items: EvidenceView[] }` delle versioni correnti |
+| GET /api/projects/{p}/evidence/{e} | — | 200 `EvidenceDetailView` (anche di versioni non correnti) |
+| GET /api/projects/{p}/messages/{m}/evidence/versions | — | 200 `MessageVersionsView` |
+| GET /api/projects/{p}/evidence/versions/{v} | — | 200 `ExtractionVersionView` |
+| GET /api/projects/{p}/evidence/versions/{v1}/compare/{v2} | — | 200 `VersionDiffView`; 422 `versions_not_comparable` se di messaggi diversi |
+| POST /api/projects/{p}/messages/{m}/evidence/reanalyses | Idempotency-Key | 202 `ExtractionJobView`; 409 `extraction_active` (+`jobId`); 404 se `m` non è un messaggio PM del progetto |
+| POST /api/projects/{p}/evidence/jobs/{j}/retry | Idempotency-Key | 202 `ExtractionJobView` del nuovo lavoro; 409 `job_not_failed` o `extraction_active` |
+| GET /api/projects/{p}/evidence/jobs/{j} | — | 200 `ExtractionJobView` |
+| POST /api/projects/{p}/evidence/reanalyses | Idempotency-Key | 202 `EvidenceBatchView` Kind=Reanalysis (tutti i messaggi PM senza lavoro aperto) |
+| POST /api/projects/{p}/evidence/backfills | Idempotency-Key | 202 `EvidenceBatchView` Kind=Backfill (solo messaggi PM senza versione corrente né lavoro aperto) |
+| GET /api/projects/{p}/evidence/batches/{b} | — | 200 `EvidenceBatchView` |
+| POST /api/projects/{p}/messages/{m}/evidence/promotions | `{ versionId, expectedStateRevision, reason? }` | 200 `PromotionResultView`; 409 `promotion_conflict` (+`currentVersionId`, `stateRevision`); 422 `version_not_of_message` |
+| GET /api/projects/{p}/analyses/{a}/evidence-selection | — | 200 `EvidenceSelectionView`; 404 `selection_not_available` (run precedente al registro o non ancora avviato) |
+| POST /api/projects/{p}/analyses/{a}/coverage-reports | `{ revisionId?, draftId? }` | 201 `CoverageReportView` (200 se già calcolato per gli stessi input); 409 `selection_not_available`; 422 `coverage_input_invalid` |
+| GET /api/projects/{p}/analyses/{a}/coverage-reports | — | 200 `{ items: CoverageReportSummary[] }` |
+| GET /api/projects/{p}/analyses/{a}/coverage-reports/{r} | — | 200 `CoverageReportView` |
+
+**Viste** (campi camelCase; enum per nome come nel contratto AI):
+
+- `ExtractionJobView`: id, messageId, messageSequence, reason (Initial/Reanalysis/Backfill), batchId, retryOfJobId, status, requestedAt,
+  startedAt, completedAt, deadlineAt, attemptCount, maxAttempts, nextAttemptAt, resultVersionId, error `{code, message}`.
+- `EvidenceStatusView`: `messages[]` per ogni messaggio PM in ordine di sequenza: messageId, sequence, createdAt, stateRevision (0 senza
+  stato), currentVersion `{id, version, evidenceCount, noEvidenceReason, createdAt}` o null, candidateCount (versioni più recenti della
+  corrente), latestJob `ExtractionJobView` o null, state (`none` senza lavoro né versione, `pending`, `running`, `extracted`, `empty`
+  = zero evidenze valide, `failed`); `queue {queued, running, failed}` del progetto.
+- `EvidenceView`: id, versionId, version, isCurrent, messageId, messageSequence, ordinal, key, kind, kindRationale, statement, subject,
+  action, object, scope, purpose, instrument, channel, recipient, qualifiers `[{type,text}]`, polarity, certainty,
+  sources `[{messageId, sequence, role, start, end, quote}]`.
+- `EvidenceDetailView`: evidence `EvidenceView`; messages `[{id, sequence, role, text}]` (gli originali citati, per l'evidenziazione);
+  relations `[{id, type, basis, rationale, direction (outgoing/incoming), otherEvidenceId, otherStatement, otherMessageSequence}]`.
+- `MessageVersionsView`: messageId, sequence, stateRevision, currentVersionId, versions `[{id, version, createdAt, evidenceCount,
+  noEvidenceReason, promptVersion, schemaVersion, modelId, jobId, reason, isCurrent}]`, promotions `[{id, fromVersionId, toVersionId,
+  promotedBy, promotedAt, reason}]`.
+- `ExtractionVersionView`: versione come sopra + parameters (configurazione e contesto usato) + evidences `EvidenceView[]` +
+  relations `[{id, fromEvidenceId, toEvidenceId, type, basis, rationale}]`.
+- `VersionDiffView`: fromVersionId, toVersionId, messageId, summary `{added, removed, unchanged, modified, ambiguous}`, entries
+  `[{status (Added/Removed/Unchanged/Modified/Ambiguous), from EvidenceView|null, to EvidenceView|null, changes [{field, from, to}],
+  candidates [evidenceId] (solo Ambiguous), overlap}]`. Campi confrontati: kind, polarity, certainty, statement, subject, action,
+  object, scope, purpose, instrument, channel, recipient, qualifiers, sources, relations.
+- `PromotionResultView`: messageId, stateRevision, currentVersionId, promotion `{id, fromVersionId, toVersionId, promotedBy, promotedAt,
+  reason, relationImpact {remapped, stale}}`. Promuovere la versione già corrente: 200 senza nuova promozione.
+- `EvidenceBatchView`: id, kind, requestedAt, throughSequence, jobCount, skippedCount, progress `{queued, running, completed, failed}`.
+- `EvidenceSelectionView`: runId, createdAt, viewHash, items `[{messageId, sequence, versionId, version}]`, evidences
+  `[{alias, evidenceId, …EvidenceView}]`, relations `[{fromAlias, toAlias, type, basis, open, remapped}]`, staleRelations `[...]`,
+  links `[{itemId, evidenceIds[]}]` (vuoto finché la revisione AI non è committata).
+- `CoverageReportView`: id, analysisId, revisionId, draftId, checkerVersion, inputHash, createdAt, createdBy, counts
+  `{deterministicErrors, semanticRisks, pmAssessments}`, findings `[{category (DeterministicError/SemanticRisk/PmAssessment), code,
+  message, evidenceId, alias, itemId, section, confidence (solo SemanticRisk: low/medium), details}]`, limits `[string]`.
+
+**Stato in tempo reale.** Lo stream `GET /api/projects/{p}/events` aggiunge l'evento `evidence.state` con `ExtractionJobView` a ogni
+transizione (best-effort come `processing.state`); la UI riconcilia con `GET .../evidence/status` e polling ogni due secondi mentre ci
+sono lavori aperti.
+
+**Errori asincroni del lavoro**: `invalid_agent_output`, `llm_unavailable`, `model_timeout`, `model_rejected`, `model_not_available`,
+`context_overflow`, `deadline_exceeded`, `attempts_exhausted`, `processing_failed`. **Errore del run di analisi**: `evidence_unavailable`
+(uno o più messaggi PM entro il cutoff senza versione corrente: elencati nel messaggio redatto, senza testo).
+
+Nessuna operazione modifica messaggi, versioni, analisi, revisioni o bozze esistenti; per aggiornare il documento il PM avvia
+esplicitamente una nuova analisi, revisione, conferma e generazione.

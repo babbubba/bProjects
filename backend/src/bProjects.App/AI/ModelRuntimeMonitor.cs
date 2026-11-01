@@ -28,11 +28,32 @@ public sealed record ModelRuntimeSnapshot(
     int? ContextWindowTokens = null,
     int? ServerDefaultNPredict = null,
     int? SlotCount = null,
-    string? ModelStatus = null)
+    string? ModelStatus = null,
+    IReadOnlyList<string>? AvailableModels = null)
 {
     /// <summary>Finestra configurata maggiore di quella reale: solo con una misura verificata, mai con un valore assente.</summary>
     public bool WindowMismatch =>
         Status == ModelRuntimeStatus.Online && ContextWindowTokens is { } real && ConfiguredContextWindowTokens > real;
+
+    /// <summary>
+    /// Il server ha elencato i propri modelli (GET /v1/models) e <paramref name="modelId"/> non c'è. Un modello elencato ma non
+    /// caricato (router mode: unloaded/sleeping) non è mancante: lo carica il server alla richiesta. Senza elenco non si deduce nulla.
+    /// </summary>
+    public bool IsModelMissing(string? modelId) =>
+        AvailableModels is { } listed && !string.IsNullOrEmpty(modelId) && !listed.Contains(modelId, StringComparer.Ordinal);
+}
+
+/// <summary>Il modello richiesto da una fase non è esposto dal server: nessuna richiesta inviata, nessun modello alternativo usato.</summary>
+public sealed class ModelNotAvailableException(string modelId, AiPhase phase)
+    : InvalidOperationException($"Modello {modelId} (fase {phase}) non esposto dal server.")
+{
+    public const string ErrorCode = "model_not_available";
+
+    public string Code => ErrorCode;
+
+    public string ModelId { get; } = modelId;
+
+    public AiPhase Phase { get; } = phase;
 }
 
 /// <summary>La finestra reale del runtime è inferiore a quella configurata: ogni budget calcolato su di essa sarebbe falso.</summary>
@@ -143,10 +164,11 @@ public sealed class ModelRuntimeMonitor
             return Empty(ModelRuntimeStatus.Offline, _time.GetUtcNow());
         }
 
+        var available = models.Outcome == Outcome.Ok ? models.Value!.Select(m => m.Id).ToList() : null;
         var listed = models.Value?.FirstOrDefault(m => string.Equals(m.Id, _options.ModelId, StringComparison.Ordinal));
         if (listed?.Status is { } state && !string.Equals(state, "loaded", StringComparison.OrdinalIgnoreCase))
         {
-            return Empty(ModelRuntimeStatus.Unverified, _time.GetUtcNow()) with { ModelStatus = state };
+            return Empty(ModelRuntimeStatus.Unverified, _time.GetUtcNow()) with { ModelStatus = state, AvailableModels = available };
         }
 
         var propsTask = TryAsync(c => _client.GetServerPropsAsync(c), ct);
@@ -174,7 +196,8 @@ public sealed class ModelRuntimeMonitor
             window is > 0 ? window : null,
             nPredict is > 0 ? nPredict : null,
             props.Value?.TotalSlots ?? (slots.Value is { Count: > 0 } known ? known.Count : null),
-            listed?.Status);
+            listed?.Status,
+            available);
     }
 
     private ModelRuntimeSnapshot Empty(ModelRuntimeStatus status, DateTimeOffset? checkedAt) =>
@@ -240,16 +263,18 @@ public sealed class ModelRuntimeMonitor
 
 /// <summary>
 /// Anello più interno, subito prima del modello: se il runtime è verificato Online con una finestra reale inferiore a quella
-/// configurata fallisce con <see cref="ContextWindowMismatchException"/> (permanente) senza inviare nulla. Offline o non verificato
+/// configurata fallisce con <see cref="ContextWindowMismatchException"/> (permanente) senza inviare nulla; se il server elenca i
+/// modelli e quello richiesto dalla fase (<c>ChatOptions.ModelId</c>) non c'è fallisce con <see cref="ModelNotAvailableException"/>
+/// (permanente): mai un altro modello al suo posto. Offline o non verificato
 /// lascia procedere: l'eventuale errore di rete è classificato transitorio dal dispatcher. Un guasto transitorio invalida la cache,
 /// così il tentativo successivo rilegge il runtime (es. riavviato con un ctx-size diverso).
 /// </summary>
-internal sealed class ModelRuntimeGuardChatClient(IChatClient inner, ModelRuntimeMonitor runtime) : DelegatingChatClient(inner)
+internal sealed class ModelRuntimeGuardChatClient(IChatClient inner, ModelRuntimeMonitor runtime, AiPhase phase = AiPhase.Chat) : DelegatingChatClient(inner)
 {
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
-        await EnsureAsync(cancellationToken);
+        await EnsureAsync(options, cancellationToken);
         try
         {
             return await base.GetResponseAsync(messages, options, cancellationToken);
@@ -264,7 +289,7 @@ internal sealed class ModelRuntimeGuardChatClient(IChatClient inner, ModelRuntim
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await EnsureAsync(cancellationToken);
+        await EnsureAsync(options, cancellationToken);
         await using var updates = base.GetStreamingResponseAsync(messages, options, cancellationToken).GetAsyncEnumerator(cancellationToken);
         while (true)
         {
@@ -285,12 +310,17 @@ internal sealed class ModelRuntimeGuardChatClient(IChatClient inner, ModelRuntim
         }
     }
 
-    private async ValueTask EnsureAsync(CancellationToken cancellationToken)
+    private async ValueTask EnsureAsync(ChatOptions? options, CancellationToken cancellationToken)
     {
         var snapshot = await runtime.GetSnapshotAsync(cancellationToken);
         if (snapshot.WindowMismatch)
         {
             throw new ContextWindowMismatchException(snapshot.ConfiguredContextWindowTokens, snapshot.ContextWindowTokens!.Value);
+        }
+
+        if (snapshot.IsModelMissing(options?.ModelId))
+        {
+            throw new ModelNotAvailableException(options!.ModelId!, phase);
         }
     }
 

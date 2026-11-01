@@ -120,8 +120,8 @@ vincoli, flussi ed evidenze attesi; non basarsi sullo stile dell'output.
 Servizio disponibile, nessun guasto indotto e nessun'altra coda per le soglie nominali.
 
 1. **Chat riuscita**: cinque scambi con risposte reali, ciascuno entro 180 secondi;
-   chiarimenti pertinenti, al massimo uno per turno e nessuna domanda ripetuta dopo
-   risposta. Originali e assistant distinguibili. Nessun ProcessingRun formale.
+   chiarimenti pertinenti, al massimo uno per turno e nessuna domanda ripetuta, anche se la
+   precedente non ha ricevuto risposta. Originali e assistant distinguibili. Nessun ProcessingRun formale.
 2. **Analisi riuscita**: Analizza crea solo Kind=Analysis. Entro 180 secondi restituisce
    revisione AnalysisContent 1.0.0 valida, Unvalidated, e anteprima leggibile. Nessun
    Markdown o chiamata DocumentAgent. Tutti i casi nominali devono riuscire.
@@ -240,6 +240,36 @@ assistant come unica fonte fattuale, PmConfirmed inventato dall'AI, conflitto ri
 dall'AI, revisione PM attribuita erroneamente, alternative o risoluzioni incoerenti.
 PUT/confirm devono validare nuovamente; revisione AI iniziale e originali rimangono intatti.
 
+## Registro atomico delle evidenze — validazione (estensione 2026-10-31)
+
+Prerequisiti come sopra; variabili opzionali della fase di estrazione in `infra/.env` (`AI_EXTRACTION_MODEL_ID`,
+`AI_EXTRACTION_ENABLE_THINKING`, `AI_EXTRACTION_MAX_OUTPUT_TOKENS`, `AI_EXTRACTION_REQUEST_TIMEOUT_SECONDS`,
+`EXECUTION_EXTRACTION_DEADLINE_SECONDS`); senza override valgono i default documentati in `infra/compose.yaml`.
+
+1. **Durabilità**: con il modello offline inviare un messaggio PM: risposta 201 immediata; `GET /api/projects/{p}/evidence/status`
+   mostra il messaggio `pending` (lavoro Queued). Riavviare `app`: il lavoro resta; a modello disponibile passa a `extracted` o `empty`.
+2. **Estrazione**: nella vista Evidenze ogni evidenza mostra tipo, polarità, certezza e la frase originale con lo span evidenziato;
+   un messaggio di sola cortesia risulta «zero evidenze» con motivo, distinto da un lavoro `failed` (che mostra errore e Riprova).
+3. **Analizza**: con un'estrazione ancora in coda il run resta Queued finché le estrazioni entro il cutoff non terminano; con
+   un'estrazione fallita il run termina Failed `evidence_unavailable`. `GET .../analyses/{a}/evidence-selection` riporta versioni,
+   vista e mappa elementi→evidenze del run.
+4. **Rianalisi e confronto**: «Rianalizza» su un messaggio crea una versione candidata; il confronto mostra aggiunte, rimosse,
+   modificate e ambigue; la promozione richiede la revisione attesa (una seconda promozione concorrente risponde 409). Analisi,
+   revisioni e bozze già prodotte restano invariate.
+5. **Backfill**: in un progetto con messaggi antecedenti al registro, «Backfill» accoda solo i messaggi senza versione; ripeterlo con
+   la stessa chiave restituisce lo stesso batch; interrompere e riavviare non crea duplicati.
+6. **Copertura**: «Verifica copertura» su analisi, revisione confermata e bozza produce un report con errori deterministici, rischi
+   stimati e valutazioni PM separati; i rischi stimati sono euristiche, non giudizi certi.
+   «Nessun rischio rilevato» non significa significato conservato: nessun modello valuta la semantica e la verifica resta del PM.
+7. **Promozione e relazioni**: promuovere una versione candidata mostra quante relazioni di altri messaggi sono state rimappate e
+   quante non sono più risolvibili; le relazioni e le analisi già prodotte non vengono riscritte.
+8. **Latenza**: con lo slot unico la risposta di chat attende al più l'estrazione già in corso; l'estrazione non occupa il modello
+   quando un turno o run ha un retry imminente. I tempi di coda e di inferenza si ricavano da `ChatTurns.RequestedAt/StartedAt` e da
+   `InferenceCalls.DurationMs`.
+
+Test: `dotnet test --solution bProjects.sln --filter-class "*Evidence*"` (deterministici e, con `BPROJECTS_TEST_POSTGRES`, su
+PostgreSQL); `--filter-trait "Category=MafReal"` per l'estrattore reale e i nominali N1–N5. Esiti registrati in T070–T073 e in `HANDOFF.md`.
+
 ## Esito da raccogliere
 
 Per ogni caso: risultato atteso/osservato, versioni, ID di run/revisione/bozza,
@@ -251,3 +281,21 @@ deve essere registrato. Non utilizzare il PASS documentale come prova runtime.
 Riferimenti: [spec](spec.md), [data model](data-model.md),
 [API](contracts/http-api.md), [contratto AI](contracts/ai-workflow.md),
 [checklist canonica](checklists/requirements.md).
+
+## Esito verifica tecnica T053 PRELIMINARE (2026-10-31, Qwen3.6-35B-Smart, DGX reale)
+
+Commit di partenza `ca945c6` + modifiche di sessione 8 (solo test/documentazione). **Preliminare: T053 resta aperto** perche' T052 non e' superato.
+
+| Verifica | Esito |
+| --- | --- |
+| `dotnet restore` e `dotnet build` | PASS, 0 errori, 0 avvisi |
+| Suite backend senza MafReal (deterministica + Integration su PostgreSQL 18) | PASS 1002, 0 falliti, 1 ignorato (`V7_replay_dump`, richiede traccia V7) |
+| MafReal su DGX (32 test, un solo run, in parallelo su `parallel=1`) | **25 PASS, 7 FAIL, 0 SKIP**; `LocalProviderTests` corretto e ripassato 8/8 (attesa finestra obsoleta); restano: N2, N3, N5 nominali, esplorativo grande, T047 chat ridotta, T047 analisi 10 messaggi grandi (vedi HANDOFF 8.2/8.3) |
+| `npm run test:ci` (Vitest, Node 24.22.1) | PASS 168/168 in 13 file |
+| `npm run test:e2e` (Playwright, desktop-1440 + mobile-390, stack Docker isolato, `E2E_MODEL_MODE=offline`) | 177 PASS, 0 falliti, 33 SKIP (percorsi con modello reale e prove solo desktop) |
+| Docker `up --build --wait`, `migrate`, bootstrap account, riavvio `down`/`up` nei test E2E | PASS (le prove di riavvio desktop sono incluse nei 177) |
+| Persistenza/SSE/idempotenza | coperte dalle suite Integration ed E2E sopra; nessuna prova di crash con modello reale |
+| Nominali reali N1–N5 | **FAIL** (prima esecuzione 0/5; rerun: N1 e Boreale PASS, Aurora FAIL) |
+| Compattazione reale, fasi di produzione | 1 PASS + 1 FAIL (perdita SMS nell'analisi finale) |
+
+Gli SKIP non sono PASS. Nessuna attestazione di SC-001–SC-012: mancano le valutazioni umane.

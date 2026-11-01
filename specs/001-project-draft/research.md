@@ -224,3 +224,18 @@ Rimangono verifiche tecniche della futura implementazione: compile sul lock,
 provider DGX e structured output, compattazione sperimentale, durabilità dei due
 workflow e FIFO/recovery/retry con PostgreSQL. Non sono blocchi funzionali irrisolti
 né verifiche già eseguite. Nessuna ADR o nuovo documento viene creato per questi dettagli.
+
+## 10. Addendum 2026-10-31 — Registro atomico delle evidenze
+
+- **Primitive MAF**: l'estrazione usa `ChatClientAgent` con `ChatOptions.ResponseFormat` JSON Schema, lo stesso percorso già provato da
+  DocumentAgent e dal consolidamento con MAF 1.26.0 pinned. Un workflow con checkpoint non serve: la chiamata è singola, senza stato
+  intermedio e ripetibile; la durabilità è del lavoro in PostgreSQL. Nessun altro motore di orchestrazione.
+- **Offset**: i modelli non calcolano offset affidabili; il modello cita il passo (con `occurrence`) e il server calcola gli indici in
+  unità UTF-16 (`string` .NET e JavaScript usano la stessa unità), quindi l'evidenziazione Angular usa gli stessi numeri.
+- **Riconciliazione**: incrementale al momento dell'estrazione (il messaggio nuovo vede le evidenze correnti precedenti); nessuna
+  seconda chiamata AI in Analizza, che resta nei tempi del consolidamento. Il ricalcolo dopo una promozione è deterministico
+  (rimappatura per confronto delle citazioni), riproducibile e senza costo di inferenza.
+- **Confronto versioni**: l'identità di due evidenze è ancorata alla sovrapposizione delle citazioni primarie sullo stesso originale,
+  non a parole comuni; i casi non univoci sono esposti come ambigui.
+- **Limiti noti**: la qualità delle evidenze dipende dal modello; il report distingue controlli deterministici ed euristiche lessicali e
+  non sostituisce la valutazione PM. Una verifica semantica con giudice AI non è implementata.

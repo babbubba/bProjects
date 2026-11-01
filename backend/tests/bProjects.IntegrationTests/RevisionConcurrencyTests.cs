@@ -624,6 +624,7 @@ public sealed class RevisionConcurrencyTests : IAsyncLifetime
 
         // Due processi (owner distinti) si contendono lo stesso turno: il claim e il limite AI globale ne lasciano correre uno.
         var other = ActivatorUtilities.CreateInstance<AiDispatchService>(App.Services);
+        await EvidenceTestSeed.CompleteAsync(App.Services, Ct); // l'estrazione del messaggio non è il lavoro conteso dalla prova
         _dgx.ResetCount();
         var ran = await Task.WhenAll(_dispatcher!.RunOnceAsync(Ct), other.RunOnceAsync(Ct));
 

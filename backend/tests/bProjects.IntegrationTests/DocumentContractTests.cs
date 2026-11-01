@@ -773,6 +773,7 @@ public sealed class DocumentContractTests : IAsyncLifetime
         var project = existingProject ?? (await Json(await client.PostAsJsonAsync("/api/projects", new { name = $"Documento {Guid.NewGuid():N}" }, Ct))).GetProperty("id").GetGuid();
         var post = await client.PostAsJsonAsync($"/api/projects/{project}/messages", new { clientMessageId = Guid.NewGuid(), text = "Vogliamo un portale clienti." }, Ct);
         Assert.Equal(HttpStatusCode.Created, post.StatusCode);
+        await EvidenceTestSeed.CompleteAsync(App.Services, Ct); // evidenze pronte: il run accodato qui sotto supera il gate
         var analyze = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
         analyze.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
         var queued = await client.SendAsync(analyze, Ct);

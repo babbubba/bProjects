@@ -446,6 +446,90 @@ La prossima milestone funzionale prioritaria è **allegati + ingestion tracciabi
 I test di crash, idempotenza, sicurezza e compattazione della slice corrente
 rimangono prioritari per stabilire una baseline affidabile.
 
+### Registro atomico delle evidenze — estensione 2026-10-31
+
+Mandato: [atomic-evidence-ledger.md](atomic-evidence-ledger.md) (FR-029–FR-038, SC-013–SC-016). Estensione permanente della
+slice, nello stesso monolite e nello stesso dispatcher; nessun nuovo servizio, broker, workflow engine o ADR (Constitution I/IX):
+le decisioni sono documentate qui, in [data-model.md](data-model.md) §Registro e nei contratti.
+
+**Moduli.** `backend/src/bProjects.App/Evidence/` (entità, validatore, vista, confronto, copertura, endpoint) e
+`AI/EvidenceExtractor.cs` + `AI/Prompts/extraction.md` (agente MAF). Persistenza in `AppDbContext` con una migrazione additiva.
+
+**Lavoro durevole.** Il POST del messaggio PM inserisce nella stessa transazione `EvidenceExtractionJob` Queued (Reason=Initial),
+oltre a messaggio e ChatTurn: nessun messaggio committato può restare senza lavoro. I messaggi preesistenti non hanno lavori finché un
+backfill (esplicito) o Analizza (per i soli messaggi entro il cutoff senza versione corrente né lavoro aperto) non li accoda. Un indice
+univoco parziale impedisce due lavori aperti sullo stesso messaggio.
+
+**Scheduling (DGX `parallel=1`).** I lavori di estrazione entrano nello stesso `ExecutionLeaseStore` (lock di claim, limite AI globale
+uno, lease/rinnovo/reclaim/fencing/sweep su tempo DB, backoff e `MaxAttempts`). Priorità: ChatTurn e ProcessingRun eleggibili come
+oggi (FIFO per richiesta); un lavoro di estrazione è preso in carico **solo se nessun turno o run è eleggibile**. Fra le estrazioni:
+prima quelle richieste da un run di Analysis in attesa, poi le iniziali, poi rianalisi/backfill, FIFO. La chat non viene mai sorpassata;
+un'estrazione già in corso occupa il modello per la sua durata (una chiamata, senza ragionamento di default). Backpressure: la coda è
+visibile (`GET .../evidence/status`, batch con conteggi per stato) e limitata dalle deadline dei lavori (`Execution:ExtractionDeadlineSeconds`,
+default 3600 s); nessun lavoro si rigenera da solo dopo Failed.
+
+**Latenza di Chat con lo slot unico (misurata, 2026-11-01).** Un solo slot GPU e nessuna preemption: una chiamata in corso non si
+interrompe e nessun lavoro avviato viene cancellato per simulare una priorità. Interventi applicati, tutti sul claim e sull'attesa del
+dispatcher: (1) il dispatcher non attende più l'intero intervallo di polling quando un endpoint accoda un turno o un run
+(`DispatchWakeup`, segnale in-process coalescente; il polling di 1 s resta come rete di sicurezza e per altre istanze); (2) un'estrazione
+non è presa in carico se un turno o un run ha un retry (backoff) entro 30 s, così il retry non trova il modello occupato da un lavoro
+avviato nella finestra di attesa. Invariati: chat/run prima delle estrazioni a ogni claim, FIFO per conversazione, lease/fencing/deadline.
+Non applicato di proposito: rinviare le estrazioni «mentre la conversazione è calda». Con uno slot il lavoro totale si conserva, quindi lo
+rinvio sposterebbe il costo dalla chat ad Analizza (che attenderebbe tutte le estrazioni accumulate invece dell'ultima) e peggiorerebbe
+il margine dei 180 s. La coda di 8–20 s osservata in N1–N5 è il resto dell'estrazione del messaggio precedente (10–18 s, 348–1081 token di
+completion a ~58 token/s: decode-bound) quando i messaggi si inviano a raffica; un PM che legge la risposta prima di scrivere la assorbe.
+Leve residue non applicate perché richiedono una misura di qualità: uscita dell'estrattore più compatta, modello più veloce per la fase
+Extraction, uno slot GPU in più.
+
+**Gate di Analizza.** Un run di Analysis è eleggibile al claim solo quando nessun lavoro di estrazione aperto riguarda messaggi PM entro
+il suo cutoff (dunque le estrazioni necessarie passano prima, con priorità). Al primo claim il workflow congela la selezione
+(`AnalysisEvidenceSelection`: per ogni messaggio PM ≤ cutoff la versione corrente in quel momento) e la vista; retry e resume rileggono
+quella riga, mai il registro corrente. Se un messaggio non ha versione corrente (estrazione fallita) il run fallisce subito con
+`evidence_unavailable` (permanente, messaggi elencati): il PM ritenta l'estrazione e lancia un nuovo Analizza. La deadline del run
+continua a valere: l'attesa delle evidenze è contata nel tempo dell'analisi, non esclusa dal criterio di 180 s.
+
+**Consolidamento.** `project-analysis-v3` / `analysis-v4`: stesso grafo nativo (LoadDialog → agente → ValidatePersist), stesse fonti e
+stessa history (compattazione nativa invariata); LoadDialog aggiunge nel messaggio finale — il gruppo sempre preservato dalla
+compattazione — la vista deterministica del registro (alias E1…En in ordine sequenza/ordinale, struttura, qualificatori, polarità,
+certezza, citazioni e relazioni con stato aperto/stale). Lo schema del run aggiunge a ogni elemento `evidenceKeys` (enum degli alias):
+il validatore li toglie prima della validazione di `AnalysisContent 1.0.0`, che resta il contratto persistito; la mappa elemento→evidenze
+è salvata in `AnalysisEvidenceLinks` nel commit della revisione AI. Un run v2 accodato prima dell'aggiornamento fallisce con
+`workflow_incompatible` (regola esistente: nessun checkpoint incompatibile ripreso).
+Quando dialogo e vista non stanno in una chiamata (nemmeno con la sintesi nativa entro il budget della fase Compaction) il
+consolidamento è incrementale per intervalli di sequenza, ogni passo con originali ed evidenze interi e l'analisi corrente da
+aggiornare (contracts/ai-workflow.md §10.7): nessun limite al numero di evidenze, nessuna sintesi del registro, perdita di evidenze già
+rappresentate rifiutata. Costo: una chiamata di consolidamento per passo, entro la deadline del run (`Execution:AnalysisRunDeadlineSeconds`).
+
+**Estrazione.** Un `ChatClientAgent` MAF (fase `Extraction`, configurazione propria `Ai:Phases:Extraction`, default senza ragionamento,
+4096 token, timeout 150 s) riceve un solo messaggio utente: il messaggio da estrarre, gli originali PM precedenti (più recenti entro il
+budget), l'eventuale messaggio dell'assistente a cui il PM risponde (solo come referente, mai prova unica) e le evidenze correnti dei
+messaggi precedenti (alias P1…Pn). Output `json_schema` vincolato (id messaggi e alias ammessi in enum); nessun workflow MAF né
+checkpoint: è una chiamata singola, ripetibile senza effetti. La validazione ricalcola gli offset dalla citazione (UTF-16, start incluso /
+end escluso) e rifiuta tutto ciò che non è verificabile; nessuna riparazione AI.
+
+**Versioni e promozione.** Le versioni sono append-only; la prima valida di un messaggio diventa corrente (promozione automatica tracciata
+con `PromotedBy = null`), le successive restano candidate. La promozione è un comando PM con revisione attesa dello stato del messaggio
+(409 su conflitto), atomica e tracciata con l'impatto sulle relazioni. Le relazioni puntano a evidenze di versioni precise: quando la
+versione del bersaglio non è quella selezionata, la vista le rimappa tramite il confronto (abbinamento univoco) oppure le marca `stale`;
+nulla viene riscritto.
+
+**Confronto.** Abbinamento esplicito per sovrapposizione delle citazioni primarie (IoU ≥ 0,5, migliore reciproco, a parità = ambiguo),
+mai per parole comuni; poi diff campo per campo. Gli esiti ambigui sono mostrati e non promuovono nulla.
+
+**Copertura.** `EvidenceCoverageService` (riutilizzabile, nessuna regola N1–N5) confronta selezione, mappa, revisione AI, revisione
+target e bozza. Errori deterministici: evidenza senza elemento collegato, fonte dell'elemento diversa da quella dell'evidenza, span non
+verificabile, alternativa di un conflitto aperto collegata a un requisito/vincolo, relazione stale, fonte di un elemento confermato mai
+citata nella bozza. Rischi semantici stimati (lessicali, incertezza dichiarata, nessun giudice AI): qualificatore numerico assente,
+negazione non espressa, strumento separato dall'azione, elemento confermato non riconoscibile nella bozza. Valutazioni PM: elementi
+rimossi o riscritti dalla revisione PM. I report sono persistiti con versione del verificatore e ID esatti degli input.
+
+**Frontend.** Una vista «Evidenze» nel progetto (componente standalone, stessi servizi, Bootstrap/SCSS), senza toccare il flusso
+esistente se non per un collegamento di navigazione.
+
+**Costi.** Ogni messaggio PM costa una chiamata di estrazione fuori dal percorso critico della chat; Analizza aggiunge al prompt la vista
+(qualche centinaio di token per messaggio) e all'output gli `evidenceKeys`. Il tempo di disponibilità delle evidenze è riportato nei run
+DGX insieme a quello dell'analisi; un eventuale superamento dei 180 s è un esito da riportare, non un motivo per cambiare la soglia.
+
 ## Phase 0 — Research
 
 [research.md](research.md) riporta verifica documentale della versione 1.26.0, primitive

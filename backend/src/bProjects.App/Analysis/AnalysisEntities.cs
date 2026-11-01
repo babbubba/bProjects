@@ -32,7 +32,8 @@ public enum AnalysisValidationState
 /// </summary>
 public sealed class ProcessingRun
 {
-    public const string AnalysisWorkflowVersion = "project-analysis-v2";
+    /// <summary>v3: il consolidamento riceve la vista congelata del registro delle evidenze e restituisce la mappa elementi→evidenze.</summary>
+    public const string AnalysisWorkflowVersion = "project-analysis-v3";
     public const string DocumentWorkflowVersion = "project-document-v1";
 
     public Guid Id { get; set; }

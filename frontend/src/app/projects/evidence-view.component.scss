@@ -1,0 +1,138 @@
+:host {
+  display: block;
+  margin-top: 1.5rem;
+  min-width: 0;
+}
+
+.evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.ev-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+}
+
+.ev-block-head,
+.ev-row-head,
+.ev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ev-block-head {
+  justify-content: space-between;
+}
+
+.ev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ev-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: var(--bs-border-radius);
+  overflow-wrap: anywhere;
+}
+
+.ev-excerpt,
+.ev-statement {
+  margin: 0;
+}
+
+.ev-excerpt {
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+
+.ev-statement {
+  font-weight: 600;
+}
+
+.ev-empty {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-secondary-color);
+}
+
+.ev-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.25rem 1rem;
+  margin: 0;
+  font-size: 0.875rem;
+
+  dt {
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+  }
+
+  dd {
+    margin: 0;
+  }
+}
+
+.ev-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+
+  > div {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+}
+
+.ev-detail,
+.ev-promote {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  background: var(--bs-light);
+  border-radius: var(--bs-border-radius);
+}
+
+.ev-original {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// Il passo citato si riconosce anche senza colore: sfondo + sottolineatura; il contesto è tratteggiato.
+mark {
+  padding: 0 0.125rem;
+  color: inherit;
+  background: #fde68a;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+mark.mark-context,
+mark.mark-referent {
+  background: #e0e7ff;
+  text-decoration-style: dashed;
+}
+
+.ev-batch .progress {
+  height: 0.5rem;
+}

@@ -24,11 +24,26 @@ public sealed class ExecutionOptions
     /// <summary>Deadline complessiva dal comando; non attraversa l'attesa umana.</summary>
     public int RunDeadlineSeconds { get; set; } = 180;
 
+    /// <summary>Deadline dei run di analisi (consolidamento con ragionamento: diversi minuti); null = <see cref="RunDeadlineSeconds"/>.</summary>
+    public int? AnalysisRunDeadlineSeconds { get; set; }
+
+    public int EffectiveAnalysisRunDeadlineSeconds => AnalysisRunDeadlineSeconds ?? RunDeadlineSeconds;
+
+    /// <summary>
+    /// Deadline di un lavoro di estrazione delle evidenze dalla richiesta: lavoro di sfondo con priorità inferiore alla chat, quindi più
+    /// ampia della deadline interattiva (la coda resta visibile e limitata; un lavoro scaduto è Failed, mai rigenerato da solo).
+    /// </summary>
+    public int ExtractionDeadlineSeconds { get; set; } = 3600;
+
+    public TimeSpan ExtractionDeadline => TimeSpan.FromSeconds(ExtractionDeadlineSeconds);
+
     public TimeSpan LeaseDuration => TimeSpan.FromSeconds(LeaseDurationSeconds);
 
     public TimeSpan RenewInterval => TimeSpan.FromSeconds(RenewIntervalSeconds);
 
     public TimeSpan RunDeadline => TimeSpan.FromSeconds(RunDeadlineSeconds);
+
+    public TimeSpan AnalysisRunDeadline => TimeSpan.FromSeconds(EffectiveAnalysisRunDeadlineSeconds);
 
     /// <summary>Attesa prima del claim successivo: min(RetryMaxDelay, RetryBaseDelay * 2^(AttemptCount-1)), cioè 2s e 4s con i default.</summary>
     public TimeSpan BackoffAfterAttempt(int attemptCount)
@@ -66,14 +81,47 @@ public sealed class ExecutionOptionsValidator(IOptions<AiOptions>? ai = null) : 
             errors.Add("Execution:RetryBaseDelaySeconds non può superare RetryMaxDelaySeconds.");
         }
 
-        if (ai?.Value is { } a && a.RequestTimeoutSeconds >= o.RunDeadlineSeconds)
+        if (ai?.Value is { } a)
         {
-            errors.Add("Ai:RequestTimeoutSeconds deve essere inferiore a Execution:RunDeadlineSeconds.");
+            if (a.RequestTimeoutSeconds >= o.RunDeadlineSeconds)
+            {
+                errors.Add("Ai:RequestTimeoutSeconds deve essere inferiore a Execution:RunDeadlineSeconds.");
+            }
+
+            // Chat, documento e sintesi vivono nella deadline comune; l'analisi (e la sua sintesi) in quella dell'analisi.
+            foreach (var phase in Enum.GetValues<AiPhase>())
+            {
+                var deadline = phase switch
+                {
+                    AiPhase.Analysis => o.EffectiveAnalysisRunDeadlineSeconds,
+                    AiPhase.Extraction => o.ExtractionDeadlineSeconds,
+                    _ => o.RunDeadlineSeconds,
+                };
+                if (a.Phases.Of(phase).RequestTimeoutSeconds is { } timeout && timeout >= deadline)
+                {
+                    errors.Add(phase switch
+                    {
+                        AiPhase.Analysis => "Ai:Phases:Analysis:RequestTimeoutSeconds deve essere inferiore a Execution:AnalysisRunDeadlineSeconds.",
+                        AiPhase.Extraction => "Ai:Phases:Extraction:RequestTimeoutSeconds deve essere inferiore a Execution:ExtractionDeadlineSeconds.",
+                        _ => $"Ai:Phases:{phase}:RequestTimeoutSeconds deve essere inferiore a Execution:RunDeadlineSeconds.",
+                    });
+                }
+            }
         }
 
         if (o.RunDeadlineSeconds < o.LeaseDurationSeconds)
         {
             errors.Add("Execution:RunDeadlineSeconds non può essere inferiore a LeaseDurationSeconds.");
+        }
+
+        if (o.ExtractionDeadlineSeconds < o.LeaseDurationSeconds)
+        {
+            errors.Add("Execution:ExtractionDeadlineSeconds non può essere inferiore a LeaseDurationSeconds.");
+        }
+
+        if (o.AnalysisRunDeadlineSeconds is { } analysisDeadline && analysisDeadline < o.LeaseDurationSeconds)
+        {
+            errors.Add("Execution:AnalysisRunDeadlineSeconds non può essere inferiore a LeaseDurationSeconds.");
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);

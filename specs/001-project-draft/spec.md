@@ -2,7 +2,7 @@
 
 **Feature Branch**: `restart/speckit-clean`
 **Created**: 2026-10-27
-**Updated**: 2026-10-28
+**Updated**: 2026-10-31 (registro atomico delle evidenze)
 **Status**: Draft consolidato — decisioni F-01–F-07 recepite
 **Input**: Prima vertical slice bProjects, aggiornata con analisi strutturata, anteprima
 modificabile e conferma PM prima della generazione esplicita del documento.
@@ -27,7 +27,7 @@ e legge la bozza con evidenze. Nessun allegato, KB, web, editor avanzato o assis
 
 1. **Given** un PM autorizzato, **When** crea un progetto con nome non vuoto e descrizione facoltativa, **Then** lo ritrova con una propria chat, anche se esistono progetti omonimi. Nome whitespace è rifiutato con spiegazione. (FR-001, FR-002)
 2. **Given** un progetto, **When** il PM invia testo con modello disponibile oppure indisponibile, **Then** il messaggio viene salvato prima dell'inferenza e ne riceve conferma; il turno AI ha un proprio stato. Un salvataggio fallito lascia recuperabile il testo e non lo dichiara salvato. (FR-003, FR-004, FR-008)
-3. **Given** un'ambiguità concreta, **When** ConversationalAgent risponde, **Then** produce una risposta pertinente e, se necessario, al massimo una domanda mirata; usa informazioni già presenti e non ripete domande risolte. Non consolida né genera documenti. (FR-005, FR-018)
+3. **Given** un'ambiguità concreta, **When** ConversationalAgent risponde, **Then** produce una risposta pertinente e, se necessario, al massimo una domanda mirata; usa informazioni già presenti e non ripete domande già poste, anche se rimaste senza risposta. Non consolida né genera documenti. (FR-005, FR-018)
 4. **Given** due invii ravvicinati U1 e U2 prima della risposta A1, **When** vengono elaborati, **Then** l'ordine è FIFO, ogni risposta è collegata al trigger e U2 non usa A1 se A1 è successiva al cutoff di U2, neppure tramite la sessione ripristinata. (FR-007, FR-019)
 5. **Given** un turno interrotto, **When** scade il lease o si verifica un errore transitorio, **Then** recovery/retry controllati preservano messaggi ed esiti, rispettano i limiti configurati e non pubblicano due risposte. Un errore permanente o tentativi esauriti produce Failed. (FR-014, FR-020)
 6. **Given** almeno un messaggio PM salvato, **When** il PM seleziona Analizza, **Then** parte soltanto l'analisi formale sullo snapshot assegnato; senza messaggi PM l'avvio è impedito. Invii duplicati non creano analisi concorrenti. (FR-006, FR-007)
@@ -50,6 +50,20 @@ e legge la bozza con evidenze. Nessun allegato, KB, web, editor avanzato o assis
 23. **Given** il percorso nel browser a 1440 e 390 pixel di larghezza, **When** il PM passa da chat ad analisi, modifica, conferma e generazione, **Then** progetto e fase corrente restano riconoscibili, i controlli sono utilizzabili senza scorrimento orizzontale della pagina e ogni fase presenta una sola azione primaria. (FR-026)
 24. **Given** una risposta chat in streaming o una fase formale in corso, **When** arrivano aggiornamenti, un errore o una disconnessione, **Then** testo provvisorio e risposta salvata sono distinguibili, le fasi mostrate corrispondono a eventi reali e la riconnessione recupera gli esiti persistiti senza nuovi comandi; errori e tentativi disponibili sono comprensibili. (FR-027)
 25. **Given** navigazione da tastiera, lettore di schermo e preferenza di movimento ridotto, **When** il PM percorre le viste principali, **Then** focus, etichette, errori e cambi di stato sono percepibili e utilizzabili senza affidarsi soltanto al colore o alle animazioni. (FR-028)
+
+#### Estensione 2026-10-31 — Registro atomico delle evidenze
+
+Mandato: [atomic-evidence-ledger.md](atomic-evidence-ledger.md). Estende la stessa US1, non è una nuova storia:
+il percorso Chat → Analizza → Correggi → Conferma → Genera resta invariato nei comandi e nei contratti esterni.
+
+26. **Given** un messaggio PM salvato, **When** il POST risponde, **Then** nella stessa transazione esiste un lavoro durevole di estrazione Queued, anche con modello offline; la chat non attende l'estrazione. (FR-029)
+27. **Given** un'estrazione eseguita, **When** l'output supera la validazione, **Then** una versione append-only con una o più evidenze tipizzate (oppure zero evidenze con motivo esplicito) è persistita con fonte letterale e offset verificati; un output non valido o un errore lasciano il lavoro Failed, distinto da «zero evidenze». (FR-030, FR-031)
+28. **Given** messaggi successivi con rettifiche, conferme o posizioni alternative, **When** vengono estratti, **Then** le relazioni verso le evidenze precedenti sono persistite con tipo e base (dichiarata dal PM oppure inferita), senza riscrivere le estrazioni precedenti né scegliere alternative. (FR-032)
+29. **Given** Analizza su un cutoff, **When** il run parte, **Then** usa solo versioni correnti di messaggi PM entro il cutoff, congelate per il run; estrazioni mancanti vengono accodate, estrazioni fallite producono un errore esplicito e recuperabile, mai un'analisi parziale silenziosa. Il consolidamento riceve la vista deterministica del registro. (FR-033)
+30. **Given** un messaggio o un progetto già estratti, **When** il PM chiede una rianalisi o un backfill, **Then** nuove versioni candidate sono create in modo durevole e idempotente; le versioni correnti, i run passati, le revisioni e le bozze non cambiano. (FR-034)
+31. **Given** due versioni dello stesso messaggio, **When** il PM le confronta, **Then** vede evidenze aggiunte, rimosse, invariate, modificate (campo per campo) e abbinamenti ambigui; può promuovere esplicitamente la candidata con controllo di concorrenza, con traccia della promozione e dell'impatto sulle relazioni. (FR-035)
+32. **Given** un'analisi, una revisione PM e una bozza, **When** il PM richiede la verifica di copertura, **Then** un report versionato distingue errori deterministici, rischi semantici stimati e valutazioni PM, legato agli input esatti. (FR-036)
+33. **Given** la vista Evidenze del progetto, **When** il PM la apre, **Then** vede stato reale delle estrazioni, evidenze filtrabili con la frase originale evidenziata, storico e confronto versioni, azioni di rianalisi/retry/backfill e report di copertura, senza ragionamento del modello. (FR-037)
 
 ### Edge Cases
 
@@ -87,7 +101,7 @@ e legge la bozza con evidenze. Nessun allegato, KB, web, editor avanzato o assis
 - **FR-015**: Dati, revisioni e run DEVONO appartenere al progetto corretto; nessun recupero automatico da KB, web o altri progetti nella slice.
 - **FR-016**: Solo LLM interni autorizzati DEVONO elaborare contenuti e sintesi; niente fallback esterno. Input non fidati non alterano istruzioni/policy. Niente stime AI di ore, costi, date o risorse.
 - **FR-017**: La compattazione nativa MAF DEVE essere presente nella prima slice, con budget configurabile coerente col modello. Originali PostgreSQL e revisioni confermate non vengono sostituiti da sintesi; attivazione reale, rispetto del budget e fallimenti espliciti DEVONO avere verifiche dedicate.
-- **FR-018**: ConversationalAgent DEVE rispondere pertinemente e, se necessario, porre al massimo una domanda mirata per turno, usando il contesto ammesso e senza ripetere chiarimenti già risolti.
+- **FR-018**: ConversationalAgent DEVE rispondere pertinemente e, se necessario, porre al massimo una domanda mirata per turno, usando il contesto ammesso e senza ripetere domande già poste, anche se rimaste senza risposta.
 - **FR-019**: I turni chat DEVONO essere FIFO, con un solo turno attivo per progetto e cutoff rigoroso. Una sessione più avanzata DEVE essere ricostruita dallo storico ammesso; replay non duplica messaggi o risposte pubblicate.
 - **FR-020**: ChatTurn interrotti DEVONO avere recovery automatico controllato con lease rinnovabile, fencing e tentativi limitati/configurabili. Retry dopo errore transitorio è distinto dal recovery dopo crash; esaurimento tentativi produce Failed. Checkpoint MAF validi vengono usati quando disponibili; una chiamata non riprendibile può ripetersi senza duplicare l'esito.
 - **FR-021**: Solo il PM DEVE confermare esplicitamente la revisione corrente dell'anteprima. Dopo conferma lo snapshot è immutabile; ogni modifica successiva crea una nuova revisione non confermata. Conferma/modifica su base obsoleta devono segnalare conflitto.
@@ -99,6 +113,19 @@ e legge la bozza con evidenze. Nessun allegato, KB, web, editor avanzato o assis
 - **FR-026**: La UI DEVE adottare un design system minimale Modern Enterprise SaaS: tema chiaro, colori sobri e tipografia leggibile; desktop-first e responsive. Sidebar progetti, chat centrale e viste di anteprima/documento rendono evidente il percorso Chat → Analizza → Anteprima modificabile → Validazione PM → Genera documento. Pochi pulsanti e una sola azione primaria per fase; azioni non disponibili hanno una spiegazione. Su schermi piccoli la sidebar è richiudibile e le viste si dispongono su una colonna.
 - **FR-027**: Le risposte conversazionali DEVONO essere mostrate progressivamente tramite streaming MAF, distinguendo il testo provvisorio dall'esito persistito. Spinner indeterminati e stati distinguono attesa, elaborazione, verifica PM, successo ed errore; analisi e generazione mostrano solo fasi reali, senza thinking grezzo, percentuali o progressi inventati. Errori chiari indicano il prossimo passo e consentono il retry esplicito dove previsto, senza duplicare invii. Animazioni minimali; una perdita dello stream non equivale a fallimento del lavoro.
 - **FR-028**: WCAG 2.2 AA è l'obiettivo di accessibilità della slice: navigazione completa da tastiera, focus visibile e non occultato, etichette dei campi, errori associati, contrasto adeguato, target utilizzabili e annunci accessibili di stato. Non affidarsi soltanto al colore; rispettare la preferenza di movimento ridotto ed evitare annunci di ogni token. Prevedere test browser E2E dei percorsi principali, inclusi blocco della generazione senza conferma, errori e riconnessione.
+
+#### Registro atomico delle evidenze (estensione 2026-10-31)
+
+- **FR-029**: Ogni messaggio PM DEVE generare, nella transazione del salvataggio, un lavoro durevole di estrazione delle evidenze. Il salvataggio NON DEVE dipendere dalla disponibilità del modello; l'estrazione è successiva, ha priorità inferiore alla chat e usa lease, fencing, tentativi e deadline persistenti come gli altri lavori AI.
+- **FR-030**: L'estrazione DEVE produrre evidenze tipizzate e versionate (identità, origine, tipologia, struttura semantica, qualificatori, polarità, certezza, relazioni, diagnostica) ancorate a passaggi letterali degli originali ammessi, con offset UTF-16 verificati. Citazioni inventate, fonti assistant come prova unica, riferimenti fuori progetto, oltre la sequenza del messaggio o a messaggi inesistenti DEVONO essere rifiutati.
+- **FR-031**: «Zero evidenze» DEVE essere un esito validato con motivo esplicito, distinto da errore, omissione presunta o lavoro incompleto. Le versioni di estrazione sono append-only; la prima versione valida diventa corrente automaticamente, le successive sono candidate.
+- **FR-032**: Le relazioni fra evidenze (qualifica, conferma, contraddice, rettifica, sostituisce, dipende da, alternativa a, stessa regola) DEVONO essere persistite con la base (dichiarata dal PM o inferita dall'AI). Nessuna relazione sostituisce silenziosamente un fatto né trasforma una decisione non confermata in vincolo.
+- **FR-033**: Analizza DEVE consumare il registro: le versioni correnti dei messaggi PM entro il cutoff sono congelate per il run (anche in retry/resume) e consegnate al consolidamento come vista deterministica; l'analisi collega i propri elementi alle evidenze tramite una mappa interna persistita, senza cambiare `AnalysisContent 1.0.0`. Estrazioni mancanti sono accodate; estrazioni fallite producono `evidence_unavailable` esplicito e recuperabile.
+- **FR-034**: Il PM DEVE poter rianalizzare un messaggio o l'intero progetto dagli originali e avviare un backfill dei messaggi preesistenti, con lavori durevoli, avanzamento reale, retry autorizzato e idempotenza; una rianalisi non modifica messaggi, versioni storiche, analisi, revisioni o bozze.
+- **FR-035**: Il confronto fra versioni DEVE distinguere evidenze aggiunte, rimosse, invariate e modificate (campi semantici, classificazione, fonti, relazioni) e mostrare gli abbinamenti ambigui; la promozione è esplicita, autorizzata, atomica, con concorrenza ottimistica e tracciata. Aggiornare il documento richiede sempre una nuova analisi/revisione/generazione esplicita.
+- **FR-036**: Un servizio riutilizzabile DEVE verificare copertura e provenienza messaggi → evidenze → analisi → revisione PM → documento, separando errori deterministici, rischi semantici stimati (con limiti dichiarati) e valutazioni PM, con report versionati legati agli input esatti. Il report non modifica analisi o documento.
+- **FR-037**: La UI DEVE offrire una vista Evidenze leggera nel progetto (stato reale, filtri essenziali, fonte evidenziata, storico, confronto, promozione, rianalisi, backfill, copertura), coerente con FR-026–FR-028; API documentate, autorizzate e isolate per progetto.
+- **FR-038**: Compattazione e sintesi NON DEVONO sostituire il registro: il consolidamento usa le evidenze selezionate anche quando la history è compattata.
 
 ### Scope e continuità con il prodotto approvato
 
@@ -132,6 +159,11 @@ gestioni avanzate e pubblicazioni human-in-the-loop sono future.
 - **Elaborazione formale**: richiesta di analisi oppure generazione, con input congelato, stato e checkpoint MAF.
 - **Revisione di analisi**: JSON versionato con origine AI/PM, provenienza e conferma PM; confermata diventa immutabile.
 - **Bozza**: Markdown proposto, collegato alla revisione confermata e al run generativo.
+- **Lavoro di estrazione**: richiesta durevole di estrazione delle evidenze di un messaggio PM (iniziale, rianalisi o backfill), con stato, tentativi e configurazione congelata.
+- **Versione di estrazione ed evidenza**: risultato append-only di un'estrazione valida e sue evidenze atomiche ancorate al testo; versione corrente per messaggio e promozioni tracciate.
+- **Relazione fra evidenze**: legame tipizzato con base dichiarata/inferita, asserito da una versione di estrazione.
+- **Selezione del run e mappa**: versioni congelate per un'analisi e collegamenti fra elementi dell'analisi ed evidenze.
+- **Report di copertura**: verifica versionata messaggi → evidenze → analisi → revisione → documento.
 
 ## Success Criteria *(mandatory)*
 
@@ -144,12 +176,17 @@ gestioni avanzate e pubblicazioni human-in-the-loop sono future.
 - **SC-005**: Nessun turno chat o riapertura avvia un'analisi formale; nessuna analisi o conferma avvia automaticamente la generazione. Tutte le richieste senza revisione corrente confermata sono respinte prima di invocare DocumentAgent.
 - **SC-006**: In ogni caso nominale un tecnico non presente al dialogo ricostruisce correttamente obiettivi, perimetro, flussi applicabili, requisiti/vincoli e punti aperti usando soltanto la bozza. La revisione rileva zero omissioni sostanziali, contraddizioni introdotte o ripetizioni sostanziali; entrambi i PM la giudicano utile come base di revisione.
 - **SC-007**: Nelle prove di guasto dedicate a chat, analisi, compattazione e generazione, ogni esito è un errore esplicito entro la deadline configurata o alla prima ripresa utile dopo indisponibilità; originali, conferme e ultimo risultato riuscito rimangono intatti. Queste prove non sostituiscono SC-002.
-- **SC-008**: Nei cinque scambi chat nominali, a servizio disponibile e senza altra coda, tutte le risposte riescono entro 180 secondi ciascuna, con chiarimenti pertinenti e al massimo uno per turno; nessuna domanda già risolta viene ripetuta. Nei casi FIFO/cutoff non compare alcun messaggio successivo nell'input ammesso.
+- **SC-008**: Nei cinque scambi chat nominali, a servizio disponibile e senza altra coda, tutte le risposte riescono entro 180 secondi ciascuna, con chiarimenti pertinenti e al massimo uno per turno; nessuna domanda già posta viene ripetuta, anche se rimasta senza risposta. Nei casi FIFO/cutoff non compare alcun messaggio successivo nell'input ammesso.
 - **SC-009**: Le prove di recovery/retry ai confini di commit producono un solo messaggio/risultato per richiesta logica; un vecchio worker non può persistere dopo perdita del lease. Raggiunti i limiti, il run è Failed e nessun tentativo ulteriore viene avviato implicitamente.
 - **SC-010**: In prove dedicate della chat e dell'analisi la soglia tecnica ridotta attiva realmente la compattazione MAF; nella generazione il payload confermato è verificato integralmente contro il budget senza ridurlo. Il contesto finale è entro il budget di input; originali e snapshot confermati sono invariati, source IDs e vincoli delle attese sono conservati. Una compattazione fallita o fuori budget è un caso di errore esplicito, non un successo.
 - **SC-011**: In tutte le prove di modifica/conferma/generazione, la bozza è riconducibile a una sola revisione confermata immutabile. Modifiche successive non la cambiano e una nuova generazione richiede nuova conferma. Le due operazioni su revisione obsoleta producono conflitto senza perdita di dati.
 
 - **SC-012**: I percorsi browser E2E coprono creazione/riapertura progetto, chat in streaming, analisi, modifica e conferma, generazione e lettura bozza; coprono separatamente errore, blocco senza conferma e riconnessione senza duplicazioni. Le prove responsive a 1440/390 pixel e da tastiera verificano gli scenari 23–25. I controlli automatici di accessibilità sono integrati con verifica manuale di focus, contrasto e annunci; nessuna conformità è dichiarata prima delle prove.
+
+- **SC-013**: In prove dedicate su PostgreSQL reale, il 100% dei messaggi PM salvati ha un lavoro di estrazione durevole, anche con modello offline e dopo crash; doppio invio, retry, reclaim e worker obsoleti non producono versioni duplicate né scritture fuori fencing.
+- **SC-014**: Ogni analisi riuscita referenzia esattamente le versioni selezionate al proprio cutoff; retry e resume usano la stessa selezione anche se nel frattempo una rianalisi ha prodotto o promosso altre versioni.
+- **SC-015**: Rianalisi di messaggio e di progetto, backfill, confronto e promozione funzionano senza alterare messaggi, versioni storiche, analisi, revisioni o bozze; il confronto mostra i casi ambigui.
+- **SC-016**: Il report di copertura segnala almeno evidenza non rappresentata, fonte assente/non valida, qualificatore modificato, negazione invertita, strumento separato dall'operazione, conflitto aperto presentato come scelta e requisito confermato assente nel documento, distinguendo deterministico/stimato/PM. N1–N5 sono rieseguiti sulla nuova pipeline senza modificare le attese e con tempi end-to-end e per fase riportati (inclusa l'attesa delle evidenze rispetto al limite nominale di 180 s).
 
 ## Assumptions
 

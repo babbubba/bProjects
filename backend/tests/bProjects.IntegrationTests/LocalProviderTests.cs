@@ -113,7 +113,7 @@ public sealed class LocalProviderTests
     [Fact]
     public async Task Discovery_lists_the_configured_model_with_its_declared_window()
     {
-        using var client = new InternalModelClient(TestEnvironment.RequireDgxOptions());
+        using var client = new InternalModelClient(TestEnvironment.RequireDgxOptions(), MafDiagnostics.Wrap());
 
         var models = await client.ListModelsAsync(Ct);
 
@@ -126,7 +126,7 @@ public sealed class LocalProviderTests
     {
         var options = TestEnvironment.RequireDgxOptions();
         options.ApiKey = "chiave-errata";
-        using var client = new InternalModelClient(options);
+        using var client = new InternalModelClient(options, MafDiagnostics.Wrap());
 
         var ex = await Assert.ThrowsAnyAsync<Exception>(() => client.ChatClient.GetResponseAsync("ciao", client.CreateChatOptions(), Ct));
 
@@ -138,7 +138,7 @@ public sealed class LocalProviderTests
     [Fact]
     public async Task Chat_completion_returns_text_and_token_usage()
     {
-        using var client = new InternalModelClient(TestEnvironment.RequireDgxOptions());
+        using var client = new InternalModelClient(TestEnvironment.RequireDgxOptions(), MafDiagnostics.Wrap());
 
         var response = await client.ChatClient.GetResponseAsync("Rispondi solo con la parola: pronto", client.CreateChatOptions(temperature: 0), Ct);
 
@@ -151,7 +151,7 @@ public sealed class LocalProviderTests
     [Fact]
     public async Task Streaming_delivers_several_incremental_updates()
     {
-        using var client = new InternalModelClient(TestEnvironment.RequireDgxOptions());
+        using var client = new InternalModelClient(TestEnvironment.RequireDgxOptions(), MafDiagnostics.Wrap());
         var updates = new List<(TimeSpan At, string Text)>();
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -172,7 +172,7 @@ public sealed class LocalProviderTests
     public async Task Runtime_window_matches_the_configured_budget_and_tokenizer_counts_tokens()
     {
         var options = TestEnvironment.RequireDgxOptions();
-        using var client = new InternalModelClient(options);
+        using var client = new InternalModelClient(options, MafDiagnostics.Wrap());
 
         var window = await client.GetRuntimeContextTokensAsync(Ct);
         var tokens = await client.CountTokensAsync("Hello bProjects, analisi requisiti", Ct);
@@ -218,7 +218,7 @@ public sealed class LocalProviderTests
     {
         var options = TestEnvironment.RequireDgxOptions();
         options.StructuredOutputMode = mode;
-        using var client = new InternalModelClient(options);
+        using var client = new InternalModelClient(options, MafDiagnostics.Wrap());
         using var schema = JsonDocument.Parse(ItemSchema);
 
         var prompt = mode == StructuredOutputMode.ValidatedTextJson

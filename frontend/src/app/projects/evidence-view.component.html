@@ -1,0 +1,699 @@
+<section class="evidence" aria-labelledby="evidence-title">
+  <header>
+    <h2 id="evidence-title" class="h5 mb-1">Evidenze</h2>
+    <p class="text-secondary small mb-0">
+      Fatti atomici estratti dai tuoi messaggi, ciascuno legato al passo originale. Sono dati
+      strutturati e verificati: non vengono mostrati ragionamenti del modello. Nessuna azione
+      modifica messaggi, analisi o documento.
+    </p>
+  </header>
+
+  <div role="status" aria-live="polite" data-testid="evidence-live">
+    @if (notice()) {
+      <div class="alert alert-success py-2 mb-0" data-testid="evidence-notice">{{ notice() }}</div>
+    }
+  </div>
+  @if (commandError()) {
+    <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="evidence-command-error">
+      {{ commandError() }}
+    </div>
+  }
+
+  <!-- Stato delle estrazioni -->
+  <section class="ev-block" aria-labelledby="ev-status-title">
+    <div class="ev-block-head">
+      <h3 id="ev-status-title" class="h6 mb-0">Stato delle estrazioni</h3>
+      <div class="ev-actions">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-secondary"
+          data-testid="backfill"
+          [disabled]="isBusy('batch:backfill')"
+          (click)="backfill()"
+        >
+          Backfill
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          data-testid="reanalyze-project"
+          [disabled]="isBusy('batch:reanalysis')"
+          (click)="reanalyzeProject()"
+        >
+          Rianalizza progetto
+        </button>
+      </div>
+    </div>
+    <p class="small text-secondary mb-0">
+      «Backfill» analizza solo i messaggi senza evidenze; «Rianalizza progetto» crea una nuova
+      versione candidata per tutti. Le versioni correnti cambiano solo se le promuovi tu.
+    </p>
+
+    @if (loading()) {
+      <p class="text-secondary small mb-0" role="status">Caricamento delle evidenze…</p>
+    }
+    @if (statusError()) {
+      <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="status-error">
+        {{ statusError() }}
+      </div>
+    }
+    @for (b of batches(); track b.id) {
+      <div class="ev-batch" data-testid="batch">
+        <p class="small mb-1" role="status">{{ batchText(b) }}</p>
+        <div
+          class="progress"
+          role="progressbar"
+          [attr.aria-label]="batchText(b)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          [attr.aria-valuenow]="batchPercent(b)"
+        >
+          <div class="progress-bar" [style.width.%]="batchPercent(b)"></div>
+        </div>
+      </div>
+    }
+    @if (status(); as s) {
+      <p class="small mb-0" data-testid="queue-text">{{ queueText() }}</p>
+      @if (s.messages.length === 0) {
+        <p class="ev-empty" data-testid="no-messages">
+          Nessun messaggio del PM: scrivi nella conversazione per ottenere evidenze.
+        </p>
+      } @else {
+        <ul class="list-unstyled mb-0 ev-list" aria-label="Messaggi del PM e stato di estrazione">
+          @for (r of rows(); track r.m.messageId) {
+            <li class="ev-row" [attr.data-testid]="'msg-' + r.m.sequence">
+              <div class="ev-row-head">
+                <strong>Messaggio #{{ r.m.sequence }}</strong>
+                <span class="badge" [class]="r.badge.cls" data-testid="state-badge">
+                  @if (r.active) {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  }
+                  {{ r.badge.label }}
+                </span>
+                @if (r.m.currentVersion; as v) {
+                  <span class="small text-secondary">
+                    versione {{ v.version }} · {{ plural(v.evidenceCount, 'evidenza', 'evidenze') }}
+                  </span>
+                }
+                @if (r.m.candidateCount > 0) {
+                  <span class="badge text-bg-light border" data-testid="candidates">
+                    {{ plural(r.m.candidateCount, 'versione candidata', 'versioni candidate') }}
+                  </span>
+                }
+                @if (r.attempt) {
+                  <span class="small text-secondary">{{ r.attempt }}</span>
+                }
+              </div>
+              @if (r.text) {
+                <p class="ev-excerpt">{{ r.text }}</p>
+              }
+              @if (r.m.currentVersion?.noEvidenceReason; as why) {
+                <p class="small text-secondary mb-0">Motivo: {{ why }}</p>
+              }
+              @if (r.error) {
+                <div class="alert alert-danger py-2 mb-0" role="alert" data-testid="job-error">
+                  <strong>Ultima estrazione non riuscita.</strong> {{ r.error }}
+                </div>
+              }
+              <div class="ev-actions">
+                @if (r.retryJobId; as jobId) {
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    data-testid="retry"
+                    [disabled]="isBusy('retry:' + jobId)"
+                    [attr.aria-label]="'Riprova l\'estrazione del messaggio ' + r.m.sequence"
+                    (click)="retry(jobId, r.m.sequence)"
+                  >
+                    Riprova
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  data-testid="reanalyze"
+                  [disabled]="r.active || isBusy('re:' + r.m.messageId)"
+                  [attr.aria-label]="'Rianalizza il messaggio ' + r.m.sequence"
+                  (click)="reanalyze(r.m.messageId, r.m.sequence)"
+                >
+                  Rianalizza
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  data-testid="open-versions"
+                  [attr.aria-expanded]="versionsFor() === r.m.messageId"
+                  aria-controls="ev-versions"
+                  [attr.aria-label]="'Versioni del messaggio ' + r.m.sequence"
+                  [disabled]="!r.m.currentVersion && r.m.state === 'none'"
+                  (click)="openVersions(r.m.messageId)"
+                >
+                  Versioni
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </section>
+
+  <!-- Evidenze correnti -->
+  <section class="ev-block" aria-labelledby="ev-items-title">
+    <div class="ev-block-head">
+      <h3 id="ev-items-title" class="h6 mb-0">Evidenze correnti</h3>
+      <span class="small text-secondary" role="status" data-testid="items-count">
+        {{ itemsLoading() ? 'Caricamento…' : plural(items().length, 'evidenza', 'evidenze') }}
+      </span>
+    </div>
+    <form class="ev-filters" aria-label="Filtri delle evidenze" (submit)="$event.preventDefault()">
+      <div>
+        <label for="ev-f-message" class="form-label small mb-0">Messaggio</label>
+        <select
+          id="ev-f-message"
+          class="form-select form-select-sm"
+          (change)="setFilter('messageId', $event)"
+        >
+          <option value="" [selected]="!filters().messageId">Tutti</option>
+          @for (m of messageOptions(); track m.id) {
+            <option [value]="m.id" [selected]="filters().messageId === m.id">
+              #{{ m.sequence }}
+            </option>
+          }
+        </select>
+      </div>
+      <div>
+        <label for="ev-f-kind" class="form-label small mb-0">Tipologia</label>
+        <select
+          id="ev-f-kind"
+          class="form-select form-select-sm"
+          (change)="setFilter('kind', $event)"
+        >
+          <option value="" [selected]="!filters().kind">Tutte</option>
+          @for (o of kindOptions; track o[0]) {
+            <option [value]="o[0]" [selected]="filters().kind === o[0]">{{ o[1] }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label for="ev-f-polarity" class="form-label small mb-0">Polarità</label>
+        <select
+          id="ev-f-polarity"
+          class="form-select form-select-sm"
+          (change)="setFilter('polarity', $event)"
+        >
+          <option value="" [selected]="!filters().polarity">Tutte</option>
+          @for (o of polarityOptions; track o[0]) {
+            <option [value]="o[0]" [selected]="filters().polarity === o[0]">{{ o[1] }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label for="ev-f-certainty" class="form-label small mb-0">Certezza</label>
+        <select
+          id="ev-f-certainty"
+          class="form-select form-select-sm"
+          (change)="setFilter('certainty', $event)"
+        >
+          <option value="" [selected]="!filters().certainty">Tutte</option>
+          @for (o of certaintyOptions; track o[0]) {
+            <option [value]="o[0]" [selected]="filters().certainty === o[0]">{{ o[1] }}</option>
+          }
+        </select>
+      </div>
+      @if (hasFilters()) {
+        <button
+          type="button"
+          class="btn btn-sm btn-link align-self-end"
+          data-testid="clear-filters"
+          (click)="clearFilters()"
+        >
+          Azzera filtri
+        </button>
+      }
+    </form>
+
+    @if (itemsError()) {
+      <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="items-error">
+        {{ itemsError() }}
+        <button type="button" class="btn btn-sm btn-outline-dark ms-2" (click)="reloadItems()">
+          Riprova
+        </button>
+      </div>
+    }
+    @if (!itemsLoading() && !itemsError() && items().length === 0) {
+      <p class="ev-empty" data-testid="no-items">
+        @if (hasFilters()) {
+          Nessuna evidenza corrisponde ai filtri.
+        } @else {
+          Nessuna evidenza corrente. Usa «Backfill» per analizzare i messaggi esistenti.
+        }
+      </p>
+    }
+    <ul class="list-unstyled mb-0 ev-list" aria-label="Evidenze correnti">
+      @for (e of items(); track e.id) {
+        <li class="ev-row" [attr.data-testid]="'evidence-' + e.id">
+          <div class="ev-row-head">
+            <span class="badge text-bg-primary" data-testid="ev-kind">{{ kindLabel(e.kind) }}</span>
+            <span class="badge text-bg-light border" data-testid="ev-polarity"
+              >Polarità: {{ polarityLabel(e.polarity) }}</span
+            >
+            <span class="badge text-bg-light border" data-testid="ev-certainty"
+              >Certezza: {{ certaintyLabel(e.certainty) }}</span
+            >
+            <span class="small text-secondary">Messaggio #{{ e.messageSequence }}</span>
+          </div>
+          <p class="ev-statement" data-testid="ev-statement">{{ e.statement }}</p>
+          @if (structureFields(e).length > 0) {
+            <dl class="ev-fields">
+              @for (f of structureFields(e); track f.label) {
+                <div>
+                  <dt>{{ f.label }}</dt>
+                  <dd>{{ f.value }}</dd>
+                </div>
+              }
+            </dl>
+          }
+          @if (e.qualifiers.length > 0) {
+            <ul class="list-inline mb-1" aria-label="Qualificatori">
+              @for (q of e.qualifiers; track $index) {
+                <li class="list-inline-item badge text-bg-light border" data-testid="ev-qualifier">
+                  {{ qualifierLabel(q.type) }}: {{ q.text }}
+                </li>
+              }
+            </ul>
+          }
+          <div class="ev-actions">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary"
+              data-testid="ev-detail"
+              [attr.aria-expanded]="selectedId() === e.id"
+              [attr.aria-controls]="'ev-detail-' + e.id"
+              (click)="toggleDetail(e.id)"
+            >
+              {{ selectedId() === e.id ? 'Nascondi originale' : 'Mostra originale' }}
+            </button>
+          </div>
+
+          @if (selectedId() === e.id) {
+            <div class="ev-detail" [id]="'ev-detail-' + e.id" data-testid="detail">
+              @if (detailLoading()) {
+                <p class="small text-secondary mb-0" role="status">Caricamento…</p>
+              }
+              @if (detailError()) {
+                <div class="alert alert-warning py-2 mb-0" role="alert">{{ detailError() }}</div>
+              }
+              @if (detail(); as d) {
+                @for (m of detailMessages(); track m.id) {
+                  <h4 class="h6 mb-1">
+                    Messaggio #{{ m.sequence }}
+                    {{ m.assistant ? "dell'assistente (solo contesto)" : 'del PM' }}
+                  </h4>
+                  <p class="ev-original" data-testid="original">
+                    @for (seg of m.segments; track $index) {
+                      @if (seg.role) {
+                        <mark
+                          [class]="'mark-' + seg.role.toLowerCase()"
+                          [attr.data-role]="seg.role"
+                          >{{ seg.text }}</mark
+                        >
+                      } @else {
+                        <ng-container>{{ seg.text }}</ng-container>
+                      }
+                    }
+                  </p>
+                }
+                <p class="small text-secondary mb-2">
+                  Evidenziato: passo citato (sfondo giallo), contesto precedente (sottolineato
+                  tratteggiato).
+                </p>
+                @if (d.evidence.sources.length > 0) {
+                  <h4 class="h6 mb-1">Fonti</h4>
+                  <ul class="small ps-3">
+                    @for (s of d.evidence.sources; track $index) {
+                      <li>
+                        {{ sourceRoleLabel(s.role) }} · messaggio #{{ s.sequence }}: «{{ s.quote }}»
+                      </li>
+                    }
+                  </ul>
+                }
+                @if (d.evidence.kindRationale) {
+                  <p class="small mb-2">
+                    <strong>Perché questa tipologia:</strong> {{ d.evidence.kindRationale }}
+                  </p>
+                }
+                <h4 class="h6 mb-1">Relazioni</h4>
+                @if (d.relations.length === 0) {
+                  <p class="small text-secondary mb-0" data-testid="no-relations">
+                    Nessuna relazione con altre evidenze.
+                  </p>
+                } @else {
+                  <ul class="small ps-3 mb-0" data-testid="relations">
+                    @for (r of d.relations; track r.id) {
+                      <li>
+                        Questa evidenza
+                        {{
+                          r.direction === 'outgoing'
+                            ? relationLabel(r.type)
+                            : 'è ' + relationLabel(r.type) + ' da'
+                        }}
+                        «{{ r.otherStatement }}» (messaggio #{{ r.otherMessageSequence }}) ·
+                        {{ r.basis === 'Declared' ? 'dichiarata nel testo' : 'inferita' }}
+                        @if (r.rationale) {
+                          <span class="text-secondary"> · {{ r.rationale }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              }
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  </section>
+
+  <!-- Versioni di un messaggio -->
+  @if (versionsFor()) {
+    <section
+      class="ev-block"
+      id="ev-versions"
+      aria-labelledby="ev-versions-title"
+      data-testid="versions"
+    >
+      <div class="ev-block-head">
+        <h3 id="ev-versions-title" class="h6 mb-0">{{ versionsTitle() }}</h3>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeVersions()">
+          Chiudi
+        </button>
+      </div>
+      @if (versionsLoading() && !versions()) {
+        <p class="small text-secondary mb-0" role="status">Caricamento delle versioni…</p>
+      }
+      @if (versionsError()) {
+        <div class="alert alert-warning py-2 mb-0" role="alert">{{ versionsError() }}</div>
+      }
+      @if (versions(); as v) {
+        @if (v.versions.length === 0) {
+          <p class="ev-empty">Nessuna versione: il messaggio non è ancora stato analizzato.</p>
+        } @else {
+          <ul class="list-unstyled mb-0 ev-list" aria-label="Versioni">
+            @for (ver of v.versions; track ver.id) {
+              <li class="ev-row" data-testid="version">
+                <div class="ev-row-head">
+                  <strong>Versione {{ ver.version }}</strong>
+                  @if (ver.isCurrent) {
+                    <span class="badge text-bg-success" data-testid="current-flag">Corrente</span>
+                  } @else {
+                    <span class="badge text-bg-light border">Candidata</span>
+                  }
+                  <span class="small text-secondary">
+                    {{ formatTime(ver.createdAt) }} ·
+                    {{ plural(ver.evidenceCount, 'evidenza', 'evidenze') }}
+                  </span>
+                </div>
+                @if (ver.noEvidenceReason) {
+                  <p class="small text-secondary mb-0">Motivo: {{ ver.noEvidenceReason }}</p>
+                }
+                @if (!ver.isCurrent) {
+                  @if (promoteTarget() === ver.id) {
+                    <div
+                      class="ev-promote"
+                      role="group"
+                      [attr.aria-label]="'Promozione della versione ' + ver.version"
+                    >
+                      <p class="small mb-1">
+                        Promuovere la versione {{ ver.version }} a corrente? Le analisi già eseguite
+                        non cambiano.
+                      </p>
+                      <label [for]="'ev-reason-' + ver.id" class="form-label small mb-0"
+                        >Motivo (facoltativo)</label
+                      >
+                      <input
+                        [id]="'ev-reason-' + ver.id"
+                        class="form-control form-control-sm mb-2"
+                        maxlength="500"
+                        data-testid="promote-reason"
+                        [value]="promoteReason()"
+                        (input)="setReason($event)"
+                      />
+                      <div class="ev-actions">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-primary"
+                          data-testid="promote-confirm"
+                          [disabled]="isBusy('promote')"
+                          (click)="promote()"
+                        >
+                          Conferma promozione
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          (click)="cancelPromote()"
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="ev-actions">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-primary"
+                        data-testid="promote"
+                        [attr.aria-label]="'Promuovi la versione ' + ver.version"
+                        (click)="askPromote(ver.id)"
+                      >
+                        Promuovi
+                      </button>
+                    </div>
+                  }
+                }
+              </li>
+            }
+          </ul>
+
+          @if (v.versions.length >= 2) {
+            <form
+              class="ev-filters"
+              aria-label="Confronto fra versioni"
+              (submit)="$event.preventDefault(); compare()"
+            >
+              <div>
+                <label for="ev-cmp-from" class="form-label small mb-0">Da</label>
+                <select
+                  id="ev-cmp-from"
+                  class="form-select form-select-sm"
+                  (change)="setCompare('from', $event)"
+                >
+                  @for (ver of v.versions; track ver.id) {
+                    <option [value]="ver.id" [selected]="compareFrom() === ver.id">
+                      Versione {{ ver.version }}{{ ver.isCurrent ? ' (corrente)' : '' }}
+                    </option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label for="ev-cmp-to" class="form-label small mb-0">A</label>
+                <select
+                  id="ev-cmp-to"
+                  class="form-select form-select-sm"
+                  (change)="setCompare('to', $event)"
+                >
+                  @for (ver of v.versions; track ver.id) {
+                    <option [value]="ver.id" [selected]="compareTo() === ver.id">
+                      Versione {{ ver.version }}{{ ver.isCurrent ? ' (corrente)' : '' }}
+                    </option>
+                  }
+                </select>
+              </div>
+              <button
+                type="submit"
+                class="btn btn-sm btn-primary align-self-end"
+                data-testid="compare"
+                [disabled]="diffLoading()"
+              >
+                Confronta
+              </button>
+            </form>
+          }
+          @if (diffError()) {
+            <div class="alert alert-warning py-2 mb-0" role="alert">{{ diffError() }}</div>
+          }
+          @if (diff(); as d) {
+            <div data-testid="diff" role="region" aria-label="Esito del confronto">
+              <p class="small mb-2" data-testid="diff-summary">
+                {{ d.summary.added }} aggiunte · {{ d.summary.removed }} rimosse ·
+                {{ d.summary.unchanged }} invariate · {{ d.summary.modified }} modificate ·
+                {{ d.summary.ambiguous }} ambigue
+              </p>
+              @if (d.summary.ambiguous > 0) {
+                <p class="small text-secondary">
+                  Le voci ambigue non sono abbinate automaticamente: valutale tu.
+                </p>
+              }
+              <ul class="list-unstyled mb-0 ev-list">
+                @for (en of d.entries; track $index) {
+                  <li class="ev-row" data-testid="diff-entry">
+                    <div class="ev-row-head">
+                      <span class="badge text-bg-light border" data-testid="diff-status">{{
+                        diffStatusLabel(en.status)
+                      }}</span>
+                      @if (en.from || en.to) {
+                        <span class="small text-secondary">
+                          {{ kindLabel((en.to ?? en.from)!.kind) }}
+                        </span>
+                      }
+                    </div>
+                    @if (en.from; as f) {
+                      <p class="ev-statement mb-1">
+                        <span class="text-secondary">Prima:</span> {{ f.statement }}
+                      </p>
+                    }
+                    @if (en.to; as t) {
+                      <p class="ev-statement mb-1">
+                        <span class="text-secondary">Dopo:</span> {{ t.statement }}
+                      </p>
+                    }
+                    @if (en.changes.length > 0) {
+                      <ul class="small ps-3 mb-0" data-testid="diff-changes">
+                        @for (c of en.changes; track $index) {
+                          <li>
+                            <strong>{{ diffFieldLabel(c.field) }}</strong
+                            >: {{ c.from ?? '—' }} →
+                            {{ c.to ?? '—' }}
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+          @if (v.promotions.length > 0) {
+            <h4 class="h6 mb-1">Promozioni</h4>
+            <ul class="small ps-3 mb-0">
+              @for (p of v.promotions; track p.id) {
+                <li>
+                  {{ formatTime(p.promotedAt) }} · {{ p.promotedBy ?? 'utente' }}
+                  @if (p.reason) {
+                    <span class="text-secondary"> · {{ p.reason }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        }
+      }
+    </section>
+  }
+
+  <!-- Copertura -->
+  <section class="ev-block" aria-labelledby="ev-coverage-title">
+    <div class="ev-block-head">
+      <h3 id="ev-coverage-title" class="h6 mb-0">Copertura</h3>
+      <button
+        type="button"
+        class="btn btn-sm btn-primary"
+        data-testid="verify-coverage"
+        [disabled]="!analysisId() || coverageBusy()"
+        (click)="verifyCoverage()"
+      >
+        {{ coverageBusy() ? 'Verifica in corso…' : 'Verifica copertura' }}
+      </button>
+    </div>
+    @if (!analysisId()) {
+      <p class="ev-empty" data-testid="no-analysis">
+        Nessuna analisi: avvia «Analizza» nella conversazione per poter verificare la copertura.
+      </p>
+    } @else {
+      <p class="small text-secondary mb-0">
+        Confronta le evidenze, la revisione corrente e l'eventuale bozza. Non modifica nulla.
+        {{ selectionInfo() }}
+      </p>
+    }
+    @if (coverageError()) {
+      <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="coverage-error">
+        {{ coverageError() }}
+      </div>
+    }
+    @if (report(); as r) {
+      <div data-testid="report" role="region" aria-label="Report di copertura">
+        <p class="small mb-2" data-testid="report-meta">
+          Report del {{ formatTime(r.createdAt) }} · verificatore {{ r.checkerVersion }} ·
+          {{ r.draftId ? 'bozza inclusa' : 'senza bozza' }}
+        </p>
+        @for (g of groups(); track g.category) {
+          <section
+            [attr.aria-label]="categoryLabel(g.category)"
+            [attr.data-testid]="'group-' + g.category"
+          >
+            <h4 class="h6 mb-0">{{ categoryLabel(g.category) }} ({{ g.findings.length }})</h4>
+            <p class="small text-secondary mb-1">{{ categoryHint(g.category) }}</p>
+            @if (g.findings.length === 0) {
+              <p class="small mb-2" [attr.data-testid]="'empty-' + g.category">
+                @if (g.category === 'SemanticRisk') {
+                  Nessun rischio rilevato dalle euristiche lessicali. Non è una conferma che il
+                  significato sia stato conservato: la verifica semantica resta al PM.
+                } @else {
+                  Nessuna segnalazione.
+                }
+              </p>
+            } @else {
+              <ul class="small ps-3 mb-2">
+                @for (f of g.findings; track $index) {
+                  <li data-testid="finding">
+                    {{ f.message }}
+                    @if (f.alias) {
+                      <span class="text-secondary"> · {{ f.alias }}</span>
+                    }
+                    @if (f.section) {
+                      <span class="text-secondary"> · {{ f.section }}</span>
+                    }
+                    @if (f.category === 'SemanticRisk' && f.confidence) {
+                      <span class="badge text-bg-light border ms-1" data-testid="confidence"
+                        >Confidenza {{ confidenceLabel(f.confidence) }}</span
+                      >
+                    }
+                    @if (f.details) {
+                      <span class="d-block text-secondary">{{ f.details }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+        }
+        <h4 class="h6 mb-1">Limiti della verifica</h4>
+        <ul class="small ps-3 mb-0" data-testid="limits">
+          @for (l of r.limits; track $index) {
+            <li>{{ l }}</li>
+          }
+        </ul>
+      </div>
+    }
+    @if (reports().length > 0) {
+      <h4 class="h6 mb-1">Report precedenti</h4>
+      <ul class="list-unstyled mb-0 small" data-testid="reports">
+        @for (p of reports(); track p.id) {
+          <li>
+            <button
+              type="button"
+              class="btn btn-sm btn-link text-start p-0"
+              [attr.aria-current]="report()?.id === p.id ? 'true' : null"
+              (click)="openReport(p.id)"
+            >
+              {{ reportLabel(p) }}
+            </button>
+          </li>
+        }
+      </ul>
+    } @else if (analysisId() && !coverageError()) {
+      <p class="small text-secondary mb-0">Nessun report ancora calcolato per questa analisi.</p>
+    }
+  </section>
+</section>

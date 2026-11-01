@@ -28,6 +28,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         await create.ExecuteNonQueryAsync();
 
         ConnectionString = new NpgsqlConnectionStringBuilder(_adminConnectionString) { Database = _databaseName }.ConnectionString;
+        MafDiagnostics.AnnounceDatabase(ConnectionString);   // snapshot ed export delle evidenze se il test usa il modello reale
     }
 
     public async ValueTask DisposeAsync()
@@ -37,6 +38,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
             return;
         }
 
+        await MafDiagnostics.FinalizeAsync(ConnectionString);   // export delle evidenze PRIMA di eliminare il database
         NpgsqlConnection.ClearAllPools();
         await using var connection = new NpgsqlConnection(_adminConnectionString);
         await connection.OpenAsync();

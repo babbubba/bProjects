@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Conversations;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
 using Microsoft.EntityFrameworkCore;
@@ -168,7 +169,7 @@ public static class AnalysisEndpoints
                 RequestedBy = requestedBy,
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
-                DeadlineAt = now + policy.RunDeadline,
+                DeadlineAt = now + policy.AnalysisRunDeadline,
                 WorkflowDefinitionVersion = ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
@@ -177,6 +178,11 @@ public static class AnalysisEndpoints
                 UpdatedAt = now,
             };
             db.ProcessingRuns.Add(run);
+            await db.SaveChangesAsync(ct);
+            // Registro delle evidenze: i messaggi PM entro il cutoff senza versione corrente né lavoro aperto (preesistenti o falliti)
+            // ricevono un lavoro di estrazione; il run attende le estrazioni aperte entro il cutoff (gate del claim).
+            await new EvidenceLedgerStore(db).EnqueueAsync(projectId, conversationId!.Value, cutoff.Value, onlyMissing: true, ExtractionJobReason.Backfill,
+                requestedBy, null, now, policy, EvidenceLedgerStore.ExtractorConfig(ai.Value, policy), ct);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             runId = run.Id;
@@ -191,6 +197,7 @@ public static class AnalysisEndpoints
             return Problem(StatusCodes.Status409Conflict, "Un'elaborazione formale è già attiva", "processing_active", other);
         }
 
+        http.RequestServices.GetService<bProjects.App.AI.DispatchWakeup>()?.Notify();
         await events.PublishStateAsync(runId); // post-commit; legge lo stato corrente, mai uno vecchio
         var created = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == runId, ct);
         return Results.Accepted(LocationOf(projectId, runId), ToView(created));
@@ -376,7 +383,7 @@ public static class AnalysisEndpoints
         var settings = ai.ForPhase(phase);
         return JsonSerializer.Serialize(new
         {
-            modelId = ai.ModelId,
+            modelId = settings.ModelId,
             phase = InferenceMetrics.PhaseName(phase),
             structuredOutputMode = ai.StructuredOutputMode.ToString(),
             contextWindowTokens = ai.ContextWindowTokens,
@@ -386,13 +393,13 @@ public static class AnalysisEndpoints
             compactionTriggerTokens = ai.CompactionTriggerTokens > 0 ? ai.CompactionTriggerTokens : settings.InputBudgetTokens,
             enableThinking = settings.EnableThinking,
             temperature = 0,
-            requestTimeoutSeconds = ai.RequestTimeoutSeconds,
+            requestTimeoutSeconds = settings.RequestTimeoutSeconds,
             leaseSeconds = policy.LeaseDurationSeconds,
             renewSeconds = policy.RenewIntervalSeconds,
             maxAttempts = policy.MaxAttempts,
             retryBaseDelaySeconds = policy.RetryBaseDelaySeconds,
             retryMaxDelaySeconds = policy.RetryMaxDelaySeconds,
-            runDeadlineSeconds = policy.RunDeadlineSeconds,
+            runDeadlineSeconds = phase == AiPhase.Analysis ? policy.EffectiveAnalysisRunDeadlineSeconds : policy.RunDeadlineSeconds,
         });
     }
 

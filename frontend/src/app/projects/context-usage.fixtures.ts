@@ -47,6 +47,7 @@ export function contextUsage(over: Partial<ContextUsage> = {}): ContextUsage {
         analysis: { maxOutputTokens: 8192, enableThinking: false, inputBudgetTokens: 24064 },
         document: { maxOutputTokens: 8192, enableThinking: false, inputBudgetTokens: 24064 },
         compaction: { maxOutputTokens: 2048, enableThinking: false, inputBudgetTokens: 30208 },
+        extraction: { maxOutputTokens: 4096, enableThinking: false, inputBudgetTokens: 28160 },
       },
     },
     last: {

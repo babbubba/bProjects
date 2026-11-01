@@ -124,6 +124,47 @@ public sealed class AnalysisContentTests
     }
 
     [Fact]
+    public void Item_ids_are_unique_per_payload_not_across_analyses_or_projects()
+    {
+        // Regola 1: ID «unici nel payload». Il modello ripete ID-segnaposto fra progetti (V7: 74 occorrenze, 38 distinti);
+        // nessuna lettura li risolve fuori dalla catena di revisioni della stessa analisi, quindi il riuso è ammesso.
+        var (first, second) = (AnalysisFixtures.World(), AnalysisFixtures.World());
+        var (a, b) = (AnalysisFixtures.NominalAi(first), AnalysisFixtures.NominalAi(second));
+        var ids = ItemNodes(a).Select(n => n["id"]!.GetValue<string>()).ToList();
+        foreach (var (node, id) in ItemNodes(b).Zip(ids))
+        {
+            node["id"] = id;
+        }
+
+        Assert.NotEqual(first.ProjectId, second.ProjectId);
+        Assert.Equal(ids, ItemNodes(b).Select(n => n["id"]!.GetValue<string>()));
+        var (outcomeA, outcomeB) = (AnalysisGateway.Validate(a, first.Trusted, AnalysisActor.Ai), AnalysisGateway.Validate(b, second.Trusted, AnalysisActor.Ai));
+        Assert.True(outcomeA.Accepted, outcomeA.Code);
+        Assert.True(outcomeB.Accepted, outcomeB.Code);
+
+        static IEnumerable<JsonObject> ItemNodes(JsonObject root)
+        {
+            var scope = root["contextAndScope"]!;
+            foreach (var array in new[] { root["goals"], scope["overview"], scope["included"], scope["excluded"], root["requirements"], root["operationalFlows"], root["constraints"], root["dependencies"], root["assumptions"], root["openQuestions"] })
+            {
+                foreach (var item in array!.AsArray())
+                {
+                    yield return item!.AsObject();
+                }
+            }
+
+            foreach (var conflict in root["conflicts"]!.AsArray())
+            {
+                yield return conflict!.AsObject();
+                foreach (var alternative in conflict["alternatives"]!.AsArray())
+                {
+                    yield return alternative!.AsObject();
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void A_pm_edit_adds_a_pm_revision_source_and_the_pm_may_resolve_a_conflict_with_a_reason()
     {
         var world = AnalysisFixtures.World();
@@ -263,11 +304,23 @@ public sealed class AnalysisContentTests
         Assert.Equal([world.ProjectId.ToString()], Enum(properties["projectId"]));
         Assert.Equal(world.Cutoff, Assert.Single(properties["sourceCutoffSequence"]!["enum"]!.AsArray())!.GetValue<long>());
 
-        // Solo i messaggi del progetto fino al cutoff: né quello oltre il cutoff né quello di un altro progetto.
-        string[] dialog = [.. world.Trusted.Messages.Where(m => m.ProjectId == world.ProjectId && m.Sequence <= world.Cutoff).OrderBy(m => m.Sequence).Select(m => m.Id.ToString())];
-        var source = properties["sources"]!["items"]!["properties"]!;
-        Assert.Equal(dialog, Enum(source["id"]));
-        Assert.Equal(dialog, Enum(source["messageId"]));
+        // Solo i messaggi del PM del progetto fino al cutoff (quelli dell'assistente sono contesto, non fonti): né quello oltre il cutoff né
+        // quello di un altro progetto. Le fonti sono una tupla fissa, una per messaggio, con id, messageId e ruolo già determinati.
+        string[] dialog = [.. world.Trusted.Messages.Where(m => m.ProjectId == world.ProjectId && m.Sequence <= world.Cutoff && m.Role == "user")
+            .OrderBy(m => m.Sequence).Select(m => m.Id.ToString())];
+        var sources = properties["sources"]!["prefixItems"]!.AsArray();
+        Assert.Equal(dialog.Length, sources.Count);
+        Assert.Equal(dialog.Length, properties["sources"]!["minItems"]!.GetValue<int>());
+        Assert.Equal(dialog.Length, properties["sources"]!["maxItems"]!.GetValue<int>());
+        for (var i = 0; i < dialog.Length; i++)
+        {
+            var source = sources[i]!["properties"]!;
+            Assert.Equal([dialog[i]], Enum(source["id"]));
+            Assert.Equal([dialog[i]], Enum(source["messageId"]));
+            Assert.Equal(["user"], Enum(source["messageRole"]));
+            Assert.Equal(["Message"], Enum(source["kind"]));
+        }
+
         Assert.Equal(dialog, Enum(properties["goals"]!["items"]!["properties"]!["evidenceRefs"]!["items"]));
 
         // Ogni altro elemento con evidenze è lo stesso tipo (lo schema generato lo riferisce con $ref): nessuna evidenza resta libera.
@@ -490,7 +543,12 @@ internal sealed class InMemoryAnalysisStore(TrustedInput trusted) : IAnalysisRun
             .OrderBy(m => m.Sequence)
             .Select(m => new AnalysisDialogMessage(m.Id, m.Role == "user" ? AnalysisMessageRole.User : AnalysisMessageRole.Assistant, m.Sequence, $"Messaggio {m.Sequence}"))]));
 
-    public Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct)
+    /// <summary>Senza database il registro è vuoto: la prova riguarda schema e validazione, non le evidenze.</summary>
+    public Task<bProjects.App.Evidence.SelectionResult> FreezeEvidenceAsync(AnalysisRunClaim claim, CancellationToken ct) =>
+        Task.FromResult(new bProjects.App.Evidence.SelectionResult(bProjects.App.Evidence.SelectionOutcome.Existing, new bProjects.App.Evidence.EvidenceSelectionView([], [], [], [])));
+
+    public Task<AnalysisCommitResult> CommitAsync(
+        AnalysisRunClaim claim, AnalysisContent content, IReadOnlyDictionary<Guid, IReadOnlyList<string>> evidenceKeys, CancellationToken ct)
     {
         Committed = content;
         return Task.FromResult(new AnalysisCommitResult(AnalysisCommitOutcome.Committed, Guid.NewGuid()));
@@ -705,6 +763,7 @@ internal static class AnalysisFixtures
         ["testo_solo_whitespace"] = new(false, r => At(r, "goals")["text"] = " \t\r\n "),
         ["id_elemento_duplicato"] = new(false, r => At(r, "requirements")["id"] = At(r, "goals")["id"]!.GetValue<string>()),
         ["id_fonte_duplicato"] = new(false, r => r["sources"]![1]!["id"] = r["sources"]![0]!["id"]!.GetValue<string>()),
+        ["id_elemento_uguale_a_fonte"] = new(false, r => At(r, "goals")["id"] = r["sources"]![0]!["id"]!.GetValue<string>()),
         ["evidenza_non_risolta"] = new(false, r => At(r, "goals")["evidenceRefs"] = new JsonArray(Id())),
         ["cutoff_diverso_dal_server"] = new(false, r => r["sourceCutoffSequence"] = 4),
         ["analysisId_diverso_dal_server"] = new(false, r => r["analysisId"] = Id()),

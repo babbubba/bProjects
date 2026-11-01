@@ -30,23 +30,42 @@ services:
       Ai__Endpoint: ${AI_ENDPOINT:?impostare AI_ENDPOINT in infra/.env}
       Ai__ModelId: ${AI_MODEL_ID:?impostare AI_MODEL_ID in infra/.env}
       Ai__ApiKey: ${AI_API_KEY:?impostare AI_API_KEY in infra/.env}
-      Ai__ContextWindowTokens: ${AI_CONTEXT_WINDOW_TOKENS:-32768}
-      # Limiti e fasi: i default riproducono il comportamento di AiOptions. Gli override di fase vuoti ereditano il valore globale
-      # (il binder .NET legge la stringa vuota come non impostata).
+      # Profilo Qwen3.6-35B-Smart sul DGX: ctx-size 131072 con parallel=1, quindi la finestra per slot è 131072.
+      Ai__ContextWindowTokens: ${AI_CONTEXT_WINDOW_TOKENS:-131072}
+      # Limiti e fasi. Gli override di fase vuoti ereditano il valore globale (il binder .NET legge la stringa vuota come non
+      # impostata); enable_thinking è invece esplicito per ogni fase: il profilo del server ha reasoning=on e non deve prevalere.
       Ai__MaxOutputTokens: ${AI_MAX_OUTPUT_TOKENS:-4096}
       Ai__SafetyMarginTokens: ${AI_SAFETY_MARGIN_TOKENS:-1024}
       Ai__CompactionTriggerTokens: ${AI_COMPACTION_TRIGGER_TOKENS:-0}
       Ai__EnableThinking: ${AI_ENABLE_THINKING:-false}
       Ai__RequestTimeoutSeconds: ${AI_REQUEST_TIMEOUT_SECONDS:-150}
       Ai__RuntimeCheckSeconds: ${AI_RUNTIME_CHECK_SECONDS:-60}
+      Ai__Phases__Chat__ModelId: ${AI_CHAT_MODEL_ID:-}
       Ai__Phases__Chat__MaxOutputTokens: ${AI_CHAT_MAX_OUTPUT_TOKENS:-}
-      Ai__Phases__Chat__EnableThinking: ${AI_CHAT_ENABLE_THINKING:-}
-      Ai__Phases__Analysis__MaxOutputTokens: ${AI_ANALYSIS_MAX_OUTPUT_TOKENS:-8192}
-      Ai__Phases__Analysis__EnableThinking: ${AI_ANALYSIS_ENABLE_THINKING:-}
+      Ai__Phases__Chat__EnableThinking: ${AI_CHAT_ENABLE_THINKING:-false}
+      Ai__Phases__Chat__RequestTimeoutSeconds: ${AI_CHAT_REQUEST_TIMEOUT_SECONDS:-}
+      Ai__Phases__Analysis__ModelId: ${AI_ANALYSIS_MODEL_ID:-}
+      Ai__Phases__Analysis__MaxOutputTokens: ${AI_ANALYSIS_MAX_OUTPUT_TOKENS:-32768}
+      Ai__Phases__Analysis__EnableThinking: ${AI_ANALYSIS_ENABLE_THINKING:-true}
+      Ai__Phases__Analysis__RequestTimeoutSeconds: ${AI_ANALYSIS_REQUEST_TIMEOUT_SECONDS:-900}
+      Ai__Phases__Document__ModelId: ${AI_DOCUMENT_MODEL_ID:-}
       Ai__Phases__Document__MaxOutputTokens: ${AI_DOCUMENT_MAX_OUTPUT_TOKENS:-}
-      Ai__Phases__Document__EnableThinking: ${AI_DOCUMENT_ENABLE_THINKING:-}
+      Ai__Phases__Document__EnableThinking: ${AI_DOCUMENT_ENABLE_THINKING:-false}
+      Ai__Phases__Document__RequestTimeoutSeconds: ${AI_DOCUMENT_REQUEST_TIMEOUT_SECONDS:-}
+      Ai__Phases__Compaction__ModelId: ${AI_COMPACTION_MODEL_ID:-}
       Ai__Phases__Compaction__MaxOutputTokens: ${AI_COMPACTION_MAX_OUTPUT_TOKENS:-}
-      Ai__Phases__Compaction__EnableThinking: ${AI_COMPACTION_ENABLE_THINKING:-}
+      Ai__Phases__Compaction__EnableThinking: ${AI_COMPACTION_ENABLE_THINKING:-false}
+      Ai__Phases__Compaction__RequestTimeoutSeconds: ${AI_COMPACTION_REQUEST_TIMEOUT_SECONDS:-}
+      # Estrazione delle evidenze (registro atomico): una chiamata con schema per messaggio PM, senza ragionamento di default; un messaggio
+      # ricco di fatti produce molte evidenze, da qui il tetto di output più ampio di quello globale.
+      Ai__Phases__Extraction__ModelId: ${AI_EXTRACTION_MODEL_ID:-}
+      Ai__Phases__Extraction__MaxOutputTokens: ${AI_EXTRACTION_MAX_OUTPUT_TOKENS:-16384}
+      Ai__Phases__Extraction__EnableThinking: ${AI_EXTRACTION_ENABLE_THINKING:-false}
+      Ai__Phases__Extraction__RequestTimeoutSeconds: ${AI_EXTRACTION_REQUEST_TIMEOUT_SECONDS:-600}
+      # Deadline dei run di analisi: deve superare Ai__Phases__Analysis__RequestTimeoutSeconds (chat e documento restano a 180 s).
+      Execution__AnalysisRunDeadlineSeconds: ${EXECUTION_ANALYSIS_RUN_DEADLINE_SECONDS:-1200}
+      # Deadline di ogni lavoro di estrazione dalla richiesta (coda inclusa): con parallel=1 le estrazioni attendono chat e run.
+      Execution__ExtractionDeadlineSeconds: ${EXECUTION_EXTRACTION_DEADLINE_SECONDS:-3600}
     depends_on:
       db:
         condition: service_healthy

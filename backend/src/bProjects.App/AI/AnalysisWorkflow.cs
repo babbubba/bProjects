@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -52,22 +53,78 @@ public static class AnalysisSchema
         properties["analysisId"] = Only("string", input.AnalysisId.ToString());
         properties["projectId"] = Only("string", input.ProjectId.ToString());
         properties["sourceCutoffSequence"] = Only("integer", input.SourceCutoffSequence);
-        if (input.Dialog.Count > 0)
+        // Le fonti sono i soli messaggi del PM (quelli dell'assistente sono contesto e non provano fatti): la grammatica elenca una
+        // fonte per messaggio, con id, messageId e ruolo già determinati, così il modello non può alterare un id né attribuire a un
+        // messaggio dell'assistente il ruolo user (osservato: tutte le fonti «user», messageRole incoerente e run invalid_agent_output).
+        var users = input.Dialog.Where(m => m.Role == AnalysisMessageRole.User).ToList();
+        if (users.Count > 0)
         {
             var messages = new System.Text.Json.Nodes.JsonObject
             {
                 ["type"] = "string",
-                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. input.Dialog.Select(m => System.Text.Json.Nodes.JsonValue.Create(m.Id.ToString()))]),
+                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. users.Select(m => System.Text.Json.Nodes.JsonValue.Create(m.Id.ToString()))]),
             };
-            var source = properties["sources"]!["items"]!["properties"]!;
-            source["id"] = messages.DeepClone();
-            source["messageId"] = messages.DeepClone();
+            properties["sources"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "array",
+                ["prefixItems"] = new System.Text.Json.Nodes.JsonArray([.. users.Select(m => (System.Text.Json.Nodes.JsonNode)MessageSource(m.Id))]),
+                ["minItems"] = users.Count,
+                ["maxItems"] = users.Count,
+            };
             ConstrainEvidence(node, messages);
         }
 
+        AddEvidenceKeys(node, input.Evidence?.Aliases ?? []);
+        Reorder(node);
         using var document = JsonDocument.Parse(node.ToJsonString());
         return document.RootElement.Clone();
     }
+
+    /// <summary>
+    /// La grammatica impone l'ordine delle proprietà dello schema, e il modello scrive nell'ordine in cui le trova: conflitti, lacune
+    /// ed esclusioni precedono le sezioni dei fatti, così quando compila requisiti e vincoli ha già collocato altrove le posizioni
+    /// in conflitto, ciò che il PM non sa e ciò che esclude (osservato: le stesse affermazioni ripetute come requisiti o vincoli e
+    /// negazioni finite nei vincoli). L'ordine non cambia il contenuto: il validatore e il DTO non dipendono dall'ordine.
+    /// </summary>
+    private static void Reorder(System.Text.Json.Nodes.JsonNode node)
+    {
+        string[] root = ["schemaVersion", "analysisId", "projectId", "sourceCutoffSequence", "validationState", "sources", "goals", "conflicts",
+            "openQuestions", "contextAndScope", "requirements", "operationalFlows", "constraints", "dependencies", "assumptions"];
+        Sort(node["properties"]!.AsObject(), root);
+        if (node["properties"]!["contextAndScope"]?["properties"] is System.Text.Json.Nodes.JsonObject scope)
+        {
+            Sort(scope, ["excluded", "overview", "included"]);
+        }
+    }
+
+    private static void Sort(System.Text.Json.Nodes.JsonObject properties, string[] order)
+    {
+        var entries = properties.ToList();
+        properties.Clear();
+        foreach (var name in order.Concat(entries.Select(p => p.Key).Except(order)))
+        {
+            if (entries.FirstOrDefault(p => p.Key == name) is { Value: { } value })
+            {
+                properties[name] = value;
+            }
+        }
+    }
+
+    /// <summary>Fonte Message di un messaggio del PM con tutti i campi determinati (stessa forma e ordine di <see cref="AnalysisSource"/>).</summary>
+    private static System.Text.Json.Nodes.JsonObject MessageSource(Guid messageId) => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["id"] = Only("string", messageId.ToString()),
+            ["kind"] = Only("string", nameof(AnalysisSourceKind.Message)),
+            ["messageId"] = Only("string", messageId.ToString()),
+            ["messageRole"] = Only("string", "user"),
+            ["revisionId"] = new System.Text.Json.Nodes.JsonObject { ["type"] = "null" },
+        },
+        ["required"] = new System.Text.Json.Nodes.JsonArray("id", "kind", "messageId", "messageRole", "revisionId"),
+        ["additionalProperties"] = false,
+    };
 
     private static System.Text.Json.Nodes.JsonObject Only<T>(string type, T value) => new()
     {
@@ -99,6 +156,126 @@ public static class AnalysisSchema
 
                 break;
         }
+    }
+
+    /// <summary>Proprietà interna della mappa elemento→evidenze: rimossa prima della validazione, mai persistita in AnalysisContent.</summary>
+    public const string EvidenceKeysProperty = "evidenceKeys";
+
+    /// <summary>
+    /// Ogni oggetto elemento (id, text, classification, evidenceRefs) riceve <c>evidenceKeys</c> obbligatorio: alias della vista congelata
+    /// del run, vincolati in enum dalla grammatica. La risoluzione dei conflitti (senza testo) non ne riceve.
+    /// </summary>
+    private static void AddEvidenceKeys(System.Text.Json.Nodes.JsonNode? node, IReadOnlyList<string> aliases)
+    {
+        switch (node)
+        {
+            case System.Text.Json.Nodes.JsonObject obj:
+                if (obj["properties"] is System.Text.Json.Nodes.JsonObject props && props.ContainsKey("evidenceRefs") && props.ContainsKey("text")
+                    && !props.ContainsKey(EvidenceKeysProperty))
+                {
+                    props[EvidenceKeysProperty] = aliases.Count == 0
+                        ? new System.Text.Json.Nodes.JsonObject { ["type"] = "array", ["maxItems"] = 0 }
+                        : new System.Text.Json.Nodes.JsonObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = new System.Text.Json.Nodes.JsonObject
+                            {
+                                ["type"] = "string",
+                                ["enum"] = new System.Text.Json.Nodes.JsonArray([.. aliases.Select(a => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(a)!)]),
+                            },
+                        };
+                    if (obj["required"] is System.Text.Json.Nodes.JsonArray required)
+                    {
+                        required.Add(EvidenceKeysProperty);
+                    }
+                }
+
+                foreach (var child in obj.Select(p => p.Value).ToList())
+                {
+                    AddEvidenceKeys(child, aliases);
+                }
+
+                break;
+            case System.Text.Json.Nodes.JsonArray array:
+                foreach (var child in array)
+                {
+                    AddEvidenceKeys(child, aliases);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Separa la mappa elemento→evidenze dal JSON del modello: toglie <c>evidenceKeys</c> da ogni elemento e restituisce il testo
+    /// AnalysisContent da validare. Un testo non JSON resta invariato (lo rifiuterà la validazione). Alias non presenti nella vista:
+    /// violazioni (con la grammatica attiva non possono comparire).
+    /// </summary>
+    public static (string Content, Dictionary<Guid, IReadOnlyList<string>> Keys, List<string> Violations) SplitEvidenceKeys(string text, IReadOnlyCollection<string> aliases)
+    {
+        var keys = new Dictionary<Guid, IReadOnlyList<string>>();
+        var violations = new List<string>();
+        System.Text.Json.Nodes.JsonNode? root;
+        try
+        {
+            root = System.Text.Json.Nodes.JsonNode.Parse(text.Trim());
+        }
+        catch (JsonException)
+        {
+            return (text, keys, violations);
+        }
+
+        void Walk(System.Text.Json.Nodes.JsonNode? node)
+        {
+            switch (node)
+            {
+                case System.Text.Json.Nodes.JsonObject obj:
+                    if (obj.ContainsKey(EvidenceKeysProperty))
+                    {
+                        var raw = obj[EvidenceKeysProperty];
+                        obj.Remove(EvidenceKeysProperty);
+                        if (obj["id"] is System.Text.Json.Nodes.JsonValue idValue && idValue.TryGetValue<string>(out var idText) && Guid.TryParse(idText, out var id)
+                            && raw is System.Text.Json.Nodes.JsonArray list)
+                        {
+                            var found = new List<string>();
+                            foreach (var entry in list)
+                            {
+                                if (entry is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var alias) && aliases.Contains(alias))
+                                {
+                                    found.Add(alias);
+                                }
+                                else
+                                {
+                                    violations.Add($"evidenceKeys dell'elemento {idText}: alias «{entry}» non presente nel registro del run");
+                                }
+                            }
+
+                            keys[id] = [.. found.Distinct()];
+                        }
+                        else if (raw is not null and not System.Text.Json.Nodes.JsonArray)
+                        {
+                            violations.Add("evidenceKeys deve essere un array di alias");
+                        }
+                    }
+
+                    foreach (var child in obj.Select(p => p.Value).ToList())
+                    {
+                        Walk(child);
+                    }
+
+                    break;
+                case System.Text.Json.Nodes.JsonArray array:
+                    foreach (var child in array)
+                    {
+                        Walk(child);
+                    }
+
+                    break;
+            }
+        }
+
+        Walk(root);
+        return (root?.ToJsonString() ?? text, keys, violations);
     }
 
     private const string UuidPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
@@ -162,17 +339,36 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
         }
 
         var options = InternalModelClient.WithJsonSchema(analysisOptions, AnalysisSchema.ForRun(input), AnalysisSchema.Name);
-        var agent = await conversational.CreateConsolidationAgentAsync(options, ct);
-        var load = new LoadDialogExecutor(scopes, claim).BindExecutor();
-        var consolidate = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false, ReassignOtherAgentsAsUsers = false });
+        // Passo singolo (grafo invariato) o consolidamento incrementale: un agente nativo per passo, separati da un executor che valida
+        // l'analisi corrente e consegna il passo successivo. Il piano dipende solo dall'input congelato e dalle opzioni: stessa topologia al resume.
+        var plan = await AnalysisConsolidation.PlanAsync(input, conversational.Factory, ct);
+        var load = new LoadDialogExecutor(scopes, claim, plan).BindExecutor();
         var validate = new ValidatePersistAnalysisExecutor(scopes, claim).BindExecutor();
+        var agents = new List<ExecutorBinding>();
+        for (var step = 1; step <= plan.Steps.Count; step++)
+        {
+            var agent = await conversational.CreateConsolidationAgentAsync(options, ct, step);
+            agents.Add(agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false, ReassignOtherAgentsAsUsers = false }));
+        }
 
-        return new WorkflowBuilder(load)
-            .AddEdge(load, consolidate)
-            .AddEdge(consolidate, validate)
+        var builder = new WorkflowBuilder(load).AddEdge(load, agents[0]);
+        for (var step = 1; step < plan.Steps.Count; step++)
+        {
+            var next = new ConsolidationStepExecutor(scopes, claim, plan, step).BindExecutor();
+            builder.AddEdge(agents[step - 1], next).AddEdge(next, agents[step]);
+        }
+
+        return builder
+            .AddEdge(agents[^1], validate)
             .WithOutputFrom(validate)
             .Build();
     }
+
+    /// <summary>Fase osservabile di un executor: gli agenti e i passi del consolidamento incrementale sono tutti «consolidamento».</summary>
+    private static string? StageOf(string executorId) =>
+        Stages.Contains(executorId) ? executorId
+        : executorId.StartsWith(ConsolidationId + "-", StringComparison.Ordinal) || executorId.StartsWith("ConsolidationStep", StringComparison.Ordinal) ? ConsolidationId
+        : null;
 
     /// <summary>
     /// Esegue il run per conto dell'owner del lease: avvio nativo oppure, se esiste un checkpoint del run, ripresa
@@ -199,6 +395,26 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
             return await ReadAsync(claim.RunId, ct);
         }
 
+        // Registro delle evidenze (contracts/ai-workflow.md §10.6): la selezione si congela al primo tentativo, prima di costruire il grafo
+        // (lo schema del run dipende dagli alias); i tentativi successivi e il resume la rileggono identica.
+        SelectionResult selection;
+        using (var evidenceScope = scopes.CreateScope())
+        {
+            selection = await evidenceScope.ServiceProvider.GetRequiredService<IAnalysisRunStore>().FreezeEvidenceAsync(claim, ct);
+        }
+
+        switch (selection.Outcome)
+        {
+            case SelectionOutcome.Rejected:
+                // Come EnsureWorkflowSessionAsync: un run senza lease valido non è nostro e non tocca il modello.
+                throw new OperationCanceledException("Selezione delle evidenze rifiutata: il lease del run non è più valido.");
+            case SelectionOutcome.Missing:
+                await FailAsync(claim, EvidenceLedgerStore.EvidenceUnavailable,
+                    "Estrazione delle evidenze non disponibile per i messaggi PM di sequenza " + string.Join(", ", selection.MissingSequences!)
+                    + ": ritentare l'estrazione e avviare una nuova analisi.", ct);
+                return await ReadAsync(claim.RunId, ct);
+        }
+
         var sessionId = await EnsureWorkflowSessionAsync(db, claim, ct);
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(db, new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken)));
         var workflow = await BuildAsync(claim, ct);
@@ -216,11 +432,11 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
             {
                 switch (evt)
                 {
-                    case ExecutorInvokedEvent invoked when Stages.Contains(invoked.ExecutorId) && invoked.ExecutorId != lastStage:
+                    case ExecutorInvokedEvent invoked when StageOf(invoked.ExecutorId) is { } stage && stage != lastStage:
                         // Solo fasi reali, osservate dagli eventi nativi (l'host dell'agente è invocato più volte per fase): informativo, mai un prossimo step.
-                        lastStage = invoked.ExecutorId;
-                        await RecordStageAsync(claim, invoked.ExecutorId, ct);
-                        onStage?.Invoke(invoked.ExecutorId);
+                        lastStage = stage;
+                        await RecordStageAsync(claim, stage, ct);
+                        onStage?.Invoke(stage);
                         break;
                     case WorkflowErrorEvent error:
                         failure ??= error.Exception;
@@ -287,7 +503,7 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
 /// </summary>
 [SendsMessage(typeof(List<ChatMessage>))]
 [SendsMessage(typeof(TurnToken))]
-internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRunClaim claim)
+internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRunClaim claim, ConsolidationPlan plan)
     : Executor<TurnToken>(AnalysisWorkflow.LoadDialogId)
 {
     public override async ValueTask HandleAsync(TurnToken message, IWorkflowContext context, CancellationToken cancellationToken = default)
@@ -299,19 +515,8 @@ internal sealed class LoadDialogExecutor(IServiceScopeFactory scopes, AnalysisRu
             throw new InvalidOperationException("Nessun messaggio del project manager fino al cutoff: niente da analizzare.");
         }
 
-        var messages = run.Dialog
-            .Select(m => new ChatMessage(
-                m.Role == AnalysisMessageRole.User ? ChatRole.User : ChatRole.Assistant,
-                $"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}"))
-            .ToList();
-        messages.Add(new ChatMessage(ChatRole.User, new StringBuilder()
-            .AppendLine("Dati affidabili del server per questa analisi:")
-            .AppendLine($"- analysisId: {run.AnalysisId}")
-            .AppendLine($"- projectId: {run.ProjectId}")
-            .AppendLine($"- sourceCutoffSequence: {run.SourceCutoffSequence}")
-            .AppendLine("Produci ora l'unico oggetto JSON AnalysisContent 1.0.0.")
-            .ToString()));
-
+        // Passo singolo: tutto il dialogo e la vista completa nel messaggio finale; incrementale: il primo intervallo e la sua parte del registro.
+        var messages = AnalysisConsolidation.Messages(run, plan, step: 1, prior: null);
         await context.SendMessageAsync(messages, cancellationToken: cancellationToken);
         await context.SendMessageAsync(message, cancellationToken: cancellationToken);
     }
@@ -338,17 +543,27 @@ internal sealed class ValidatePersistAnalysisExecutor(IServiceScopeFactory scope
         using var scope = scopes.CreateScope();
         var committer = scope.ServiceProvider.GetRequiredService<IAnalysisRunStore>();
         var input = await committer.LoadInputAsync(claim.RunId, cancellationToken);
-        var validation = AnalysisContentValidator.ValidateText(text, input.ToValidationContext(), AnalysisActorKind.Ai);
-
-        if (!validation.Accepted)
+        // La mappa elemento→evidenze (evidenceKeys) è interna: separata prima della validazione, AnalysisContent 1.0.0 resta il contratto.
+        var (content, keys, keyViolations) = AnalysisSchema.SplitEvidenceKeys(text, input.Evidence?.Aliases ?? []);
+        var validation = AnalysisContentValidator.ValidateText(content, input.ToValidationContext(), AnalysisActorKind.Ai);
+        // Consolidamento incrementale: l'ultimo passo non può perdere le evidenze già rappresentate dai precedenti (stato nativo del workflow).
+        var lost = AnalysisConsolidation.Lost(
+            await context.ReadStateAsync<List<string>>(AnalysisConsolidation.RepresentedKey, AnalysisConsolidation.StateScope, cancellationToken), keys);
+        if (lost.Count > 0)
         {
-            var summary = $"L'output del modello non è un'analisi valida ({validation.Violations.Count} violazioni): " +
-                string.Join(" | ", validation.Violations.Take(5));
+            keyViolations.Add(AnalysisConsolidation.LostViolation(lost));
+        }
+
+        if (!validation.Accepted || keyViolations.Count > 0)
+        {
+            var violations = validation.Violations.Concat(keyViolations).ToList();
+            var summary = $"L'output del modello non è un'analisi valida ({violations.Count} violazioni): " +
+                string.Join(" | ", violations.Take(5));
             await committer.FailAsync(claim, validation.Code ?? AnalysisContentValidator.InvalidAgentOutput, summary, cancellationToken);
             return;
         }
 
-        var commit = await committer.CommitAsync(claim, validation.Content!, cancellationToken);
+        var commit = await committer.CommitAsync(claim, validation.Content!, keys, cancellationToken);
         if (commit.Outcome == AnalysisCommitOutcome.Rejected)
         {
             if (commit.Reason == "lease_lost")

@@ -98,6 +98,7 @@ Molte cose NON si fanno: negazioni ed esclusioni da non invertire (FR-010).
 - Come affermazione (mentre e' negato, escluso o aperto): «Il portale gestisce le assenze per malattia e i certificati»
 - Come affermazione (mentre e' negato, escluso o aperto): «L'ufficio personale approva le richieste»
 - In nessun punto (non presente nel dialogo): ad es. «Notifiche anche via SMS»
+- In nessun punto (non presente nel dialogo): ad es. «Integrazione con il software paghe per importare i ratei» (il software paghe è responsabile di paghe e ratei, nessuno scambio di dati è dichiarato)
 - Stime di ore, costi o date non presenti nel dialogo; sezioni vuote o riempitivi; la bozza presentata come approvata o definitiva.
 
 **Correzione d'anteprima prevista (SC-001: una correzione, una integrazione, un'assunzione)**
@@ -267,6 +268,7 @@ Dopo la correzione: salvare, confermare, poi Genera documento. La bozza deve rip
 
 - Come affermazione (mentre e' negato, escluso o aperto): «Il portale gestisce il listino prezzi»
 - Come affermazione (mentre e' negato, escluso o aperto): «Accesso con email e password»
+- In nessun punto (contraddice il PM, anche se formulato come negazione): ad es. «Integrazione facoltativa con Colorweb, con invio notturno degli ordini»
 - In nessun punto (non presente nel dialogo di questo progetto): ad es. «I ticket dell'assistenza»
 - Stime di ore, costi o date non presenti nel dialogo; sezioni vuote o riempitivi; la bozza presentata come approvata o definitiva.
 

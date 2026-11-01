@@ -251,6 +251,9 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<long?>("DurationMs")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("EvidenceExtractionJobId")
+                        .HasColumnType("uuid");
+
                     b.Property<long>("FencingToken")
                         .HasColumnType("bigint");
 
@@ -315,12 +318,19 @@ namespace bProjects.App.Persistence.Migrations
                         .HasDatabaseName("UX_InferenceCalls_OneFinalPerTurn")
                         .HasFilter("\"IsFinal\"");
 
+                    b.HasIndex("EvidenceExtractionJobId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InferenceCalls_OneFinalPerExtraction")
+                        .HasFilter("\"IsFinal\"");
+
                     b.HasIndex("ProcessingRunId")
                         .IsUnique()
                         .HasDatabaseName("UX_InferenceCalls_OneFinalPerRun")
                         .HasFilter("\"IsFinal\"");
 
                     b.HasIndex("ChatTurnId", "Attempt");
+
+                    b.HasIndex("EvidenceExtractionJobId", "Attempt");
 
                     b.HasIndex("ProcessingRunId", "Attempt");
 
@@ -333,7 +343,7 @@ namespace bProjects.App.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_InferenceCalls_Final", "NOT \"IsFinal\" OR (\"State\" = 'Completed' AND \"Phase\" <> 'Compaction')");
 
-                            t.HasCheckConstraint("CK_InferenceCalls_Owner", "(\"ChatTurnId\" IS NULL) <> (\"ProcessingRunId\" IS NULL)");
+                            t.HasCheckConstraint("CK_InferenceCalls_Owner", "(\"ChatTurnId\" IS NOT NULL)::int + (\"ProcessingRunId\" IS NOT NULL)::int + (\"EvidenceExtractionJobId\" IS NOT NULL)::int = 1");
 
                             t.HasCheckConstraint("CK_InferenceCalls_Tokens", "(\"PromptTokens\" IS NULL OR \"PromptTokens\" >= 0) AND (\"CompletionTokens\" IS NULL OR \"CompletionTokens\" >= 0) AND (\"TotalTokens\" IS NULL OR \"TotalTokens\" >= 0) AND (\"CachedTokens\" IS NULL OR \"CachedTokens\" >= 0)");
                         });
@@ -884,6 +894,581 @@ namespace bProjects.App.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceLink", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RunId", "ItemId", "EvidenceId");
+
+                    b.HasIndex("EvidenceId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("AnalysisEvidenceLinks");
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceSelection", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("View")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ViewHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("RunId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("AnalysisEvidenceSelections");
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceSelectionItem", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("MessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RunId", "MessageId");
+
+                    b.HasIndex("MessageId");
+
+                    b.HasIndex("VersionId");
+
+                    b.ToTable("AnalysisEvidenceSelectionItems");
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("JobCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RequestKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SkippedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ThroughSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("ProjectId", "Kind", "RequestKey")
+                        .IsUnique();
+
+                    b.ToTable("EvidenceBatches", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceBatches_Counts", "\"JobCount\" >= 0 AND \"SkippedCount\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceCoverageReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AnalysisId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CheckerVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DeterministicErrors")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PmAssessments")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Report")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("RevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SemanticRisks")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("DraftId");
+
+                    b.HasIndex("RevisionId");
+
+                    b.HasIndex("ProjectId", "CreatedAt");
+
+                    b.HasIndex("AnalysisId", "RevisionId", "DraftId", "CheckerVersion")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("AnalysisId", "RevisionId", "DraftId", "CheckerVersion"), false);
+
+                    b.ToTable("EvidenceCoverageReports", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceCoverageReports_Counts", "\"DeterministicErrors\" >= 0 AND \"SemanticRisks\" >= 0 AND \"PmAssessments\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ExtractorConfig")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<long>("FencingToken")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("MessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("RequestKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ResultVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RetryOfJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MessageId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_EvidenceExtractionJobs_OneOpenPerMessage")
+                        .HasFilter("\"Status\" IN ('Queued', 'Running')");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("ResultVersionId");
+
+                    b.HasIndex("RetryOfJobId");
+
+                    b.HasIndex("ProjectId", "MessageSequence");
+
+                    b.HasIndex("ProjectId", "RequestKey")
+                        .IsUnique()
+                        .HasFilter("\"RequestKey\" IS NOT NULL");
+
+                    b.HasIndex("RequestedAt", "Id")
+                        .HasDatabaseName("IX_EvidenceExtractionJobs_Open_Fifo")
+                        .HasFilter("\"Status\" IN ('Queued', 'Running')");
+
+                    b.ToTable("EvidenceExtractionJobs", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceExtractionJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
+
+                            t.HasCheckConstraint("CK_EvidenceExtractionJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultVersionId\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_EvidenceExtractionJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_EvidenceExtractionJobs_Sequence", "\"MessageSequence\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EvidenceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("MessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ModelId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("NoEvidenceReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Parameters")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PromptVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.HasIndex("MessageId", "Version")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectId", "MessageSequence");
+
+                    b.ToTable("EvidenceExtractionVersions", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceExtractionVersions_NoEvidence", "\"EvidenceCount\" >= 0 AND ((\"EvidenceCount\" = 0) = (\"NoEvidenceReason\" IS NOT NULL)) AND (\"NoEvidenceReason\" IS NULL OR \"NoEvidenceReason\" ~ '\\S')");
+
+                            t.HasCheckConstraint("CK_EvidenceExtractionVersions_Version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Certainty")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Polarity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Statement")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId");
+
+                    b.HasIndex("ProjectId", "MessageId");
+
+                    b.HasIndex("VersionId", "Key")
+                        .IsUnique();
+
+                    b.HasIndex("VersionId", "Ordinal")
+                        .IsUnique();
+
+                    b.ToTable("Evidences", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Evidences_Ordinal", "\"Ordinal\" >= 1");
+
+                            t.HasCheckConstraint("CK_Evidences_Statement_NotBlank", "\"Statement\" ~ '\\S'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceMessageState", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CurrentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MessageId");
+
+                    b.HasIndex("CurrentVersionId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("EvidenceMessageStates", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceMessageStates_Revision", "\"Revision\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidencePromotion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FromVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PromotedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("RelationImpact")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ToVersionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromVersionId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("PromotedBy");
+
+                    b.HasIndex("ToVersionId");
+
+                    b.HasIndex("MessageId", "PromotedAt");
+
+                    b.ToTable("EvidencePromotions");
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceRelation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("FromEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Rationale")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("ToEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromEvidenceId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ToEvidenceId");
+
+                    b.HasIndex("VersionId", "FromEvidenceId", "ToEvidenceId", "Type")
+                        .IsUnique();
+
+                    b.ToTable("EvidenceRelations", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceRelations_NotSelf", "\"FromEvidenceId\" <> \"ToEvidenceId\"");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Identity.RefreshSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1019,6 +1604,11 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ChatTurn", null)
                         .WithMany()
                         .HasForeignKey("ChatTurnId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionJob", null)
+                        .WithMany()
+                        .HasForeignKey("EvidenceExtractionJobId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
@@ -1186,6 +1776,277 @@ namespace bProjects.App.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ReplyToMessageId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceLink", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceItem", null)
+                        .WithMany()
+                        .HasForeignKey("EvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.AnalysisEvidenceSelection", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceSelection", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithOne()
+                        .HasForeignKey("bProjects.App.Evidence.AnalysisEvidenceSelection", "RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceSelectionItem", b =>
+                {
+                    b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.AnalysisEvidenceSelection", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceBatch", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceCoverageReport", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("AnalysisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.Draft", null)
+                        .WithMany()
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Analysis.AnalysisRevision", null)
+                        .WithMany()
+                        .HasForeignKey("RevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionJob", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceBatch", null)
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Conversations.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ResultVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionJob", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfJobId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionVersion", b =>
+                {
+                    b.HasOne("bProjects.App.Conversations.Conversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceItem", b =>
+                {
+                    b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceMessageState", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("CurrentVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
+                        .WithOne()
+                        .HasForeignKey("bProjects.App.Evidence.EvidenceMessageState", "MessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidencePromotion", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("FromVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("PromotedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ToVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceRelation", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceItem", null)
+                        .WithMany()
+                        .HasForeignKey("FromEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceItem", null)
+                        .WithMany()
+                        .HasForeignKey("ToEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("bProjects.App.Identity.RefreshSession", b =>

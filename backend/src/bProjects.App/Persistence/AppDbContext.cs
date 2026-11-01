@@ -1,6 +1,7 @@
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Evidence;
 using bProjects.App.Identity;
 using bProjects.App.Projects;
 using Microsoft.AspNetCore.Identity;
@@ -22,6 +23,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<WorkflowCheckpoint> WorkflowCheckpoints => Set<WorkflowCheckpoint>();
     public DbSet<InferenceCall> InferenceCalls => Set<InferenceCall>();
+    public DbSet<EvidenceExtractionJob> EvidenceExtractionJobs => Set<EvidenceExtractionJob>();
+    public DbSet<EvidenceExtractionVersion> EvidenceExtractionVersions => Set<EvidenceExtractionVersion>();
+    public DbSet<EvidenceItem> Evidences => Set<EvidenceItem>();
+    public DbSet<EvidenceRelation> EvidenceRelations => Set<EvidenceRelation>();
+    public DbSet<EvidenceMessageState> EvidenceMessageStates => Set<EvidenceMessageState>();
+    public DbSet<EvidencePromotion> EvidencePromotions => Set<EvidencePromotion>();
+    public DbSet<EvidenceBatch> EvidenceBatches => Set<EvidenceBatch>();
+    public DbSet<AnalysisEvidenceSelection> AnalysisEvidenceSelections => Set<AnalysisEvidenceSelection>();
+    public DbSet<AnalysisEvidenceSelectionItem> AnalysisEvidenceSelectionItems => Set<AnalysisEvidenceSelectionItem>();
+    public DbSet<AnalysisEvidenceLink> AnalysisEvidenceLinks => Set<AnalysisEvidenceLink>();
+    public DbSet<EvidenceCoverageReport> EvidenceCoverageReports => Set<EvidenceCoverageReport>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -32,6 +44,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureDrafts(builder);
         ConfigureCheckpoints(builder);
         ConfigureInferenceCalls(builder);
+        ConfigureEvidence(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -205,23 +218,207 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             call.HasOne<Project>().WithMany().HasForeignKey(c => c.ProjectId).OnDelete(DeleteBehavior.Restrict);
             call.HasOne<ChatTurn>().WithMany().HasForeignKey(c => c.ChatTurnId).OnDelete(DeleteBehavior.Restrict);
             call.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
-            // Letture del risultato logico: righe di un turno/run per tentativo.
+            call.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(c => c.EvidenceExtractionJobId).OnDelete(DeleteBehavior.Restrict);
+            // Letture del risultato logico: righe di un turno/run/lavoro di estrazione per tentativo.
             call.HasIndex(c => new { c.ChatTurnId, c.Attempt });
             call.HasIndex(c => new { c.ProcessingRunId, c.Attempt });
-            // Un solo risultato logico per turno e per run, anche fra tentativi diversi.
+            call.HasIndex(c => new { c.EvidenceExtractionJobId, c.Attempt });
+            // Un solo risultato logico per turno, per run e per lavoro di estrazione, anche fra tentativi diversi.
             call.HasIndex(c => c.ChatTurnId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerTurn");
             call.HasIndex(c => c.ProcessingRunId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerRun");
+            call.HasIndex(c => c.EvidenceExtractionJobId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerExtraction");
             // Monitor del contesto: ultima inferenza finale del progetto.
             call.HasIndex(c => new { c.ProjectId, c.StartedAt }).IsDescending(false, true).HasFilter("\"IsFinal\"").HasDatabaseName("IX_InferenceCalls_Project_LastFinal");
             call.ToTable(t =>
             {
-                t.HasCheckConstraint("CK_InferenceCalls_Owner", "(\"ChatTurnId\" IS NULL) <> (\"ProcessingRunId\" IS NULL)");
+                t.HasCheckConstraint("CK_InferenceCalls_Owner",
+                    "(\"ChatTurnId\" IS NOT NULL)::int + (\"ProcessingRunId\" IS NOT NULL)::int + (\"EvidenceExtractionJobId\" IS NOT NULL)::int = 1");
                 t.HasCheckConstraint("CK_InferenceCalls_Final", "NOT \"IsFinal\" OR (\"State\" = 'Completed' AND \"Phase\" <> 'Compaction')");
                 t.HasCheckConstraint("CK_InferenceCalls_Tokens",
                     "(\"PromptTokens\" IS NULL OR \"PromptTokens\" >= 0) AND (\"CompletionTokens\" IS NULL OR \"CompletionTokens\" >= 0) " +
                     "AND (\"TotalTokens\" IS NULL OR \"TotalTokens\" >= 0) AND (\"CachedTokens\" IS NULL OR \"CachedTokens\" >= 0)");
             });
         });
+
+    /// <summary>
+    /// Registro atomico delle evidenze (data-model.md §Registro): migrazione additiva, nessun vincolo tolto alle tabelle esistenti.
+    /// Le appartenenze fra righe dello stesso messaggio/progetto che una FK semplice non esprime sono verificate dal codice che scrive.
+    /// </summary>
+    private static void ConfigureEvidence(ModelBuilder builder)
+    {
+        builder.Entity<EvidenceExtractionJob>(job =>
+        {
+            job.HasKey(j => j.Id);
+            job.Property(j => j.Reason).HasConversion<string>().HasMaxLength(16);
+            job.Property(j => j.Status).HasConversion<string>().HasMaxLength(16);
+            job.Property(j => j.ExtractorConfig).HasColumnType("jsonb");
+            job.Property(j => j.LeaseOwner).HasMaxLength(128);
+            job.Property(j => j.ErrorCode).HasMaxLength(64);
+            job.Property(j => j.ErrorMessage).HasMaxLength(1_000);
+            job.HasOne<Project>().WithMany().HasForeignKey(j => j.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<Conversation>().WithMany().HasForeignKey(j => j.ConversationId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<ConversationMessage>().WithMany().HasForeignKey(j => j.MessageId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<EvidenceBatch>().WithMany().HasForeignKey(j => j.BatchId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(j => j.RetryOfJobId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(j => j.ResultVersionId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(j => j.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+            // Un solo lavoro aperto per messaggio: doppio invio, rianalisi concorrenti e backfill non lo duplicano.
+            job.HasIndex(j => j.MessageId).IsUnique().HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("UX_EvidenceExtractionJobs_OneOpenPerMessage");
+            job.HasIndex(j => new { j.RequestedAt, j.Id }).HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("IX_EvidenceExtractionJobs_Open_Fifo");
+            job.HasIndex(j => new { j.ProjectId, j.MessageSequence });
+            job.HasIndex(j => j.BatchId);
+            job.HasIndex(j => j.ResultVersionId);
+            // Idempotenza dei comandi PM (rianalisi di un messaggio, retry): stessa chiave nel progetto = stesso lavoro.
+            job.HasIndex(j => new { j.ProjectId, j.RequestKey }).IsUnique().HasFilter("\"RequestKey\" IS NOT NULL");
+            job.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_EvidenceExtractionJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
+                t.HasCheckConstraint("CK_EvidenceExtractionJobs_Sequence", "\"MessageSequence\" >= 1");
+                t.HasCheckConstraint("CK_EvidenceExtractionJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultVersionId\" IS NOT NULL");
+                t.HasCheckConstraint("CK_EvidenceExtractionJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<EvidenceExtractionVersion>(version =>
+        {
+            version.HasKey(v => v.Id);
+            version.Property(v => v.SchemaVersion).HasMaxLength(32);
+            version.Property(v => v.PromptVersion).HasMaxLength(64);
+            version.Property(v => v.ModelId).HasMaxLength(256);
+            version.Property(v => v.Parameters).HasColumnType("jsonb");
+            version.Property(v => v.NoEvidenceReason).HasMaxLength(2_000);
+            version.HasIndex(v => new { v.MessageId, v.Version }).IsUnique();
+            version.HasIndex(v => v.JobId).IsUnique();
+            version.HasIndex(v => new { v.ProjectId, v.MessageSequence });
+            version.HasOne<Project>().WithMany().HasForeignKey(v => v.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<Conversation>().WithMany().HasForeignKey(v => v.ConversationId).OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<ConversationMessage>().WithMany().HasForeignKey(v => v.MessageId).OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(v => v.JobId).OnDelete(DeleteBehavior.Restrict);
+            version.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_EvidenceExtractionVersions_Version", "\"Version\" >= 1");
+                // Zero evidenze è un esito esplicito e motivato, mai un default.
+                t.HasCheckConstraint("CK_EvidenceExtractionVersions_NoEvidence",
+                    "\"EvidenceCount\" >= 0 AND ((\"EvidenceCount\" = 0) = (\"NoEvidenceReason\" IS NOT NULL)) AND (\"NoEvidenceReason\" IS NULL OR \"NoEvidenceReason\" ~ '\\S')");
+            });
+        });
+
+        builder.Entity<EvidenceItem>(evidence =>
+        {
+            evidence.ToTable("Evidences");
+            evidence.HasKey(e => e.Id);
+            evidence.Property(e => e.Key).HasMaxLength(16);
+            evidence.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
+            evidence.Property(e => e.Polarity).HasConversion<string>().HasMaxLength(16);
+            evidence.Property(e => e.Certainty).HasConversion<string>().HasMaxLength(16);
+            evidence.Property(e => e.Content).HasColumnType("jsonb");
+            evidence.HasIndex(e => new { e.VersionId, e.Ordinal }).IsUnique();
+            evidence.HasIndex(e => new { e.VersionId, e.Key }).IsUnique();
+            evidence.HasIndex(e => new { e.ProjectId, e.MessageId });
+            evidence.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(e => e.VersionId).OnDelete(DeleteBehavior.Restrict);
+            evidence.HasOne<Project>().WithMany().HasForeignKey(e => e.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            evidence.HasOne<ConversationMessage>().WithMany().HasForeignKey(e => e.MessageId).OnDelete(DeleteBehavior.Restrict);
+            evidence.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Evidences_Ordinal", "\"Ordinal\" >= 1");
+                t.HasCheckConstraint("CK_Evidences_Statement_NotBlank", "\"Statement\" ~ '\\S'");
+            });
+        });
+
+        builder.Entity<EvidenceRelation>(relation =>
+        {
+            relation.HasKey(r => r.Id);
+            relation.Property(r => r.Type).HasConversion<string>().HasMaxLength(16);
+            relation.Property(r => r.Basis).HasConversion<string>().HasMaxLength(16);
+            relation.Property(r => r.Rationale).HasMaxLength(2_000);
+            relation.HasIndex(r => new { r.VersionId, r.FromEvidenceId, r.ToEvidenceId, r.Type }).IsUnique();
+            relation.HasIndex(r => r.ToEvidenceId);
+            relation.HasIndex(r => r.FromEvidenceId);
+            relation.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(r => r.VersionId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceItem>().WithMany().HasForeignKey(r => r.FromEvidenceId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceItem>().WithMany().HasForeignKey(r => r.ToEvidenceId).OnDelete(DeleteBehavior.Restrict);
+            relation.ToTable(t => t.HasCheckConstraint("CK_EvidenceRelations_NotSelf", "\"FromEvidenceId\" <> \"ToEvidenceId\""));
+        });
+
+        builder.Entity<EvidenceMessageState>(state =>
+        {
+            state.HasKey(s => s.MessageId);
+            state.HasIndex(s => s.ProjectId);
+            state.HasOne<ConversationMessage>().WithOne().HasForeignKey<EvidenceMessageState>(s => s.MessageId).OnDelete(DeleteBehavior.Restrict);
+            state.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            state.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(s => s.CurrentVersionId).OnDelete(DeleteBehavior.Restrict);
+            state.ToTable(t => t.HasCheckConstraint("CK_EvidenceMessageStates_Revision", "\"Revision\" >= 1"));
+        });
+
+        builder.Entity<EvidencePromotion>(promotion =>
+        {
+            promotion.HasKey(p => p.Id);
+            promotion.Property(p => p.Reason).HasMaxLength(1_000);
+            promotion.Property(p => p.RelationImpact).HasColumnType("jsonb");
+            promotion.HasIndex(p => new { p.MessageId, p.PromotedAt });
+            promotion.HasOne<Project>().WithMany().HasForeignKey(p => p.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<ConversationMessage>().WithMany().HasForeignKey(p => p.MessageId).OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(p => p.FromVersionId).OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(p => p.ToVersionId).OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.PromotedBy).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EvidenceBatch>(batch =>
+        {
+            batch.HasKey(b => b.Id);
+            batch.Property(b => b.Kind).HasConversion<string>().HasMaxLength(16);
+            batch.HasIndex(b => new { b.ProjectId, b.Kind, b.RequestKey }).IsUnique();
+            batch.HasOne<Project>().WithMany().HasForeignKey(b => b.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            batch.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(b => b.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+            batch.ToTable(t => t.HasCheckConstraint("CK_EvidenceBatches_Counts", "\"JobCount\" >= 0 AND \"SkippedCount\" >= 0"));
+        });
+
+        builder.Entity<AnalysisEvidenceSelection>(selection =>
+        {
+            selection.HasKey(s => s.RunId);
+            selection.Property(s => s.ViewHash).HasMaxLength(64);
+            selection.Property(s => s.View).HasColumnType("jsonb");
+            selection.HasOne<ProcessingRun>().WithOne().HasForeignKey<AnalysisEvidenceSelection>(s => s.RunId).OnDelete(DeleteBehavior.Restrict);
+            selection.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AnalysisEvidenceSelectionItem>(item =>
+        {
+            item.HasKey(i => new { i.RunId, i.MessageId });
+            item.HasIndex(i => i.VersionId);
+            item.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(i => i.RunId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<ConversationMessage>().WithMany().HasForeignKey(i => i.MessageId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(i => i.VersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AnalysisEvidenceLink>(link =>
+        {
+            link.HasKey(l => new { l.RunId, l.ItemId, l.EvidenceId });
+            link.HasIndex(l => l.EvidenceId);
+            link.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(l => l.RunId).OnDelete(DeleteBehavior.Restrict);
+            link.HasOne<EvidenceItem>().WithMany().HasForeignKey(l => l.EvidenceId).OnDelete(DeleteBehavior.Restrict);
+            link.HasOne<Project>().WithMany().HasForeignKey(l => l.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EvidenceCoverageReport>(report =>
+        {
+            report.HasKey(r => r.Id);
+            report.Property(r => r.CheckerVersion).HasMaxLength(32);
+            report.Property(r => r.InputHash).HasMaxLength(64);
+            report.Property(r => r.Report).HasColumnType("jsonb");
+            // NULLS NOT DISTINCT: la stessa terna di input (anche senza revisione o bozza) è un solo report per versione del verificatore.
+            report.HasIndex(r => new { r.AnalysisId, r.RevisionId, r.DraftId, r.CheckerVersion }).IsUnique().AreNullsDistinct(false);
+            report.HasIndex(r => new { r.ProjectId, r.CreatedAt });
+            report.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            report.HasOne<ProcessingRun>().WithMany().HasForeignKey(r => r.AnalysisId).OnDelete(DeleteBehavior.Restrict);
+            report.HasOne<AnalysisRevision>().WithMany().HasForeignKey(r => r.RevisionId).OnDelete(DeleteBehavior.Restrict);
+            report.HasOne<Draft>().WithMany().HasForeignKey(r => r.DraftId).OnDelete(DeleteBehavior.Restrict);
+            report.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(r => r.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            report.ToTable(t => t.HasCheckConstraint("CK_EvidenceCoverageReports_Counts",
+                "\"DeterministicErrors\" >= 0 AND \"SemanticRisks\" >= 0 AND \"PmAssessments\" >= 0"));
+        });
+    }
 
     private static void ConfigureConversations(ModelBuilder builder)
     {

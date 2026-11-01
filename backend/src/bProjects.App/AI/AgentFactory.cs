@@ -33,11 +33,15 @@ public sealed class AgentFactory
         _summarizerOptions = summarizerOptions;
     }
 
-    /// <summary>Modello per una fase: guardia della finestra (se c'è il monitor) sopra la cattura della telemetria, sopra il client reale.</summary>
+    /// <summary>
+    /// Modello per una fase: guardia della finestra e del modello esposto (se c'è il monitor) sopra la cattura della telemetria,
+    /// sopra il timeout della fase, sopra il client reale.
+    /// </summary>
     private IChatClient Model(AiPhase phase, TokenCounter? count)
     {
-        var capture = new InferenceCaptureChatClient(_model, phase, _options, _runtime, count);
-        return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime);
+        var timed = new PhaseTimeoutChatClient(_model, phase, TimeSpan.FromSeconds(_options.ForPhase(phase).RequestTimeoutSeconds));
+        var capture = new InferenceCaptureChatClient(timed, phase, _options, _runtime, count);
+        return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime, phase);
     }
 
     public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null) =>
@@ -66,8 +70,7 @@ public sealed class AgentFactory
         // La strategia smette di riassumere quando il trigger non scatta più, ma la sintesi si aggiunge dopo: si lascia
         // sotto soglia lo spazio della sintesi (il suo tetto di output) perché il contesto finale resti entro il budget.
         // Il tetto di output della sintesi è quello della fase Compaction, lo stesso che MonitoredSummarizerClient impone alla richiesta.
-        var summaryOutput = _options.ForPhase(AiPhase.Compaction).MaxOutputTokens;
-        var reserve = Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, summaryOutput), messageTrigger / 2));
+        var reserve = SummaryReserve(budget, messageTrigger);
         var strategy = new SummarizationCompactionStrategy(
             new MonitoredSummarizerClient(Model(AiPhase.Compaction, count: null), monitor, _summarizerOptions, reserve),
             index => measured.Included(index) > messageTrigger,
@@ -80,6 +83,53 @@ public sealed class AgentFactory
             .UseAIContextProviders(new CompactionProvider(strategy))
             .Use(inner => new ContextBudgetChatClient(inner, budget, measured.CountAsync, monitor))
             .Build();
+    }
+
+    /// <summary>Spazio lasciato sotto la soglia per la sintesi: il suo tetto di output, entro un sesto del budget e metà della soglia.</summary>
+    private int SummaryReserve(ContextBudget budget, int messageTrigger) =>
+        Math.Max(1, Math.Min(Math.Min(budget.InputBudgetTokens / 6, _options.ForPhase(AiPhase.Compaction).MaxOutputTokens), messageTrigger / 2));
+
+    /// <summary>Opzioni del modello interno (budget, tetti di output e fasi) con cui sono costruiti client e agenti.</summary>
+    public AiOptions Options => _options;
+
+    /// <summary>Token di un testo con lo stesso contatore delle chiamate (tokenizer del modello).</summary>
+    public ValueTask<int> CountAsync(string text, CancellationToken cancellationToken = default) => _count(text, cancellationToken);
+
+    /// <summary>
+    /// Prevede, con le stesse regole del client compattante di <paramref name="phase"/>, se una chiamata con queste istruzioni e questi
+    /// messaggi (l'ultimo sempre preservato) resta entro il budget: senza compattazione, oppure riassumendo i gruppi più vecchi in una
+    /// sola richiesta di sintesi che a sua volta stia nel budget della fase Compaction. False = la chiamata singola non è eseguibile
+    /// senza perdere informazioni o fallire (compaction_failed/context_overflow): il chiamante deve suddividere il lavoro.
+    /// </summary>
+    public async ValueTask<bool> FitsWithCompactionAsync(
+        string instructions, IReadOnlyList<int> messageTokens, AiPhase phase, CancellationToken cancellationToken = default)
+    {
+        var budget = ContextBudget.From(_options, phase);
+        var instructionTokens = await _count(instructions, cancellationToken);
+        var messageTrigger = budget.MessageTriggerTokens(instructionTokens);
+        var total = messageTokens.Sum();
+        if (total <= messageTrigger && instructionTokens + total <= budget.InputBudgetTokens)
+        {
+            return true;
+        }
+
+        // Come la strategia nativa: si riassumono i messaggi più vecchi, interi, finché il resto scende sotto soglia meno la riserva.
+        var target = messageTrigger - SummaryReserve(budget, messageTrigger);
+        var kept = total;
+        var summarized = 0;
+        for (var i = 0; i < messageTokens.Count - PreservedGroups && kept > target; i++)
+        {
+            kept -= messageTokens[i];
+            summarized += messageTokens[i];
+        }
+
+        if (kept > target)
+        {
+            return false; // l'ultimo messaggio da solo supera la soglia: nessuna sintesi lo fa rientrare
+        }
+
+        var summarizer = ContextBudget.From(_options, AiPhase.Compaction);
+        return summarized + await _count(SummarizationPrompt, cancellationToken) <= summarizer.InputBudgetTokens;
     }
 
     /// <summary>Gruppi finali sempre preservati dalla sintesi: il solo ultimo, cioè il messaggio PM/istruzione del turno.</summary>
@@ -114,7 +164,99 @@ public sealed class AgentFactory
     public ValueTask EnsureDocumentWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>
         ContextBudget.From(_options, AiPhase.Document).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
 
+    /// <summary>
+    /// Client dell'estrattore delle evidenze: come quello del DocumentAgent (nessuna history né compattazione: un solo messaggio costruito
+    /// dal server), con il budget, il modello, il timeout e la telemetria della fase Extraction.
+    /// </summary>
+    public IChatClient CreateExtractionClient()
+    {
+        var measured = new MeasuredTokens(_count);
+        return new ChatClientBuilder(Model(AiPhase.Extraction, measured.CountAsync))
+            .Use(inner => new ContextBudgetChatClient(inner, ContextBudget.From(_options, AiPhase.Extraction), measured.CountAsync, monitor: null))
+            .Build();
+    }
+
+    /// <summary>Vero se istruzioni e messaggi rientrano nel budget di input della fase Extraction (conteggio del tokenizer reale).</summary>
+    public async ValueTask<bool> FitsExtractionBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await ContextBudget.From(_options, AiPhase.Extraction).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
+            return true;
+        }
+        catch (ContextOverflowException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Come <see cref="FitsExtractionBudgetAsync"/>, ma fuori budget lancia <see cref="ContextOverflowException"/> (context_overflow).</summary>
+    public ValueTask EnsureExtractionWithinBudgetAsync(IEnumerable<ChatMessage> messages, string instructions, CancellationToken cancellationToken = default) =>
+        ContextBudget.From(_options, AiPhase.Extraction).EnsureWithinAsync(messages, instructions, _count, cancellationToken);
+
     public async Task<ChatClientAgent> CreateCompactingAgentAsync(
         string name, string instructions, CancellationToken cancellationToken = default) =>
         new(await CreateCompactingClientAsync(instructions, cancellationToken), instructions: instructions, name: name);
+}
+
+/// <summary>
+/// Timeout della singola chiamata della fase (<c>Ai:Phases:{fase}:RequestTimeoutSeconds</c>): il client HTTP condiviso ha il tetto
+/// della fase più lunga. Lo scadere è un <see cref="TaskCanceledException"/> con causa <see cref="TimeoutException"/>, come il
+/// timeout di HttpClient, quindi il dispatcher lo classifica model_timeout (transitorio); la cancellazione del chiamante resta sua.
+/// </summary>
+internal sealed class PhaseTimeoutChatClient(IChatClient inner, AiPhase phase, TimeSpan timeout) : DelegatingChatClient(inner)
+{
+    public override async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        using var cts = Start(cancellationToken);
+        try
+        {
+            return await base.GetResponseAsync(messages, options, cts.Token);
+        }
+        catch (OperationCanceledException e) when (Expired(cts, cancellationToken))
+        {
+            throw Timeout(e);
+        }
+    }
+
+    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var cts = Start(cancellationToken);
+        await using var updates = base.GetStreamingResponseAsync(messages, options, cts.Token).GetAsyncEnumerator(cts.Token);
+        while (true)
+        {
+            try
+            {
+                if (!await updates.MoveNextAsync())
+                {
+                    yield break;
+                }
+            }
+            catch (OperationCanceledException e) when (Expired(cts, cancellationToken))
+            {
+                throw Timeout(e);
+            }
+
+            yield return updates.Current;
+        }
+    }
+
+    private CancellationTokenSource Start(CancellationToken cancellationToken)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeout > TimeSpan.Zero)
+        {
+            cts.CancelAfter(timeout);
+        }
+
+        return cts;
+    }
+
+    private static bool Expired(CancellationTokenSource cts, CancellationToken caller) => cts.IsCancellationRequested && !caller.IsCancellationRequested;
+
+    private TaskCanceledException Timeout(OperationCanceledException e) =>
+        new($"Nessuna risposta del modello entro {timeout.TotalSeconds:0} s (fase {phase}).", new TimeoutException(e.Message, e));
 }

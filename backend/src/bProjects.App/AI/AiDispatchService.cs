@@ -1,5 +1,6 @@
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.Extensions.Options;
 
@@ -32,7 +33,10 @@ public sealed class AiDispatchService(
     ChatTurnEvents? events = null,
     AnalysisWorkflow? workflow = null,
     ProcessingRunEvents? runEvents = null,
-    DocumentWorkflow? documentWorkflow = null) : BackgroundService
+    DocumentWorkflow? documentWorkflow = null,
+    IEvidenceExtractionExecutor? extractor = null,
+    EvidenceEvents? evidenceEvents = null,
+    DispatchWakeup? wakeup = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
@@ -41,7 +45,7 @@ public sealed class AiDispatchService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (executor is null && workflow is null && documentWorkflow is null)
+        if (executor is null && workflow is null && documentWorkflow is null && extractor is null)
         {
             logger.LogInformation("Nessun esecutore dei turni né workflow formale registrati: il dispatcher non prende in carico lavori.");
             return;
@@ -55,7 +59,7 @@ public sealed class AiDispatchService(
                 {
                     if (!await RunOnceAsync(stoppingToken))
                     {
-                        await Task.Delay(PollInterval, stoppingToken);
+                        await IdleAsync(stoppingToken);
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -72,10 +76,16 @@ public sealed class AiDispatchService(
         }
     }
 
+    /// <summary>
+    /// Attesa a riposo: al massimo un intervallo di polling, interrotta subito da un endpoint che ha appena accodato un turno o un run.
+    /// Il lavoro resta comunque letto dal database, quindi un segnale perso costa al più <see cref="PollInterval"/>.
+    /// </summary>
+    private Task IdleAsync(CancellationToken ct) => wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct);
+
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
-        if (executor is null && workflow is null && documentWorkflow is null)
+        if (executor is null && workflow is null && documentWorkflow is null && extractor is null)
         {
             return false;
         }
@@ -84,7 +94,8 @@ public sealed class AiDispatchService(
         using (var scope = scopes.CreateScope())
         {
             work = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
-                .ClaimNextWorkAsync(_owner, turns: executor is not null, runs: workflow is not null, documents: documentWorkflow is not null, ct);
+                .ClaimNextWorkAsync(_owner, turns: executor is not null, runs: workflow is not null, documents: documentWorkflow is not null,
+                    extractions: extractor is not null, ct);
         }
 
         if (work is null)
@@ -100,9 +111,13 @@ public sealed class AiDispatchService(
         {
             await RunAnalysisAsync(analysis, ct);
         }
+        else if (work.Document is { } document)
+        {
+            await RunDocumentAsync(document, ct);
+        }
         else
         {
-            await RunDocumentAsync(work.Document!, ct);
+            await RunExtractionAsync(work.Extraction!, ct);
         }
 
         return true;
@@ -205,6 +220,20 @@ public sealed class AiDispatchService(
         (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
         ct);
 
+    /// <summary>
+    /// Esegue un lavoro di estrazione delle evidenze con lo stesso ciclo, lo stesso lease e le stesse regole di retry dei run formali:
+    /// l'estrattore committa da sé versione + Completed (o Failed per output non valido); gli errori del modello sono classificati qui.
+    /// </summary>
+    private Task RunExtractionAsync(ExtractionJobClaim claim, CancellationToken ct) => RunFormalAsync(
+        "estrazione delle evidenze",
+        claim.JobId,
+        EvidenceLedgerStore.Owner(claim),
+        (store, c) => store.RenewAsync(claim, c),
+        c => extractor!.ExecuteAsync(claim, c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
+        ct,
+        publish: id => evidenceEvents is null ? Task.CompletedTask : evidenceEvents.PublishStateAsync(id));
+
     private async Task RunFormalAsync(
         string label,
         Guid runId,
@@ -212,9 +241,11 @@ public sealed class AiDispatchService(
         Func<ExecutionLeaseStore, CancellationToken, Task<bool>> renew,
         Func<CancellationToken, Task> execute,
         Func<ExecutionLeaseStore, ModelFailure, CancellationToken, Task<TurnRelease>> release,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<Guid, Task>? publish = null)
     {
-        await PublishRunState(runId); // Running
+        publish ??= PublishRunState;
+        await publish(runId); // Running
         // Lo scope è ereditato dagli executor del workflow MAF: commit e Failed del validatore vi trovano le chiamate del tentativo.
         using var inferenceScope = InferenceScope.Begin();
         var inference = InferenceScope.Current!;
@@ -252,7 +283,7 @@ public sealed class AiDispatchService(
             }
             else
             {
-                await PublishRunState(runId);
+                await publish(runId);
             }
         }
         finally
@@ -263,7 +294,7 @@ public sealed class AiDispatchService(
 
         if (completed)
         {
-            await PublishRunState(runId); // Completed o Failed già scritto dal workflow
+            await publish(runId); // Completed o Failed già scritto dal workflow o dall'estrattore
         }
     }
 

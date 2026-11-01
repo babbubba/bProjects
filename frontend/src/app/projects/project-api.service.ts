@@ -10,7 +10,7 @@ export interface TokenValue {
   source: TokenSource;
 }
 
-export type InferencePhase = 'chat' | 'analysis' | 'document' | 'compaction';
+export type InferencePhase = 'chat' | 'analysis' | 'document' | 'compaction' | 'extraction';
 
 /** Telemetria tecnica reale di una richiesta AI; mai il contenuto del ragionamento. */
 export interface InferenceMetrics {
@@ -105,6 +105,7 @@ export interface ProjectView {
   currentAnalysisId?: string | null;
   currentRevisionId?: string | null;
   validationState?: string | null;
+  latestDraftId?: string | null;
 }
 
 export interface ProjectPage {

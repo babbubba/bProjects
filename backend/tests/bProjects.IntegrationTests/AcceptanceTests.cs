@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using bProjects.App.AI;
+using bProjects.App.Evidence;
 using bProjects.App.Analysis;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -382,7 +383,7 @@ internal static class AcceptanceRunner
         }
 
         run.Reached = "bozza";
-        run.Findings.Merge(AcceptanceChecker.CheckDocument(script, run.Markdown ?? "", run.Confirmed, run.CorrectionApplied));
+        run.Findings.Merge(AcceptanceChecker.CheckDocument(script, run.Markdown ?? "", run.Confirmed, run.CorrectionApplied, run.Ai));
 
         // --- Riapertura: originali e risultati identici; revisione AI v1 mai modificata; un solo run per fase, una sola bozza
         var again = await pm.GetFromJsonAsync<JsonElement>($"/api/projects/{project}/draft", Ct);
@@ -416,7 +417,7 @@ internal static class AcceptanceRunner
     }
 
     /// <summary>Corpo del PUT: l'AnalysisContent con la modifica, le integrazioni, l'assunzione e l'eventuale risoluzione (fonti e autore li assegna il server).</summary>
-    private static JsonNode? ApplyCorrection(JsonNode content, ProjectScript script, ProjectRun run)
+    internal static JsonNode? ApplyCorrection(JsonNode content, ProjectScript script, ProjectRun run)
     {
         var correction = script.Correction;
         var changed = false;
@@ -435,17 +436,16 @@ internal static class AcceptanceRunner
             _ => content["openQuestions"]!.AsArray(),
         };
 
-        var edit = script.Facts.Single(f => f.Key == correction.EditKey);
-        var target = edit.Accept.SelectMany(s => Array(s))
-            .FirstOrDefault(i => AcceptanceChecker.Matches(AcceptanceChecker.Norm(i!["text"]!.GetValue<string>()), edit.Match));
-        if (target is not null)
+        // Solo la voce che esprime il fatto da modificare, unica; una voce a piu' fatti e' riscritta conservando gli altri (PmCorrection): assente o ambigua = segnalata.
+        var target = PmCorrection.Locate(script, content);
+        if (target.Kind == EditTargetKind.Found)
         {
-            target["text"] = correction.EditedText;
+            Array(target.Section)[target.Index]!["text"] = target.NewText;
             changed = true;
         }
         else
         {
-            run.Fail($"correzione non applicabile: la voce «{edit.Key}» da modificare non e' nell'anteprima");
+            run.Fail(target.Message);
         }
 
         foreach (var add in correction.Additions)
@@ -538,7 +538,8 @@ internal static class AcceptanceRunner
     internal static string ErrorOf(JsonElement terminal) =>
         terminal.ValueKind != JsonValueKind.Object || !terminal.TryGetProperty("error", out var error) || error.ValueKind == JsonValueKind.Null
             ? $"stato {(terminal.ValueKind == JsonValueKind.Object ? terminal.GetProperty("status").GetString() : "sconosciuto")}, nessun errore"
-            : $"{error.GetProperty("code").GetString()}";
+            : $"{error.GetProperty("code").GetString()}"
+                + (error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String ? $" [{message.GetString()}]" : "");
 
     private static async Task<T> ScalarAsync<T>(AcceptanceEnv env, string sql, params (string Name, object Value)[] parameters)
     {
@@ -840,16 +841,18 @@ public sealed class AcceptanceDeterministicTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_large_context_case_runs_through_native_compaction_with_originals_unchanged_without_claiming_nominal_success()
+    public async Task The_large_context_case_is_consolidated_incrementally_with_originals_unchanged_without_claiming_nominal_success()
     {
         TestEnvironment.RequirePostgres();
         var script = Assert.Single(AcceptanceCases.Exploratory.Projects);
         // Valori di produzione (infra/.env.example) e server finto con tokenizer a un token ogni quattro caratteri: ~185.000 caratteri
-        // sono ~46.000 token contro un budget di input di 27.648, quindi la compattazione nativa DEVE attivarsi.
+        // sono ~46.000 token contro un budget di input di 23.552 (fase Analysis): una chiamata singola, anche con la sintesi nativa entro il
+        // budget della fase Compaction, non basta, quindi il consolidamento è incrementale (contracts/ai-workflow.md §10.7).
         var options = new AiOptions
         {
             Endpoint = "http://dgx.test/v1/", ApiKey = "chiave-di-prova", ModelId = "modello-finto",
             ContextWindowTokens = 32768, MaxOutputTokens = 4096, SafetyMarginTokens = 1024, CompactionTriggerTokens = 0,
+            Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml: l'analisi con UUID validi supera i 4096 token
         };
         await using var host = await CompactionHost.StartAsync(_database.ConnectionString, options, new FakeModelServer(), chat: false, analysis: true, prepare: true);
         var (pm, project) = await host.NewProjectAsync();
@@ -864,14 +867,19 @@ public sealed class AcceptanceDeterministicTests : IAsyncLifetime
         var terminal = await CompactionHost.WaitRunAsync(pm, project, run);
 
         Assert.Equal("Completed", terminal.GetProperty("status").GetString());
-        Assert.NotEmpty(host.Recorder.Summaries);                              // la compattazione nativa si e' attivata
-        Assert.All(host.Recorder.Summaries, s => Assert.Equal(200, s.Status));
-        var main = Assert.Single(host.Recorder.Main);
-        Assert.True(await host.CountSentAsync(main) <= options.InputBudgetTokens);
+        Assert.Empty(host.Recorder.Summaries);                                 // nessuna sintesi: nessuna perdita
+        var calls = host.Recorder.Main;
+        Assert.True(calls.Count >= 2, $"atteso un consolidamento incrementale, chiamate={calls.Count}");
+        foreach (var call in calls)
+        {
+            Assert.True(await host.CountSentAsync(call) <= options.ForPhase(AiPhase.Analysis).InputBudgetTokens);
+        }
+
+        Assert.All(before, m => Assert.Contains(calls, c => c.Texts.Contains($"[messaggio id={m.Id} sequenza={m.Sequence}]\n{m.Body}")));
         Assert.Equal(before, await CompactionHost.OriginalsAsync(_database.ConnectionString));   // originali intatti
         Assert.Equal(script.Messages, before.Select(m => m.Body));
         TestContext.Current.SendDiagnosticMessage(
-            $"T052 esplorativo deterministico: messaggi={script.Messages.Length} caratteri={script.Messages.Sum(m => m.Length)} sintesi={host.Recorder.Summaries.Count} "
+            $"T052 esplorativo deterministico: messaggi={script.Messages.Length} caratteri={script.Messages.Sum(m => m.Length)} passi={calls.Count} "
             + "(server finto: non prova le attese sul contenuto ne' il modello reale)");
     }
 
@@ -909,24 +917,30 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
     [MemberData(nameof(CaseIds))]
     public async Task The_real_model_meets_the_annotated_expectations_of_the_nominal_case(string caseId)
     {
-        var options = TestEnvironment.RequireDgxOptions();
+        var options = TestEnvironment.RequireProductionLikeOptions();
         TestEnvironment.RequirePostgres();
         var testCase = AcceptanceCases.Nominal.Single(c => c.Id == caseId);
 
-        using var model = new InternalModelClient(options);
+        using var model = new InternalModelClient(options, MafDiagnostics.Wrap());
         var factory = AgentFactory.Create(options, model);
         CallCounter? counter = null;
         await using var app = await ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
         {
+            services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
             var agent = new ConversationalAgent(factory, model.CreateChatOptions(temperature: 0.2f));
             services.AddSingleton(agent);
             services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
             services.AddSingleton(sp => new AnalysisWorkflow(
-                sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0)));
+                sp.GetRequiredService<IServiceScopeFactory>(), agent, model.CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis)));
             counter = new CallCounter(model.ChatClient);
             var documentFactory = new AgentFactory(options, counter, async (t, ct) => await model.CountTokensAsync(t, ct));
             services.AddSingleton(new DocumentAgent(documentFactory, model.CreateChatOptions(temperature: 0.2f)));
             services.AddSingleton(sp => new DocumentWorkflow(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentAgent>()));
+            // Nuova pipeline (T072): l'estrattore reale MAF della fase Extraction, come Program.cs; Analizza attende le sue evidenze.
+            services.AddSingleton<IEvidenceExtractionExecutor>(sp => new EvidenceExtractor(
+                sp.GetRequiredService<IServiceScopeFactory>(), factory,
+                model.CreateChatOptions(EvidenceExtractionSchema.Base, EvidenceExtractionSchema.Name, temperature: 0, phase: AiPhase.Extraction),
+                sp.GetRequiredService<EvidenceEvents>()));
         });
 
         var env = new AcceptanceEnv { App = app, Connection = _database.ConnectionString, DocumentCalls = () => counter!.Calls };
@@ -935,6 +949,37 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         foreach (var run in runs)
         {
             TestContext.Current.SendDiagnosticMessage($"T052 reale {caseId}/{run.Summary()}");
+        }
+
+        // Telemetria per chiamata (modello, fase, tentativo, durata, token, finish_reason, thinking richiesto/effettivo): una riga per chiamata.
+        await using (var connection = new NpgsqlConnection(_database.ConnectionString))
+        {
+            await connection.OpenAsync(Ct);
+            await using var command = new NpgsqlCommand(
+                """
+                SELECT "ProjectId", "Phase", "Attempt", "ModelId", "DurationMs", "PromptTokens", "CompletionTokens", "CachedTokens", "FinishReason",
+                       "ReasoningRequested", "ReasoningEffective", "MaxOutputTokensRequested", "State"
+                FROM "InferenceCalls" ORDER BY "StartedAt"
+                """, connection);
+            await using var reader = await command.ExecuteReaderAsync(Ct);
+            var lines = new List<string>();
+            while (await reader.ReadAsync(Ct))
+            {
+                string Col(int i) => reader.IsDBNull(i) ? "n/d" : Convert.ToString(reader.GetValue(i), System.Globalization.CultureInfo.InvariantCulture)!;
+                lines.Add($"progetto={Col(0)[..8]} fase={Col(1)} tentativo={Col(2)} modello={Col(3)} ms={Col(4)} prompt={Col(5)} completion={Col(6)} cache={Col(7)} "
+                    + $"finish={Col(8)} thinking_richiesto={Col(9)} effettivo={Col(10)} maxOut={Col(11)} stato={Col(12)}");
+            }
+
+            foreach (var line in lines)
+            {
+                TestContext.Current.SendDiagnosticMessage($"T052 chiamata {caseId} {line}");
+            }
+
+            if (Environment.GetEnvironmentVariable("BPROJECTS_ACCEPTANCE_EXPORT_DIR") is { Length: > 0 } root)
+            {
+                Directory.CreateDirectory(Path.Combine(root, caseId));
+                File.WriteAllLines(Path.Combine(root, caseId, "telemetria-chiamate.txt"), lines);
+            }
         }
 
         Assert.All(runs, run => Assert.True(run.Passed, $"{caseId}/{run.Script.Key}: " + string.Join("; ", run.Findings.Failures)));
@@ -956,10 +1001,11 @@ public sealed class AcceptanceMafTests : IAsyncLifetime
         {
             Endpoint = services.Endpoint, ApiKey = services.ApiKey, ModelId = services.ModelId,
             ContextWindowTokens = 32768, MaxOutputTokens = 4096, SafetyMarginTokens = 1024, CompactionTriggerTokens = 0,
+            Phases = { Analysis = { MaxOutputTokens = 8192 } },   // come infra/compose.yaml: l'analisi con UUID validi supera i 4096 token
         };
 
         await using var host = await CompactionHost.StartAsync(
-            _database.ConnectionString, options, new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }, chat: true, analysis: true, prepare: true, requestUsage: true);
+            _database.ConnectionString, options, MafDiagnostics.Wrap(), chat: true, analysis: true, prepare: true, requestUsage: true);
         var (pm, project) = await host.NewProjectAsync();
         using var _ = pm;
 

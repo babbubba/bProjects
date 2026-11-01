@@ -14,6 +14,8 @@ export interface Fact {
   declared: boolean;
   from: number[];
   match: string[];
+  /** Scomposizione atomica alternativa a `match`: ogni parte combacia con una voce (AcceptanceFixtures.cs, Fact.Parts). */
+  parts?: string[][];
 }
 
 export interface ConflictSpec {
@@ -30,6 +32,8 @@ export interface Forbid {
   mode: 'affirmed' | 'anywhere';
   sample: string;
   conflictKey: string | null;
+  /** Responsabilita' attribuita dal PM a un sistema esterno (Forbid.External). */
+  external?: string;
 }
 
 export interface Addition {
@@ -117,6 +121,35 @@ const EXCLUSION_HEADING = /esclus|fuori perimetro|non inclus|non previst|fuori a
 const ESTIMATES = /ore[- ]uomo|giorni[- ]uomo|man[- ]?days?|\bstim\w+\s+(di\s+|del\s+|dei\s+)?(costi|ore|tempi|impegno|budget)|€|\beuro\b/;
 const APPROVAL = /\b(documento|bozza|analisi|specifica)\b[^.]{0,30}\b(approvat[oa]|definitiv[oa]|validat[oa]|accettat[oa])\b|\b(approvat[oa]|validat[oa]|accettat[oa]) dal cliente\b|\bversione definitiva\b/;
 const CITATION = /\[fonte:[^\]]*\]/gi;
+// Polarita' per proposizione: punteggiatura forte, avversative, coordinata che si apre con una negazione (non la virgola semplice).
+const CLAUSE_BREAK = /[.;:!?]|\s(?:ma|mentre|pero|invece|bensi|tuttavia)\s|(?:,|\s(?:e|ed|o|oppure))\s+(?=(?:non|niente|nessun\w*|senza|neanche|no)\b)/;
+const OWN_SYSTEM = /\b(portale|sistema|applicazione|app|sito|piattaforma|soluzione)\b/;
+
+/** Una voce soddisfa tutto `match`, oppure ogni parte atomica annotata e' soddisfatta da una voce (mai somma libera di frammenti). */
+export const covers = (match: string[], parts: string[][] | undefined, texts: string[]) =>
+  texts.some((t) => matches(t, match)) || (!!parts && parts.every((p) => texts.some((t) => matches(t, p))));
+
+/** Il testo afferma il divieto: in una proposizione, termine vietato non negato e non attribuito al sistema esterno annotato. */
+export function affirms(forbid: Forbid, text: string): boolean {
+  return text.split(CLAUSE_BREAK).some((clause) => {
+    if (!re(forbid.pattern).test(clause) || NEGATION.test(clause)) return false;
+    if (forbid.external && re(forbid.external).test(clause) && !OWN_SYSTEM.test(clause.replace(new RegExp(forbid.external, 'gi'), ' '))) return false;
+    return true;
+  });
+}
+
+/** Diagnosi di un'omissione: voce piu' vicina e, per ogni espressione mancante, legame perso fra voci o dettaglio assente ovunque. */
+function closest(f: Fact, c: Content): string {
+  const all = SECTIONS.flatMap((s) => items(c, s).map((i) => ({ s, i, t: norm(i.text) })));
+  const scored = all.map((x) => ({ ...x, hits: f.match.filter((p) => re(p).test(x.t)).length })).filter((x) => x.hits > 0)
+    .sort((a, b) => b.hits - a.hits || Number(f.accept.includes(b.s)) - Number(f.accept.includes(a.s)));
+  if (!scored.length) return ' (nessuna voce vicina: fatto assente)';
+  const best = scored[0];
+  const missing = f.match.filter((p) => !re(p).test(best.t))
+    .map((p) => ({ p, where: [...new Set(all.filter((x) => x.i !== best.i && re(p).test(x.t)).map((x) => x.s))] }));
+  const detail = missing.map((m) => (m.where.length ? `/${m.p}/ solo in un'altra voce (${m.where.join('/')})` : `/${m.p}/ assente ovunque`)).join(', ');
+  return ` (voce piu' vicina in ${best.s}: «${best.i.text}»; manca ${detail}: ${missing.some((m) => !m.where.length) ? 'qualificatore o dettaglio assente' : 'legame perso fra voci'})`;
+}
 
 /** messageId -> indice (da 1) del messaggio PM. */
 export type UserIndex = Map<string, number>;
@@ -133,14 +166,17 @@ export function checkAnalysis(p: ProjectCase, c: Content, userIndex: UserIndex, 
   const cited = (i: Item) => i.evidenceRefs.filter((r) => sourceIndex.has(r)).map((r) => sourceIndex.get(r)!);
 
   for (const f of p.facts) {
-    const candidates = f.accept.flatMap((s) => items(c, s)).filter((i) => matches(norm(i.text), f.match));
-    if (candidates.length === 0) {
-      const elsewhere = SECTIONS.filter((s) => !f.accept.includes(s) && items(c, s).some((i) => matches(norm(i.text), f.match)));
-      failures.push(`omissione: «${f.key}» non presente in ${f.accept.join('/')}` + (elsewhere.length ? ` (trovata in ${elsewhere.join('/')}: sezione sbagliata)` : ''));
+    const accepted = f.accept.flatMap((s) => items(c, s));
+    if (!covers(f.match, f.parts, accepted.map((i) => norm(i.text)))) {
+      const elsewhere = SECTIONS.filter((s) => !f.accept.includes(s) && covers(f.match, f.parts, items(c, s).map((i) => norm(i.text))));
+      failures.push(`omissione: «${f.key}» non presente in ${f.accept.join('/')}` + (elsewhere.length ? ` (trovata in ${elsewhere.join('/')}: sezione sbagliata)` : closest(f, c)));
       continue;
     }
+    const whole = accepted.filter((i) => matches(norm(i.text), f.match));
+    const groups = whole.length || !f.parts ? [whole] : f.parts.map((part) => accepted.filter((i) => matches(norm(i.text), part)));
+    const candidates = groups.flat();
     if (f.declared) {
-      const good = candidates.some((i) => i.classification === 'Declared' && cited(i).some((n) => f.from.includes(n)));
+      const good = groups.every((g) => g.some((i) => i.classification === 'Declared' && cited(i).some((n) => f.from.includes(n))));
       if (!good) {
         failures.push(candidates.some((i) => i.classification === 'Declared')
           ? `fonte errata: «${f.key}» non cita il messaggio PM ${f.from.join('/')}`
@@ -153,7 +189,7 @@ export function checkAnalysis(p: ProjectCase, c: Content, userIndex: UserIndex, 
     if (forbid.mode === 'affirmed') {
       for (const s of POSITIVE) {
         for (const i of items(c, s)) {
-          if (matches(norm(i.text), [forbid.pattern]) && !NEGATION.test(norm(i.text))) failures.push(`«${forbid.key}» affermata in ${s} (negazione invertita o informazione inventata)`);
+          if (matches(norm(i.text), [forbid.pattern]) && affirms(forbid, norm(i.text))) failures.push(`«${forbid.key}» affermata in ${s} (negazione invertita o informazione inventata)`);
         }
       }
     } else if (allTexts(c).some((t) => matches(norm(t), [forbid.pattern]))) {
@@ -217,24 +253,35 @@ function units(markdown: string): Unit[] {
   return list;
 }
 
-/** `sourceIds`: fonti della revisione confermata (citazioni valide). */
-export function checkDraft(p: ProjectCase, markdown: string, sourceIds: Set<string>, correctionApplied: boolean): string[] {
+/**
+ * `sourceIds`: fonti della revisione confermata (citazioni valide). `contents` (facoltativo) attribuisce un'omissione: presente nella
+ * revisione confermata = persa nella generazione; presente solo nell'analisi AI = tolta dalla correzione PM (non e' un errore della bozza).
+ */
+export function checkDraft(p: ProjectCase, markdown: string, sourceIds: Set<string>, correctionApplied: boolean, contents: { ai?: Content; confirmed?: Content } = {}): string[] {
   const failures: string[] = [];
   if (!markdown.trim()) return ['bozza vuota'];
   const us = units(markdown);
   const resolve = correctionApplied ? p.correction.resolve : null;
-  const facts = [
-    ...p.facts.map((f) => ({ key: f.key, section: f.section, match: f.match })),
+  const facts: { key: string; section: string; match: string[]; parts?: string[][] }[] = [
+    ...p.facts.map((f) => ({ key: f.key, section: f.section, match: f.match, parts: f.parts })),
     ...(correctionApplied ? p.correction.additions.map((a) => ({ key: a.key, section: a.section, match: a.match })) : []),
   ];
+  const texts = (c?: Content) => (c ? allTexts(c).map(norm) : undefined);
+  const confirmedTexts = texts(contents.confirmed);
+  const aiTexts = texts(contents.ai);
   for (const f of facts) {
+    const okFor = (patterns: string[]) => {
+      const found = us.filter((u) => matches(u.text, patterns));
+      return f.section === 'excluded' ? found.filter((u) => u.region === 'excl' || NEGATION.test(u.text))
+        : f.section === 'questions' ? found.filter((u) => u.region === 'open' || OPEN_MARKER.test(u.text))
+          : found;
+    };
     const hits = us.filter((u) => matches(u.text, f.match));
-    const ok = f.section === 'excluded' ? hits.filter((u) => u.region === 'excl' || NEGATION.test(u.text))
-      : f.section === 'questions' ? hits.filter((u) => u.region === 'open' || OPEN_MARKER.test(u.text))
-        : hits;
-    if (ok.length === 0) {
-      failures.push(`omissione nella bozza: «${f.key}»` + (hits.length ? (f.section === 'excluded' ? ' (presente ma non come esclusione: negazione invertita?)' : ' (presente ma non come punto aperto: lacuna trasformata in fatto?)') : ''));
-    }
+    if (okFor(f.match).length > 0 || (f.parts && f.parts.every((part) => okFor(part).length > 0))) continue;
+    if (hits.length) failures.push(`omissione nella bozza: «${f.key}»` + (f.section === 'excluded' ? ' (presente ma non come esclusione: negazione invertita?)' : ' (presente ma non come punto aperto: lacuna trasformata in fatto?)'));
+    else if (confirmedTexts && covers(f.match, f.parts, confirmedTexts)) failures.push(`omissione nella bozza: «${f.key}» (presente nella revisione confermata: persa nella generazione)`);
+    else if (aiTexts && covers(f.match, f.parts, aiTexts)) continue; // tolta o riscritta dalla correzione PM: la bozza segue la revisione
+    else failures.push(`omissione nella bozza: «${f.key}»` + (confirmedTexts ? " (assente gia' dalla revisione confermata: omissione ereditata dall'analisi)" : ''));
   }
   for (const spec of p.conflicts) {
     if (resolve && resolve.conflictKey === spec.key) {
@@ -250,7 +297,7 @@ export function checkDraft(p: ProjectCase, markdown: string, sourceIds: Set<stri
     if (forbid.conflictKey && resolve?.conflictKey === forbid.conflictKey) continue;
     for (const u of us.filter((x) => matches(x.text, [forbid.pattern]))) {
       if (forbid.mode === 'anywhere') { failures.push(`«${forbid.key}» presente nella bozza (informazione inventata o di un altro progetto)`); break; }
-      const exempt = u.region === 'excl' || NEGATION.test(u.text) || u.region === 'open' || OPEN_MARKER.test(u.text) || (forbid.conflictKey !== null && CONFLICT_MARKER.test(u.text));
+      const exempt = u.region === 'excl' || !affirms(forbid, u.text) || u.region === 'open' || OPEN_MARKER.test(u.text) || (forbid.conflictKey !== null && CONFLICT_MARKER.test(u.text));
       if (!exempt) { failures.push(`«${forbid.key}» affermata nella bozza (negazione invertita o scelta silenziosa)`); break; }
     }
   }

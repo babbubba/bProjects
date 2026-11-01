@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { acceptanceCases, checkAnalysis, checkDraft, matches, norm, type Content, type ProjectCase, type UserIndex } from './support/acceptance';
+import { locateEdit } from './support/pm-correction';
 
 // T043: primo percorso completo con servizi reali (Angular + API + PostgreSQL + modello DGX):
 // login -> creazione -> chat con streaming -> Analizza -> anteprima corretta e salvata -> conferma -> Genera -> bozza;
@@ -327,20 +328,17 @@ for (const nominal of acceptanceCases) {
 
       // --- correzione e salvataggio (nuova revisione PM), poi conferma esplicita
       const form = (section: string) => page.locator(`[data-section=${section}] [data-testid=item-text]`);
-      const edit = p.facts.find((f) => f.key === p.correction.editKey)!;
-      let edited = false;
-      for (const section of edit.accept) {
+      // Solo la voce che esprime il fatto da modificare, unica; una voce a piu' fatti e' riscritta conservando gli altri (support/pm-correction.ts): assente o ambigua = segnalata.
+      const preview = new Map<string, string[]>();
+      for (const section of new Set(p.facts.flatMap((f) => f.accept))) {
         const fields = form(section);
-        for (let n = 0; n < (await fields.count()); n++) {
-          if (matches(norm(await fields.nth(n).inputValue()), edit.match)) {
-            await fields.nth(n).fill(p.correction.editedText);
-            edited = true;
-            break;
-          }
-        }
-        if (edited) break;
+        const values: string[] = [];
+        for (let n = 0; n < (await fields.count()); n++) values.push(await fields.nth(n).inputValue());
+        preview.set(section, values);
       }
-      if (!edited) failures.push(`correzione non applicabile: «${edit.key}» non e' nell'anteprima`);
+      const target = locateEdit(p, (section) => preview.get(section) ?? []);
+      if (target.kind === 'found') await form(target.section!).nth(target.index!).fill(target.newText!);
+      else failures.push(target.message);
       for (const add of p.correction.additions) {
         await page.getByTestId(`add-${add.section}`).click();
         await form(add.section).last().fill(add.text);
@@ -389,7 +387,7 @@ for (const nominal of acceptanceCases) {
       const confirmedView = await getJson<{ currentRevisionId: string; content: Content }>(`/api/projects/${projectId}/analyses/${project.currentAnalysisId}`);
       if (draft.status !== 'Proposed' || draft.approvalStatus !== 'NotApproved') failures.push('bozza non Proposed/NotApproved');
       if (draft.analysisRevisionId !== confirmedView.currentRevisionId || confirmedView.content.validationState !== 'PmConfirmed') failures.push('bozza non legata alla revisione confermata');
-      failures.push(...checkDraft(p, draft.markdown, new Set(confirmedView.content.sources.map((s) => s.id)), true));
+      failures.push(...checkDraft(p, draft.markdown, new Set(confirmedView.content.sources.map((s) => s.id)), true, { ai: aiView.content, confirmed: confirmedView.content }));
 
       const summary = `${p.key}: chat=${timings.chat.map((s) => s.toFixed(1)).join('/')}s analisi=${timings.analysis.toFixed(1)}s generazione=${timings.draft.toFixed(1)}s fallimenti=${failures.length}`;
       exportProject(nominal.id, p, replies, aiView.content, confirmedView.content, draft.markdown, failures, summary);

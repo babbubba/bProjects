@@ -391,7 +391,7 @@ internal sealed class InferenceCaptureChatClient(
                 enableThinking = settings.EnableThinking,
                 temperature = chatOptions?.Temperature,
                 structuredOutput = chatOptions?.ResponseFormat is ChatResponseFormatJson,
-                requestTimeoutSeconds = options.RequestTimeoutSeconds,
+                requestTimeoutSeconds = settings.RequestTimeoutSeconds,
             }),
         };
         scope.Add(record);

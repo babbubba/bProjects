@@ -613,7 +613,10 @@ public sealed class WorkflowRecoveryTests : IAsyncLifetime
     {
         public Task<AnalysisRunInput> LoadInputAsync(Guid runId, CancellationToken ct) => inner.LoadInputAsync(runId, ct);
 
-        public async Task<AnalysisCommitResult> CommitAsync(AnalysisRunClaim claim, AnalysisContent content, CancellationToken ct)
+        public Task<bProjects.App.Evidence.SelectionResult> FreezeEvidenceAsync(AnalysisRunClaim claim, CancellationToken ct) => inner.FreezeEvidenceAsync(claim, ct);
+
+        public async Task<AnalysisCommitResult> CommitAsync(
+            AnalysisRunClaim claim, AnalysisContent content, IReadOnlyDictionary<Guid, IReadOnlyList<string>> evidenceKeys, CancellationToken ct)
         {
             (probe.Claim, probe.Payload) = (claim, content);
             if (probe.BeforeCommit is not null)
@@ -621,7 +624,7 @@ public sealed class WorkflowRecoveryTests : IAsyncLifetime
                 await probe.BeforeCommit(ct);
             }
 
-            var result = await inner.CommitAsync(claim, content, probe.CommitIgnoresCancellation ? CancellationToken.None : ct);
+            var result = await inner.CommitAsync(claim, content, evidenceKeys, probe.CommitIgnoresCancellation ? CancellationToken.None : ct);
             probe.Commits.Enqueue((result.Outcome.ToString(), result.Reason));
             if (probe.AfterCommit is not null)
             {
