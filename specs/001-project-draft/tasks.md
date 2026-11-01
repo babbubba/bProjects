@@ -228,7 +228,8 @@ rivalidazione usa la pipeline con registro (T072). Milestone M1–M8 del mandato
 
 - [x] T067 [US1] Esporre gli endpoint di HTTP §Registro in `backend/src/bProjects.App/Evidence/EvidenceEndpoints.cs` con test `backend/tests/bProjects.IntegrationTests/EvidenceApiTests.cs`: percorsi, payload, codici, idempotenza, 401/403, ID di altri progetti 404, nessun output non validato o ragionamento nelle risposte. Dipende da T065, T066.
 - [x] T068 [US1] Realizzare la vista Evidenze in `frontend/src/app/projects/evidence-view.component.ts` (+ template/SCSS) e `frontend/src/app/projects/project-api.service.ts`: stato reale dei lavori, filtri essenziali, frase originale con lo span evidenziato, storico, confronto e promozione, rianalisi/retry/backfill con avanzamento, report di copertura; accessibile e responsive come la slice; test Vitest. Dipende da T067.
-- [ ] T069 [US1] Aggiungere il percorso browser `tests/e2e/evidence-ledger.spec.ts`: navigazione alla vista, stato dei lavori con modello offline, errori e retry, fonti; con modello reale l'estrazione e il confronto. Dipende da T068.
+- [x] T069 [US1] Aggiungere il percorso browser `tests/e2e/evidence-ledger.spec.ts`: navigazione alla vista, stato dei lavori con modello offline, errori e retry, fonti; con modello reale l'estrazione e il confronto. Dipende da T068.
+  - Esito 2026-11-01: modello offline 1 PASS (stack `bprojects-ledger-e2e`, desktop) e modello reale 1 PASS in 28,8 s (DGX `Qwen3.6-35B-Smart`, stack isolato `bprojects-t069`, desktop-1440, seriale, nessuna altra inferenza); il mobile-390 e' SKIP per progetto (prova solo desktop). Log in `t052-evidence/t069-real/pw-real.log`. Dipendenza di T070 ora soddisfatta: T070 ha eseguito la suite E2E offline prima della chiusura di T069; il percorso reale e' stato aggiunto qui, senza modifiche al codice nel frattempo.
 
 ### M8 — Test completi, verifiche DGX, documentazione ed esiti residui
 

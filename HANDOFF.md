@@ -1194,3 +1194,47 @@ simili, non PASS). Frontend: `ng build` OK, Vitest 210/210. Compose: `config -q`
 
 **Stato.** Chiusi: T065, T066, T068, T070, T073. Aperti: T069 (parte con modello reale), T052, T053. I FAIL N2/N4/N5 restano problemi
 distinti (T072). Il container `bprojects-close-pg18` (PostgreSQL di prova) è preesistente e lasciato attivo.
+
+## 10.5 Chiusura Slice 1: T069, classificazione N2/N4/N5, checklist T052/T053 (2026-11-01)
+
+Nessuna modifica al codice di produzione, alle attese, ai limiti temporali o ai contratti. Nessuna suite nominale rieseguita.
+
+**T069 chiuso.** `evidence-ledger.spec.ts`, modello reale, desktop-1440, stack isolato `bprojects-t069` (rimosso con `down -v`), DGX
+`Qwen3.6-35B-Smart`, un solo test per volta e nessuna altra inferenza: **1 PASS (28,8 s)**; mobile-390 SKIP per progetto (prova solo desktop). Il
+percorso offline era già PASS (1 PASS). Stato in `tasks.md`: T069 `[x]`; T070 resta `[x]` e ora la sua dipendenza da T069 è soddisfatta (T070 aveva
+eseguito la suite E2E offline; il percorso reale è stato aggiunto dopo, senza modifiche al codice tra i due). Log: `t052-evidence/t069-real/`.
+
+**Classificazione dei FAIL (solo diagnostica già raccolta; unica inferenza nuova: 4 repliche seriali della fase Document di N2, ~20 s l'una).**
+
+| Caso | Sintomo | Classe | Evidenza |
+| --- | --- | --- | --- |
+| N2 | Genera `invalid_agent_output`: marcatore `[fonte:...]` malformato | **Causa non dimostrata** (sospetto limite del modello, intermittente) | Il validatore applica la regola 2 del prompt («un solo id per marcatore, mai virgole»): il rifiuto senza riparazione è il contratto. Stesso input (analisi confermata del rerun, 3 riferimenti sulla voce «esclusivamente dal responsabile») inviato 4 volte al DGX: **0/4 riprodotto**, 17 marcatori UUID validi per bozza, tutti in `sources`. L'output non valido non viene conservato (l'harness non era attivo nel rerun), quindi il testo del marcatore è sconosciuto. Nessun bug applicativo deterministico dimostrato. |
+| N2 | Prima esecuzione: Analizza >210 s ancora Running; rerun 171,6 s | **Limite di capacità del modello/parallel=1** (tempo) | Analisi 154 s di inferenza, ~9k token generati a ~58 token/s, più l'attesa dell'ultima estrazione (~15 s). Trade-off col limite di 180 s già segnalato in 10.3, limite non modificato. |
+| N4 | «correzione non applicabile … cancellerebbe «certificazioni»» | **Limite del modello** (analisi non atomica); harness corretto | L'analisi AI fonde «compila un questionario» e «carica le certificazioni» in un'unica voce, mentre la fixture le attende separate. La regola di conservazione di `PmCorrection` (sessione 1C) rifiuta per costruzione di riscrivere una voce che porta un altro fatto. |
+| N4 | «ripetizione: lo stesso punto compare più volte» | **Limite del modello** (DocumentAgent) | L'input del documento ha «Italia» e «10 anni» soltanto in `constraints`; la bozza li riporta sia in Requisiti sia in Vincoli, contro «Non ripetere lo stesso contenuto in più sezioni». Un solo campione; non riprodotto. |
+| N5 aurora | «chat: domanda ripetuta» | **Limite del modello** | La regola «non ripetere una domanda» è nel prompt e la cronologia è inviata (prompt 677→1136 token, crescente); il turno 5 ripete la domanda del turno 3. Un solo campione. |
+| N5 boreale | «ordini» in Goals anziché Requirements/Flows | **Limite del modello** (collocazione); registro non escluso | L'obiettivo assorbe «i clienti inseriscono gli ordini e ne seguono la spedizione» e nessun requisito lo riprende. L'export non contiene le evidenze estratte, quindi non è dimostrato se la fusione avvenga nell'analisi o a monte. |
+
+Nessun bug applicativo deterministico riproducibile: nessuna correzione di produzione. Seguiti **non eseguiti** (decisione dell'autore, non necessari
+alla chiusura): (a) conservare l'output grezzo non valido del DocumentAgent nella diagnostica locale (non nelle risposte API, che per T067 non espongono
+output non validato) per classificare il marcatore alla prossima occorrenza; (b) un controllo deterministico di ripetizione tra sezioni nel validatore,
+che sarebbe un cambio di contratto.
+
+**Checklist finale T052/T053.**
+
+*Controlli automatici (già eseguiti; PASS/FAIL/SKIP reali)*
+- [x] Build, suite deterministica (1120 PASS, 0 FAIL, 39 SKIP), Integration su PostgreSQL, `test:ci`/Vitest 210/210, Playwright offline (189 PASS, 1 FAIL poi 13 PASS con il comando di riavvio documentato, 36 SKIP), Compose con riavvio: T070.
+- [x] Registro: estrattore reale 6/6 PASS (T071), UI Evidenze con modello reale PASS (T069).
+- [ ] N1–N5 nominali con modello reale: N1 PASS, N3 PASS; **N2, N4, N5 FAIL** (tabella sopra). Nessun PASS da dichiarare per N2/N4/N5 senza una nuova esecuzione.
+- [ ] Verificatori di accettazione: i FAIL sono segnalazioni del checker, non giudizio SC-006.
+- [ ] MafReal completo e Playwright con modello reale (`T052 N1…N5`, `context-monitor-real`): non rieseguiti dopo il registro.
+
+*Accettazione umana (non automatizzabile)*
+- [ ] Due PM e un tecnico estraneo al dialogo rivedono le bozze dei cinque casi: zero omissioni/contraddizioni/ripetizioni sostanziali (SC-006).
+- [ ] Tempo di interazione attiva <= 5 min per PM e analisi/generazioni entro 180 s su un campione ripetuto, non uno solo.
+- [ ] Riapertura in tre sessioni dopo riavvio (SC-004), controllo manuale oltre a `T043`.
+- [ ] Attestazione SC-001–SC-012 e capacità tecnica solo in token, firmata da chi ha fatto la revisione.
+
+**Decisione richiesta per chiudere la Slice 1.** O si accettano i limiti del modello con N2/N4/N5 FAIL documentati (deviazione da SC-006/180 s da
+approvare per iscritto), oppure si autorizza un'esecuzione mirata (N2/N4/N5 con `DiagnosticsHarness` attivo, in seriale) prima della revisione umana.
+T052 e T053 restano aperti finché la decisione e la revisione umana non sono registrate.
