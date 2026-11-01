@@ -1,0 +1,19 @@
+[project]
+name = "bprojects-parser"
+version = "0.1.0"
+description = "Parser interno document-parse-1 (Docling, stateless, offline)"
+requires-python = ">=3.12,<3.13"
+# Le dipendenze dirette sono fissate in requirements.in; il lock con hash e requirements.lock.
+dependencies = [
+  "docling==2.129.0",
+  "fastapi==0.136.1",
+  "uvicorn==0.46.0",
+  "python-multipart==0.0.28",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+  "heavy: carica Docling e converte fixture reali (lento, richiede l'immagine del parser)",
+]

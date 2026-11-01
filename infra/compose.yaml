@@ -71,6 +71,8 @@ services:
       Documents__StorageRoot: /var/lib/bprojects/documents
     volumes:
       - documents:/var/lib/bprojects/documents
+    # default: rete applicativa esistente; parser_net: rete privata verso il parser (nessun egress, vedi servizio parser).
+    networks: [default, parser_net]
     depends_on:
       db:
         condition: service_healthy
@@ -79,6 +81,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Parser documenti (slice 002, T026): Docling CPU offline. Raggiungibile solo dal backend (http://parser:8000) sulla rete interna
+  # parser_net: nessuna porta host, nessun egress, nessun mount degli originali, nessun DB/LLM. Profilo `parser` finche il backend
+  # non lo usa (T029): avviare con `docker compose --profile parser up -d --build parser`.
+  parser:
+    profiles: ["parser"]
+    build:
+      context: ../parser
+      target: runtime
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:size=1g,mode=1777,noexec,nosuid
+    cpus: 2
+    mem_limit: 4g
+    memswap_limit: 4g
+    pids_limit: 256
+    environment:
+      # Segreto condiviso con il backend (da infra/.env). Vuoto = il parser rifiuta ogni conversione.
+      PARSER_INTERNAL_SECRET: ${PARSER_INTERNAL_SECRET:-}
+    networks: [parser_net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   web:
     build:
@@ -90,6 +122,10 @@ services:
     depends_on:
       app:
         condition: service_healthy
+
+networks:
+  parser_net:
+    internal: true   # nessun gateway verso l'esterno: il parser non ha egress
 
 volumes:
   pgdata:

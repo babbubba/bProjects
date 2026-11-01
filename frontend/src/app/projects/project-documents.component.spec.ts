@@ -332,7 +332,7 @@ describe('ProjectDocumentsComponent', () => {
     expect(pins[0].disabled).toBe(false);
     expect(pins[1].disabled).toBe(false);
     const notes = [...el.querySelectorAll<HTMLElement>('[data-testid="docs-pin-note"]')];
-    expect(notes.length).toBe(1);   // solo la versione non pronta ha l'avviso, la pronta no
+    expect(notes.length).toBe(1); // solo la versione non pronta ha l'avviso, la pronta no
     expect(notes[0].textContent).toContain('Analizza');
 
     pins[0].click();
@@ -445,11 +445,9 @@ describe('ProjectDocumentsComponent', () => {
 
     q('docs-download')!.click();
     await settle();
-    http
-      .expectOne(`${BASE}/documents/d-1/versions/1/download`)
-      .flush(new Blob(['abc']), {
-        headers: { 'Content-Disposition': 'attachment; filename="originale.md"' },
-      });
+    http.expectOne(`${BASE}/documents/d-1/versions/1/download`).flush(new Blob(['abc']), {
+      headers: { 'Content-Disposition': 'attachment; filename="originale.md"' },
+    });
     await settle();
     expect(created).toHaveBeenCalled();
     expect(downloadName).toBe('originale.md');
@@ -501,19 +499,17 @@ describe('ProjectDocumentsComponent', () => {
 
     q('docs-versions')!.click();
     await settle();
-    http
-      .expectOne(`${BASE}/documents/d-1`)
-      .flush(
-        detail([
-          version({
-            processingStatus: 'Failed',
-            issuesSummary: {
-              code: 'parse_failed',
-              message: 'La preparazione del documento non è riuscita',
-            },
-          }),
-        ]),
-      );
+    http.expectOne(`${BASE}/documents/d-1`).flush(
+      detail([
+        version({
+          processingStatus: 'Failed',
+          issuesSummary: {
+            code: 'parse_failed',
+            message: 'La preparazione del documento non è riuscita',
+          },
+        }),
+      ]),
+    );
     await settle();
     expect(q('docs-issue')!.textContent).toContain('non è riuscita');
   });
@@ -537,7 +533,9 @@ describe('ProjectDocumentsComponent', () => {
     await flushLoad();
     q('docs-versions')!.click();
     await settle();
-    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ processingStatus: 'Extracting' })]));
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ processingStatus: 'Extracting' })]));
     await settle();
 
     q('docs-read')!.click();
@@ -560,18 +558,29 @@ describe('ProjectDocumentsComponent', () => {
       allowedActions: ['download'],
     });
     await settle();
-    http.expectOne((r) => r.url === `${prefix}/blocks`).flush({
-      preparationId: 'g-1',
-      processingStatus: 'Extracting',
-      isReady: false,
-      items: [
-        {
-          id: 'b-0', ref: 'r0', ordinal: 0, parentId: null, type: 'Paragraph', text: 'Testo letto',
-          headingPath: [], page: 1, bbox: null, lines: null, tableCells: null,
-        },
-      ],
-      nextCursor: null,
-    });
+    http
+      .expectOne((r) => r.url === `${prefix}/blocks`)
+      .flush({
+        preparationId: 'g-1',
+        processingStatus: 'Extracting',
+        isReady: false,
+        items: [
+          {
+            id: 'b-0',
+            ref: 'r0',
+            ordinal: 0,
+            parentId: null,
+            type: 'Paragraph',
+            text: 'Testo letto',
+            headingPath: [],
+            page: 1,
+            bbox: null,
+            lines: null,
+            tableCells: null,
+          },
+        ],
+        nextCursor: null,
+      });
     await settle();
 
     expect(q('docs-read')!.getAttribute('aria-expanded')).toBe('true');
@@ -584,7 +593,9 @@ describe('ProjectDocumentsComponent', () => {
     await flushLoad();
     q('docs-versions')!.click();
     await settle();
-    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ processingStatus: 'NotPrepared' })]));
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ processingStatus: 'NotPrepared' })]));
     await settle();
     expect(q('docs-read')).toBeNull();
   });

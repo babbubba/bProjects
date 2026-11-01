@@ -7,7 +7,9 @@ Non è un piano: la fonte dei task è `tasks.md`. Contiene solo lo stato per rip
 - Milestone corrente: **I2** (T020–T032, T116–T117). Ultimo task completato: T019 (I1) + hardening I1.
 - Completati e verificati (fake HTTP, PG reale, test mirati): T027, T028 (migration `20261101223202_DocumentParsing`). T029 implementato, test con parser fake PASS (20), ma **resta aperto**: manca verifica con parser reale (NOT VERIFIED).
 - T030 implementato (API passages 21/21 PG, Vitest 30/30, build OK) ma **aperto**: manca prova per formato PDF/DOCX/MD/TXT (con T031/T032). `{g}` accetta generazione, id preparazione o `latest` (contratto http-api.md da allineare). `reason` issue esposto come dal parser (decisione aperta: testo fisso?).
-- In corso: agente parser Python (T020–T026) in background. Modifiche non committate: solo `docs/acceptance-trace/` (da non toccare né committare).
+- Completati: T020–T026 (parser: 141 test in container offline, vedi validation/parser.md). NOT VERIFIED: prestazioni/documenti reali grandi, tabelle PDF TableFormer, limite 250 MB reale, solo linux/amd64.
+- **MISMATCH da risolvere (prima di T031)**: il parser usa header `X-Internal-Secret`, il backend `Authorization: Bearer`; verificare anche tutti i nomi campi JSON del manifest (validatore backend vs parser reale). Compose: servizio `parser` con profilo `parser`, rete interna `parser_net` anche su `app`.
+- In corso: allineamento backend↔parser (T031). Modifiche non committate: solo `docs/acceptance-trace/` (da non toccare né committare).
 - Prossimo task eseguibile: T020 e T021 in parallelo (parser Python, cartella `parser/`); T027 dopo T022.
 
 ## Ambiente (verificato all'avvio)

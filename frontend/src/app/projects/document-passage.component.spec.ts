@@ -77,7 +77,12 @@ describe('DocumentPassageComponent', () => {
   }
 
   /** Le richieste partono in sequenza (preparazione, poi blocchi): si risponde man mano. */
-  async function flush(items: BlockView[], p = prep(), nextCursor: string | null = null, ready = false) {
+  async function flush(
+    items: BlockView[],
+    p = prep(),
+    nextCursor: string | null = null,
+    ready = false,
+  ) {
     http.expectOne(BASE).flush(p);
     await settle();
     http.expectOne((r) => r.url === BASE + '/blocks').flush(page(items, nextCursor, ready));
@@ -130,7 +135,12 @@ describe('DocumentPassageComponent', () => {
 
   it('Ready è presentato come Pronto senza avviso', async () => {
     mount();
-    await flush([block()], prep({ processingStatus: 'Ready', isReady: true, contentState: 'Ready' }), null, true);
+    await flush(
+      [block()],
+      prep({ processingStatus: 'Ready', isReady: true, contentState: 'Ready' }),
+      null,
+      true,
+    );
 
     expect(el.querySelector('[data-testid="passage-status"]')!.textContent).toContain('Pronto');
     expect(el.querySelector('[data-testid="passage-notready"]')).toBeNull();
@@ -142,7 +152,9 @@ describe('DocumentPassageComponent', () => {
 
     expect(el.querySelector('img')).toBeNull();
     expect(el.querySelector('[data-testid="passage-block"] b')).toBeNull();
-    expect(el.querySelector('[data-testid="passage-block"]')!.textContent).toContain('<b>grassetto</b>');
+    expect(el.querySelector('[data-testid="passage-block"]')!.textContent).toContain(
+      '<b>grassetto</b>',
+    );
   });
 
   it('pagina i blocchi con il cursore e non duplica', async () => {
@@ -177,7 +189,9 @@ describe('DocumentPassageComponent', () => {
 
     const mark = el.querySelector('[data-testid="passage-quote"] mark')!;
     expect(mark.textContent).toBe('paragrafo');
-    expect(el.querySelector('[data-testid="passage-quote"]')!.textContent).toContain('Primo paragrafo.');
+    expect(el.querySelector('[data-testid="passage-quote"]')!.textContent).toContain(
+      'Primo paragrafo.',
+    );
     (el.querySelector('[data-testid="passage-download"]') as HTMLButtonElement).click();
     expect(downloads).toBe(1);
   });
