@@ -24,7 +24,7 @@ Disegno futuro. Base `/api/projects/{p}`; JSON camelCase, UUID, date UTC; bearer
 
 Upload stessa chiave/input diverso (hash bytes+metadata+target) → 409 idempotency_conflict; upload ancora in ricezione → 409 upload_in_progress con receiptId, nessuna falsa versione acquisita. Replay dopo crash riconcilia la stessa receipt. Nuovo caricamento deliberato con nuova chiave può creare altra versione; hash uguale non fonde documenti di progetti diversi. Nessun resume parziale byte-level promesso.
 
-Errori sincroni: 400 multipart/chiave/revisione malformata, 401/403 auth/ruolo, 404 progetto o risorsa, 409 conflitto/idempotenza/preparazione attiva, 413 file oltre limite, 415 formato non supportato o incoerente, 422 file vuoto/protetto/input non valido, 507 quota/spazio insufficiente, 503 persistenza/parser temporaneamente indisponibili. Formato/protezione scoperti dopo acquisizione sono errore asincrono: originale rimane scaricabile. Mai stack trace, storage path, endpoint riservati o contenuto completo negli errori.
+Errori sincroni: 400 multipart/chiave/revisione malformata, 401/403 auth/ruolo, 404 progetto o risorsa, 408 `upload_timeout` (ricezione del file oltre `Documents:UploadTimeoutSeconds`: nulla acquisito, ritentabile con la stessa Idempotency-Key), 409 conflitto/idempotenza/preparazione attiva, 413 file oltre limite, 415 formato non supportato o incoerente, 422 file vuoto/protetto/input non valido, 507 quota/spazio insufficiente, 503 persistenza/parser temporaneamente indisponibili. Formato/protezione scoperti dopo acquisizione sono errore asincrono: originale rimane scaricabile. Mai stack trace, storage path, endpoint riservati o contenuto completo negli errori.
 
 ## Selezione persistente e snapshot
 
