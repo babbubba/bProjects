@@ -175,6 +175,12 @@
                       <span [class]="'badge ' + badge(v.processingStatus)">{{ processingLabel(v.processingStatus) }}</span>
                       @if (isPinnedTo(doc.documentId, v.id)) {
                         <span class="badge text-bg-info" data-testid="docs-pinned">Fissata</span>
+                        @if (!isReady(v)) {
+                          <span class="small text-warning-emphasis" role="status" data-testid="docs-pinned-unready">
+                            Fissata ma non è pronta: finché non lo sarà, Analizza resta bloccata e la chat la dichiara
+                            indisponibile. Aspetta la preparazione oppure escludi il documento.
+                          </span>
+                        }
                       }
                       @if (v.issuesSummary) {
                         <span class="small text-danger" data-testid="docs-issue">{{ issueText(v) }}</span>
@@ -191,12 +197,17 @@
                         type="button"
                         class="btn btn-sm btn-outline-secondary"
                         data-testid="docs-pin"
-                        [disabled]="busy() || !canPin(v) || isPinnedTo(doc.documentId, v.id)"
-                        [attr.title]="canPin(v) ? null : 'Si può fissare solo una versione pronta'"
+                        [disabled]="busy() || isPinnedTo(doc.documentId, v.id)"
+                        [attr.aria-describedby]="isReady(v) ? null : 'pin-note-' + v.id"
                         (click)="pin(doc.documentId, v)"
                       >
                         Fissa questa versione
                       </button>
+                      @if (!isReady(v) && !isPinnedTo(doc.documentId, v.id)) {
+                        <span class="small text-secondary" [id]="'pin-note-' + v.id" data-testid="docs-pin-note">
+                          Non ancora pronta: puoi fissarla, ma non sarà utilizzabile in Analizza finché non è pronta.
+                        </span>
+                      }
                     </li>
                   }
                 </ul>

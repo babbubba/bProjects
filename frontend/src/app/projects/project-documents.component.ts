@@ -364,12 +364,12 @@ export class ProjectDocumentsComponent {
     }));
   }
 
-  protected canPin(version: DocumentVersionView): boolean {
+  protected isReady(version: DocumentVersionView): boolean {
     return version.processingStatus === 'Ready';
   }
 
+  /** Il contratto ammette di fissare anche una versione non pronta: resta indisponibile (e blocca Analizza) finché non lo è. */
   protected async pin(documentId: string, version: DocumentVersionView): Promise<void> {
-    if (!this.canPin(version)) return;
     await this.applySelection(documentId, (current) => ({
       ...current,
       mode: 'Pinned',

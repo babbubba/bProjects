@@ -314,7 +314,7 @@ describe('ProjectDocumentsComponent', () => {
     expect(component().selectionRevision()).toBe(5);
   });
 
-  it('pins only a ready version and never a not-ready one', async () => {
+  it('pins a ready version and offers the pin on a not-ready one with its consequence stated', async () => {
     await flushLoad();
     q('docs-versions')!.click();
     await settle();
@@ -330,7 +330,10 @@ describe('ProjectDocumentsComponent', () => {
 
     const pins = [...el.querySelectorAll<HTMLButtonElement>('[data-testid="docs-pin"]')];
     expect(pins[0].disabled).toBe(false);
-    expect(pins[1].disabled).toBe(true);
+    expect(pins[1].disabled).toBe(false);
+    const notes = [...el.querySelectorAll<HTMLElement>('[data-testid="docs-pin-note"]')];
+    expect(notes.length).toBe(1);   // solo la versione non pronta ha l'avviso, la pronta no
+    expect(notes[0].textContent).toContain('Analizza');
 
     pins[0].click();
     await settle();
@@ -365,6 +368,61 @@ describe('ProjectDocumentsComponent', () => {
     await settle();
     expect(q('docs-pinned')).not.toBeNull();
     expect(el.textContent).toContain('Versione fissata');
+  });
+
+  it('lets the PM pin a not-ready version and then states it stays unavailable for Analizza', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ id: 'v-1', version: 1, processingStatus: 'Queued' })]));
+    await settle();
+    expect(q('docs-pinned-unready')).toBeNull();
+
+    q('docs-pin')!.click();
+    await settle();
+    const put = http.expectOne(`${BASE}/source-selection`);
+    expect(put.request.body).toEqual({
+      items: [{ documentId: 'd-1', included: true, mode: 'Pinned', versionId: 'v-1' }],
+    });
+    put.flush(
+      selection(2, {
+        items: [
+          { ...selection().items[0], mode: 'Pinned', versionId: 'v-1', resolvedVersionId: 'v-1' },
+        ],
+        blockingSources: [
+          {
+            documentId: 'd-1',
+            displayName: 'Capitolato',
+            versionId: 'v-1',
+            version: 1,
+            status: 'Queued',
+            allowedActions: ['exclude'],
+          },
+        ],
+      }),
+      { headers: { ETag: '"2"' } },
+    );
+    await settle();
+    http
+      .expectOne((r) => r.url === `${BASE}/documents`)
+      .flush({
+        items: [item({ selectionMode: 'Pinned', availability: 'Unavailable' })],
+        nextCursor: null,
+      });
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ id: 'v-1', version: 1, processingStatus: 'Queued' })]));
+    await settle();
+
+    expect(q('docs-pinned')).not.toBeNull();
+    const consequence = q('docs-pinned-unready')!;
+    expect(consequence.getAttribute('role')).toBe('status');
+    expect(consequence.textContent).toContain('non è pronta');
+    expect(consequence.textContent).toContain('Analizza');
+    expect(consequence.textContent).toContain('escludi');
   });
 
   it('downloads the original keeping the server file name', async () => {
