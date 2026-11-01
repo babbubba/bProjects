@@ -8,6 +8,7 @@ import { CurrentRevision, DocumentViewComponent } from './document-view.componen
 import { ChatComponent } from './chat.component';
 import { ContextUsagePanelComponent } from './context-usage-panel.component';
 import { EvidenceViewComponent } from './evidence-view.component';
+import { ProjectDocumentsComponent } from './project-documents.component';
 import { ProjectApiService, ProjectView } from './project-api.service';
 
 const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
@@ -22,6 +23,7 @@ const dateFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeS
     DocumentViewComponent,
     EvidenceViewComponent,
     FormsModule,
+    ProjectDocumentsComponent,
     RouterLink,
   ],
   templateUrl: './project-shell.component.html',
@@ -43,8 +45,8 @@ export class ProjectShellComponent {
   protected readonly selected = signal<ProjectView | null>(null);
   protected readonly current = signal<CurrentRevision | null>(null);
   protected readonly detailError = signal('');
-  /** Sezione del progetto: lavoro (chat, anteprima, documento) oppure registro delle evidenze. */
-  protected readonly section = signal<'work' | 'evidence'>('work');
+  /** Sezione del progetto: lavoro (chat, anteprima, documento) archivio documenti oppure registro delle evidenze. */
+  protected readonly section = signal<'work' | 'documents' | 'evidence'>('work');
 
   protected readonly sidebarOpen = signal(false);
   protected readonly formOpen = signal(false);
