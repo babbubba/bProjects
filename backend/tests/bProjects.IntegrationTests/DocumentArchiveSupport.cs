@@ -8,17 +8,6 @@ using Npgsql;
 namespace bProjects.IntegrationTests;
 
 /// <summary>
-/// Guardia delle prove scritte prima dell'implementazione (T008/T010, convenzione T037): finché T012–T014 non esistono le prove restano
-/// <b>Skipped</b> con motivo — mai Passed. Per vederle fallire sul comportamento mancante: <c>BPROJECTS_RUN_PENDING=1</c>.
-/// Rimuovere le chiamate a <see cref="Await"/> (e questa classe) quando il task indicato è completato.
-/// </summary>
-internal static class PendingGuard
-{
-    public static void Await(string tasks) =>
-        Assert.SkipUnless(Environment.GetEnvironmentVariable("BPROJECTS_RUN_PENDING") == "1", $"In attesa di {tasks}: prova scritta prima dell'implementazione, non è un PASS.");
-}
-
-/// <summary>
 /// Base delle prove dell'archivio documenti su API reale + PostgreSQL reale + filesystem isolato: ogni classe ha un database nuovo e una
 /// radice di storage temporanea propria (<c>Documents:StorageRoot</c>), rimossa alla fine. Nessun modello AI: il client è sostituito dall'harness.
 /// </summary>
@@ -54,12 +43,22 @@ public abstract class ArchiveTestBase : IAsyncLifetime
         if (TestEnvironment.PostgresAdminConnectionString is not null)
         {
             Directory.CreateDirectory(_sandbox);
-            _app = await ApiHarness.StartAsync(_database.ConnectionString, configure: services => services.Configure<DocumentOptions>(options =>
-            {
-                options.StorageRoot = StorageRoot;
-                Tune(options);
-            }));
+            _app = await StartAppAsync();
         }
+    }
+
+    private Task<ApiHarness> StartAppAsync() =>
+        ApiHarness.StartAsync(_database.ConnectionString, configure: services => services.Configure<DocumentOptions>(options =>
+        {
+            options.StorageRoot = StorageRoot;
+            Tune(options);
+        }));
+
+    /// <summary>Riavvio del processo: nuova applicazione sullo stesso database e sullo stesso volume di storage.</summary>
+    protected async Task RestartAppAsync()
+    {
+        await _app!.DisposeAsync();
+        _app = await StartAppAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -138,6 +137,17 @@ public abstract class ArchiveTestBase : IAsyncLifetime
 
         return (T)Convert.ChangeType((await command.ExecuteScalarAsync(Ct))!, typeof(T));
     }
+
+    /// <summary>Connessione aperta al database di prova (per tenere transazioni o sonde di lock fuori dall'applicazione).</summary>
+    protected async Task<NpgsqlConnection> OpenConnection()
+    {
+        var connection = new NpgsqlConnection(_database.ConnectionString);
+        await connection.OpenAsync(Ct);
+        return connection;
+    }
+
+    /// <summary>Chiave dell'advisory lock di progetto (stessa derivazione di ProjectLock).</summary>
+    protected static string ProjectLockKey(Guid projectId) => "bprojects:project-sources:" + projectId.ToString("N");
 
     protected Task<long> Count(string sql, params (string Name, object Value)[] args) => Scalar<long>(sql, args);
 

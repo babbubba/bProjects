@@ -32,6 +32,15 @@ public sealed record DocumentLimits(
     /// <summary>Tetto finito dei timer (24 h): un valore enorme equivale a «nessun limite», che il Plan non ammette.</summary>
     public const int MaxDeadlineSeconds = 86_400;
 
+    /// <summary>Limite per file: non oltre il corpo che il proxy accetta (client_max_body_size 52m in infra/web.conf).</summary>
+    public const long MaxFileBytesCeiling = 52_000_000;
+
+    /// <summary>Massimo dei byte espansi di un contenitore (DOCX): oltre è una configurazione che esaurirebbe memoria o disco.</summary>
+    public const long MaxExpandedBytesCeiling = 1_000_000_000;
+
+    /// <summary>Massimo di quota per progetto (originali o derivati): 1 TB.</summary>
+    public const long MaxQuotaBytesCeiling = 1_000_000_000_000;
+
     /// <summary>Soglia minima del regime Extended (Plan: 180 s di base).</summary>
     public const int MinExtendedSeconds = 180;
 
@@ -55,6 +64,14 @@ public sealed record DocumentLimits(
             }
         }
 
+        void Ceiling(string field, long value, long ceiling)
+        {
+            if (value > ceiling)
+            {
+                errors.Add($"{field}: non può superare {ceiling} byte.");
+            }
+        }
+
         void Timer(string field, int value)
         {
             if (value <= 0 || value > MaxDeadlineSeconds)
@@ -67,6 +84,14 @@ public sealed record DocumentLimits(
         Positive(nameof(ProjectQuotaBytes), ProjectQuotaBytes);
         Positive(nameof(DerivedQuotaBytes), DerivedQuotaBytes);
         Positive(nameof(MaxExpandedBytes), MaxExpandedBytes);
+
+        // Tetti assoluti: il proxy (infra/web.conf, client_max_body_size 52m) rifiuta corpi oltre 52 MB, quindi un limite per file più alto
+        // sarebbe inattuabile; espansione e quote hanno un massimo ragionevole contro configurazioni che esaurirebbero disco o memoria.
+        Ceiling(nameof(MaxFileBytes), MaxFileBytes, MaxFileBytesCeiling);
+        Ceiling(nameof(MaxExpandedBytes), MaxExpandedBytes, MaxExpandedBytesCeiling);
+        Ceiling(nameof(ProjectQuotaBytes), ProjectQuotaBytes, MaxQuotaBytesCeiling);
+        Ceiling(nameof(DerivedQuotaBytes), DerivedQuotaBytes, MaxQuotaBytesCeiling);
+        Ceiling(nameof(MaxDerivedBytes), MaxDerivedBytes, MaxQuotaBytesCeiling);
         Positive(nameof(MaxPages), MaxPages);
         Positive(nameof(MaxBlocks), MaxBlocks);
         Positive(nameof(MaxAiCallsPerPreparation), MaxAiCallsPerPreparation);

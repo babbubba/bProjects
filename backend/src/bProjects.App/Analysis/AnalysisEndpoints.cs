@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
@@ -99,6 +100,7 @@ public static class AnalysisEndpoints
         IOptions<ExecutionOptions> execution,
         IOptions<AiOptions> ai,
         ProcessingRunEvents events,
+        SourceSelectionService selection,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -117,6 +119,14 @@ public static class AnalysisEndpoints
         try
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+            // Lock di progetto delle fonti (upload, selezione, chat) PRIMA di quello della conversazione: ordine progetto → conversazione.
+            // Un progetto senza documenti resta sul ramo 001, senza questo lock.
+            var hasDocuments = await db.ProjectDocuments.AsNoTracking().AnyAsync(d => d.ProjectId == projectId, ct);
+            if (hasDocuments)
+            {
+                await ProjectLock.AcquireAsync(db, projectId, ct);
+            }
 
             // Stesso lock del salvataggio dei messaggi PM: il cutoff è l'ultimo messaggio PM committato, senza race con chi scrive.
             var conversationId = (await db.Database
@@ -143,9 +153,24 @@ public static class AnalysisEndpoints
                     : Results.Ok(replay);
             }
 
+            // Fonti documentali risolte sotto lock alla richiesta (dopo il replay, che non le ricalcola): un documento incluso non pronto
+            // blocca Analizza senza creare alcun run.
+            SourceEvaluation? sources = hasDocuments ? await selection.EvaluateAsync(projectId, ct) : null;
+            if (sources is not null && sources.Blocking.Any())
+            {
+                var blocking = SourceSelectionService.ToView(sources, await selection.PreparationStatusesAsync(projectId, ct)).BlockingSources;
+                return Results.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Fonti documentali non pronte",
+                    extensions: new Dictionary<string, object?> { ["code"] = "sources_not_ready", ["blockingSources"] = blocking });
+            }
+
             if (cutoff is null)
             {
-                return Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager", "no_pm_input");
+                // Nessun messaggio PM: con documenti nel progetto manca ogni input analizzabile (nessuna fonte pronta), altrimenti ramo 001.
+                return sources is not null
+                    ? Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager o un documento pronto", "no_source_input")
+                    : Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager", "no_pm_input");
             }
 
             var active = await db.ProcessingRuns.AsNoTracking()
@@ -177,6 +202,11 @@ public static class AnalysisEndpoints
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };
+            if (sources is not null)
+            {
+                run.SourceSnapshotId = selection.AddSnapshot(projectId, sources, now).Id;   // manifest fissato alla richiesta, mai al claim
+            }
+
             db.ProcessingRuns.Add(run);
             await db.SaveChangesAsync(ct);
             // Registro delle evidenze: i messaggi PM entro il cutoff senza versione corrente né lavoro aperto (preesistenti o falliti)

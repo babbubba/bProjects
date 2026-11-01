@@ -66,6 +66,11 @@ services:
       Execution__AnalysisRunDeadlineSeconds: ${EXECUTION_ANALYSIS_RUN_DEADLINE_SECONDS:-1200}
       # Deadline di ogni lavoro di estrazione dalla richiesta (coda inclusa): con parallel=1 le estrazioni attendono chat e run.
       Execution__ExtractionDeadlineSeconds: ${EXECUTION_EXTRACTION_DEADLINE_SECONDS:-3600}
+      # Originali dei documenti (slice 002): volume privato fuori dal webroot, nessuna porta né URL pubblica. Limiti e quote: Documents__* (default
+      # nel codice, modificabili dall'Admin); account Admin: solo con bootstrap-accounts esplicito, mai da questo file.
+      Documents__StorageRoot: /var/lib/bprojects/documents
+    volumes:
+      - documents:/var/lib/bprojects/documents
     depends_on:
       db:
         condition: service_healthy
@@ -88,3 +93,4 @@ services:
 
 volumes:
   pgdata:
+  documents:

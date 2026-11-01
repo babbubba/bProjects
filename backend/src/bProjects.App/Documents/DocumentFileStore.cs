@@ -45,6 +45,9 @@ public enum DocumentStoreStage
 
     /// <summary>Rename eseguito: l'originale è durevole ma nessun record DB lo referenzia ancora.</summary>
     AfterRename,
+
+    /// <summary>Solo in <see cref="DocumentFileStore.DeleteOrphanAsync"/>: verificato che è orfano, subito prima di cancellarlo.</summary>
+    BeforeDelete,
 }
 
 /// <summary>Esito di una scrittura o ispezione: chiave server, lunghezza reale dallo stream e SHA-256 esadecimale minuscolo.</summary>
@@ -238,6 +241,12 @@ public sealed partial class DocumentFileStore
         }
     }
 
+    /// <summary>
+    /// Apre l'originale appena scritto in sola lettura, senza rileggerlo per l'hash (il chiamante lo ha appena calcolato): per i controlli
+    /// di contenuto di DocumentUploadService prima del commit. Il chiamante lo elimina.
+    /// </summary>
+    public FileStream OpenForValidation(string storageKey) => OpenForRead(storageKey);
+
     /// <summary>Lunghezza e hash dei byte presenti sotto la chiave, o null se non esiste: per riconciliare residui dopo un crash.</summary>
     public async Task<StoredDocumentFile?> InspectAsync(string storageKey, CancellationToken ct)
     {
@@ -304,6 +313,7 @@ public sealed partial class DocumentFileStore
             return false;
         }
 
+        OnStage?.Invoke(DocumentStoreStage.BeforeDelete);
         File.SetAttributes(path, FileAttributes.Normal);
         File.Delete(path);
         _logger.LogInformation("Originale orfano rimosso: chiave {StorageKey}", storageKey);

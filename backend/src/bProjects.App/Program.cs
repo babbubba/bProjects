@@ -35,6 +35,9 @@ builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(A
 builder.Services.AddSingleton<IValidateOptions<DocumentOptions>, DocumentOptionsValidator>();
 builder.Services.AddOptions<DocumentOptions>().Bind(builder.Configuration.GetSection(DocumentOptions.SectionName)).ValidateOnStart();
 builder.Services.AddScoped<DocumentPolicyService>();
+builder.Services.AddScoped<DocumentUploadService>();
+builder.Services.AddScoped<SourceSelectionService>();
+builder.Services.AddScoped<DocumentCatalog>();
 builder.Services.AddSingleton<DocumentFileStore>();   // originali su volume privato (T011); la radice si valida al primo uso
 builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSection(ExecutionOptions.SectionName)).ValidateOnStart();
 builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
@@ -157,7 +160,12 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
         await context.RequestServices.GetRequiredService<IProblemDetailsService>().WriteAsync(new ProblemDetailsContext
         {
             HttpContext = context,
-            ProblemDetails = { Status = badRequest.StatusCode, Title = "Richiesta non valida", Extensions = { ["code"] = "malformed_request" } },
+            ProblemDetails =
+            {
+                Status = badRequest.StatusCode,
+                Title = badRequest.StatusCode == StatusCodes.Status413PayloadTooLarge ? "Corpo della richiesta troppo grande" : "Richiesta non valida",
+                Extensions = { ["code"] = badRequest.StatusCode == StatusCodes.Status413PayloadTooLarge ? "payload_too_large" : "malformed_request" },
+            },
         });
         return;
     }
@@ -206,6 +214,8 @@ app.MapConversationEndpoints();
 app.MapAnalysisEndpoints();
 app.MapDocumentEndpoints();
 app.MapDocumentLimitEndpoints();
+app.MapProjectDocumentEndpoints();
+app.MapSourceSelectionEndpoints();
 app.MapProjectEventsEndpoint();
 app.MapContextUsageEndpoint();
 bProjects.App.Evidence.EvidenceEndpoints.MapEvidenceEndpoints(app);

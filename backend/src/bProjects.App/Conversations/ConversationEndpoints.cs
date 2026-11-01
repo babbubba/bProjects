@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using bProjects.App.AI;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -70,6 +71,7 @@ public static class ConversationEndpoints
         IOptions<AiOptions> ai,
         ChatTurnEvents events,
         EvidenceEvents evidenceEvents,
+        SourceSelectionService selection,
         CancellationToken ct,
         bProjects.App.AI.DispatchWakeup? wakeup = null)
     {
@@ -104,6 +106,13 @@ public static class ConversationEndpoints
         var policy = execution.Value;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        // Lock di progetto delle fonti prima di quello della conversazione (ordine progetto → conversazione); i progetti senza documenti restano sul ramo 001.
+        var hasDocuments = await db.ProjectDocuments.AsNoTracking().AnyAsync(d => d.ProjectId == projectId, ct);
+        if (hasDocuments)
+        {
+            await ProjectLock.AcquireAsync(db, projectId, ct);
+        }
 
         // Lock della conversazione: serializza assegnazione di Sequence, replay e fissaggio del cutoff.
         var conversationId = await LockConversation(db, projectId, ct);
@@ -159,6 +168,12 @@ public static class ConversationEndpoints
             DeadlineAt = now + policy.RunDeadline,
             MaxAttempts = policy.MaxAttempts,
         };
+
+        // Fonti fissate alla richiesta anche quando non pronte: il turno conserva il messaggio e dichiara l'indisponibilità senza attenderla.
+        if (hasDocuments)
+        {
+            turn.SourceSnapshotId = selection.AddSnapshot(projectId, await selection.EvaluateAsync(projectId, ct), now).Id;
+        }
 
         // Lavoro durevole di estrazione delle evidenze (contracts/ai-workflow.md §10.1): nella stessa transazione, mai dipendente dal modello.
         var extraction = EvidenceLedgerStore.NewJob(projectId, conversation.Id, message.Id, message.Sequence, ExtractionJobReason.Initial, now,

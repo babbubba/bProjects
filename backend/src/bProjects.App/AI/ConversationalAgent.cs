@@ -160,6 +160,13 @@ public sealed class ConversationalTurnExecutor(
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var reply = await agent.RunAsync(db, claim, onDelta: events?.DeltaSink(claim), ct);
+        // Fonti documentali non pronte congelate nello snapshot del turno: la risposta lo dichiara (testo deterministico, non del modello).
+        var unavailable = await ChatSourceNotice.UnavailableCountAsync(db, claim.TurnId, ct);
+        if (unavailable > 0)
+        {
+            reply = reply with { Text = ChatSourceNotice.Append(reply.Text, unavailable) };
+        }
+
         // Un commit rifiutato (lease perso, revisione cambiata) o già riconciliato non modifica nulla: il dispatcher
         // tenta Failed solo con owner/fencing, quindi un vecchio worker non cambia mai l'esito.
         var result = await scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>().CommitAsync(claim, reply, ct);

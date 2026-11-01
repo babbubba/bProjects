@@ -96,6 +96,34 @@ public sealed class DocumentPolicyTests
     }
 
     [Fact]
+    public void Absolute_ceilings_bound_file_size_to_the_proxy_limit_and_cap_expansion_and_quotas()
+    {
+        var defaults = new DocumentOptions().ToLimits();
+
+        Assert.Empty((defaults with { MaxFileBytes = 52_000_000 }).Validate());   // esattamente il limite nginx (52m in infra/web.conf)
+        Assert.Contains((defaults with { MaxFileBytes = 52_000_001, ProjectQuotaBytes = 100_000_000 }).Validate(), v => v.StartsWith("MaxFileBytes:", StringComparison.Ordinal));
+        Assert.Empty((defaults with { MaxExpandedBytes = 1_000_000_000 }).Validate());
+        Assert.Contains((defaults with { MaxExpandedBytes = 1_000_000_001 }).Validate(), v => v.StartsWith("MaxExpandedBytes:", StringComparison.Ordinal));
+        Assert.Contains((defaults with { ProjectQuotaBytes = 1_000_000_000_001 }).Validate(), v => v.StartsWith("ProjectQuotaBytes:", StringComparison.Ordinal));
+        Assert.Contains((defaults with { MaxFileBytes = long.MaxValue, ProjectQuotaBytes = long.MaxValue }).Validate(), v => v.StartsWith("MaxFileBytes:", StringComparison.Ordinal));
+        Assert.Contains("client_max_body_size 52m;", File.ReadAllText(FindRepoFile("infra", "web.conf")));   // il tetto del codice resta coerente col proxy
+    }
+
+    private static string FindRepoFile(params string[] parts)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine([dir.FullName, .. parts]);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new FileNotFoundException(string.Join('/', parts));
+    }
+
+    [Fact]
     public void A_snapshot_is_an_immutable_copy_whose_hash_changes_only_with_the_limits()
     {
         var options = new DocumentOptions();

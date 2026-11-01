@@ -8,14 +8,11 @@ namespace bProjects.IntegrationTests;
 /// <summary>
 /// T008 (DET): contratto HTTP dell'archivio documenti (contracts/http-api.md §Documenti) su API reale + PostgreSQL + filesystem isolato:
 /// POST documents / versions, GET lista / dettaglio / versione / download, idempotenza 201/200/409, errori sincroni e identità separata
-/// dal nome. Scritte prima dell'implementazione: finché T012–T014 non esistono restano <b>Skipped</b> (non PASS, vedi <see cref="PendingGuard"/>);
-/// con <c>BPROJECTS_RUN_PENDING=1</c> falliscono sul comportamento mancante (404 sulle route). Il PASS richiesto è in T014 e T018.
+/// dal nome. Scritte prima dell'implementazione (T012–T014) e ora eseguite contro il servizio reale: il PASS integrato è il gate T018.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
 public sealed class DocumentArchiveContractTests : ArchiveTestBase
 {
-    private const string PendingTasks = "T012–T014";
-
     protected override void Tune(DocumentOptions options)
     {
         options.MaxFileBytes = 5_000;   // 413 provabile senza inviare 50 MB
@@ -29,7 +26,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Posting_a_new_document_is_201_with_an_acquired_version_a_queued_preparation_and_no_server_paths()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var bytes = Text("prima versione");
@@ -60,7 +56,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Replaying_the_same_key_and_input_is_200_with_the_same_version_and_enqueues_nothing_new()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -83,7 +78,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task The_same_key_with_different_bytes_metadata_or_target_is_409_idempotency_conflict_and_changes_nothing()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -111,7 +105,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task A_new_version_keeps_the_document_identity_gets_the_next_number_and_never_replaces_earlier_bytes()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var v1 = Text("versione uno");
@@ -137,7 +130,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Two_uploads_with_the_same_file_name_are_two_distinct_documents_the_name_is_not_the_identity()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 
@@ -155,7 +147,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Listing_is_cursor_paginated_with_limit_one_to_one_hundred_and_never_starts_work()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var ids = new HashSet<Guid>();
@@ -192,7 +183,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Detail_and_version_views_expose_versions_and_the_download_returns_identical_bytes_with_safe_headers()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var bytes = Text("scarico identico", 1_500);
@@ -223,7 +213,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task A_download_of_altered_bytes_is_refused_not_served()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var created = await Json(await Upload(client, project, Text("integro"), "i.txt"));
@@ -242,7 +231,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Ids_of_another_project_are_404_for_every_route()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var owner = await NewProject(client);
         var intruder = await NewProject(client);
@@ -268,7 +256,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task The_same_bytes_in_two_projects_never_merge_documents_or_share_storage()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var a = await NewProject(client);
         var b = await NewProject(client);
@@ -286,7 +273,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Authentication_role_and_unknown_project_are_401_403_404()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 
@@ -304,7 +290,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Malformed_requests_are_400_without_storing_anything()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 
@@ -333,7 +318,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task Oversize_unsupported_empty_and_macro_files_are_413_415_422_with_clean_errors_and_earlier_originals_stay_downloadable()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var good = Text("già acquisito");
@@ -367,7 +351,6 @@ public sealed class DocumentArchiveContractTests : ArchiveTestBase
     [Fact]
     public async Task A_file_whose_extension_does_not_match_its_content_is_415_not_stored()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 

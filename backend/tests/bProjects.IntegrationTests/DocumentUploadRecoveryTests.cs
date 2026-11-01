@@ -9,14 +9,11 @@ namespace bProjects.IntegrationTests;
 /// T010 (PG): fault injection e contese di receipt/quota dell'upload su PostgreSQL reale e filesystem isolato. Il DB non è transazionale
 /// col filesystem: le prove non fingono atomicità, verificano che ogni guasto (crash prima del rename, dopo il rename e prima del commit DB)
 /// non crei duplicati né un falso «acquisito» e che il replay con la stessa chiave converga su una sola versione. Il guasto è iniettato
-/// con <see cref="DocumentFileStore.OnStage"/> attraverso l'API reale. Scritte prima dell'implementazione: Skipped finché T012–T013 non
-/// esistono (<see cref="PendingGuard"/>); il PASS applicativo di quote e contese è richiesto nel gate T018, non nella migrazione T007.
+/// con <see cref="DocumentFileStore.OnStage"/> attraverso l'API reale. Scritte prima dell'implementazione (T012–T013), ora eseguite contro il servizio reale; il PASS applicativo di quote e contese è richiesto nel gate T018, non nella migrazione T007.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
 public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
 {
-    private const string PendingTasks = "T012–T013 (gate T018)";
-
     protected override void Tune(DocumentOptions options)
     {
         options.MaxFileBytes = 800;
@@ -49,7 +46,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task A_crash_before_rename_acquires_nothing_leaves_no_original_and_a_replay_creates_exactly_one_version()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -77,7 +73,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task A_crash_after_rename_before_the_database_commit_leaves_a_verifiable_orphan_and_the_replay_adopts_it_without_duplicates()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -107,7 +102,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task A_failed_upload_in_the_same_process_releases_its_quota_reservation()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         FailAt(Store, DocumentStoreStage.BeforeRename);
@@ -123,7 +117,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task An_abandoned_receipt_blocks_quota_until_it_expires_then_a_new_upload_proceeds()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         // Un processo morto lascia una ricevuta Receiving con 800 byte prenotati.
@@ -149,7 +142,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task Replaying_a_committed_upload_is_idempotent_across_file_receipt_version_and_job()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -169,7 +161,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task The_same_key_with_different_input_is_a_conflict_that_never_stores_the_new_bytes()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -187,18 +178,28 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task A_second_request_with_the_same_key_while_the_first_is_still_receiving_is_409_upload_in_progress_with_the_receipt()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
         var bytes = Sized("lento", 500);
-        var gate = new TaskCompletionSource();
-        var slow = new GatedContent(bytes, gate.Task);
-        var first = Upload(client, project, bytes, key: key, fileContent: slow);
+        // Il TestServer bufferizza il corpo della richiesta prima di avviare l'handler, quindi un corpo «lento» non basta a tenere l'upload
+        // in ricezione: il server stesso si ferma, con la ricevuta aperta e il file scritto, al punto TempWritten dello store.
+        using var reached = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var blocked = 0;
+        Store.OnStage = stage =>
+        {
+            if (stage == DocumentStoreStage.TempWritten && Interlocked.Exchange(ref blocked, 1) == 0)
+            {
+                reached.Set();
+                release.Wait(TimeSpan.FromSeconds(30));
+            }
+        };
+        var first = Task.Run(() => Upload(client, project, bytes, key: key), Ct);
 
-        // Aspetta che il server abbia aperto la ricevuta: l'upload è «in ricezione», non ancora acquisito.
-        var receipt = await WaitFor(async () => await Count("SELECT count(*) FROM \"UploadReceipts\" WHERE \"Status\" = 'Receiving'") == 1);
-        Assert.True(receipt, "la ricevuta Receiving non è comparsa");
+        // Aspetta che il primo upload sia davvero in ricezione sul server: ricevuta Receiving, nessuna versione acquisita.
+        Assert.True(await Task.Run(() => reached.Wait(TimeSpan.FromSeconds(20)), Ct), "il primo upload non è arrivato in ricezione");
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"UploadReceipts\" WHERE \"Status\" = 'Receiving'"));
         var second = await Upload(client, project, bytes, key: key);
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
@@ -207,8 +208,9 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
         Assert.NotEqual(Guid.Empty, problem.GetProperty("receiptId").GetGuid());
         Assert.Equal(0, await Count("SELECT count(*) FROM \"DocumentVersions\""));   // nessuna falsa versione acquisita
 
-        gate.SetResult();
+        release.Set();
         Assert.Equal(HttpStatusCode.Created, (await first).StatusCode);
+        Store.OnStage = null;
         Assert.Equal(1, await Count("SELECT count(*) FROM \"DocumentVersions\""));
         Assert.Equal(HttpStatusCode.OK, (await Upload(client, project, bytes, key: key)).StatusCode);
     }
@@ -218,7 +220,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task Simultaneous_uploads_with_different_keys_make_distinct_documents_versions_files_and_receipts()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var bytes = Sized("gemelli", 300);
@@ -236,7 +237,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task Simultaneous_versions_of_one_document_get_distinct_consecutive_numbers()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var document = (await Json(await Upload(client, project, Sized("base", 200)))).GetProperty("documentId").GetGuid();
@@ -257,7 +257,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task The_same_key_sent_twice_at_once_commits_one_version_and_the_loser_is_a_replay_or_in_progress()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         var key = Guid.NewGuid();
@@ -278,7 +277,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task Original_quota_is_enforced_at_and_over_the_limit_without_leaving_files_or_receipts()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 
@@ -302,7 +300,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task Concurrent_uploads_that_do_not_both_fit_the_quota_are_serialised_one_wins_and_one_gets_507()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 
@@ -320,7 +317,6 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
     [Fact]
     public async Task The_derived_quota_is_separate_a_tiny_derived_limit_does_not_restrict_originals()
     {
-        PendingGuard.Await(PendingTasks);
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
 
@@ -329,41 +325,5 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(500, await Scalar<long>("SELECT sum(\"ReservedBytes\") FROM \"UploadReceipts\" WHERE \"Status\" = 'Committed'"));
-    }
-
-    // ================================================================ utilità
-
-    private static async Task<bool> WaitFor(Func<Task<bool>> condition)
-    {
-        for (var i = 0; i < 100; i++)
-        {
-            if (await condition())
-            {
-                return true;
-            }
-
-            await Task.Delay(100, Ct);
-        }
-
-        return false;
-    }
-
-    /// <summary>Corpo che invia metà dei byte e poi attende il via: tiene l'upload «in ricezione» in modo deterministico.</summary>
-    private sealed class GatedContent(byte[] bytes, Task gate) : HttpContent
-    {
-        protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
-        {
-            var half = bytes.Length / 2;
-            await stream.WriteAsync(bytes.AsMemory(0, half), Ct);
-            await stream.FlushAsync(Ct);
-            await gate;
-            await stream.WriteAsync(bytes.AsMemory(half), Ct);
-        }
-
-        protected override bool TryComputeLength(out long length)
-        {
-            length = bytes.Length;
-            return true;
-        }
     }
 }
