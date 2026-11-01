@@ -635,7 +635,14 @@
             <h4 class="h6 mb-0">{{ categoryLabel(g.category) }} ({{ g.findings.length }})</h4>
             <p class="small text-secondary mb-1">{{ categoryHint(g.category) }}</p>
             @if (g.findings.length === 0) {
-              <p class="small mb-2">Nessuna segnalazione.</p>
+              <p class="small mb-2" [attr.data-testid]="'empty-' + g.category">
+                @if (g.category === 'SemanticRisk') {
+                  Nessun rischio rilevato dalle euristiche lessicali. Non è una conferma che il
+                  significato sia stato conservato: la verifica semantica resta al PM.
+                } @else {
+                  Nessuna segnalazione.
+                }
+              </p>
             } @else {
               <ul class="small ps-3 mb-2">
                 @for (f of g.findings; track $index) {

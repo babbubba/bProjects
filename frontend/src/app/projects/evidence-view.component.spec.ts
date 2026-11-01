@@ -279,17 +279,15 @@ describe('EvidenceViewComponent', () => {
       statusText: 'Accepted',
     });
     await settle();
-    http
-      .expectOne(`${BASE}/evidence/status`)
-      .flush(
-        status([
-          message({
-            currentVersion: null,
-            state: 'pending',
-            latestJob: job({ id: 'j-10', status: 'Queued' }),
-          }),
-        ]),
-      );
+    http.expectOne(`${BASE}/evidence/status`).flush(
+      status([
+        message({
+          currentVersion: null,
+          state: 'pending',
+          latestJob: job({ id: 'j-10', status: 'Queued' }),
+        }),
+      ]),
+    );
     await settle();
     expect(q('evidence-live')!.textContent).toContain('accodato');
     expect(q('state-badge')!.textContent).toContain('In coda');
@@ -550,7 +548,7 @@ describe('EvidenceViewComponent', () => {
         promotedBy: 'pm',
         promotedAt: '2030-01-02T10:00:00Z',
         reason: 'più completa',
-        relationImpact: { remapped: 0, stale: 0 },
+        relationImpact: { remapped: 2, stale: 1 },
       },
     });
     await settle();
@@ -561,6 +559,8 @@ describe('EvidenceViewComponent', () => {
     http.expectOne(`${BASE}/evidence`).flush({ items: [evidence()] });
     await settle();
     expect(q('evidence-live')!.textContent).toContain('Versione 2 promossa');
+    expect(q('evidence-live')!.textContent).toContain('2 rimappate');
+    expect(q('evidence-live')!.textContent).toContain('1 non più risolvibili');
   });
 
   it('shows "lo stato è cambiato, ricarica" on promotion_conflict and reloads versions, status and evidence', async () => {
@@ -651,21 +651,19 @@ describe('EvidenceViewComponent', () => {
     };
     create.flush(report, { status: 201, statusText: 'Created' });
     await settle();
-    http
-      .expectOne(`${BASE}/analyses/a-1/coverage-reports`)
-      .flush({
-        items: [
-          {
-            id: 'c-1',
-            analysisId: 'a-1',
-            revisionId: 'rev-1',
-            draftId: null,
-            checkerVersion: 'coverage-v1',
-            createdAt: '2030-01-03T10:00:00Z',
-            counts: report.counts,
-          },
-        ],
-      });
+    http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush({
+      items: [
+        {
+          id: 'c-1',
+          analysisId: 'a-1',
+          revisionId: 'rev-1',
+          draftId: null,
+          checkerVersion: 'coverage-v1',
+          createdAt: '2030-01-03T10:00:00Z',
+          counts: report.counts,
+        },
+      ],
+    });
     await settle();
 
     const text = (id: string) => q(id)!.textContent!.replace(/\s+/g, ' ');
@@ -676,6 +674,38 @@ describe('EvidenceViewComponent', () => {
     expect(text('group-PmAssessment')).toContain('Valutazione PM (1)');
     expect(q('limits')!.textContent).toContain('Controllo lessicale');
     expect(q('reports')!.textContent).toContain('1 errori, 1 rischi, 1 da valutare');
+  });
+
+  it('never presents an empty semantic group as a confirmation of meaning', async () => {
+    await setup({ analysisId: 'a-1' });
+    await click('verify-coverage');
+    http
+      .expectOne(`${BASE}/draft`)
+      .flush({ code: 'draft_not_available' }, { status: 404, statusText: 'Not Found' });
+    await settle();
+    http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush(
+      {
+        id: 'c-2',
+        analysisId: 'a-1',
+        revisionId: 'rev-1',
+        draftId: null,
+        checkerVersion: 'coverage-v1',
+        createdAt: '2030-01-03T10:00:00Z',
+        counts: { deterministicErrors: 0, semanticRisks: 0, pmAssessments: 0 },
+        inputHash: 'h',
+        createdBy: 'pm',
+        findings: [],
+        limits: ['Nessun modello linguistico valuta la copertura.'],
+      },
+      { status: 201, statusText: 'Created' },
+    );
+    await settle();
+    http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush({ items: [] });
+    await settle();
+    const semantic = q('empty-SemanticRisk')!.textContent!.replace(/\s+/g, ' ');
+    expect(semantic).toContain('euristiche lessicali');
+    expect(semantic).toContain('Non è una conferma');
+    expect(q('empty-DeterministicError')!.textContent).toContain('Nessuna segnalazione');
   });
 
   it('includes the draft only when it belongs to the current revision', async () => {

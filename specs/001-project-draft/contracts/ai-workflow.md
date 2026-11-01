@@ -461,7 +461,7 @@ dalla revisione target). Esiti per categoria:
 | --- | --- |
 | Errore deterministico | `evidence_unrepresented` (nessun elemento collegato), `evidence_source_mismatch` (l'elemento collegato non cita il messaggio dell'evidenza), `evidence_span_invalid`, `open_conflict_as_decision` (alternativa aperta collegata a requisiti/flussi/vincoli/dipendenze), `relation_stale`, `revision_source_not_cited` (fonte di un elemento confermato assente dai marcatori della bozza) |
 | Rischio semantico stimato | `qualifier_changed` (numero del qualificatore assente dal testo collegato), `negation_inverted` (evidenza negativa collegata a testo senza marcatori di negazione fuori da esclusioni, o evidenza affermativa collegata solo a esclusioni), `instrument_detached` (strumento e azione mai nello stesso elemento collegato), `revision_item_missing_in_document` (parole significative dell'elemento confermato in gran parte assenti dalla bozza) |
-| Valutazione PM | `item_removed_by_pm`, `item_rewritten_by_pm` (elementi collegati assenti o con testo cambiato nella revisione target) |
+| Valutazione PM | `item_removed_by_pm`, `item_rewritten_by_pm` (elementi collegati assenti o con testo cambiato nella revisione target), `pm_decided_alternative` (il PM ha riportato un'alternativa aperta in requisiti/flussi/vincoli/dipendenze: decisione da confermare) |
 
 I rischi sono euristiche lessicali con incertezza dichiarata, mai giudizi semantici certi; nessun LLM li valuta in questa versione.
 Il report non modifica analisi, revisioni o bozze ed è persistito con `CheckerVersion` e hash degli input.

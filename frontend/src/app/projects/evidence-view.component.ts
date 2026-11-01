@@ -700,7 +700,7 @@ export class EvidenceViewComponent {
       const version = view.versions.find((v) => v.id === versionId)?.version;
       this.notice.set(
         result.promotion
-          ? `Versione ${version} promossa a corrente. Le evidenze correnti sono state ricaricate.`
+          ? `Versione ${version} promossa a corrente. Le evidenze correnti sono state ricaricate.${this.impactText(result.promotion.relationImpact)}`
           : 'La versione scelta era già quella corrente.',
       );
       this.promoteTarget.set(null);
@@ -721,6 +721,15 @@ export class EvidenceViewComponent {
     } finally {
       this.setBusy('promote', false);
     }
+  }
+
+  /** Effetto della promozione sulle relazioni che altri messaggi puntavano alla versione uscente. */
+  private impactText(impact: { remapped: number; stale: number } | null | undefined): string {
+    if (!impact || (impact.remapped === 0 && impact.stale === 0)) return '';
+    const parts: string[] = [];
+    if (impact.remapped > 0) parts.push(`${impact.remapped} rimappate sulla nuova versione`);
+    if (impact.stale > 0) parts.push(`${impact.stale} non più risolvibili (da verificare)`);
+    return ` Relazioni da altri messaggi: ${parts.join(', ')}.`;
   }
 
   private async reloadAfterChange(messageId: string, gen: number): Promise<void> {
