@@ -12,7 +12,9 @@ Assistente AI per trasformare il dialogo con un Project Manager in una bozza di 
 
 ## Stato
 
-Sviluppo spec-driven della feature `001-project-draft` (53 task). Completati T001–T005 (setup, harness di test, Docker Compose, prova API MAF) e T007–T008 (database, Identity, login/refresh/logout); la feature non è ancora utilizzabile. Prossimi: T006/T009 (client DGX, opzioni AI) e il primo incremento utente T010+.
+La slice `001-project-draft` implementa chat persistente, analisi correggibile e confermabile, generazione Markdown e registro atomico delle evidenze. È stata [accettata con riserve per il solo pilota controllato](specs/001-project-draft/acceptance/decisione-accettazione.md): **T052 e T053 restano aperti, non PASS**. Limiti, prove registrate e discrepanze sullo stato di T054–T073 sono nella [baseline di copertura](docs/roadmap/implementation-coverage.md).
+
+Prossimo incremento previsto: `002-project-documents`, branch `feature/002-project-documents`, per allegati PDF testuali, DOCX, Markdown e TXT, parsing, provenienza e documenti oltre contesto. KB condivise e RAG esclusi. Preparazione del repository soltanto: la slice 002 non è ancora avviata.
 
 ## Struttura
 
@@ -25,7 +27,7 @@ specs/          specifiche Spec Kit (spec, piano, task, contratti)
 .specify/       Constitution e strumenti Spec Kit
 ```
 
-Convenzioni e comandi di sviluppo: [CLAUDE.md](CLAUDE.md). Specifiche: [specs/001-project-draft](specs/001-project-draft/).
+Istruzioni Codex e uso brownfield di Spec Kit: [AGENTS.md](AGENTS.md). Convenzioni e comandi: [CLAUDE.md](CLAUDE.md). Ogni nuova slice avrà i propri artefatti in `specs/`; [la 001](specs/001-project-draft/) conserva specifiche e contratti storici.
 
 ## Licenza
 

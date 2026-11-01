@@ -3,10 +3,14 @@
 ## Documenti autorevoli (in ordine di precedenza)
 
 1. `.specify/memory/constitution.md` — prevale su tutto, incluse le regole di ECC. Non modificarla senza approvazione esplicita.
-2. `specs/001-project-draft/` — `spec.md`, `plan.md`, `tasks.md`, `data-model.md`, `contracts/`, `research.md`, `quickstart.md`, `checklists/requirements.md`.
-3. `AI-Project-Documentation-MVP-Plan.md` — piano storico: fonte dei requisiti funzionali, non amplia il perimetro della feature.
+2. `AI-Project-Documentation-MVP-Plan.md` — fonte dei requisiti funzionali approvati; non amplia automaticamente il perimetro della slice corrente.
+3. `specs/<slice-corrente>/` — specifica, piano, task, modello dati, contratti, ricerca e verifiche pertinenti; preservare i contratti storici delle slice precedenti.
 
-`tasks.md` è l'unica baseline di lavoro: niente altro sistema di pianificazione. Spunta una checkbox solo se il task è completato e verificato. Se i documenti si contraddicono, segnalalo: non riscriverli per aggirare un test. Non rieseguire Specify/Clarify/Plan/Tasks.
+`specs/<slice-corrente>/tasks.md` è l'unica baseline operativa della slice: niente pianificazione parallela. Spunta una checkbox solo se il task è completato e verificato. Se i documenti si contraddicono, segnalalo: non riscriverli per aggirare un test. Non rigenerare Specify/Clarify/Plan/Tasks della 001 per avviare nuove feature. Dopo un mandato esplicito, le nuove slice seguono Spec Kit nei propri artefatti; verificare il contesto feature degli script, che non deriva dal solo branch. Procedura brownfield in [AGENTS.md](AGENTS.md).
+
+La 001 è [accettata con riserve per il pilota controllato](specs/001-project-draft/acceptance/decisione-accettazione.md); **T052/T053 restano aperti, non PASS**. Consultare [copertura, componenti riutilizzabili e incoerenze](docs/roadmap/implementation-coverage.md), oltre a backlog e HANDOFF della 001.
+
+Prossimo incremento previsto: `002-project-documents` (PDF testuali, DOCX, Markdown, TXT; parsing, provenienza e documenti oltre contesto). KB condivise e RAG esclusi. Non avviare ancora skill Spec Kit o implementazione: questa è solo preparazione del repository. I divieti di allegati/Docling presenti nella 001 ne delimitano il perimetro storico, non tutte le feature future.
 
 ## Convenzioni
 
@@ -50,4 +54,4 @@ Stack Docker: copiare `infra/.env.example` in `infra/.env`, valorizzare `POSTGRE
 
 ## Commit
 
-Piccoli e coerenti, Conventional Commits (`feat(backend):`, `test:`, `build:`, `docs:`) con riferimento al task (`T001`…). Niente merge su `main` né push senza autorizzazione dell'autore. Branch di sviluppo: `feature/001-project-draft`.
+Piccoli e coerenti, Conventional Commits (`feat(backend):`, `test:`, `build:`, `docs:`) con riferimento alla slice e al task quando applicabile (gli ID Txxx sono locali alla slice). Niente merge su `main` né push senza autorizzazione dell'autore. Branch previsto per il prossimo incremento: `feature/002-project-documents`; verificare sempre quello effettivo. Non creare cloni/worktree e non aggiungere `Co-Authored-By`. I file locali non tracciati in `docs/acceptance-trace/` vanno conservati ed esclusi dai commit; usare staging per percorsi espliciti.
