@@ -19,6 +19,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Corpus sintetico dei documenti (T002): copiato accanto ai test, così il percorso non dipende dalla cartella di lavoro. -->
+  <ItemGroup>
+    <None Include="..\..\..\tests\fixtures\documents\**" Link="fixtures\documents\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\bProjects.App\bProjects.App.csproj" />
   </ItemGroup>

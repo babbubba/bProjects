@@ -1,6 +1,7 @@
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Identity;
 using bProjects.App.Projects;
@@ -34,6 +35,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AnalysisEvidenceSelectionItem> AnalysisEvidenceSelectionItems => Set<AnalysisEvidenceSelectionItem>();
     public DbSet<AnalysisEvidenceLink> AnalysisEvidenceLinks => Set<AnalysisEvidenceLink>();
     public DbSet<EvidenceCoverageReport> EvidenceCoverageReports => Set<EvidenceCoverageReport>();
+    public DbSet<DocumentPolicy> DocumentPolicies => Set<DocumentPolicy>();
+    public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
+    public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
+    public DbSet<UploadReceipt> UploadReceipts => Set<UploadReceipt>();
+    public DbSet<ProjectSourceSelection> ProjectSourceSelections => Set<ProjectSourceSelection>();
+    public DbSet<ProjectSourceSelectionItem> ProjectSourceSelectionItems => Set<ProjectSourceSelectionItem>();
+    public DbSet<DocumentPreparation> DocumentPreparations => Set<DocumentPreparation>();
+    public DbSet<DocumentJob> DocumentJobs => Set<DocumentJob>();
+    public DbSet<SourceSnapshot> SourceSnapshots => Set<SourceSnapshot>();
+    public DbSet<SourceSnapshotItem> SourceSnapshotItems => Set<SourceSnapshotItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -45,6 +56,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureCheckpoints(builder);
         ConfigureInferenceCalls(builder);
         ConfigureEvidence(builder);
+        ConfigureDocuments(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -54,6 +66,276 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             session.HasIndex(s => s.UserId);
             session.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             session.HasOne<RefreshSession>().WithMany().HasForeignKey(s => s.ReplacedById).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    /// <summary>Documenti di progetto (slice 002): migrazioni additive, nessun dato o vincolo della 001 modificato.</summary>
+    private static void ConfigureDocuments(ModelBuilder builder)
+    {
+        builder.Entity<DocumentPolicy>(policy =>
+        {
+            policy.HasKey(p => p.Id);
+            policy.Property(p => p.Id).ValueGeneratedNever();
+            policy.Property(p => p.LimitsJson).HasColumnType("jsonb");
+            policy.Property(p => p.PolicyHash).HasMaxLength(64);
+            policy.Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
+            policy.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+            // Una sola riga globale; la revisione parte da 1 e cresce a ogni PUT.
+            policy.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPolicies_Singleton", "\"Id\" = 1");
+                t.HasCheckConstraint("CK_DocumentPolicies_Revision", "\"Revision\" >= 1");
+            });
+        });
+
+        ConfigureDocumentArchive(builder);
+        ConfigureDocumentPreparation(builder);
+    }
+
+    /// <summary>
+    /// Archivio (T006): FK composte con ProjectId impediscono riferimenti fra progetti; i puntatori fra documento e versioni passano da
+    /// chiavi alternative (Id, DocumentId). Le quote aggregate e le riserve non sono vincoli di riga: le impone il servizio di upload.
+    /// </summary>
+    private static void ConfigureDocumentArchive(ModelBuilder builder)
+    {
+        builder.Entity<ProjectDocument>(document =>
+        {
+            document.HasKey(d => d.Id);
+            document.Property(d => d.DisplayName).HasMaxLength(ProjectDocument.MaxDisplayNameLength);
+            document.Property(d => d.CreatedAt).HasDefaultValueSql("now()");
+            document.HasAlternateKey(d => new { d.Id, d.ProjectId });
+            document.HasIndex(d => new { d.ProjectId, d.CreatedAt });   // il nome non è identità: nessun indice univoco su DisplayName
+            document.HasOne<Project>().WithMany().HasForeignKey(d => d.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            document.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            // Il puntatore Ready è a una versione di questo stesso documento (con LatestReadyVersionId nullo la FK non vincola).
+            document.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(d => new { d.LatestReadyVersionId, d.Id })
+                .HasPrincipalKey(v => new { v.Id, v.DocumentId })
+                .OnDelete(DeleteBehavior.Restrict);
+            document.ToTable(t => t.HasCheckConstraint("CK_ProjectDocuments_Name_NotBlank", "\"DisplayName\" ~ '\\S'"));
+        });
+
+        builder.Entity<DocumentVersion>(version =>
+        {
+            version.HasKey(v => v.Id);
+            version.Property(v => v.OriginalName).HasMaxLength(512);
+            version.Property(v => v.MediaType).HasMaxLength(128);
+            version.Property(v => v.Sha256).HasMaxLength(64);
+            version.Property(v => v.StorageKey).HasMaxLength(256);
+            version.Property(v => v.UploadedAt).HasDefaultValueSql("now()");
+            version.HasAlternateKey(v => new { v.Id, v.ProjectId });
+            version.HasAlternateKey(v => new { v.Id, v.DocumentId });
+            version.HasIndex(v => new { v.DocumentId, v.Version }).IsUnique();
+            version.HasIndex(v => v.StorageKey).IsUnique();
+            version.HasIndex(v => v.UploadReceiptId).IsUnique();
+            version.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(v => new { v.DocumentId, v.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<UploadReceipt>().WithMany()
+                .HasForeignKey(v => new { v.UploadReceiptId, v.ProjectId })
+                .HasPrincipalKey(r => new { r.Id, r.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(v => v.UploadedBy).OnDelete(DeleteBehavior.Restrict);
+            version.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentVersions_Version", "\"Version\" >= 1");
+                t.HasCheckConstraint("CK_DocumentVersions_Size", "\"ByteLength\" > 0");
+                t.HasCheckConstraint("CK_DocumentVersions_Sha256", "length(\"Sha256\") = 64");
+            });
+        });
+
+        builder.Entity<UploadReceipt>(receipt =>
+        {
+            receipt.HasKey(r => r.Id);
+            receipt.Property(r => r.InputHash).HasMaxLength(64);
+            receipt.Property(r => r.Status).HasConversion<string>().HasMaxLength(16);
+            receipt.Property(r => r.CreatedAt).HasDefaultValueSql("now()");
+            receipt.HasAlternateKey(r => new { r.Id, r.ProjectId });
+            receipt.HasIndex(r => new { r.ProjectId, r.RequestKey }).IsUnique();
+            receipt.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            receipt.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(r => new { r.DocumentId, r.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            receipt.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(r => new { r.ResultVersionId, r.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            receipt.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UploadReceipts_Reserved", "\"ReservedBytes\" >= 0");
+                // Acquisizione solo da Committed, con la versione risultante; le altre ricevute non ne hanno.
+                t.HasCheckConstraint("CK_UploadReceipts_Result", "(\"Status\" = 'Committed') = (\"ResultVersionId\" IS NOT NULL)");
+            });
+        });
+
+        builder.Entity<ProjectSourceSelection>(selection =>
+        {
+            selection.HasKey(s => s.ProjectId);
+            selection.Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+            selection.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            selection.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(s => s.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+            selection.ToTable(t => t.HasCheckConstraint("CK_ProjectSourceSelections_Revision", "\"Revision\" >= 0"));
+        });
+
+        builder.Entity<ProjectSourceSelectionItem>(item =>
+        {
+            item.HasKey(i => i.Id);
+            item.Property(i => i.Mode).HasConversion<string>().HasMaxLength(16);
+            item.HasIndex(i => new { i.ProjectId, i.DocumentId }).IsUnique();
+            item.HasOne<ProjectSourceSelection>().WithMany().HasForeignKey(i => i.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(i => new { i.DocumentId, i.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // La versione fissata appartiene al documento dell'item.
+            item.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(i => new { i.PinnedVersionId, i.DocumentId })
+                .HasPrincipalKey(v => new { v.Id, v.DocumentId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.ToTable(t => t.HasCheckConstraint("CK_ProjectSourceSelectionItems_Pinned", "(\"Mode\" = 'Pinned') = (\"PinnedVersionId\" IS NOT NULL)"));
+        });
+    }
+
+    /// <summary>
+    /// Preparazione, job e snapshot (T115): predispone il modello condiviso, non i worker. L'ordine dei vincoli
+    /// (unico parse, una generazione aperta per versione, risultato per Completed, errore per Failed) è verificato in T007.
+    /// </summary>
+    private static void ConfigureDocumentPreparation(ModelBuilder builder)
+    {
+        builder.Entity<DocumentPreparation>(preparation =>
+        {
+            preparation.HasKey(p => p.Id);
+            preparation.Property(p => p.Status).HasConversion<string>().HasMaxLength(16);
+            preparation.Property(p => p.ParserVersion).HasMaxLength(64);
+            preparation.Property(p => p.ConfigHash).HasMaxLength(64);
+            preparation.Property(p => p.ManifestHash).HasMaxLength(64);
+            preparation.Property(p => p.PolicyHash).HasMaxLength(64);
+            preparation.Property(p => p.ErrorCode).HasMaxLength(64);
+            preparation.Property(p => p.ErrorMessage).HasMaxLength(1_000);
+            preparation.Property(p => p.RequestedAt).HasDefaultValueSql("now()");
+            preparation.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+            preparation.HasAlternateKey(p => new { p.Id, p.ProjectId });
+            preparation.HasIndex(p => new { p.DocumentVersionId, p.Generation }).IsUnique();
+            // Una sola generazione aperta per versione file.
+            preparation.HasIndex(p => p.DocumentVersionId).IsUnique().HasFilter("\"Status\" IN ('Queued', 'Parsing', 'Extracting')").HasDatabaseName("UX_DocumentPreparations_OneOpenPerVersion");
+            preparation.HasIndex(p => p.ParseJobId);
+            preparation.HasIndex(p => p.RetryOfId);
+            preparation.HasIndex(p => p.CurrentEvidenceVersionId);
+            preparation.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(p => new { p.DocumentVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // Il job Parse appartiene a questa stessa preparazione.
+            preparation.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(p => new { p.ParseJobId, p.Id })
+                .HasPrincipalKey(j => new { j.Id, j.PreparationId })
+                .OnDelete(DeleteBehavior.Restrict);
+            preparation.HasOne<DocumentPreparation>().WithMany().HasForeignKey(p => p.RetryOfId).OnDelete(DeleteBehavior.Restrict);
+            preparation.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(p => p.CurrentEvidenceVersionId).OnDelete(DeleteBehavior.Restrict);
+            preparation.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPreparations_Generation", "\"Generation\" >= 1");
+                t.HasCheckConstraint("CK_DocumentPreparations_Calls", "\"CallCount\" >= 0");
+                t.HasCheckConstraint("CK_DocumentPreparations_Deadlines", "\"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\"");
+                t.HasCheckConstraint("CK_DocumentPreparations_Ready_Evidence", "\"Status\" <> 'Ready' OR \"CurrentEvidenceVersionId\" IS NOT NULL");
+                t.HasCheckConstraint("CK_DocumentPreparations_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<DocumentJob>(job =>
+        {
+            job.HasKey(j => j.Id);
+            job.Property(j => j.Kind).HasConversion<string>().HasMaxLength(16);
+            job.Property(j => j.Status).HasConversion<string>().HasMaxLength(16);
+            job.Property(j => j.ConfigJson).HasColumnType("jsonb");
+            job.Property(j => j.WorkflowDefinitionVersion).HasMaxLength(64);
+            job.Property(j => j.LeaseOwner).HasMaxLength(128);
+            job.Property(j => j.ResultHash).HasMaxLength(64);
+            job.Property(j => j.ErrorCode).HasMaxLength(64);
+            job.Property(j => j.ErrorMessage).HasMaxLength(1_000);
+            job.Property(j => j.RequestedAt).HasDefaultValueSql("now()");
+            job.HasAlternateKey(j => new { j.Id, j.PreparationId });
+            // Un solo lavoro per owner e unità logica (UnitId nullo = lavoro della preparazione, es. Parse).
+            job.HasIndex(j => new { j.PreparationId, j.Kind, j.UnitId }).IsUnique().AreNullsDistinct(false);
+            job.HasIndex(j => new { j.ProjectId, j.RequestKey }).IsUnique();
+            job.HasIndex(j => j.RetryOfId);
+            job.HasIndex(j => new { j.RequestedAt, j.Id }).HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("IX_DocumentJobs_Open_Fifo");
+            job.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(j => new { j.PreparationId, j.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<DocumentJob>().WithMany().HasForeignKey(j => j.RetryOfId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(j => j.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+            job.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
+                t.HasCheckConstraint("CK_DocumentJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultHash\" IS NOT NULL");
+                t.HasCheckConstraint("CK_DocumentJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<SourceSnapshot>(snapshot =>
+        {
+            snapshot.HasKey(s => s.Id);
+            snapshot.Property(s => s.Hash).HasMaxLength(64);
+            snapshot.Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+            snapshot.HasAlternateKey(s => new { s.Id, s.ProjectId });
+            snapshot.HasIndex(s => new { s.ProjectId, s.CreatedAt });
+            snapshot.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            snapshot.ToTable(t => t.HasCheckConstraint("CK_SourceSnapshots_Revision", "\"SelectionRevision\" >= 0"));
+        });
+
+        builder.Entity<SourceSnapshotItem>(item =>
+        {
+            item.HasKey(i => i.Id);
+            item.Property(i => i.Availability).HasConversion<string>().HasMaxLength(16);
+            item.HasIndex(i => new { i.SnapshotId, i.DocumentId }).IsUnique();
+            item.HasIndex(i => i.PreparationId);
+            item.HasIndex(i => i.EvidenceVersionId);
+            item.HasOne<SourceSnapshot>().WithMany()
+                .HasForeignKey(i => new { i.SnapshotId, i.ProjectId })
+                .HasPrincipalKey(s => new { s.Id, s.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(i => new { i.DocumentId, i.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(i => new { i.DocumentVersionId, i.DocumentId })
+                .HasPrincipalKey(v => new { v.Id, v.DocumentId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(i => new { i.PreparationId, i.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(i => i.EvidenceVersionId).OnDelete(DeleteBehavior.Restrict);
+            item.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_SourceSnapshotItems_Excluded", "(\"Availability\" = 'Excluded') = (NOT \"Included\")");
+                // Solo Ready ha estrazione selezionabile; un'indisponibile non diventa Ready per effetto dei riferimenti.
+                t.HasCheckConstraint(
+                    "CK_SourceSnapshotItems_Ready",
+                    "(\"Availability\" = 'Ready') = (\"DocumentVersionId\" IS NOT NULL AND \"PreparationId\" IS NOT NULL AND \"EvidenceVersionId\" IS NOT NULL)");
+                t.HasCheckConstraint("CK_SourceSnapshotItems_EvidenceOnlyReady", "\"EvidenceVersionId\" IS NULL OR \"Availability\" = 'Ready'");
+            });
+        });
+
+        // Legacy nullable (SourceSnapshotId nullo = ramo 001 invariato).
+        builder.Entity<ChatTurn>(turn =>
+        {
+            turn.HasIndex(t => t.SourceSnapshotId);
+            turn.HasOne<SourceSnapshot>().WithMany().HasForeignKey(t => t.SourceSnapshotId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProcessingRun>(run =>
+        {
+            run.HasIndex(r => r.SourceSnapshotId);
+            run.HasOne<SourceSnapshot>().WithMany()
+                .HasForeignKey(r => new { r.SourceSnapshotId, r.ProjectId })
+                .HasPrincipalKey(s => new { s.Id, s.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

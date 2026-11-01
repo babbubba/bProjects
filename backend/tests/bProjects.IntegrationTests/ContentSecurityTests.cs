@@ -254,7 +254,7 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             .OrderBy(r => r.Pattern, StringComparer.Ordinal).ThenBy(r => r.Method, StringComparer.Ordinal)
             .ToList();
 
-        // Nessun endpoint oltre a quelli del contratto: niente approvazione cliente, pubblicazione, KB, upload, ricerca web, signup o amministrazione.
+        // Nessun endpoint oltre a quelli del contratto: niente approvazione cliente, pubblicazione, KB, upload, ricerca web, signup o amministrazione (salvo i limiti dei documenti della 002).
         const string p = "/api/projects/{projectId:guid}";
         string[] contract =
         [
@@ -296,12 +296,15 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"POST {p}/analyses/{{analysisId:guid}}/coverage-reports",
             $"GET {p}/analyses/{{analysisId:guid}}/coverage-reports",
             $"GET {p}/analyses/{{analysisId:guid}}/coverage-reports/{{reportId:guid}}",
+            // Limiti dei documenti (slice 002, contracts/http-api.md): unico endpoint di amministrazione, ruolo Admin (T005).
+            "GET /api/admin/document-limits",
+            "PUT /api/admin/document-limits",
         ];
         var actual = routes.Select(r => $"{r.Method} {r.Pattern}{(r.Anonymous ? " (anonimo)" : "")}").ToList();
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(33, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze
+        Assert.Equal(35, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 2 limiti documenti (Admin)
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {

@@ -628,6 +628,9 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<long?>("SourceCutoffSequence")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("SourceSnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -667,6 +670,8 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("ResultRevisionId");
 
+                    b.HasIndex("SourceSnapshotId");
+
                     b.HasIndex("Id", "InputRevisionId")
                         .IsUnique()
                         .HasDatabaseName("UX_ProcessingRuns_Id_InputRevisionId");
@@ -674,6 +679,8 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasIndex("RequestedAt", "Id")
                         .HasDatabaseName("IX_ProcessingRuns_Open_Fifo")
                         .HasFilter("\"Status\" IN ('Queued', 'Running')");
+
+                    b.HasIndex("SourceSnapshotId", "ProjectId");
 
                     b.HasIndex("ProjectId", "Kind", "RequestKey")
                         .IsUnique();
@@ -751,6 +758,9 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<long>("SourceCutoffSequence")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("SourceSnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -770,6 +780,8 @@ namespace bProjects.App.Persistence.Migrations
                         .HasFilter("\"Status\" = 'Running'");
 
                     b.HasIndex("ResultMessageId");
+
+                    b.HasIndex("SourceSnapshotId");
 
                     b.HasIndex("TriggerMessageId")
                         .IsUnique();
@@ -891,6 +903,590 @@ namespace bProjects.App.Persistence.Migrations
                             t.HasCheckConstraint("CK_ConversationMessages_Role_Fields", "(\"Role\" = 'User' AND \"ClientMessageId\" IS NOT NULL AND \"AuthorId\" IS NOT NULL AND \"AgentId\" IS NULL AND \"ReplyToMessageId\" IS NULL AND \"ChatTurnId\" IS NULL) OR (\"Role\" = 'Assistant' AND \"ClientMessageId\" IS NULL AND \"AuthorId\" IS NULL AND \"AgentId\" IS NOT NULL AND \"ReplyToMessageId\" IS NOT NULL AND \"ChatTurnId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_ConversationMessages_Sequence", "\"Sequence\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfigJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<long>("FencingToken")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RequestKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResultHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("RetryOfId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("UnitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WorkflowDefinitionVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("RetryOfId");
+
+                    b.HasIndex("PreparationId", "ProjectId");
+
+                    b.HasIndex("ProjectId", "RequestKey")
+                        .IsUnique();
+
+                    b.HasIndex("RequestedAt", "Id")
+                        .HasDatabaseName("IX_DocumentJobs_Open_Fifo")
+                        .HasFilter("\"Status\" IN ('Queued', 'Running')");
+
+                    b.HasIndex("PreparationId", "Kind", "UnitId")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PreparationId", "Kind", "UnitId"), false);
+
+                    b.ToTable("DocumentJobs", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
+
+                            t.HasCheckConstraint("CK_DocumentJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultHash\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_DocumentJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentPolicy", b =>
+                {
+                    b.Property<short>("Id")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("LimitsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UpdatedBy");
+
+                    b.ToTable("DocumentPolicies", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentPolicies_Revision", "\"Revision\" >= 1");
+
+                            t.HasCheckConstraint("CK_DocumentPolicies_Singleton", "\"Id\" = 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentPreparation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CallCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConfigHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CurrentEvidenceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("EffectiveDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("HardDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ManifestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("ParseJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParserVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("RetryOfId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurrentEvidenceVersionId");
+
+                    b.HasIndex("DocumentVersionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentPreparations_OneOpenPerVersion")
+                        .HasFilter("\"Status\" IN ('Queued', 'Parsing', 'Extracting')");
+
+                    b.HasIndex("ParseJobId");
+
+                    b.HasIndex("RetryOfId");
+
+                    b.HasIndex("DocumentVersionId", "Generation")
+                        .IsUnique();
+
+                    b.HasIndex("DocumentVersionId", "ProjectId");
+
+                    b.HasIndex("ParseJobId", "Id");
+
+                    b.ToTable("DocumentPreparations", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentPreparations_Calls", "\"CallCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_DocumentPreparations_Deadlines", "\"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\"");
+
+                            t.HasCheckConstraint("CK_DocumentPreparations_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_DocumentPreparations_Generation", "\"Generation\" >= 1");
+
+                            t.HasCheckConstraint("CK_DocumentPreparations_Ready_Evidence", "\"Status\" <> 'Ready' OR \"CurrentEvidenceVersionId\" IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("OriginalName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("UploadReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.HasIndex("UploadReceiptId")
+                        .IsUnique();
+
+                    b.HasIndex("UploadedBy");
+
+                    b.HasIndex("DocumentId", "ProjectId");
+
+                    b.HasIndex("DocumentId", "Version")
+                        .IsUnique();
+
+                    b.HasIndex("UploadReceiptId", "ProjectId");
+
+                    b.ToTable("DocumentVersions", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentVersions_Sha256", "length(\"Sha256\") = 64");
+
+                            t.HasCheckConstraint("CK_DocumentVersions_Size", "\"ByteLength\" > 0");
+
+                            t.HasCheckConstraint("CK_DocumentVersions_Version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ProjectDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("LatestReadyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("LatestReadyVersionId", "Id");
+
+                    b.HasIndex("ProjectId", "CreatedAt");
+
+                    b.ToTable("ProjectDocuments", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProjectDocuments_Name_NotBlank", "\"DisplayName\" ~ '\\S'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ProjectSourceSelection", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ProjectId");
+
+                    b.HasIndex("UpdatedBy");
+
+                    b.ToTable("ProjectSourceSelections", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProjectSourceSelections_Revision", "\"Revision\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ProjectSourceSelectionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Included")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("PinnedVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId", "ProjectId");
+
+                    b.HasIndex("PinnedVersionId", "DocumentId");
+
+                    b.HasIndex("ProjectId", "DocumentId")
+                        .IsUnique();
+
+                    b.ToTable("ProjectSourceSelectionItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProjectSourceSelectionItems_Pinned", "(\"Mode\" = 'Pinned') = (\"PinnedVersionId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.SourceSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SelectionRevision")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "CreatedAt");
+
+                    b.ToTable("SourceSnapshots", t =>
+                        {
+                            t.HasCheckConstraint("CK_SourceSnapshots_Revision", "\"SelectionRevision\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.SourceSnapshotItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Availability")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DocumentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("EvidenceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Included")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EvidenceVersionId");
+
+                    b.HasIndex("PreparationId");
+
+                    b.HasIndex("DocumentId", "ProjectId");
+
+                    b.HasIndex("DocumentVersionId", "DocumentId");
+
+                    b.HasIndex("PreparationId", "ProjectId");
+
+                    b.HasIndex("SnapshotId", "DocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("SnapshotId", "ProjectId");
+
+                    b.ToTable("SourceSnapshotItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_SourceSnapshotItems_EvidenceOnlyReady", "\"EvidenceVersionId\" IS NULL OR \"Availability\" = 'Ready'");
+
+                            t.HasCheckConstraint("CK_SourceSnapshotItems_Excluded", "(\"Availability\" = 'Excluded') = (NOT \"Included\")");
+
+                            t.HasCheckConstraint("CK_SourceSnapshotItems_Ready", "(\"Availability\" = 'Ready') = (\"DocumentVersionId\" IS NOT NULL AND \"PreparationId\" IS NOT NULL AND \"EvidenceVersionId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.UploadReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RequestKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ReservedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("ResultVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId", "ProjectId");
+
+                    b.HasIndex("ProjectId", "RequestKey")
+                        .IsUnique();
+
+                    b.HasIndex("ResultVersionId", "ProjectId");
+
+                    b.ToTable("UploadReceipts", t =>
+                        {
+                            t.HasCheckConstraint("CK_UploadReceipts_Reserved", "\"ReservedBytes\" >= 0");
+
+                            t.HasCheckConstraint("CK_UploadReceipts_Result", "(\"Status\" = 'Committed') = (\"ResultVersionId\" IS NOT NULL)");
                         });
                 });
 
@@ -1723,6 +2319,12 @@ namespace bProjects.App.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ResultRevisionId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.SourceSnapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SourceSnapshotId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("bProjects.App.Conversations.ChatTurn", b =>
@@ -1736,6 +2338,11 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("ResultMessageId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.SourceSnapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SourceSnapshotId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
@@ -1775,6 +2382,204 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("ReplyToMessageId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentJob", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentJob", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentPolicy", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentPreparation", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("CurrentEvidenceVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentVersionId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentJob", null)
+                        .WithMany()
+                        .HasForeignKey("ParseJobId", "Id")
+                        .HasPrincipalKey("Id", "PreparationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentVersion", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.ProjectDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.UploadReceipt", null)
+                        .WithMany()
+                        .HasForeignKey("UploadReceiptId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ProjectDocument", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("LatestReadyVersionId", "Id")
+                        .HasPrincipalKey("Id", "DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ProjectSourceSelection", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ProjectSourceSelectionItem", b =>
+                {
+                    b.HasOne("bProjects.App.Documents.ProjectSourceSelection", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.ProjectDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PinnedVersionId", "DocumentId")
+                        .HasPrincipalKey("Id", "DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.SourceSnapshot", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.SourceSnapshotItem", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("EvidenceVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.ProjectDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentVersionId", "DocumentId")
+                        .HasPrincipalKey("Id", "DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.SourceSnapshot", null)
+                        .WithMany()
+                        .HasForeignKey("SnapshotId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.UploadReceipt", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.ProjectDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ResultVersionId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

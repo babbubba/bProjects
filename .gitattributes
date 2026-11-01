@@ -1,0 +1,2 @@
+# Le fixture dei documenti hanno hash nel manifest: nessuna conversione dei fine riga.
+tests/fixtures/documents/** -text

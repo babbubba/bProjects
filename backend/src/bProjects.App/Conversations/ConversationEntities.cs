@@ -78,4 +78,7 @@ public sealed class ChatTurn
     /// <summary>Configurazione risolta del turno (JSONB), senza segreti.</summary>
     public string? AgentConfig { get; set; }
     public long SessionRevisionAtStart { get; set; }
+
+    /// <summary>Selezione documentale fissata alla richiesta (slice 002); null per i turni legacy e per i progetti senza documenti.</summary>
+    public Guid? SourceSnapshotId { get; set; }
 }

@@ -1,0 +1,307 @@
+Portale Ordini Acme - Documento dei requisiti esteso
+
+## Introduzione
+
+[INT.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[INT.2] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[INT.3] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[INT.4] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[INT.5] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[INT.6] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[INT.7] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[INT.8] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[INT.9] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[INT.10] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[INT.11] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[INT.12] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[INT.13] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[INT.14] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[INT.15] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[INT.16] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[INT.17] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[INT.18] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[INT.19] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[INT.20] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+Il portale deve supportare 500 utenti simultanei.
+L'accesso avviene tramite SSO aziendale.
+
+[int.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[int.2] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[int.3] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[int.4] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[int.5] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[int.6] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[int.7] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[int.8] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[int.9] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[int.10] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[int.11] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[int.12] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[int.13] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[int.14] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[int.15] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[int.16] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[int.17] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[int.18] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[int.19] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[int.20] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+Lo storico degli ordini precedenti al 2020 e' escluso dalla migrazione.
+
+## Processi amministrativi
+
+[PRO.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[PRO.2] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[PRO.3] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[PRO.4] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[PRO.5] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[PRO.6] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[PRO.7] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[PRO.8] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[PRO.9] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[PRO.10] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[PRO.11] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[PRO.12] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[PRO.13] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[PRO.14] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[PRO.15] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[PRO.16] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[PRO.17] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[PRO.18] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[PRO.19] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[PRO.20] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[PRO.21] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[PRO.22] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[PRO.23] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[PRO.24] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[PRO.25] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[PRO.26] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[PRO.27] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[PRO.28] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[PRO.29] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[PRO.30] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+Le fatture sono emesse entro 5 giorni lavorativi.
+I resi non sono gestiti dal portale.
+I pagamenti con carta superiori a 1000 euro richiedono approvazione, salvo i clienti con contratto quadro.
+
+[pro.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[pro.2] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[pro.3] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[pro.4] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[pro.5] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[pro.6] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[pro.7] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[pro.8] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[pro.9] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[pro.10] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[pro.11] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[pro.12] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[pro.13] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[pro.14] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[pro.15] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[pro.16] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[pro.17] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[pro.18] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[pro.19] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[pro.20] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[pro.21] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[pro.22] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[pro.23] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[pro.24] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[pro.25] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[pro.26] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[pro.27] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[pro.28] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[pro.29] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[pro.30] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+Le notifiche email sono inviate solo se l'utente ha dato il consenso.
+
+## Vincoli finali
+
+[VIN.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[VIN.2] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[VIN.3] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[VIN.4] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[VIN.5] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[VIN.6] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[VIN.7] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[VIN.8] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[VIN.9] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[VIN.10] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[VIN.11] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[VIN.12] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[VIN.13] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[VIN.14] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[VIN.15] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[VIN.16] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[VIN.17] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[VIN.18] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[VIN.19] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[VIN.20] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+Il go-live e' previsto il 15 marzo 2027.
+Il backup avviene ogni notte alle 02:00.
+Non e' previsto alcun supporto per Internet Explorer.
+Il tempo di risposta massimo e' 2 secondi per il 95% delle richieste.
+
+[vin.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[vin.2] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[vin.3] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[vin.4] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[vin.5] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[vin.6] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[vin.7] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[vin.8] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[vin.9] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[vin.10] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[vin.11] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[vin.12] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[vin.13] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[vin.14] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+[vin.15] La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento.
+
+[vin.16] Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto. Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione.
+
+[vin.17] Ogni modifica al perimetro e' registrata nel verbale della riunione di riferimento. Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme.
+
+[vin.18] Il glossario dei termini usati e' riportato in appendice al documento di visione. Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte.
+
+[vin.19] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento.
+
+[vin.20] Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordinamento. Le attivita' di formazione sono pianificate separatamente dal responsabile di progetto.
+
+I report sono esportabili in CSV e in PDF.
+Il portale deve supportare almeno 2000 utenti simultanei.
+L'eccezione per contratto quadro vale solo per i clienti attivi da oltre 12 mesi.

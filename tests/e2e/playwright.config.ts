@@ -4,6 +4,9 @@ import { defineConfig, devices } from '@playwright/test';
 // altrimenti Playwright avvia il dev server Angular.
 const baseURL = process.env['E2E_BASE_URL'];
 
+// Livelli di prova della 002 (T003): senza E2E_BASE_URL le prove usano il fake-stack (E2E-OFFLINE, nessun DGX né PostgreSQL);
+// con E2E_BASE_URL e uno stack reale con LLM finto si distingue l'esito. Le prove DGX/PM-DGX non girano da qui.
+// Le fixture dei documenti sono in tests/fixtures/documents (vedi support/documents.ts).
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',

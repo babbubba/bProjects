@@ -66,7 +66,7 @@ public static class AuthEndpoints
         }
 
         await users.ResetAccessFailedCountAsync(user);
-        if (!await users.IsInRoleAsync(user, AccountBootstrap.PmRole))
+        if (!await users.IsInRoleAsync(user, AccountBootstrap.PmRole) && !await users.IsInRoleAsync(user, AccountBootstrap.AdminRole))
         {
             return Results.Forbid();
         }

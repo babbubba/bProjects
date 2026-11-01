@@ -92,6 +92,9 @@ public sealed class ProcessingRun
     }
     public string? WorkflowSessionId { get; set; }
 
+    /// <summary>Selezione documentale fissata alla richiesta (slice 002); null per i run legacy e per i progetti senza documenti.</summary>
+    public Guid? SourceSnapshotId { get; set; }
+
     public int AttemptCount { get; set; }
     public int MaxAttempts { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }

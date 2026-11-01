@@ -2,6 +2,7 @@ using System.Text;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Identity;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
@@ -31,6 +32,9 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder
 builder.Services.AddSingleton<IValidateOptions<AiOptions>, AiOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<ExecutionOptions>, ExecutionOptionsValidator>();
 builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(AiOptions.SectionName)).ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<DocumentOptions>, DocumentOptionsValidator>();
+builder.Services.AddOptions<DocumentOptions>().Bind(builder.Configuration.GetSection(DocumentOptions.SectionName)).ValidateOnStart();
+builder.Services.AddScoped<DocumentPolicyService>();
 builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSection(ExecutionOptions.SectionName)).ValidateOnStart();
 builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
 // Stato verificato del runtime (cache a TTL, sonda lazy alla prima lettura): non blocca mai l'avvio né i progetti con il DGX offline.
@@ -113,9 +117,10 @@ builder.Services
         };
     });
 
-// Ogni endpoint richiede un PM autenticato, salvo quelli esplicitamente anonimi.
+// Ogni endpoint richiede un PM autenticato, salvo quelli esplicitamente anonimi; i limiti dei documenti sono riservati al ruolo Admin.
 builder.Services.AddAuthorizationBuilder()
-    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireRole(AccountBootstrap.PmRole).Build());
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireRole(AccountBootstrap.PmRole).Build())
+    .AddPolicy(AccountBootstrap.AdminPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(AccountBootstrap.AdminRole));
 
 var app = builder.Build();
 
@@ -198,6 +203,7 @@ app.MapProjectEndpoints();
 app.MapConversationEndpoints();
 app.MapAnalysisEndpoints();
 app.MapDocumentEndpoints();
+app.MapDocumentLimitEndpoints();
 app.MapProjectEventsEndpoint();
 app.MapContextUsageEndpoint();
 bProjects.App.Evidence.EvidenceEndpoints.MapEvidenceEndpoints(app);

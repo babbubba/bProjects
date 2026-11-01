@@ -1,0 +1,7 @@
+Note di progetto
+
+Il portale non deve inviare mai email senza consenso.
+Non e' richiesta la gestione dei resi.
+E' vietato memorizzare il numero di carta.
+Tutte le esportazioni sono consentite tranne quelle dei dati anagrafici.
+Il termine e' di 45 giorni, non 30.
