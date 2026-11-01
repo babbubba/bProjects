@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using bProjects.App.Documents;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace bProjects.IntegrationTests;
 
@@ -135,6 +136,161 @@ public sealed class DocumentUploadRecoveryTests : ArchiveTestBase
         Assert.Equal(HttpStatusCode.Created, proceeds.StatusCode);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"DocumentVersions\""));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"UploadReceipts\" WHERE \"Status\" = 'Receiving' AND \"ExpiresAt\" < now()"));   // scaduta riconciliata
+    }
+
+    [Fact]
+    public async Task TEMP_characterization_an_orphan_with_a_receipt_older_than_the_lookback_survives_the_next_upload()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        FailAt(Store, DocumentStoreStage.AfterRename);
+        Assert.True((int)(await Upload(client, project, Sized("orfano", 300))).StatusCode >= 500);
+        Store.OnStage = null;
+        await Execute("UPDATE \"UploadReceipts\" SET \"Status\" = 'Aborted', \"ExpiresAt\" = now() - interval '10 days'");
+        Assert.Single(StoredObjects());
+
+        Assert.Equal(HttpStatusCode.Created, (await Upload(client, project, Sized("nuovo", 200))).StatusCode);
+
+        Assert.Equal(2, StoredObjects().Length);   // l'orfano di 10 giorni fa NON è stato rimosso: perdita permanente di storage
+    }
+
+    // ================================================================ pulizia periodica degli orfani (hardening I1)
+
+    private async Task<OrphanSweepResult> Sweep(string? after = null, int examined = 500, int removed = 100, TimeSpan? minAge = null)
+    {
+        using var scope = App.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<DocumentUploadService>()
+            .SweepOrphansAsync(after, minAge ?? TimeSpan.FromHours(1), examined, removed, Ct);
+    }
+
+    private static void Age(string path, TimeSpan by) => File.SetLastWriteTimeUtc(path, DateTime.UtcNow - by);
+
+    /// <summary>Un guasto dopo il rename lascia l'originale senza versione; poi passano alcuni giorni (ricevuta Aborted scaduta, file vecchio).</summary>
+    private async Task<(Guid Project, string Path, Guid Receipt)> OldOrphan(HttpClient client, Guid? project = null, int days = 10, Guid? key = null)
+    {
+        project ??= await NewProject(client);
+        var before = StoredObjects().ToHashSet();
+        FailAt(Store, DocumentStoreStage.AfterRename);
+        Assert.True((int)(await Upload(client, project.Value, Sized("orfano" + Guid.NewGuid(), 300), key: key)).StatusCode >= 500);
+        Store.OnStage = null;
+        var path = Assert.Single(StoredObjects(), p => !before.Contains(p));
+        var receipt = Guid.ParseExact(System.IO.Path.GetFileName(path), "N");
+        await Execute("UPDATE \"UploadReceipts\" SET \"Status\" = 'Aborted', \"ExpiresAt\" = now() - make_interval(days => @d) WHERE \"Id\" = @id", ("d", days), ("id", receipt));
+        Age(path, TimeSpan.FromDays(days));
+        return (project.Value, path, receipt);
+    }
+
+    [Fact]
+    public async Task An_orphan_whose_aborted_receipt_is_older_than_the_lookback_is_reclaimed_by_the_sweep_with_no_new_upload_even_after_a_restart()
+    {
+        using var client = await App.LoginAsync();
+        var orphan = await OldOrphan(client);
+        await RestartAppAsync();   // nessun upload né memoria del processo precedente: la pulizia riparte dal volume e dal database
+        Assert.Single(StoredObjects());
+
+        var result = await Sweep();
+
+        Assert.Equal(1, result.Removed);
+        Assert.Null(result.NextCursor);
+        Assert.Empty(StoredObjects());
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"DocumentVersions\""));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"UploadReceipts\" WHERE \"Id\" = @id AND \"Status\" = 'Aborted'", ("id", orphan.Receipt)));   // la ricevuta resta: il retry riscrive
+    }
+
+    [Fact]
+    public async Task A_receiving_receipt_that_expired_while_the_process_was_down_is_aborted_and_its_original_reclaimed()
+    {
+        using var client = await App.LoginAsync();
+        var orphan = await OldOrphan(client);
+        await Execute("UPDATE \"UploadReceipts\" SET \"Status\" = 'Receiving' WHERE \"Id\" = @id", ("id", orphan.Receipt));   // il processo è morto prima di annullarla
+
+        Assert.Equal(1, (await Sweep()).Removed);
+
+        Assert.Empty(StoredObjects());
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"UploadReceipts\" WHERE \"Id\" = @id AND \"Status\" = 'Aborted'", ("id", orphan.Receipt)));
+    }
+
+    [Fact]
+    public async Task The_sweep_never_removes_a_referenced_original_a_live_upload_or_a_recent_file()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var kept = await Json(await Upload(client, project, Sized("referenziato", 300)));
+        var keptPath = Assert.Single(StoredObjects());
+        Age(keptPath, TimeSpan.FromDays(30));
+        await Execute("UPDATE \"UploadReceipts\" SET \"ExpiresAt\" = now() - interval '30 days'");   // anche la ricevuta Committed è vecchia
+
+        var live = Guid.NewGuid();   // upload in corso: ricevuta Receiving ancora viva, file già rinominato ma non referenziato
+        await Execute(
+            "INSERT INTO \"UploadReceipts\" (\"Id\", \"ProjectId\", \"RequestKey\", \"InputHash\", \"ReservedBytes\", \"Status\", \"CreatedAt\", \"ExpiresAt\") VALUES (@id, @p, @k, @h, 100, 'Receiving', now(), now() + interval '10 minutes')",
+            ("id", live), ("p", project), ("k", Guid.NewGuid()), ("h", new string('c', 64)));
+        await Store.WriteAsync(project, live, new MemoryStream(Sized("vivo", 100)), 800, Ct);
+        await Store.WriteAsync(project, Guid.NewGuid(), new MemoryStream(Sized("recente", 100)), 800, Ct);   // file recentissimo senza ricevuta
+        Age(StoredObjects().Single(p => p.EndsWith(live.ToString("N"))), TimeSpan.FromDays(30));   // vecchio come file, ma la ricevuta Receiving è viva
+
+        var result = await Sweep();
+
+        Assert.Equal(0, result.Removed);
+        Assert.Equal(3, StoredObjects().Length);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"DocumentVersions\" WHERE \"Id\" = @v", ("v", kept.GetProperty("id").GetGuid())));
+        Assert.Equal(Sized("referenziato", 300), await File.ReadAllBytesAsync(keptPath, Ct));
+    }
+
+    [Fact]
+    public async Task The_sweep_is_bounded_per_pass_and_resumable_with_its_cursor_until_every_orphan_is_reclaimed()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        for (var i = 0; i < 5; i++)
+        {
+            await OldOrphan(client, project);
+        }
+
+        Assert.Equal(5, StoredObjects().Length);
+        string? cursor = null;
+        var removed = 0;
+        var passes = 0;
+        do
+        {
+            var result = await Sweep(cursor, examined: 2, removed: 2);
+            Assert.True(result.Examined <= 2 && result.Removed <= 2, "un passo non supera i tetti");
+            removed += result.Removed;
+            cursor = result.NextCursor;
+            passes++;
+        }
+        while (cursor is not null && passes < 20);
+
+        Assert.Equal(5, removed);
+        Assert.Empty(StoredObjects());
+        Assert.True(passes >= 3, "il lavoro è stato spezzato in più passi");
+    }
+
+    [Fact]
+    public async Task A_retry_with_the_same_key_racing_the_sweep_always_ends_with_one_intact_committed_original()
+    {
+        using var client = await App.LoginAsync();
+        for (var round = 0; round < 6; round++)
+        {
+            var key = Guid.NewGuid();
+            var bytes = Sized("gara" + round, 300);
+            var project = await NewProject(client);
+            FailAt(Store, DocumentStoreStage.AfterRename);
+            Assert.True((int)(await Upload(client, project, bytes, key: key)).StatusCode >= 500);
+            Store.OnStage = null;
+            var path = Assert.Single(StoredObjects(), p => p.Contains(project.ToString("N")));
+            await Execute("UPDATE \"UploadReceipts\" SET \"Status\" = 'Aborted', \"ExpiresAt\" = now() - interval '10 days' WHERE \"ProjectId\" = @p", ("p", project));
+            Age(path, TimeSpan.FromDays(10));
+
+            var retry = Upload(client, project, bytes, key: key);
+            var sweep = Sweep();
+            var response = await retry;
+            await sweep;
+
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            Assert.Equal(1, await Count("SELECT count(*) FROM \"DocumentVersions\" WHERE \"ProjectId\" = @p", ("p", project)));
+            var stored = Assert.Single(StoredObjects(), p => p.Contains(project.ToString("N")));
+            Assert.Equal(bytes, await File.ReadAllBytesAsync(stored, Ct));
+        }
     }
 
     // ================================================================ replay e conflitti

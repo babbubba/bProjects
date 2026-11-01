@@ -50,6 +50,9 @@ public enum DocumentStoreStage
     BeforeDelete,
 }
 
+/// <summary>Un originale presente sul volume: chiave server e ultima modifica (UTC). Solo per la pulizia degli orfani.</summary>
+public sealed record StoredObjectInfo(string StorageKey, DateTime LastWriteUtc);
+
 /// <summary>Esito di una scrittura o ispezione: chiave server, lunghezza reale dallo stream e SHA-256 esadecimale minuscolo.</summary>
 public sealed record StoredDocumentFile(string StorageKey, long ByteLength, string Sha256);
 
@@ -318,6 +321,41 @@ public sealed partial class DocumentFileStore
         File.Delete(path);
         _logger.LogInformation("Originale orfano rimosso: chiave {StorageKey}", storageKey);
         return true;
+    }
+
+    /// <summary>
+    /// Originali presenti sul volume (<c>objects/{progetto}/{oggetto}</c>) con chiave dopo <paramref name="afterKey"/>, in ordine di chiave, con
+    /// chiavi nel formato esatto; reparse point e nomi estranei sono ignorati. Non apre né legge i file: serve a trovare orfani che nessun
+    /// record del database nomina più.
+    /// </summary>
+    public IReadOnlyList<StoredObjectInfo> EnumerateObjects(string? afterKey = null)
+    {
+        var objects = Path.Combine(_root, ObjectsDirectory);
+        if (!Directory.Exists(objects) || IsReparsePoint(objects))
+        {
+            return [];
+        }
+
+        var found = new List<StoredObjectInfo>();
+        foreach (var projectDirectory in Directory.EnumerateDirectories(objects))
+        {
+            if (IsReparsePoint(projectDirectory))
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(projectDirectory))
+            {
+                var key = Path.GetFileName(projectDirectory) + "/" + Path.GetFileName(file);
+                if (KeyPattern().IsMatch(key) && !IsReparsePoint(file) && (afterKey is null || string.CompareOrdinal(key, afterKey) > 0))
+                {
+                    found.Add(new(key, File.GetLastWriteTimeUtc(file)));
+                }
+            }
+        }
+
+        found.Sort((a, b) => string.CompareOrdinal(a.StorageKey, b.StorageKey));
+        return found;
     }
 
     // ---- percorsi -------------------------------------------------------------------------------------------------------------

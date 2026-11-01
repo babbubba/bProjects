@@ -91,6 +91,7 @@ builder.Services.AddSingleton<IEvidenceExtractionExecutor>(sp =>
         sp.GetRequiredService<bProjects.App.Evidence.EvidenceEvents>());
 });
 builder.Services.AddHostedService<AiDispatchService>();
+builder.Services.AddHostedService<DocumentOrphanSweepService>();   // pulizia periodica degli originali orfani, indipendente dagli upload
 
 // Il middleware del framework registrerebbe il messaggio dell'eccezione (può contenere contenuti dei progetti):
 // il log degli errori non gestiti è quello sicuro dell'handler sotto.

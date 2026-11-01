@@ -45,6 +45,9 @@ public enum UploadCommitKind
 
 public sealed record UploadCommit(UploadCommitKind Kind, Guid? VersionId = null);
 
+/// <summary>Esito di un passo di pulizia degli orfani: file esaminati e rimossi, e dove riprendere (null = giro completato).</summary>
+public sealed record OrphanSweepResult(int Examined, int Removed, string? NextCursor);
+
 /// <summary>
 /// Acquisizione degli originali (T012; plan.md §Acquisizione, data-model §Documenti). Il flusso è in tre tempi, ciascuno con la propria
 /// transazione breve sotto il lock di progetto (mai tenuto durante lo stream):
@@ -395,21 +398,13 @@ public sealed class DocumentUploadService(AppDbContext db, DocumentFileStore sto
         }
     }
 
-    /// <summary>Riconciliazione dei residui dopo un guasto, nello stesso progetto e sotto il suo lock (chiamare dentro una transazione).</summary>
+    /// <summary>
+    /// Riconciliazione dei residui dopo un guasto, nello stesso progetto e sotto il suo lock (chiamare dentro una transazione). Percorso veloce,
+    /// limitato alle ricevute scadute di recente: gli orfani più vecchi o oltre il tetto per passo li raccoglie <see cref="SweepOrphansAsync"/>.
+    /// </summary>
     private async Task ReconcileAsync(Guid projectId, DateTimeOffset now, CancellationToken ct)
     {
-        var expired = await db.UploadReceipts
-            .Where(r => r.ProjectId == projectId && r.Status == UploadReceiptStatus.Receiving && r.ExpiresAt <= now)
-            .ToListAsync(ct);
-        foreach (var receipt in expired)
-        {
-            receipt.Status = UploadReceiptStatus.Aborted;   // nessun metadato completo da finalizzare: la ricevuta non diventa mai acquisita
-        }
-
-        if (expired.Count > 0)
-        {
-            await db.SaveChangesAsync(ct);
-        }
+        await AbortExpiredAsync(projectId, now, ct);
 
         var since = now.AddDays(-OrphanLookbackDays);
         var stale = await db.UploadReceipts.AsNoTracking()
@@ -424,17 +419,96 @@ public sealed class DocumentUploadService(AppDbContext db, DocumentFileStore sto
         }
     }
 
+    private async Task AbortExpiredAsync(Guid projectId, DateTimeOffset now, CancellationToken ct)
+    {
+        var expired = await db.UploadReceipts
+            .Where(r => r.ProjectId == projectId && r.Status == UploadReceiptStatus.Receiving && r.ExpiresAt <= now)
+            .ToListAsync(ct);
+        foreach (var receipt in expired)
+        {
+            receipt.Status = UploadReceiptStatus.Aborted;   // nessun metadato completo da finalizzare: la ricevuta non diventa mai acquisita
+        }
+
+        if (expired.Count > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Pulizia periodica degli originali orfani, indipendente dagli upload (un progetto fermo, un riavvio o una ricevuta Aborted più vecchia della
+    /// finestra di <see cref="ReconcileAsync"/> non lasciano più storage perso). Parte dal volume, non dalle ricevute: ogni file più vecchio di
+    /// <paramref name="minAge"/> con chiave dopo <paramref name="after"/> è un candidato; si esaminano al più <paramref name="maxExamined"/> chiavi e se ne
+    /// rimuovono al più <paramref name="maxRemoved"/> per passo, e il cursore restituito permette di riprendere (dopo un riavvio si riparte da zero).
+    /// Un file è rimosso solo sotto il lock del suo progetto, dopo aver abortito le ricevute scadute, se nessuna versione lo referenzia e la sua
+    /// ricevuta non è né Committed né una Receiving ancora viva. Una ricevuta Aborted riaperta dallo stesso tentativo riscrive il file (idempotente).
+    /// </summary>
+    public async Task<OrphanSweepResult> SweepOrphansAsync(string? after, TimeSpan minAge, int maxExamined, int maxRemoved, CancellationToken ct)
+    {
+        var cutoff = DateTime.UtcNow - minAge;
+        var batch = store.EnumerateObjects(after).Take(maxExamined).ToList();
+        var removed = 0;
+        string? cursor = batch.Count < maxExamined ? null : batch[^1].StorageKey;
+        foreach (var project in batch.GroupBy(o => o.StorageKey[..32]))
+        {
+            var candidates = project.Where(o => o.LastWriteUtc <= cutoff).Select(o => o.StorageKey).ToList();
+            if (candidates.Count > 0)
+            {
+                removed += await SweepProjectAsync(Guid.ParseExact(project.Key, "N"), candidates, maxRemoved - removed, ct);
+            }
+
+            if (removed >= maxRemoved)
+            {
+                cursor = project.Last().StorageKey;   // tetto raggiunto: il progetto è stato esaminato per intero, si riprende dopo
+                break;
+            }
+        }
+
+        return new(batch.Count, removed, cursor);
+    }
+
+    private async Task<int> SweepProjectAsync(Guid projectId, List<string> keys, int budget, CancellationToken ct)
+    {
+        var removed = 0;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await ProjectLock.AcquireAsync(db, projectId, ct);
+        var now = await ProjectLock.NowAsync(db, ct);
+        await AbortExpiredAsync(projectId, now, ct);
+        var objectIds = keys.Select(k => Guid.ParseExact(k[33..], "N")).ToList();
+        var protectedIds = (await db.UploadReceipts.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && objectIds.Contains(r.Id)
+                && (r.Status == UploadReceiptStatus.Committed || (r.Status == UploadReceiptStatus.Receiving && r.ExpiresAt > now)))
+            .Select(r => r.Id).ToListAsync(ct)).ToHashSet();
+        foreach (var key in keys)
+        {
+            if (removed >= budget)
+            {
+                break;
+            }
+
+            if (!protectedIds.Contains(Guid.ParseExact(key[33..], "N")) && await RemoveUnreferencedAsync(key))
+            {
+                removed++;
+            }
+        }
+
+        await tx.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+        return removed;
+    }
+
     /// <summary>Rimuove un originale solo se nessuna versione lo referenzia (mai un file con riferimento nel database).</summary>
-    private async Task RemoveUnreferencedAsync(string storageKey)
+    private async Task<bool> RemoveUnreferencedAsync(string storageKey)
     {
         try
         {
-            await store.DeleteOrphanAsync(
+            return await store.DeleteOrphanAsync(
                 storageKey, async (key, token) => await db.DocumentVersions.AsNoTracking().AnyAsync(v => v.StorageKey == key, token), CancellationToken.None);
         }
         catch (Exception ex) when (ex is DocumentStoreException or IOException or UnauthorizedAccessException)
         {
             logger.LogWarning("Originale orfano non rimosso: {ExceptionType}", ex.GetType().Name);
+            return false;
         }
     }
 
