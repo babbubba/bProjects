@@ -17,7 +17,7 @@ public sealed class ParserOptions
     /// <summary>Indirizzo del parser sulla rete privata (mai pubblicato); vuoto = parsing non configurato.</summary>
     public string? BaseUrl { get; set; }
 
-    /// <summary>Segreto interno inviato come bearer; solo da variabile d'ambiente, mai nel repository né nei log.</summary>
+    /// <summary>Segreto interno inviato nell'header X-Internal-Secret (protocollo del parser); solo da variabile d'ambiente, mai nel repository né nei log.</summary>
     public string? Secret { get; set; }
 
     /// <summary>Attesa del worker quando non c'è nulla da fare.</summary>
@@ -52,6 +52,9 @@ public sealed class ParserException(ParserFailure failure) : Exception(failure.C
 public sealed class ParserClient(HttpClient http, IOptions<ParserOptions> options)
 {
     public const string SchemaVersion = "document-parse-1";
+
+    /// <summary>Header con cui il parser autentica il backend (parser/service.py).</summary>
+    public const string SecretHeader = "X-Internal-Secret";
 
     /// <summary>Cleanup massimo concesso al trasporto oltre il timeout del subprocess.</summary>
     public static readonly TimeSpan CleanupGrace = TimeSpan.FromSeconds(5);
@@ -119,7 +122,7 @@ public sealed class ParserClient(HttpClient http, IOptions<ParserOptions> option
         var message = new HttpRequestMessage(method, new Uri(new Uri(_options.BaseUrl!.TrimEnd('/') + "/"), path));
         if (!string.IsNullOrEmpty(_options.Secret))
         {
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.Secret);
+            message.Headers.Add(SecretHeader, _options.Secret);
         }
 
         return message;
@@ -141,7 +144,7 @@ public sealed class ParserClient(HttpClient http, IOptions<ParserOptions> option
             using var document = JsonDocument.Parse(body);
             var root = document.RootElement;
             if (root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty("schemaVersion", out var schema) && schema.ValueKind == JsonValueKind.String && schema.GetString() == SchemaVersion
+                && root.TryGetProperty("schema", out var schema) && schema.ValueKind == JsonValueKind.String && schema.GetString() == SchemaVersion
                 && root.TryGetProperty("configHash", out var config) && config.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(config.GetString())
                 && root.TryGetProperty("formats", out var formats) && formats.ValueKind == JsonValueKind.Array
                 && formats.EnumerateArray().Any(f => f.ValueKind == JsonValueKind.String && f.GetString() == FormatCode(format)))

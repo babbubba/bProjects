@@ -213,6 +213,9 @@ def assemble_manifest(parsed: Parsed, chunks: list[dict], *, fmt: str, original:
                 if b["ref"] in inv["blockRefs"]:
                     inv["issueRefs"].append(iss)
                     inv["state"] = "unprocessed"
+    for inv in parsed.inventory:
+        if inv["state"] == "empty" and not inv.get("reason"):  # contracts/parser.md: «empty» sempre con motivazione
+            inv["reason"] = "Pagina senza contenuto." if inv.get("kind") == "page" else "Documento senza contenuto estraibile."
     incomplete = any(i["affectsCompleteness"] for i in parsed.issues) or any(i["state"] == "unprocessed" for i in parsed.inventory)
     return {
         "schemaVersion": SCHEMA_VERSION, "originalSha256": original_sha256, "parserVersion": PARSER_VERSION,

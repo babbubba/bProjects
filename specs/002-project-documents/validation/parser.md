@@ -63,3 +63,10 @@ Comando (immagine `bprojects-parser-test:dev`, stage `test`): `docker run --rm -
 - Limite di output 250 MB reale: provati il meccanismo e i limiti ridotti, non 250 MB effettivi.
 - Revisione legale delle licenze (solo metadati e carte dei modelli); lock valido per linux/amd64: su host arm64 va rigenerato.
 - Il validatore .NET (T027), la persistenza e il recupero (T028–T031) e qualsiasi prova con DGX non fanno parte di questo gate.
+
+## Allineamento backend↔parser (T029 reale, T031, T116) — 2026-11-02
+
+- Autenticazione: il backend ora invia `X-Internal-Secret` (prima `Authorization: Bearer`); `/version` è letto con la chiave `schema` come pubblicata dal parser.
+- Nomi del manifest reale adottati dal validatore backend (il parser rispetta il contratto, nessun cambio di protocollo): `offsetConvention`, `document.serialization`, `blocks[].order`/`itemRef`/`textSha256`, `locator.bbox` come `{l,t,r,b}` (salvato come array `[l,t,r,b]`), `locator.path` (percorso DOCX, in `DoclingRef`), `table.cols` e `cells[].path`, `inventory[].state`/`itemRef` con `kind` libero, `issues[].issueRef`/`blockRef`, `ranges[].sourceTextSha256`; DOCX con `pageCount` nullable. Unica modifica al parser: `reason` aggiunta alle voci di inventario `empty` (il contratto la richiede).
+- Prove (parser reale in container, `BPROJECTS_TEST_PARSER_ENDPOINT`/`BPROJECTS_TEST_PARSER_SECRET`, Skipped se assenti): `ParsedManifestRealParserTests` (9 fixture dei 4 formati accettate dal validatore), worker end-to-end su PostgreSQL in `DocumentParsingRecoveryTests` e retry API in `DocumentParseRetryTests`. Suite parser rieseguita dopo la modifica: 141 passed. Immagine runtime ricostruita: `sha256:73205c7d241a619a63973d5857d953a5fb19ec08179d931fe3f1d2e8c907a622`.
+- Il parser reale ha uno slot di conversione: le classi di test che lo usano sono in una collection xUnit serializzata.

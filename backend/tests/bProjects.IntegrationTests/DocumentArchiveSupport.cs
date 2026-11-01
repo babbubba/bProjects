@@ -37,6 +37,11 @@ public abstract class ArchiveTestBase : IAsyncLifetime
     {
     }
 
+    /// <summary>Servizi aggiuntivi prima dell avvio (es. parser reale o irraggiungibile per il worker); di default nessuno.</summary>
+    protected virtual void ConfigureServices(IServiceCollection services)
+    {
+    }
+
     public async ValueTask InitializeAsync()
     {
         await _database.InitializeAsync();
@@ -48,11 +53,15 @@ public abstract class ArchiveTestBase : IAsyncLifetime
     }
 
     private Task<ApiHarness> StartAppAsync() =>
-        ApiHarness.StartAsync(_database.ConnectionString, configure: services => services.Configure<DocumentOptions>(options =>
+        ApiHarness.StartAsync(_database.ConnectionString, configure: services =>
         {
-            options.StorageRoot = StorageRoot;
-            Tune(options);
-        }));
+            services.Configure<DocumentOptions>(options =>
+            {
+                options.StorageRoot = StorageRoot;
+                Tune(options);
+            });
+            ConfigureServices(services);
+        });
 
     /// <summary>Riavvio del processo: nuova applicazione sullo stesso database e sullo stesso volume di storage.</summary>
     protected async Task RestartAppAsync()

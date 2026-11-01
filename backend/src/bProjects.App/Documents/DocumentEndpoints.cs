@@ -37,6 +37,7 @@ public static class ProjectDocumentEndpoints
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}", GetPreparation);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/blocks", ListBlocks);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/passages/{blockId:guid}", GetPassage);
+        group.MapPost("/document-jobs/{jobId:guid}/retry", RetryParse);
         return app;
     }
 
@@ -336,8 +337,50 @@ public static class ProjectDocumentEndpoints
     private const int DefaultBlockLimit = 50;
     private const int MaxBlockLimit = 100;
 
+    /// <summary>
+    /// Retry manuale del parsing (T116): solo POST, mai da GET o da polling. Idempotency-Key UUID obbligatoria; risponde 202 con il job e la
+    /// preparazione collegati (replay: gli stessi), 409 con codice stabile se il terminale non e ritentabile, e 404 fuori dal progetto.
+    /// </summary>
+    private static async Task<IResult> RetryParse(
+        Guid projectId, Guid jobId, HttpContext http, ClaimsPrincipal user, AppDbContext db, DocumentPreparationService preparations, CancellationToken ct)
+    {
+        if (!Guid.TryParse(user.FindFirstValue("sub"), out var requestedBy))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!await db.Projects.AsNoTracking().AnyAsync(p => p.Id == projectId, ct))
+        {
+            return Results.NotFound();
+        }
+
+        if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
+            || !Guid.TryParse(raw[0], out var requestKey) || requestKey == Guid.Empty)
+        {
+            return Problem(StatusCodes.Status400BadRequest, "idempotency_key_required", "Idempotency-Key mancante o non valida");
+        }
+
+        var result = await preparations.RetryParseAsync(projectId, jobId, requestKey, requestedBy, ct);
+        http.Response.Headers.CacheControl = "no-store";
+        return result.Kind switch
+        {
+            PreparationRetryKind.NotFound => Results.NotFound(),
+            PreparationRetryKind.Conflict => Problem(StatusCodes.Status409Conflict, result.Code!, result.Code switch
+            {
+                "idempotency_conflict" => "La stessa chiave e stata usata per un altra richiesta",
+                "job_active" => "Il job e ancora in corso",
+                "preparation_active" => "Esiste gia una preparazione attiva per questa versione",
+                "job_superseded" => "Una preparazione piu recente ha gia sostituito questo job",
+                _ => "Il job non e in uno stato ritentabile",
+            }),
+            _ => Results.Json(
+                new ParseRetryView(result.JobId, result.PreparationId, result.Generation, result.RetryOfJobId, result.RetryOfPreparationId, "Queued", result.RequestedAt, result.DeadlineAt),
+                statusCode: StatusCodes.Status202Accepted),
+        };
+    }
+
     private static async Task<IResult> GetPreparation(
-        Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+        Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, DocumentPreparationService preparations, HttpContext http, CancellationToken ct)
     {
         var found = await FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
         if (found is null)
@@ -356,7 +399,7 @@ public static class ProjectDocumentEndpoints
             artifact?.BlockCount, p.RetryOfId, p.RequestedAt,
             p.ErrorCode is { } code ? new IssuesSummary(code, IssuesSummary.FixedMessage) : null,
             issues.Select(i => new PreparationIssueView(i.Code, i.Severity.ToString(), i.Page, i.BlockId, i.Reason, i.AffectsCompleteness)).ToList(),
-            ["download"]));
+            await preparations.IsRetryAllowedAsync(p, ct) ? ["download", "retry"] : ["download"], p.ParseJobId));
     }
 
     private static async Task<IResult> ListBlocks(
@@ -477,7 +520,11 @@ public sealed record PreparationIssueView(string Code, string Severity, int? Pag
 public sealed record PreparationView(
     Guid Id, Guid DocumentVersionId, Guid DocumentId, int Version, int Generation, string ProcessingStatus, bool IsReady, string ContentState,
     int? BlockCount, Guid? RetryOfId, DateTimeOffset RequestedAt, IssuesSummary? IssuesSummary,
-    IReadOnlyList<PreparationIssueView> Issues, IReadOnlyList<string> AllowedActions);
+    IReadOnlyList<PreparationIssueView> Issues, IReadOnlyList<string> AllowedActions, Guid? ParseJobId);
+
+/// <summary>Esito del retry manuale: job e preparazione nuovi, collegati ai precedenti; mai testo del documento né percorsi.</summary>
+public sealed record ParseRetryView(
+    Guid JobId, Guid PreparationId, int Generation, Guid RetryOfJobId, Guid RetryOfPreparationId, string Status, DateTimeOffset RequestedAt, DateTimeOffset DeadlineAt);
 
 public sealed record BboxView(double[] Values, string? CoordinateSystem);
 

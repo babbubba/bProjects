@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IValidateOptions<DocumentOptions>, DocumentOptions
 builder.Services.AddOptions<DocumentOptions>().Bind(builder.Configuration.GetSection(DocumentOptions.SectionName)).ValidateOnStart();
 builder.Services.AddScoped<DocumentPolicyService>();
 builder.Services.AddScoped<DocumentUploadService>();
+builder.Services.AddScoped<DocumentPreparationService>();
 builder.Services.AddScoped<SourceSelectionService>();
 builder.Services.AddScoped<DocumentCatalog>();
 builder.Services.AddSingleton<DocumentFileStore>();   // originali su volume privato (T011); la radice si valida al primo uso

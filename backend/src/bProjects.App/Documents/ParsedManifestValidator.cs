@@ -104,13 +104,13 @@ public static class ParsedManifestValidator
             "manifest_hash_mismatch", "Hash o lunghezza dell'originale non corrispondono alla richiesta.");
         Require(!string.IsNullOrEmpty(dto.ConfigHash) && dto.ConfigHash == expected.ConfigHash, "manifest_config_mismatch", "Configurazione del parser diversa da quella richiesta.");
         Require(dto.OriginFormat == origin, "manifest_format_mismatch", "Formato di origine diverso da quello dichiarato.");
-        Malformed(dto.OffsetUnit == OffsetUnit, "Convenzione di offset non ammessa.");
+        Malformed(dto.OffsetConvention == OffsetUnit, "Convenzione di offset non ammessa.");
         Malformed(
             !string.IsNullOrWhiteSpace(dto.ParserVersion) && !string.IsNullOrWhiteSpace(dto.DependencyLockHash) && !string.IsNullOrWhiteSpace(dto.ModelArtifactsHash),
             "Versioni o hash del parser mancanti.");
         Malformed(
             dto.Document.ValueKind == JsonValueKind.Object
-            && dto.Document.TryGetProperty("serializationVersion", out var serialization)
+            && dto.Document.TryGetProperty("serialization", out var serialization)
             && serialization.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(serialization.GetString()),
             "Documento originale senza versione di serializzazione.");
         var declared = dto.Status switch
@@ -128,7 +128,8 @@ public static class ParsedManifestValidator
         Require(dto.PageCount is null || dto.PageCount <= expected.MaxPages, "parse_limit_exceeded", "Pagine oltre il limite ammesso.");
         Require(dto.Blocks.Count <= expected.MaxBlocks, "parse_limit_exceeded", "Blocchi oltre il limite ammesso.");
         Malformed(dto.Issues.Count <= MaxIssues, "Troppe segnalazioni.");
-        Require((origin is "pdf" or "docx") == (dto.PageCount is not null), "manifest_inconsistent", "Conteggio pagine incoerente col formato.");
+        // PDF: sempre paginato. DOCX: pagine non stabili, pageCount nullable (mai pagine simulate). MD/TXT: mai paginati.
+        Require(origin switch { "pdf" => dto.PageCount is not null, "docx" => true, _ => dto.PageCount is null }, "manifest_inconsistent", "Conteggio pagine incoerente col formato.");
 
         var blocks = ValidateBlocks(dto.Blocks, dto.PageCount, origin, expected.MaxExpandedBytes);
         var byRef = blocks.ToDictionary(b => b.Ref, StringComparer.Ordinal);
@@ -179,9 +180,10 @@ public static class ParsedManifestValidator
         {
             Malformed(dto is not null, "Blocco nullo.");
             Malformed(!string.IsNullOrEmpty(dto!.Ref) && dto.Ref.Length <= MaxRefLength, "Ref di blocco non valido.");
+            Malformed(dto.ItemRef is null || dto.ItemRef.Length <= MaxRefLength, "Riferimento Docling non valido.");
             Require(refs.Add(dto.Ref!), "manifest_inconsistent", "Ref di blocco duplicato.");
-            Require(dto.Ordinal is { } ordinal && ordinal > previous, "manifest_inconsistent", "Ordine dei blocchi non crescente.");
-            previous = dto.Ordinal!.Value;
+            Require(dto.Order is { } ordinal && ordinal > previous, "manifest_inconsistent", "Ordine dei blocchi non crescente.");
+            previous = dto.Order!.Value;
             var type = dto.Type switch
             {
                 "heading" => BlockType.Heading,
@@ -195,6 +197,7 @@ public static class ParsedManifestValidator
             };
             var text = dto.Text ?? throw Malformed("Testo del blocco mancante.");
             Malformed(!HasLoneSurrogate(text), "Testo con surrogati non accoppiati.");
+            Require(dto.TextSha256 is null || string.Equals(dto.TextSha256, Sha256(text), StringComparison.OrdinalIgnoreCase), "manifest_hash_mismatch", "Hash del testo del blocco non corrisponde.");
             expanded += Encoding.UTF8.GetByteCount(text);
             Require(expanded <= maxExpandedBytes, "parse_limit_exceeded", "Testo estratto oltre i byte espansi ammessi.");
             var headingPath = dto.HeadingPath ?? throw Malformed("Percorso dei titoli mancante.");
@@ -202,8 +205,9 @@ public static class ParsedManifestValidator
             var locator = dto.Locator ?? throw Malformed("Locator del blocco mancante.");
             ValidateLocator(locator, pageCount, textual);
             blocks.Add(new(
-                dto.Ref!, dto.Ordinal.Value, dto.ParentRef, type, text, Sha256(text), headingPath!, locator.Page, locator.Bbox, locator.CoordinateSystem,
-                locator.DoclingRef, locator.LineStart, locator.LineEnd, ValidateTable(dto.Table, type)));
+                dto.Ref!, dto.Order.Value, dto.ParentRef, type, text, Sha256(text), headingPath!, locator.Page,
+                locator.Bbox is { } box ? [box.L!.Value, box.T!.Value, box.R!.Value, box.B!.Value] : null,
+                locator.CoordinateSystem, locator.Path ?? dto.ItemRef, locator.LineStart, locator.LineEnd, ValidateTable(dto.Table, type)));
         }
 
         return blocks;
@@ -211,7 +215,7 @@ public static class ParsedManifestValidator
 
     private static void ValidateLocator(LocatorDto locator, int? pageCount, bool textual)
     {
-        Malformed(locator.DoclingRef is null || locator.DoclingRef.Length <= MaxRefLength, "Riferimento Docling non valido.");
+        Malformed(locator.Path is null || locator.Path.Length <= MaxRefLength, "Percorso strutturale non valido.");
         Malformed(locator.CoordinateSystem is null || locator.CoordinateSystem.Length <= MaxCodeLength, "Sistema di coordinate non valido.");
         if (textual)
         {
@@ -230,7 +234,8 @@ public static class ParsedManifestValidator
         if (locator.Bbox is { } bbox)
         {
             Require(
-                locator.Page is not null && bbox.Length == 4 && bbox.All(double.IsFinite) && !string.IsNullOrWhiteSpace(locator.CoordinateSystem),
+                locator.Page is not null && bbox is { L: { } l, T: { } t, R: { } r, B: { } b } && double.IsFinite(l) && double.IsFinite(t) && double.IsFinite(r) && double.IsFinite(b)
+                && !string.IsNullOrWhiteSpace(locator.CoordinateSystem),
                 "manifest_inconsistent", "Coordinate senza pagina, sistema o valori finiti.");
         }
     }
@@ -243,8 +248,8 @@ public static class ParsedManifestValidator
             return null;
         }
 
-        Require(table is { Cells.Count: > 0 } && table.Rows is >= 1 && table.Columns is >= 1, "manifest_inconsistent", "Tabella senza celle o dimensioni.");
-        var (rows, columns) = (table!.Rows!.Value, table.Columns!.Value);
+        Require(table is { Cells.Count: > 0 } && table.Rows is >= 1 && table.Cols is >= 1, "manifest_inconsistent", "Tabella senza celle o dimensioni.");
+        var (rows, columns) = (table!.Rows!.Value, table.Cols!.Value);
         Require(rows <= MaxTableSide && columns <= MaxTableSide && (long)rows * columns <= MaxTableArea, "parse_limit_exceeded", "Tabella oltre i limiti ammessi.");
         var occupied = new HashSet<long>();
         var cells = new List<object>(table.Cells!.Count);
@@ -263,7 +268,7 @@ public static class ParsedManifestValidator
                 }
             }
 
-            cells.Add(new { row, col, rowSpan, colSpan, header = cell.Header, text = cell.Text });
+            cells.Add(new { row, col, rowSpan, colSpan, header = cell.Header, text = cell.Text, path = cell.Path });
         }
 
         return JsonSerializer.Serialize(new { rows, columns, cells }, CellsOptions);
@@ -311,7 +316,7 @@ public static class ParsedManifestValidator
         foreach (var dto in input)
         {
             Malformed(dto is not null, "Segnalazione nulla.");
-            Malformed(!string.IsNullOrEmpty(dto!.Id) && dto.Id.Length <= MaxRefLength, "Id di segnalazione non valido.");
+            Malformed(!string.IsNullOrEmpty(dto!.IssueRef) && dto.IssueRef.Length <= MaxRefLength, "Id di segnalazione non valido.");
             Malformed(!string.IsNullOrEmpty(dto.Code) && dto.Code.Length <= MaxCodeLength, "Codice di segnalazione non valido.");
             Malformed(!string.IsNullOrWhiteSpace(dto.Reason) && dto.Reason.Length <= MaxReasonLength && !HasLoneSurrogate(dto.Reason), "Motivo non valido o troppo lungo.");
             Malformed(dto.AffectsCompleteness is not null, "affectsCompleteness mancante.");
@@ -321,11 +326,11 @@ public static class ParsedManifestValidator
                 "warning" => IssueSeverity.Warning,
                 _ => throw Malformed("Gravità sconosciuta."),
             };
-            Require(!ids.ContainsKey(dto.Id!), "manifest_inconsistent", "Id di segnalazione duplicato.");
-            Require(dto.Ref is null || byRef.ContainsKey(dto.Ref), "manifest_inconsistent", "Segnalazione su un blocco inesistente.");
+            Require(!ids.ContainsKey(dto.IssueRef!), "manifest_inconsistent", "Id di segnalazione duplicato.");
+            Require(dto.BlockRef is null || byRef.ContainsKey(dto.BlockRef), "manifest_inconsistent", "Segnalazione su un blocco inesistente.");
             Require(dto.Page is null || (pageCount is not null && dto.Page >= 1 && dto.Page <= pageCount), "manifest_inconsistent", "Segnalazione su una pagina inesistente.");
-            var issue = new ValidatedIssue(dto.Code!, severity, dto.Page, dto.Ref, dto.Reason!, dto.AffectsCompleteness!.Value);
-            ids[dto.Id!] = issue;
+            var issue = new ValidatedIssue(dto.Code!, severity, dto.Page, dto.BlockRef, dto.Reason!, dto.AffectsCompleteness!.Value);
+            ids[dto.IssueRef!] = issue;
             issues.Add(issue);
         }
 
@@ -341,8 +346,9 @@ public static class ParsedManifestValidator
         foreach (var dto in input)
         {
             Malformed(dto is not null, "Voce di inventario nulla.");
-            Malformed(dto!.Kind is "page" or "item" or "container", "Tipo di voce di inventario sconosciuto.");
-            Malformed(dto.Status is "represented" or "unprocessed" or "empty", "Stato di voce di inventario sconosciuto.");
+            Malformed(!string.IsNullOrEmpty(dto!.Kind) && dto.Kind.Length <= MaxCodeLength, "Tipo di voce di inventario non valido.");
+            Malformed(dto.ItemRef is null || dto.ItemRef.Length <= MaxRefLength, "Riferimento di voce di inventario non valido.");
+            Malformed(dto.State is "represented" or "unprocessed" or "empty", "Stato di voce di inventario sconosciuto.");
             var blockRefs = dto.BlockRefs ?? throw Malformed("blockRefs mancante.");
             var issueRefs = dto.IssueRefs ?? throw Malformed("issueRefs mancante.");
             Require(blockRefs.All(r => r is not null && byRef.ContainsKey(r)), "manifest_inconsistent", "Voce di inventario con blocco inesistente.");
@@ -352,7 +358,7 @@ public static class ParsedManifestValidator
                 Require(pageCount is not null && dto.Page is >= 1 && dto.Page <= pageCount && pages.Add(dto.Page.Value), "manifest_inconsistent", "Pagina di inventario non valida o duplicata.");
             }
 
-            switch (dto.Status)
+            switch (dto.State)
             {
                 case "represented":
                     Require(blockRefs.Count > 0, "manifest_inconsistent", "Voce rappresentata senza blocchi.");
@@ -406,9 +412,9 @@ public static class ParsedManifestValidator
                 Require(range.Start is >= 0 && range.End > range.Start && range.End <= length, "manifest_inconsistent", "Range fuori dal testo del blocco.");
                 var (start, end) = prefix is null ? (range.Start!.Value, range.End!.Value) : (prefix[range.Start!.Value], prefix[range.End!.Value]);
                 Require(
-                    string.Equals(range.TextHash, Sha256(block.Text[start..end]), StringComparison.OrdinalIgnoreCase),
+                    string.Equals(range.SourceTextSha256, Sha256(block.Text[start..end]), StringComparison.OrdinalIgnoreCase),
                     "manifest_hash_mismatch", "Hash del testo del range non corrisponde al testo canonico.");
-                ranges.Add(new(range.RangeKey!, block.Ref, start, end, ownership, range.TextHash!.ToLowerInvariant()));
+                ranges.Add(new(range.RangeKey!, block.Ref, start, end, ownership, range.SourceTextSha256!.ToLowerInvariant()));
                 if (ownership == RangeOwnership.Primary)
                 {
                     if (!primary.TryGetValue(block.Ref, out var list))
@@ -537,7 +543,7 @@ public static class ParsedManifestValidator
         public string? OriginFormat { get; set; }
         public long? OriginalByteLength { get; set; }
         public int? PageCount { get; set; }
-        public string? OffsetUnit { get; set; }
+        public string? OffsetConvention { get; set; }
         public JsonElement Document { get; set; }
         public List<BlockDto?>? Blocks { get; set; }
         public List<InventoryDto?>? Inventory { get; set; }
@@ -548,10 +554,12 @@ public static class ParsedManifestValidator
     private sealed class BlockDto
     {
         public string? Ref { get; set; }
-        public int? Ordinal { get; set; }
+        public int? Order { get; set; }
+        public string? ItemRef { get; set; }
         public string? ParentRef { get; set; }
         public string? Type { get; set; }
         public string? Text { get; set; }
+        public string? TextSha256 { get; set; }
         public List<string?>? HeadingPath { get; set; }
         public LocatorDto? Locator { get; set; }
         public TableDto? Table { get; set; }
@@ -560,17 +568,25 @@ public static class ParsedManifestValidator
     private sealed class LocatorDto
     {
         public int? Page { get; set; }
-        public double[]? Bbox { get; set; }
+        public BboxDto? Bbox { get; set; }
         public string? CoordinateSystem { get; set; }
-        public string? DoclingRef { get; set; }
+        public string? Path { get; set; }
         public int? LineStart { get; set; }
         public int? LineEnd { get; set; }
+    }
+
+    private sealed class BboxDto
+    {
+        public double? L { get; set; }
+        public double? T { get; set; }
+        public double? R { get; set; }
+        public double? B { get; set; }
     }
 
     private sealed class TableDto
     {
         public int? Rows { get; set; }
-        public int? Columns { get; set; }
+        public int? Cols { get; set; }
         public List<CellDto?>? Cells { get; set; }
     }
 
@@ -582,13 +598,15 @@ public static class ParsedManifestValidator
         public int? ColSpan { get; set; }
         public bool Header { get; set; }
         public string? Text { get; set; }
+        public string? Path { get; set; }
     }
 
     private sealed class InventoryDto
     {
+        public string? ItemRef { get; set; }
         public string? Kind { get; set; }
         public int? Page { get; set; }
-        public string? Status { get; set; }
+        public string? State { get; set; }
         public string? Reason { get; set; }
         public List<string?>? BlockRefs { get; set; }
         public List<string?>? IssueRefs { get; set; }
@@ -606,16 +624,16 @@ public static class ParsedManifestValidator
         public int? Start { get; set; }
         public int? End { get; set; }
         public string? Ownership { get; set; }
-        public string? TextHash { get; set; }
+        public string? SourceTextSha256 { get; set; }
     }
 
     private sealed class IssueDto
     {
-        public string? Id { get; set; }
+        public string? IssueRef { get; set; }
         public string? Code { get; set; }
         public string? Severity { get; set; }
         public int? Page { get; set; }
-        public string? Ref { get; set; }
+        public string? BlockRef { get; set; }
         public string? Reason { get; set; }
         public bool? AffectsCompleteness { get; set; }
     }

@@ -61,7 +61,8 @@ public sealed class ParsingDatabase : IAsyncDisposable
     /// <paramref name="store"/> è dato, l'originale è scritto davvero sotto la chiave della versione.
     /// </summary>
     public async Task<SeededParse> SeedParseAsync(
-        DocumentFileStore? store = null, byte[]? content = null, TimeSpan? hardWindow = null, int maxAttempts = 3, (Guid User, Guid Project)? owner = null)
+        DocumentFileStore? store = null, byte[]? content = null, TimeSpan? hardWindow = null, int maxAttempts = 3, (Guid User, Guid Project)? owner = null,
+        string mediaType = "text/plain", string originalName = "nota.txt")
     {
         content ??= "Titolo\n\nTesto del documento.\n"u8.ToArray();
         var (user, project) = owner ?? await SeedProjectAsync();
@@ -81,7 +82,7 @@ public sealed class ParsingDatabase : IAsyncDisposable
         db.ProjectDocuments.Add(new ProjectDocument { Id = document, ProjectId = project, DisplayName = "Nota", CreatedBy = user });
         db.UploadReceipts.Add(new UploadReceipt { Id = receipt, ProjectId = project, DocumentId = document, RequestKey = Guid.NewGuid(), InputHash = new string('d', 64), ReservedBytes = content.Length, Status = UploadReceiptStatus.Receiving, ExpiresAt = t0.AddHours(1) });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        db.DocumentVersions.Add(new DocumentVersion { Id = version, ProjectId = project, DocumentId = document, Version = 1, OriginalName = "nota.txt", MediaType = "text/plain", ByteLength = content.Length, Sha256 = sha, StorageKey = key, UploadedBy = user, UploadReceiptId = receipt });
+        db.DocumentVersions.Add(new DocumentVersion { Id = version, ProjectId = project, DocumentId = document, Version = 1, OriginalName = originalName, MediaType = mediaType, ByteLength = content.Length, Sha256 = sha, StorageKey = key, UploadedBy = user, UploadReceiptId = receipt });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var committed = await db.UploadReceipts.SingleAsync(r => r.Id == receipt, TestContext.Current.CancellationToken);
         committed.Status = UploadReceiptStatus.Committed;

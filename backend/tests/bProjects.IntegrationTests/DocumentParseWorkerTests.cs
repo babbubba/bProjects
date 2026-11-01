@@ -23,7 +23,7 @@ public sealed class DocumentParseWorkerTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private const string VersionJson = """{"schemaVersion":"document-parse-1","configHash":"cfg-hash-1","formats":["pdf","docx","md","txt"]}""";
+    private const string VersionJson = """{"schema":"document-parse-1","configHash":"cfg-hash-1","formats":["pdf","docx","md","txt"]}""";
 
     // ---- rig ---------------------------------------------------------------------------------------------------------------------
 
@@ -109,13 +109,13 @@ public sealed class DocumentParseWorkerTests
 
     private static JsonObject Block(string reference, int ordinal, string text, int line) => new()
     {
-        ["ref"] = reference, ["ordinal"] = ordinal, ["parentRef"] = null, ["type"] = ordinal == 0 ? "heading" : "paragraph", ["text"] = text,
+        ["ref"] = reference, ["order"] = ordinal, ["parentRef"] = null, ["type"] = ordinal == 0 ? "heading" : "paragraph", ["text"] = text,
         ["headingPath"] = new JsonArray(), ["locator"] = new JsonObject { ["lineStart"] = line, ["lineEnd"] = line },
     };
 
     private static JsonObject Range(string key, string block, string text) => new()
     {
-        ["rangeKey"] = key, ["blockRef"] = block, ["start"] = 0, ["end"] = text.Length, ["ownership"] = "Primary", ["textHash"] = Sha(text),
+        ["rangeKey"] = key, ["blockRef"] = block, ["start"] = 0, ["end"] = text.Length, ["ownership"] = "Primary", ["sourceTextSha256"] = Sha(text),
     };
 
     private static string Manifest(SeededParse seed, Action<JsonObject>? mutate = null)
@@ -126,10 +126,10 @@ public sealed class DocumentParseWorkerTests
         {
             ["schemaVersion"] = "document-parse-1", ["originalSha256"] = seed.Sha256, ["parserVersion"] = "1.0.0", ["dependencyLockHash"] = "lock",
             ["modelArtifactsHash"] = "model", ["configHash"] = "cfg-hash-1", ["status"] = "Complete", ["originFormat"] = "txt",
-            ["originalByteLength"] = seed.ByteLength, ["pageCount"] = null, ["offsetUnit"] = "unicode-codepoint",
-            ["document"] = new JsonObject { ["serializationVersion"] = "text-1", ["content"] = Encoding.UTF8.GetString(seed.Content) },
+            ["originalByteLength"] = seed.ByteLength, ["pageCount"] = null, ["offsetConvention"] = "unicode-codepoint",
+            ["document"] = new JsonObject { ["serialization"] = "text-1", ["content"] = Encoding.UTF8.GetString(seed.Content) },
             ["blocks"] = new JsonArray(Block("b0", 0, t0, 1), Block("b1", 1, t1, 3)),
-            ["inventory"] = new JsonArray(new JsonObject { ["kind"] = "item", ["status"] = "represented", ["blockRefs"] = new JsonArray("b0", "b1"), ["issueRefs"] = new JsonArray() }),
+            ["inventory"] = new JsonArray(new JsonObject { ["kind"] = "item", ["state"] = "represented", ["blockRefs"] = new JsonArray("b0", "b1"), ["issueRefs"] = new JsonArray() }),
             ["chunks"] = new JsonArray(
                 new JsonObject { ["ranges"] = new JsonArray(Range("r0", "b0", t0)) },
                 new JsonObject { ["ranges"] = new JsonArray(Range("r1", "b1", t1), With(Range("rc", "b0", t0), x => x["ownership"] = "Context")) }),
@@ -212,8 +212,8 @@ public sealed class DocumentParseWorkerTests
         var manifest = Manifest(seed, m =>
         {
             m["status"] = "Incomplete";
-            m["issues"] = new JsonArray(new JsonObject { ["id"] = "i1", ["code"] = "image_unprocessed", ["severity"] = "blocking", ["ref"] = "b1", ["reason"] = "Immagine non trattata", ["affectsCompleteness"] = true });
-            m["inventory"]!.AsArray().Add(new JsonObject { ["kind"] = "item", ["status"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray("i1") });
+            m["issues"] = new JsonArray(new JsonObject { ["issueRef"] = "i1", ["code"] = "image_unprocessed", ["severity"] = "blocking", ["blockRef"] = "b1", ["reason"] = "Immagine non trattata", ["affectsCompleteness"] = true });
+            m["inventory"]!.AsArray().Add(new JsonObject { ["kind"] = "item", ["state"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray("i1") });
         });
         rig.OnConvert = (_, _) => Respond(Ok(manifest));
 

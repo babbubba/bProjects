@@ -29,7 +29,7 @@ public sealed class ParsedManifestTests
     private static JsonObject Block(string reference, int ordinal, string type, string text, string? parent = null, int? line = null, int? page = null) => new()
     {
         ["ref"] = reference,
-        ["ordinal"] = ordinal,
+        ["order"] = ordinal,
         ["parentRef"] = parent,
         ["type"] = type,
         ["text"] = text,
@@ -44,7 +44,7 @@ public sealed class ParsedManifestTests
         ["start"] = start,
         ["end"] = end,
         ["ownership"] = ownership,
-        ["textHash"] = Sha(Slice(blockText, start, end)),
+        ["sourceTextSha256"] = Sha(Slice(blockText, start, end)),
     };
 
     private const string EmojiText = "Testo con \U0001F600 emoji";   // 17 codepoint, 18 unità UTF-16
@@ -66,13 +66,13 @@ public sealed class ParsedManifestTests
             ["originFormat"] = format,
             ["originalByteLength"] = Original.Length,
             ["pageCount"] = null,
-            ["offsetUnit"] = "unicode-codepoint",
-            ["document"] = new JsonObject { ["serializationVersion"] = "docling-1", ["content"] = new JsonObject() },
+            ["offsetConvention"] = "unicode-codepoint",
+            ["document"] = new JsonObject { ["serialization"] = "docling-1", ["content"] = new JsonObject() },
             ["blocks"] = new JsonArray(b0, b1),
             ["inventory"] = new JsonArray(new JsonObject
             {
                 ["kind"] = "item",
-                ["status"] = "represented",
+                ["state"] = "represented",
                 ["blockRefs"] = new JsonArray("b0", "b1"),
                 ["issueRefs"] = new JsonArray(),
             }),
@@ -191,12 +191,12 @@ public sealed class ParsedManifestTests
             m["status"] = "Incomplete";
             m["issues"] = new JsonArray(new JsonObject
             {
-                ["id"] = "i1", ["code"] = "image_unprocessed", ["severity"] = "blocking", ["page"] = null, ["ref"] = null,
+                ["issueRef"] = "i1", ["code"] = "image_unprocessed", ["severity"] = "blocking", ["page"] = null, ["blockRef"] = null,
                 ["reason"] = "Immagine potenzialmente informativa non trattata", ["affectsCompleteness"] = true,
             });
             m["inventory"]!.AsArray().Add(new JsonObject
             {
-                ["kind"] = "item", ["status"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray("i1"),
+                ["kind"] = "item", ["state"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray("i1"),
             });
         });
 
@@ -213,7 +213,7 @@ public sealed class ParsedManifestTests
     {
         var m = Valid(m => m["inventory"]!.AsArray().Add(new JsonObject
         {
-            ["kind"] = "item", ["status"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray(),
+            ["kind"] = "item", ["state"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray(),
         }));
 
         Assert.Equal("manifest_inconsistent", Reject(m).Code);
@@ -224,7 +224,7 @@ public sealed class ParsedManifestTests
     {
         var m = Valid(m => m["issues"] = new JsonArray(new JsonObject
         {
-            ["id"] = "i1", ["code"] = "x", ["severity"] = "warning", ["reason"] = "r", ["affectsCompleteness"] = true,
+            ["issueRef"] = "i1", ["code"] = "x", ["severity"] = "warning", ["reason"] = "r", ["affectsCompleteness"] = true,
         }));
 
         Assert.Equal("manifest_inconsistent", Reject(m).Code);
@@ -247,7 +247,7 @@ public sealed class ParsedManifestTests
     [InlineData("schemaVersion", "document-parse-2", "manifest_version_unsupported")]
     [InlineData("configHash", "altro", "manifest_config_mismatch")]
     [InlineData("originFormat", "pdf", "manifest_format_mismatch")]
-    [InlineData("offsetUnit", "utf16", "manifest_malformed")]
+    [InlineData("offsetConvention", "utf16", "manifest_malformed")]
     [InlineData("status", "Ready", "manifest_malformed")]
     public void Identity_fields_that_do_not_match_the_request_are_rejected(string field, object value, string code)
     {
@@ -304,8 +304,8 @@ public sealed class ParsedManifestTests
     public void Duplicate_refs_and_non_increasing_ordinals_are_rejected()
     {
         Assert.Equal("manifest_inconsistent", Reject(Valid(m => BlockAt(m, 1)["ref"] = "b0")).Code);
-        Assert.Equal("manifest_inconsistent", Reject(Valid(m => BlockAt(m, 1)["ordinal"] = 0)).Code);
-        Assert.Equal("manifest_inconsistent", Reject(Valid(m => BlockAt(m, 0)["ordinal"] = 5)).Code);
+        Assert.Equal("manifest_inconsistent", Reject(Valid(m => BlockAt(m, 1)["order"] = 0)).Code);
+        Assert.Equal("manifest_inconsistent", Reject(Valid(m => BlockAt(m, 0)["order"] = 5)).Code);
     }
 
     [Fact]
@@ -351,13 +351,13 @@ public sealed class ParsedManifestTests
             {
                 block!["locator"] = new JsonObject
                 {
-                    ["page"] = 1, ["bbox"] = new JsonArray(0.0, 0.0, 10.0, 10.0), ["coordinateSystem"] = "pdf-bottom-left", ["doclingRef"] = "#/texts/0",
+                    ["page"] = 1, ["bbox"] = new JsonObject { ["l"] = 0.0, ["t"] = 0.0, ["r"] = 10.0, ["b"] = 10.0 }, ["coordinateSystem"] = "pdf-bottom-left", ["path"] = "#/texts/0",
                 };
             }
 
             m["inventory"] = new JsonArray(
-                new JsonObject { ["kind"] = "page", ["page"] = 1, ["status"] = "represented", ["blockRefs"] = new JsonArray("b0", "b1"), ["issueRefs"] = new JsonArray() },
-                new JsonObject { ["kind"] = "page", ["page"] = 2, ["status"] = "empty", ["reason"] = "Pagina vuota", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray() });
+                new JsonObject { ["kind"] = "page", ["page"] = 1, ["state"] = "represented", ["blockRefs"] = new JsonArray("b0", "b1"), ["issueRefs"] = new JsonArray() },
+                new JsonObject { ["kind"] = "page", ["page"] = 2, ["state"] = "empty", ["reason"] = "Pagina vuota", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray() });
             mutate?.Invoke(m);
         });
         var expected = Expect(DocumentFormat.Pdf);
@@ -381,7 +381,7 @@ public sealed class ParsedManifestTests
     private static JsonObject Table(int rows, int columns, params (int Row, int Col, int RowSpan, int ColSpan, bool Header, string Text)[] cells) => new()
     {
         ["rows"] = rows,
-        ["columns"] = columns,
+        ["cols"] = columns,
         ["cells"] = new JsonArray(cells.Select(c => (JsonNode)new JsonObject
         {
             ["row"] = c.Row, ["col"] = c.Col, ["rowSpan"] = c.RowSpan, ["colSpan"] = c.ColSpan, ["header"] = c.Header, ["text"] = c.Text,
@@ -417,12 +417,12 @@ public sealed class ParsedManifestTests
     public void Inventory_references_must_resolve_and_unprocessed_items_must_point_to_a_completeness_issue()
     {
         Assert.Equal("manifest_inconsistent", Reject(Valid(m => m["inventory"]![0]!["blockRefs"] = new JsonArray("b0", "fantasma"))).Code);
-        Assert.Equal("manifest_malformed", Reject(Valid(m => m["inventory"]![0]!["status"] = "stato-strano")).Code);
+        Assert.Equal("manifest_malformed", Reject(Valid(m => m["inventory"]![0]!["state"] = "stato-strano")).Code);
 
         var unprocessedWithoutIssue = Valid(m =>
         {
             m["status"] = "Incomplete";
-            m["inventory"]!.AsArray().Add(new JsonObject { ["kind"] = "item", ["status"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray() });
+            m["inventory"]!.AsArray().Add(new JsonObject { ["kind"] = "item", ["state"] = "unprocessed", ["blockRefs"] = new JsonArray(), ["issueRefs"] = new JsonArray() });
         });
         Assert.Equal("manifest_inconsistent", Reject(unprocessedWithoutIssue).Code);
     }
@@ -432,7 +432,7 @@ public sealed class ParsedManifestTests
     {
         JsonObject Issue(Action<JsonObject>? change = null)
         {
-            var issue = new JsonObject { ["id"] = "i1", ["code"] = "x", ["severity"] = "warning", ["reason"] = "r", ["affectsCompleteness"] = false };
+            var issue = new JsonObject { ["issueRef"] = "i1", ["code"] = "x", ["severity"] = "warning", ["reason"] = "r", ["affectsCompleteness"] = false };
             change?.Invoke(issue);
             return issue;
         }
@@ -441,7 +441,7 @@ public sealed class ParsedManifestTests
         Assert.Equal("manifest_malformed", Reject(Valid(m => m["issues"] = new JsonArray(Issue(i => i["severity"] = "critical")))).Code);
         Assert.Equal("manifest_malformed", Reject(Valid(m => m["issues"] = new JsonArray(Issue(i => i["reason"] = new string('x', 5_000))))).Code);
         Assert.Equal("manifest_inconsistent", Reject(Valid(m => m["issues"] = new JsonArray(Issue(), Issue()))).Code);   // id duplicato
-        Assert.Equal("manifest_inconsistent", Reject(Valid(m => m["issues"] = new JsonArray(Issue(i => i["ref"] = "fantasma")))).Code);   // blocco inesistente
+        Assert.Equal("manifest_inconsistent", Reject(Valid(m => m["issues"] = new JsonArray(Issue(i => i["blockRef"] = "fantasma")))).Code);   // blocco inesistente
     }
 
     // ---- range -------------------------------------------------------------------------------------------------------------------
@@ -460,7 +460,7 @@ public sealed class ParsedManifestTests
         Assert.Equal("manifest_inconsistent", Reject(Valid(m => Ranges(m, Range("r1", "fantasma", EmojiText, 0, 5)))).Code);   // chunk → blocco inesistente
         Assert.Equal("manifest_inconsistent", Reject(Valid(m => Ranges(m, Range("r0", "b0", "Titolo", 0, 6), Range("r0", "b1", EmojiText, 0, 17)))).Code);   // rangeKey duplicata
         var tampered = Range("r1", "b1", EmojiText, 0, 17);
-        tampered["textHash"] = Sha("altro testo");
+        tampered["sourceTextSha256"] = Sha("altro testo");
         Assert.Equal("manifest_hash_mismatch", Reject(Valid(m => Ranges(m, Range("r0", "b0", "Titolo", 0, 6), tampered))).Code);
         var owner = Range("r1", "b1", EmojiText, 0, 17);
         owner["ownership"] = "Maybe";
@@ -472,7 +472,7 @@ public sealed class ParsedManifestTests
     {
         // Un parser che contasse unità UTF-16 farebbe slittare [0,17): l'hash del testo sorgente non coincide e il manifest è respinto.
         var wrong = Range("r1", "b1", EmojiText, 0, 17);
-        wrong["textHash"] = Sha(EmojiText[..17]);
+        wrong["sourceTextSha256"] = Sha(EmojiText[..17]);
 
         Assert.Equal("manifest_hash_mismatch", Reject(Valid(m => Chunk(m)["ranges"] = new JsonArray(Range("r0", "b0", "Titolo", 0, 6), wrong))).Code);
     }
@@ -495,7 +495,7 @@ internal static class JsonObjectExtensions
 public sealed class ParserClientTests
 {
     private const string VersionJson = """
-        {"schemaVersion":"document-parse-1","doclingVersion":"2.0","doclingCoreVersion":"2.0","configHash":"cfg-hash-1","modelArtifactsHash":"m","formats":["pdf","docx","md","txt"]}
+        {"schema":"document-parse-1","doclingVersion":"2.0","doclingCoreVersion":"2.0","configHash":"cfg-hash-1","modelArtifactsHash":"m","formats":["pdf","docx","md","txt"]}
         """;
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
@@ -509,7 +509,8 @@ public sealed class ParserClientTests
         {
             Paths.Add(request.RequestUri!.AbsolutePath);
             LastUri = request.RequestUri;
-            Authorization = request.Headers.Authorization?.ToString();
+            Authorization = request.Headers.TryGetValues(ParserClient.SecretHeader, out var secret) ? string.Join(",", secret) : null;
+            Assert.Null(request.Headers.Authorization);
             if (request.Method == HttpMethod.Post && request.Content is not null)
             {
                 ConvertBody = await request.Content.ReadAsStringAsync(cancellationToken);
@@ -550,7 +551,7 @@ public sealed class ParserClientTests
 
         Assert.Equal("{\"ok\":true}", Encoding.UTF8.GetString(response.Body));
         Assert.Equal(["/version", "/convert"], handler.Paths);
-        Assert.Equal("Bearer segreto-di-test", handler.Authorization);
+        Assert.Equal("segreto-di-test", handler.Authorization);   // header X-Internal-Secret, mai Authorization
         var body = handler.ConvertBody!;
         foreach (var field in new[] { "declaredFormat", "documentVersionId", "originalSha256", "configHash", "maxExpandedBytes", "maxPages", "maxBlocks", "maxOutputBytes", "timeoutSeconds" })
         {
@@ -684,9 +685,9 @@ public sealed class ParserClientTests
     }
 
     [Theory]
-    [InlineData("{\"schemaVersion\":\"document-parse-9\",\"configHash\":\"c\",\"formats\":[\"txt\"]}")]
-    [InlineData("{\"schemaVersion\":\"document-parse-1\",\"configHash\":\"c\",\"formats\":[\"pdf\"]}")]
-    [InlineData("{\"schemaVersion\":\"document-parse-1\",\"formats\":[\"txt\"]}")]
+    [InlineData("{\"schema\":\"document-parse-9\",\"configHash\":\"c\",\"formats\":[\"txt\"]}")]
+    [InlineData("{\"schema\":\"document-parse-1\",\"configHash\":\"c\",\"formats\":[\"pdf\"]}")]
+    [InlineData("{\"schema\":\"document-parse-1\",\"formats\":[\"txt\"]}")]
     [InlineData("non json")]
     public async Task An_incompatible_version_document_blocks_the_conversion_permanently(string version)
     {
