@@ -43,6 +43,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<ProjectSourceSelectionItem> ProjectSourceSelectionItems => Set<ProjectSourceSelectionItem>();
     public DbSet<DocumentPreparation> DocumentPreparations => Set<DocumentPreparation>();
     public DbSet<DocumentJob> DocumentJobs => Set<DocumentJob>();
+    public DbSet<ParsedArtifact> ParsedArtifacts => Set<ParsedArtifact>();
+    public DbSet<DocumentBlock> DocumentBlocks => Set<DocumentBlock>();
+    public DbSet<DocumentPortion> DocumentPortions => Set<DocumentPortion>();
+    public DbSet<PreparationIssue> PreparationIssues => Set<PreparationIssue>();
     public DbSet<SourceSnapshot> SourceSnapshots => Set<SourceSnapshot>();
     public DbSet<SourceSnapshotItem> SourceSnapshotItems => Set<SourceSnapshotItem>();
 
@@ -90,6 +94,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         ConfigureDocumentArchive(builder);
         ConfigureDocumentPreparation(builder);
+        ConfigureDocumentParsing(builder);
     }
 
     /// <summary>
@@ -195,6 +200,117 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .HasPrincipalKey(v => new { v.Id, v.DocumentId })
                 .OnDelete(DeleteBehavior.Restrict);
             item.ToTable(t => t.HasCheckConstraint("CK_ProjectSourceSelectionItems_Pinned", "(\"Mode\" = 'Pinned') = (\"PinnedVersionId\" IS NOT NULL)"));
+        });
+    }
+
+    /// <summary>
+    /// Artefatti di parsing (T028): una pubblicazione per preparazione, blocchi per ordinal/ref unici nell'artefatto, porzioni per ordinal unico
+    /// nella preparazione. Le FK composte tengono tutto nello stesso progetto e lo stesso job Parse nella stessa preparazione.
+    /// </summary>
+    private static void ConfigureDocumentParsing(ModelBuilder builder)
+    {
+        builder.Entity<ParsedArtifact>(artifact =>
+        {
+            artifact.HasKey(a => a.Id);
+            artifact.Property(a => a.SchemaVersion).HasMaxLength(32);
+            artifact.Property(a => a.StorageKey).HasMaxLength(128);
+            artifact.Property(a => a.Sha256).HasMaxLength(64);
+            artifact.Property(a => a.ParserConfigHash).HasMaxLength(64);
+            artifact.Property(a => a.CreatedAt).HasDefaultValueSql("now()");
+            artifact.HasAlternateKey(a => new { a.Id, a.ProjectId });
+            artifact.HasIndex(a => a.PreparationId).IsUnique();
+            artifact.HasIndex(a => a.StorageKey).IsUnique();
+            artifact.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(a => new { a.PreparationId, a.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            artifact.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(a => new { a.JobId, a.PreparationId })
+                .HasPrincipalKey(j => new { j.Id, j.PreparationId })
+                .OnDelete(DeleteBehavior.Restrict);
+            artifact.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ParsedArtifacts_Size", "\"ByteLength\" > 0");
+                t.HasCheckConstraint("CK_ParsedArtifacts_Counts", "\"BlockCount\" >= 0 AND \"IssueCount\" >= 0 AND \"FencingToken\" >= 1");
+            });
+        });
+
+        builder.Entity<DocumentBlock>(block =>
+        {
+            block.HasKey(b => b.Id);
+            block.Property(b => b.Ref).HasMaxLength(256);
+            block.Property(b => b.Type).HasConversion<string>().HasMaxLength(16);
+            block.Property(b => b.TextHash).HasMaxLength(64);
+            block.Property(b => b.HeadingPathJson).HasColumnType("jsonb");
+            block.Property(b => b.BboxJson).HasColumnType("jsonb");
+            block.Property(b => b.TableCellsJson).HasColumnType("jsonb");
+            block.Property(b => b.CoordinateSystem).HasMaxLength(64);
+            block.Property(b => b.DoclingRef).HasMaxLength(256);
+            block.HasAlternateKey(b => new { b.Id, b.ArtifactId });
+            block.HasAlternateKey(b => new { b.Id, b.ProjectId });
+            block.HasIndex(b => new { b.ArtifactId, b.Ordinal }).IsUnique();
+            block.HasIndex(b => new { b.ArtifactId, b.Ref }).IsUnique();
+            block.HasOne<ParsedArtifact>().WithMany()
+                .HasForeignKey(b => new { b.ArtifactId, b.ProjectId })
+                .HasPrincipalKey(a => new { a.Id, a.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // Il parent appartiene allo stesso artefatto; l'assenza di cicli è verificata dal validatore prima dell'inserimento.
+            block.HasOne<DocumentBlock>().WithMany()
+                .HasForeignKey(b => new { b.ParentId, b.ArtifactId })
+                .HasPrincipalKey(b => new { b.Id, b.ArtifactId })
+                .OnDelete(DeleteBehavior.Restrict);
+            block.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentBlocks_Ordinal", "\"Ordinal\" >= 0");
+                t.HasCheckConstraint("CK_DocumentBlocks_Parent", "\"ParentId\" IS NULL OR \"ParentId\" <> \"Id\"");
+                t.HasCheckConstraint("CK_DocumentBlocks_Page", "\"Page\" IS NULL OR \"Page\" >= 1");
+                t.HasCheckConstraint("CK_DocumentBlocks_Lines", "(\"LineStart\" IS NULL) = (\"LineEnd\" IS NULL) AND (\"LineStart\" IS NULL OR (\"LineStart\" >= 1 AND \"LineEnd\" >= \"LineStart\"))");
+            });
+        });
+
+        builder.Entity<DocumentPortion>(portion =>
+        {
+            portion.HasKey(p => p.Id);
+            portion.Property(p => p.RangesJson).HasColumnType("jsonb");
+            portion.Property(p => p.ContextRangesJson).HasColumnType("jsonb");
+            portion.Property(p => p.TextHash).HasMaxLength(64);
+            portion.Property(p => p.Status).HasConversion<string>().HasMaxLength(16);
+            portion.Property(p => p.ResultHash).HasMaxLength(64);
+            portion.Property(p => p.NoEvidenceReason).HasMaxLength(1_000);
+            portion.HasIndex(p => new { p.PreparationId, p.Ordinal }).IsUnique();
+            portion.HasIndex(p => p.JobId);
+            portion.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(p => new { p.PreparationId, p.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            portion.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(p => new { p.JobId, p.PreparationId })
+                .HasPrincipalKey(j => new { j.Id, j.PreparationId })
+                .OnDelete(DeleteBehavior.Restrict);
+            portion.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPortions_Ordinal", "\"Ordinal\" >= 0");
+                t.HasCheckConstraint("CK_DocumentPortions_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultHash\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<PreparationIssue>(issue =>
+        {
+            issue.HasKey(i => i.Id);
+            issue.Property(i => i.Code).HasMaxLength(64);
+            issue.Property(i => i.Severity).HasConversion<string>().HasMaxLength(16);
+            issue.Property(i => i.Reason).HasMaxLength(1_000);
+            issue.HasIndex(i => i.PreparationId);
+            issue.HasIndex(i => i.BlockId);
+            issue.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(i => new { i.PreparationId, i.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            issue.HasOne<DocumentBlock>().WithMany()
+                .HasForeignKey(i => new { i.BlockId, i.ProjectId })
+                .HasPrincipalKey(b => new { b.Id, b.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            issue.ToTable(t => t.HasCheckConstraint("CK_PreparationIssues_Page", "\"Page\" IS NULL OR \"Page\" >= 1"));
         });
     }
 

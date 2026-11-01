@@ -39,6 +39,7 @@ builder.Services.AddScoped<DocumentUploadService>();
 builder.Services.AddScoped<SourceSelectionService>();
 builder.Services.AddScoped<DocumentCatalog>();
 builder.Services.AddSingleton<DocumentFileStore>();   // originali su volume privato (T011); la radice si valida al primo uso
+builder.Services.AddDocumentParsing(builder.Configuration);   // worker CPU del parsing (T029): claim SQL e lease propri, nessuno slot DGX; inattivo senza Parser:BaseUrl
 builder.Services.AddOptions<ExecutionOptions>().Bind(builder.Configuration.GetSection(ExecutionOptions.SectionName)).ValidateOnStart();
 builder.Services.AddSingleton(sp => new InternalModelClient(sp.GetRequiredService<IOptions<AiOptions>>().Value));
 // Stato verificato del runtime (cache a TTL, sonda lazy alla prima lettura): non blocca mai l'avvio né i progetti con il DGX offline.

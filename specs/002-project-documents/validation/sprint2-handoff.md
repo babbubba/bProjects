@@ -5,7 +5,8 @@ Non è un piano: la fonte dei task è `tasks.md`. Contiene solo lo stato per rip
 ## Stato
 - Branch: `feature/002-implementation`; ultimo commit all'avvio: `774755e` (fine hardening I1).
 - Milestone corrente: **I2** (T020–T032, T116–T117). Ultimo task completato: T019 (I1) + hardening I1.
-- In corso: nessuno (avvio sprint). Modifiche non committate: solo `docs/acceptance-trace/` (da non toccare né committare).
+- Completati e verificati (fake HTTP, PG reale, test mirati): T027, T028 (migration `20261101223202_DocumentParsing`). T029 implementato, test con parser fake PASS (20), ma **resta aperto**: manca verifica con parser reale (NOT VERIFIED).
+- In corso: agente parser Python (T020–T026) in background. Modifiche non committate: solo `docs/acceptance-trace/` (da non toccare né committare).
 - Prossimo task eseguibile: T020 e T021 in parallelo (parser Python, cartella `parser/`); T027 dopo T022.
 
 ## Ambiente (verificato all'avvio)
@@ -23,6 +24,9 @@ Non è un piano: la fonte dei task è `tasks.md`. Contiene solo lo stato per rip
 ## Decisioni
 - 408 `upload_timeout` approvato nel contratto (I1).
 - Gli agenti non committano: il coordinatore committa per percorsi espliciti, senza `Co-Authored-By`.
+
+## Contratto JSON inferito dal backend (da allineare nel parser)
+`document.serializationVersion`, `offsetUnit="unicode-codepoint"`, `issues[].id` + `inventory[].issueRefs`, `ranges[].textHash` (SHA-256 hex UTF-8), `blocks[].locator`, `blocks[].table.cells`. Auth: `Authorization: Bearer` con `Parser:Secret`; env `Parser__BaseUrl`. Form: declaredFormat, documentVersionId, originalSha256, configHash (da /version), maxExpandedBytes, maxPages, maxBlocks, maxOutputBytes, timeoutSeconds. Job «incompleto» (T116) = job Completed con preparazione Incomplete. Preparazione Complete→Extracting, porzioni Pending (T057 le gestisce).
 
 ## Blocker
 Nessuno.

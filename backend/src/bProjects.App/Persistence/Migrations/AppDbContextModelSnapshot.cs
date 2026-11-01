@@ -906,6 +906,94 @@ namespace bProjects.App.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("bProjects.App.Documents.DocumentBlock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BboxJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("CanonicalText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CoordinateSystem")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DoclingRef")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("HeadingPathJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("LineEnd")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LineStart")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Page")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ref")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("TableCellsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("TextHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArtifactId", "Ordinal")
+                        .IsUnique();
+
+                    b.HasIndex("ArtifactId", "ProjectId");
+
+                    b.HasIndex("ArtifactId", "Ref")
+                        .IsUnique();
+
+                    b.HasIndex("ParentId", "ArtifactId");
+
+                    b.ToTable("DocumentBlocks", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentBlocks_Lines", "(\"LineStart\" IS NULL) = (\"LineEnd\" IS NULL) AND (\"LineStart\" IS NULL OR (\"LineStart\" >= 1 AND \"LineEnd\" >= \"LineStart\"))");
+
+                            t.HasCheckConstraint("CK_DocumentBlocks_Ordinal", "\"Ordinal\" >= 0");
+
+                            t.HasCheckConstraint("CK_DocumentBlocks_Page", "\"Page\" IS NULL OR \"Page\" >= 1");
+
+                            t.HasCheckConstraint("CK_DocumentBlocks_Parent", "\"ParentId\" IS NULL OR \"ParentId\" <> \"Id\"");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Documents.DocumentJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1056,6 +1144,69 @@ namespace bProjects.App.Persistence.Migrations
                             t.HasCheckConstraint("CK_DocumentPolicies_Revision", "\"Revision\" >= 1");
 
                             t.HasCheckConstraint("CK_DocumentPolicies_Singleton", "\"Id\" = 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentPortion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContextRangesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NoEvidenceReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RangesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ResultHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TextHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("JobId", "PreparationId");
+
+                    b.HasIndex("PreparationId", "Ordinal")
+                        .IsUnique();
+
+                    b.HasIndex("PreparationId", "ProjectId");
+
+                    b.ToTable("DocumentPortions", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentPortions_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultHash\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_DocumentPortions_Ordinal", "\"Ordinal\" >= 0");
                         });
                 });
 
@@ -1238,6 +1389,130 @@ namespace bProjects.App.Persistence.Migrations
                             t.HasCheckConstraint("CK_DocumentVersions_Size", "\"ByteLength\" > 0");
 
                             t.HasCheckConstraint("CK_DocumentVersions_Version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ParsedArtifact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BlockCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<long>("FencingToken")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("IssueCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParserConfigHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("PreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreparationId")
+                        .IsUnique();
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.HasIndex("JobId", "PreparationId");
+
+                    b.HasIndex("PreparationId", "ProjectId");
+
+                    b.ToTable("ParsedArtifacts", t =>
+                        {
+                            t.HasCheckConstraint("CK_ParsedArtifacts_Counts", "\"BlockCount\" >= 0 AND \"IssueCount\" >= 0 AND \"FencingToken\" >= 1");
+
+                            t.HasCheckConstraint("CK_ParsedArtifacts_Size", "\"ByteLength\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.PreparationIssue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AffectsCompleteness")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("BlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("Page")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlockId");
+
+                    b.HasIndex("PreparationId");
+
+                    b.HasIndex("BlockId", "ProjectId");
+
+                    b.HasIndex("PreparationId", "ProjectId");
+
+                    b.ToTable("PreparationIssues", t =>
+                        {
+                            t.HasCheckConstraint("CK_PreparationIssues_Page", "\"Page\" IS NULL OR \"Page\" >= 1");
                         });
                 });
 
@@ -2385,6 +2660,22 @@ namespace bProjects.App.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("bProjects.App.Documents.DocumentBlock", b =>
+                {
+                    b.HasOne("bProjects.App.Documents.ParsedArtifact", null)
+                        .WithMany()
+                        .HasForeignKey("ArtifactId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentBlock", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId", "ArtifactId")
+                        .HasPrincipalKey("Id", "ArtifactId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("bProjects.App.Documents.DocumentJob", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
@@ -2411,6 +2702,22 @@ namespace bProjects.App.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UpdatedBy")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.DocumentPortion", b =>
+                {
+                    b.HasOne("bProjects.App.Documents.DocumentJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId", "PreparationId")
+                        .HasPrincipalKey("Id", "PreparationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("bProjects.App.Documents.DocumentPreparation", b =>
@@ -2457,6 +2764,39 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Documents.UploadReceipt", null)
                         .WithMany()
                         .HasForeignKey("UploadReceiptId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.ParsedArtifact", b =>
+                {
+                    b.HasOne("bProjects.App.Documents.DocumentJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId", "PreparationId")
+                        .HasPrincipalKey("Id", "PreparationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Documents.PreparationIssue", b =>
+                {
+                    b.HasOne("bProjects.App.Documents.DocumentBlock", null)
+                        .WithMany()
+                        .HasForeignKey("BlockId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
                         .HasPrincipalKey("Id", "ProjectId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

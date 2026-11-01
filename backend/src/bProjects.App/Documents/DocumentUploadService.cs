@@ -503,7 +503,10 @@ public sealed class DocumentUploadService(AppDbContext db, DocumentFileStore sto
         try
         {
             return await store.DeleteOrphanAsync(
-                storageKey, async (key, token) => await db.DocumentVersions.AsNoTracking().AnyAsync(v => v.StorageKey == key, token), CancellationToken.None);
+                storageKey,
+                async (key, token) => await db.DocumentVersions.AsNoTracking().AnyAsync(v => v.StorageKey == key, token)
+                    || await db.ParsedArtifacts.AsNoTracking().AnyAsync(a => a.StorageKey == key, token),   // gli artefatti di parsing vivono nello stesso volume
+                CancellationToken.None);
         }
         catch (Exception ex) when (ex is DocumentStoreException or IOException or UnauthorizedAccessException)
         {
