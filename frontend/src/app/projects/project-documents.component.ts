@@ -136,7 +136,7 @@ export class ProjectDocumentsComponent {
     if (item.selectionMode === 'Pinned') {
       return 'Versione fissata';
     }
-    return "Ultima versione pronta";
+    return 'Ultima versione pronta';
   }
 
   protected sizeLabel(bytes: number): string {
@@ -156,9 +156,7 @@ export class ProjectDocumentsComponent {
   }
 
   protected issueText(v: DocumentVersionView): string {
-    return v.issuesSummary
-      ? (v.issuesSummary.message ?? 'La preparazione non è riuscita.')
-      : '';
+    return v.issuesSummary ? (v.issuesSummary.message ?? 'La preparazione non è riuscita.') : '';
   }
 
   protected isPinnedTo(documentId: string, versionId: string): boolean {
@@ -201,7 +199,10 @@ export class ProjectDocumentsComponent {
       const page = await this.api.list(projectId, cursor);
       if (projectId !== this.projectId()) return;
       const known = new Set(this.documents().map((d) => d.documentId));
-      this.documents.update((items) => [...items, ...page.items.filter((d) => !known.has(d.documentId))]);
+      this.documents.update((items) => [
+        ...items,
+        ...page.items.filter((d) => !known.has(d.documentId)),
+      ]);
       this.nextCursor.set(page.nextCursor);
     } catch (e) {
       this.loadError.set(documentFailure(e).message);
@@ -385,14 +386,29 @@ export class ProjectDocumentsComponent {
     const items: SelectionItem[] = this.documents().map((doc) => {
       const known = snapshot.view.items.find((i) => i.documentId === doc.documentId);
       const current: SelectionItem = known
-        ? { documentId: known.documentId, included: known.included, mode: known.mode, versionId: known.versionId }
-        : { documentId: doc.documentId, included: doc.included, mode: doc.selectionMode, versionId: null };
+        ? {
+            documentId: known.documentId,
+            included: known.included,
+            mode: known.mode,
+            versionId: known.versionId,
+          }
+        : {
+            documentId: doc.documentId,
+            included: doc.included,
+            mode: doc.selectionMode,
+            versionId: null,
+          };
       return doc.documentId === documentId ? change(current) : current;
     });
     // Documenti oltre la pagina caricata: restano come sono (il PUT sostituisce l'elenco completo).
     for (const known of snapshot.view.items) {
       if (!items.some((i) => i.documentId === known.documentId)) {
-        items.push({ documentId: known.documentId, included: known.included, mode: known.mode, versionId: known.versionId });
+        items.push({
+          documentId: known.documentId,
+          included: known.included,
+          mode: known.mode,
+          versionId: known.versionId,
+        });
       }
     }
 
@@ -428,7 +444,12 @@ export class ProjectDocumentsComponent {
   protected async download(documentId: string, version: DocumentVersionView): Promise<void> {
     this.actionError.set('');
     try {
-      const file = await this.api.download(this.projectId(), documentId, version.version, version.originalName);
+      const file = await this.api.download(
+        this.projectId(),
+        documentId,
+        version.version,
+        version.originalName,
+      );
       const url = URL.createObjectURL(file.blob);
       const link = document.createElement('a');
       link.href = url;

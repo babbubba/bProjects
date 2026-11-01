@@ -139,7 +139,9 @@ describe('DocumentsApiService', () => {
     const req = http.expectOne(`${BASE}/documents/d-1/versions/2/download`);
     expect(req.request.responseType).toBe('blob');
     req.flush(new Blob(['abc']), {
-      headers: { 'Content-Disposition': `attachment; filename="x.md"; filename*=UTF-8''Capitolato%20%C3%A8.md` },
+      headers: {
+        'Content-Disposition': `attachment; filename="x.md"; filename*=UTF-8''Capitolato%20%C3%A8.md`,
+      },
     });
     const result = await pending;
     expect(result.fileName).toBe('Capitolato è.md');
@@ -165,7 +167,9 @@ describe('DocumentsApiService', () => {
     expect(snapshot.etag).toBe('"3"');
     expect(snapshot.view.revision).toBe(3);
 
-    const items = [{ documentId: 'd-1', included: false, mode: 'LatestReady' as const, versionId: null }];
+    const items = [
+      { documentId: 'd-1', included: false, mode: 'LatestReady' as const, versionId: null },
+    ];
     const write = api.putSelection(P, snapshot.etag, items);
     const req = http.expectOne(`${BASE}/source-selection`);
     expect(req.request.method).toBe('PUT');
@@ -208,7 +212,10 @@ describe('DocumentsApiService', () => {
 
   it('exposes the current revision on a selection conflict', () => {
     const f = documentFailure(
-      new HttpErrorResponse({ status: 409, error: { code: 'source_selection_conflict', currentRevision: 7 } }),
+      new HttpErrorResponse({
+        status: 409,
+        error: { code: 'source_selection_conflict', currentRevision: 7 },
+      }),
     );
     expect(f.currentRevision).toBe(7);
     expect(documentFailure(new Error('x')).kind).toBe('unknown');

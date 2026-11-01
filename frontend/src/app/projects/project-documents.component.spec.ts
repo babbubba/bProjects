@@ -18,7 +18,12 @@ function item(over: Partial<DocumentListItem> = {}): DocumentListItem {
     displayName: 'Capitolato',
     createdAt: '2030-01-01T10:00:00Z',
     versionCount: 1,
-    latestVersion: { id: 'v-1', version: 1, processingStatus: 'Queued', uploadedAt: '2030-01-01T10:00:00Z' },
+    latestVersion: {
+      id: 'v-1',
+      version: 1,
+      processingStatus: 'Queued',
+      uploadedAt: '2030-01-01T10:00:00Z',
+    },
     applicableVersionId: null,
     included: true,
     selectionMode: 'LatestReady',
@@ -108,7 +113,9 @@ describe('ProjectDocumentsComponent', () => {
     sel: SourceSelectionView = selection(),
     etag = `"${sel.revision}"`,
   ) => {
-    http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET').flush({ items, nextCursor: null });
+    http
+      .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+      .flush({ items, nextCursor: null });
     http.expectOne(`${BASE}/source-selection`).flush(sel, { headers: { ETag: etag } });
     await settle();
   };
@@ -149,7 +156,9 @@ describe('ProjectDocumentsComponent', () => {
     http
       .expectOne((r) => r.url === `${BASE}/documents`)
       .flush({ code: 'x' }, { status: 503, statusText: 'Unavailable' });
-    http.expectOne(`${BASE}/source-selection`).flush({}, { status: 503, statusText: 'Unavailable' });
+    http
+      .expectOne(`${BASE}/source-selection`)
+      .flush({}, { status: 503, statusText: 'Unavailable' });
     await settle();
     expect(q('docs-load-error')!.textContent).toContain('non disponibile');
   });
@@ -205,18 +214,24 @@ describe('ProjectDocumentsComponent', () => {
     [422, null, 'non è valido'],
     [507, { code: 'quota_exceeded' }, 'quota'],
     [408, { code: 'upload_timeout' }, 'tempo consentito'],
-  ])('shows a readable error for upload status %i and drops the key when not retryable', async (status, body, text) => {
-    await flushLoad([], selection(0, { items: [] }));
-    chooseFile(q('docs-file') as HTMLInputElement, new File(['abc'], 'a.md', { lastModified: 1 }));
-    q('docs-upload')!.click();
-    await settle();
-    http.expectOne(`${BASE}/documents`).flush(body, { status, statusText: 'x' });
-    await settle();
-    const alert = q('docs-upload-error')!;
-    expect(alert.getAttribute('role')).toBe('alert');
-    expect(alert.textContent).toContain(text);
-    expect(q('docs-upload')!.hasAttribute('disabled')).toBe(false);
-  });
+  ])(
+    'shows a readable error for upload status %i and drops the key when not retryable',
+    async (status, body, text) => {
+      await flushLoad([], selection(0, { items: [] }));
+      chooseFile(
+        q('docs-file') as HTMLInputElement,
+        new File(['abc'], 'a.md', { lastModified: 1 }),
+      );
+      q('docs-upload')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents`).flush(body, { status, statusText: 'x' });
+      await settle();
+      const alert = q('docs-upload-error')!;
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.textContent).toContain(text);
+      expect(q('docs-upload')!.hasAttribute('disabled')).toBe(false);
+    },
+  );
 
   it('requires a file before uploading', async () => {
     await flushLoad([], selection(0, { items: [] }));
@@ -236,10 +251,15 @@ describe('ProjectDocumentsComponent', () => {
     await settle();
     const req = http.expectOne(`${BASE}/documents/d-1/versions`);
     expect(req.request.headers.get('Idempotency-Key')).toBeTruthy();
-    req.flush(version({ version: 2, originalName: 'capitolato-v2.md' }), { status: 201, statusText: 'Created' });
+    req.flush(version({ version: 2, originalName: 'capitolato-v2.md' }), {
+      status: 201,
+      statusText: 'Created',
+    });
     await settle();
     await flushLoad([item({ versionCount: 2 })]);
-    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version(), version({ id: 'v-2', version: 2 })]));
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version(), version({ id: 'v-2', version: 2 })]));
     await settle();
     expect(q('docs-notice')!.textContent).toContain('versione 2');
     expect(el.querySelectorAll('[data-testid="docs-version"]')).toHaveLength(2);
@@ -257,13 +277,18 @@ describe('ProjectDocumentsComponent', () => {
       items: [{ documentId: 'd-1', included: false, mode: 'LatestReady', versionId: null }],
     });
     put.flush(
-      selection(2, { items: [{ ...selection().items[0], included: false, availability: 'Excluded' }] }),
+      selection(2, {
+        items: [{ ...selection().items[0], included: false, availability: 'Excluded' }],
+      }),
       { headers: { ETag: '"2"' } },
     );
     await settle();
     http
       .expectOne((r) => r.url === `${BASE}/documents`)
-      .flush({ items: [item({ included: false, availability: 'Excluded', reason: 'excluded_by_pm' })], nextCursor: null });
+      .flush({
+        items: [item({ included: false, availability: 'Excluded', reason: 'excluded_by_pm' })],
+        nextCursor: null,
+      });
     await settle();
     expect(q('docs-notice')!.textContent).toContain('Preferenze di fonte salvate');
     expect(el.textContent).toContain('Esclusa dalle fonti');
@@ -276,7 +301,10 @@ describe('ProjectDocumentsComponent', () => {
     await settle();
     http
       .expectOne(`${BASE}/source-selection`)
-      .flush({ code: 'source_selection_conflict', currentRevision: 5 }, { status: 409, statusText: 'Conflict' });
+      .flush(
+        { code: 'source_selection_conflict', currentRevision: 5 },
+        { status: 409, statusText: 'Conflict' },
+      );
     await settle();
     await flushLoad([item({ included: false })], selection(5), '"5"');
 
@@ -290,12 +318,14 @@ describe('ProjectDocumentsComponent', () => {
     await flushLoad();
     q('docs-versions')!.click();
     await settle();
-    http.expectOne(`${BASE}/documents/d-1`).flush(
-      detail([
-        version({ id: 'v-1', version: 1, processingStatus: 'Ready' }),
-        version({ id: 'v-2', version: 2, processingStatus: 'Queued' }),
-      ]),
-    );
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(
+        detail([
+          version({ id: 'v-1', version: 1, processingStatus: 'Ready' }),
+          version({ id: 'v-2', version: 2, processingStatus: 'Queued' }),
+        ]),
+      );
     await settle();
 
     const pins = [...el.querySelectorAll<HTMLButtonElement>('[data-testid="docs-pin"]')];
@@ -309,17 +339,29 @@ describe('ProjectDocumentsComponent', () => {
       items: [{ documentId: 'd-1', included: true, mode: 'Pinned', versionId: 'v-1' }],
     });
     put.flush(
-      selection(2, { items: [{ ...selection().items[0], mode: 'Pinned', versionId: 'v-1', availability: 'Ready' }] }),
+      selection(2, {
+        items: [
+          { ...selection().items[0], mode: 'Pinned', versionId: 'v-1', availability: 'Ready' },
+        ],
+      }),
       { headers: { ETag: '"2"' } },
     );
     await settle();
     http
       .expectOne((r) => r.url === `${BASE}/documents`)
-      .flush({ items: [item({ selectionMode: 'Pinned', availability: 'Ready', reason: null })], nextCursor: null });
+      .flush({
+        items: [item({ selectionMode: 'Pinned', availability: 'Ready', reason: null })],
+        nextCursor: null,
+      });
     await settle();
-    http.expectOne(`${BASE}/documents/d-1`).flush(
-      detail([version({ id: 'v-1', processingStatus: 'Ready' }), version({ id: 'v-2', version: 2 })]),
-    );
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(
+        detail([
+          version({ id: 'v-1', processingStatus: 'Ready' }),
+          version({ id: 'v-2', version: 2 }),
+        ]),
+      );
     await settle();
     expect(q('docs-pinned')).not.toBeNull();
     expect(el.textContent).toContain('Versione fissata');
@@ -337,7 +379,9 @@ describe('ProjectDocumentsComponent', () => {
     URL.createObjectURL = created;
     URL.revokeObjectURL = revoked;
     let downloadName = '';
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
       downloadName = this.download;
     });
 
@@ -345,7 +389,9 @@ describe('ProjectDocumentsComponent', () => {
     await settle();
     http
       .expectOne(`${BASE}/documents/d-1/versions/1/download`)
-      .flush(new Blob(['abc']), { headers: { 'Content-Disposition': 'attachment; filename="originale.md"' } });
+      .flush(new Blob(['abc']), {
+        headers: { 'Content-Disposition': 'attachment; filename="originale.md"' },
+      });
     await settle();
     expect(created).toHaveBeenCalled();
     expect(downloadName).toBe('originale.md');
@@ -369,10 +415,26 @@ describe('ProjectDocumentsComponent', () => {
 
   it('shows the preparation failure of a version and the blocking sources', async () => {
     await flushLoad(
-      [item({ latestVersion: { id: 'v-1', version: 1, processingStatus: 'Failed', uploadedAt: '2030-01-01T10:00:00Z' } })],
+      [
+        item({
+          latestVersion: {
+            id: 'v-1',
+            version: 1,
+            processingStatus: 'Failed',
+            uploadedAt: '2030-01-01T10:00:00Z',
+          },
+        }),
+      ],
       selection(1, {
         blockingSources: [
-          { documentId: 'd-1', displayName: 'Capitolato', versionId: 'v-1', version: 1, status: 'Failed', allowedActions: [] },
+          {
+            documentId: 'd-1',
+            displayName: 'Capitolato',
+            versionId: 'v-1',
+            version: 1,
+            status: 'Failed',
+            allowedActions: [],
+          },
         ],
       }),
     );
@@ -381,9 +443,19 @@ describe('ProjectDocumentsComponent', () => {
 
     q('docs-versions')!.click();
     await settle();
-    http.expectOne(`${BASE}/documents/d-1`).flush(
-      detail([version({ processingStatus: 'Failed', issuesSummary: { code: 'parse_failed', message: 'La preparazione del documento non è riuscita' } })]),
-    );
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(
+        detail([
+          version({
+            processingStatus: 'Failed',
+            issuesSummary: {
+              code: 'parse_failed',
+              message: 'La preparazione del documento non è riuscita',
+            },
+          }),
+        ]),
+      );
     await settle();
     expect(q('docs-issue')!.textContent).toContain('non è riuscita');
   });
