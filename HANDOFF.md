@@ -1238,3 +1238,23 @@ che sarebbe un cambio di contratto.
 **Decisione richiesta per chiudere la Slice 1.** O si accettano i limiti del modello con N2/N4/N5 FAIL documentati (deviazione da SC-006/180 s da
 approvare per iscritto), oppure si autorizza un'esecuzione mirata (N2/N4/N5 con `DiagnosticsHarness` attivo, in seriale) prima della revisione umana.
 T052 e T053 restano aperti finché la decisione e la revisione umana non sono registrate.
+
+## 10.6 Chiusura amministrativa della Slice 1: accettazione con riserve (2026-11-01)
+
+Nessuna modifica a codice, prompt, checker o fixture; nessun DGX, nessuna suite, nessun nuovo task. **Fase di implementazione della Slice 1 chiusa.**
+
+**Decisione (autore/responsabile):** niente ulteriori test N2/N4/N5 né ottimizzazioni; limiti accettati per un **MVP pilota controllato** con revisione e
+conferma obbligatorie del PM. È un'**accettazione con riserve**, non una dichiarazione che SC-002, SC-003 o SC-006 siano soddisfatti. Testo completo,
+FAIL noti, rischi e condizioni di utilizzo: [`acceptance/decisione-accettazione.md`](specs/001-project-draft/acceptance/decisione-accettazione.md).
+
+**Stato residuo (nessuna casella spuntata):**
+- Implementato: T001–T051, T054–T073.
+- Verifiche non superate: N2, N4, N5 con modello reale (FAIL); SC-002/SC-003 non dimostrati.
+- Non eseguito: MafReal completo e Playwright reali dopo il registro; campione ripetuto dei tempi; SC-004 manuale.
+- Accettazione umana mancante: 2 PM + tecnico estraneo (SC-006), attestazione SC-001–SC-012. `modulo-risultati.md` resta vuoto.
+- **T052 e T053 restano aperti, non PASS.**
+
+**Backlog:** criticità N2/N4/N5 (B-01…B-07) e miglioramenti del modello (B-08…B-11) in [`backlog-post-slice1.md`](specs/001-project-draft/backlog-post-slice1.md).
+Evidenze intatte (`t052-evidence/`, `docs/acceptance-trace/` locale non versionata, sezioni 1–10.5 di questo file).
+
+**Prossimo passo:** revisione finale della PR #3 da parte dell'autore; nessun merge eseguito. Poi funzionalità successive (fuori Slice 1).
