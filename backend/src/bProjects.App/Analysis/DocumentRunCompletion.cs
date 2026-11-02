@@ -27,6 +27,9 @@ public sealed record DocumentRunInput(Guid ProjectId, Guid AnalysisId, Guid Revi
     public DocumentValidationContext ToValidationContext() => new(new HashSet<Guid>(Content.Sources.Select(s => s.Id)));
 }
 
+/// <summary>Input immutabile del run documentale v2: la revisione confermata 1.1.0 congelata all'avvio, intera.</summary>
+public sealed record DocumentRunInputV11(Guid ProjectId, Guid AnalysisId, Guid RevisionId, int Version, DocumentAnalysisContent Content);
+
 /// <summary>Chi committa atomicamente il risultato della generazione (T040). Deve rifiutare se lease/fencing non sono più validi.</summary>
 public interface IDocumentRunStore
 {
@@ -65,6 +68,12 @@ public sealed class DocumentRunCompletion(AppDbContext db) : IDocumentRunStore
             throw new InvalidOperationException("La revisione di input del run non è una revisione confermata dell'analisi indicata.");
         }
 
+        if (revision.SchemaVersion == AnalysisRevision.DocumentSchemaVersion)
+        {
+            // Version dispatch esplicito: una revisione 1.1.0 non si legge mai come 1.0.0 (generazione documentale v2 = LoadDocumentInputAsync).
+            throw new InvalidOperationException("La revisione di input è AnalysisContent 1.1.0: appartiene al workflow documentale v2, non a project-document-v1.");
+        }
+
         var content = AnalysisContentJson.Deserialize(revision.ContentJson);
         if (content.ProjectId != run.ProjectId || content.AnalysisId != revision.AnalysisId || content.ValidationState != AnalysisContentState.PmConfirmed)
         {
@@ -72,6 +81,33 @@ public sealed class DocumentRunCompletion(AppDbContext db) : IDocumentRunStore
         }
 
         return new DocumentRunInput(run.ProjectId, revision.AnalysisId, revision.Id, revision.Version, content);
+    }
+
+    /// <summary>
+    /// Come <see cref="LoadInputAsync"/> per la revisione confermata 1.1.0 (workflow documentale v2): la revisione identificata da InputRevisionId, intera,
+    /// confermata e legata a progetto e analisi del run. Una revisione 1.0.0 non si legge mai come 1.1.0.
+    /// </summary>
+    public async Task<DocumentRunInputV11> LoadDocumentInputAsync(Guid runId, CancellationToken ct)
+    {
+        var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == runId && r.Kind == ProcessingRunKind.Document, ct);
+        var revision = await db.AnalysisRevisions.AsNoTracking().SingleAsync(r => r.Id == run.InputRevisionId, ct);
+        if (revision.AnalysisId != run.AnalysisId || revision.ValidationState != AnalysisValidationState.PmConfirmed)
+        {
+            throw new InvalidOperationException("La revisione di input del run non è una revisione confermata dell'analisi indicata.");
+        }
+
+        if (revision.SchemaVersion != AnalysisRevision.DocumentSchemaVersion)
+        {
+            throw new InvalidOperationException("La revisione di input non è AnalysisContent 1.1.0: appartiene a project-document-v1.");
+        }
+
+        var content = DocumentAnalysisContentJson.Deserialize(revision.ContentJson);
+        if (content.ProjectId != run.ProjectId || content.AnalysisId != revision.AnalysisId || content.ValidationState != AnalysisContentState.PmConfirmed)
+        {
+            throw new InvalidOperationException("Il contenuto della revisione di input non è legato al progetto, all'analisi o alla conferma del run.");
+        }
+
+        return new DocumentRunInputV11(run.ProjectId, revision.AnalysisId, revision.Id, revision.Version, content);
     }
 
     public async Task<DocumentCommitResult> CommitAsync(DocumentRunClaim claim, string markdown, CancellationToken ct)
