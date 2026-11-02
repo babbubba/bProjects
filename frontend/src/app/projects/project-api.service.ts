@@ -156,6 +156,9 @@ export interface ChatTurnView {
   nextAttemptAt: string | null;
   resultMessageId: string | null;
   error: { code: string; message: string | null } | null;
+  /** 002: selezione fonti fissata alla richiesta; assente nei record 001. */
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
 }
 
 export type ProcessingRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed';
@@ -180,6 +183,8 @@ export interface ProcessingRunView {
   error: { code: string; message: string | null } | null;
   /** Telemetria della richiesta AI del run; assente o null = nessuna telemetria disponibile. */
   metrics?: InferenceMetrics | null;
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
 }
 
 export interface AnalyzeResult {
@@ -188,7 +193,8 @@ export interface AnalyzeResult {
   replayed: boolean;
 }
 
-export type AnalysisClassification = 'Declared' | 'Inferred' | 'Assumed';
+/** `Documented` esiste solo in AnalysisContent 1.1.0. */
+export type AnalysisClassification = 'Declared' | 'Documented' | 'Inferred' | 'Assumed';
 
 export interface AnalysisItem {
   id: string;
@@ -199,10 +205,19 @@ export interface AnalysisItem {
 
 export interface AnalysisSource {
   id: string;
-  kind: 'Message' | 'PmRevision';
+  kind: 'Message' | 'PmRevision' | 'DocumentPassage';
   messageId: string | null;
   messageRole: 'user' | 'assistant' | null;
   revisionId: string | null;
+  /** Solo schema 1.1.0 e solo per `DocumentPassage`: nei record 1.0 i campi mancano. [start,end) in UTF-16 nel blocco. */
+  documentId?: string | null;
+  documentVersionId?: string | null;
+  preparationId?: string | null;
+  artifactId?: string | null;
+  blockId?: string | null;
+  start?: number | null;
+  end?: number | null;
+  quote?: string | null;
 }
 
 export interface AnalysisConflict {
@@ -213,7 +228,7 @@ export interface AnalysisConflict {
   resolution: { selectedAlternativeIds: string[]; reason: string; evidenceRefs: string[] } | null;
 }
 
-/** AnalysisContent 1.0.0 (contracts/ai-workflow.md §4), modificabile dal PM tramite form semplice (T035). */
+/** AnalysisContent 1.0.0 o 1.1.0 (`schemaVersion` guida l'union; contracts/ai-workflow.md §1), modificabile dal PM tramite form semplice (T035). */
 export interface AnalysisContent {
   schemaVersion: string;
   analysisId: string;
@@ -253,6 +268,9 @@ export interface AnalysisView {
   canGenerate: boolean;
   /** Metriche del run di analisi che l'ha prodotta; assente o null = record storico senza telemetria. */
   metrics?: InferenceMetrics | null;
+  /** 002: fonti cambiate dopo la richiesta. È un avviso: non revoca la conferma né canGenerate. */
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
 }
 
 /** DraftView del contratto HTTP: bozza Markdown proposta, mai approvata, con la revisione usata. */
@@ -272,6 +290,8 @@ export interface DraftView {
   label: string;
   /** Metriche del run Document che l'ha generata; assente o null = record storico senza telemetria. */
   metrics?: InferenceMetrics | null;
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
 }
 
 /** RevisionView del contratto HTTP (sottoinsieme): revisione specifica con le fonti del suo contenuto. */

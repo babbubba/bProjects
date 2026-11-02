@@ -1,5 +1,7 @@
 <section class="passage" aria-labelledby="passage-title">
-  <h4 id="passage-title" class="h6 mb-0">Contenuto del documento (v{{ version() }})</h4>
+  <h4 id="passage-title" class="h6 mb-0">
+    Contenuto del documento{{ prep() ? ' (v' + prep()!.version + ')' : '' }}
+  </h4>
 
   @if (prep(); as p) {
     <p class="small mb-1" data-testid="passage-status">

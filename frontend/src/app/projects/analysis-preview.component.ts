@@ -23,6 +23,7 @@ import {
 import { describeFailure } from './failure-text';
 import { InferenceMetricsComponent } from './inference-metrics.component';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
+import { SourcePart, SourcePartsComponent, partOfSource } from './source-parts.component';
 import type { CurrentRevision } from './document-view.component';
 
 /** Intervallo (ms) di riconciliazione del run formale attivo (fallback se SSE non arriva); 0 disattiva il polling. */
@@ -30,6 +31,22 @@ export const ANALYSIS_POLL_MS = new InjectionToken<number>('ANALYSIS_POLL_MS', {
   providedIn: 'root',
   factory: () => 2000,
 });
+
+/** 409 sources_not_ready: nessun run creato; elenca i documenti inclusi che non sono ancora una fonte utilizzabile. */
+function notReadyMessage(body: unknown): string {
+  const list = (
+    body as {
+      blockingSources?: { displayName?: string; version?: number | null; status?: string }[];
+    } | null
+  )?.blockingSources;
+  const names = (Array.isArray(list) ? list : [])
+    .map(
+      (s) =>
+        `${s.displayName ?? 'documento'}${s.version ? ` v${s.version}` : ''} (${s.status ?? 'non pronto'})`,
+    )
+    .join(', ');
+  return `Analisi non avviata: ${names || 'almeno un documento incluso'} non è ancora pronto. Attendi la preparazione, riprova il parsing o escludi il documento dalle fonti.`;
+}
 
 const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -43,10 +60,19 @@ const errorLabels: Record<string, string> = {
   deadline_exceeded: "Il tempo massimo per l'analisi è scaduto.",
   attempts_exhausted: "I tentativi disponibili per l'analisi sono esauriti.",
   checkpoint_incompatible: "Lo stato dell'analisi non è compatibile con questa versione.",
+  document_limit_exceeded:
+    'I documenti scelti superano la capacità gestibile in una sola elaborazione: escludine alcuni e riprova.',
+  document_incomplete:
+    "Un documento incluso non è completo o non è pronto: l'analisi non è stata salvata. Controlla lo stato dei documenti.",
   processing_failed: 'Elaborazione non riuscita.',
 };
 
-const classificationLabels = { Declared: 'Dichiarato', Inferred: 'Dedotto', Assumed: 'Ipotizzato' };
+const classificationLabels = {
+  Declared: 'Dichiarato',
+  Documented: 'Documentato',
+  Inferred: 'Dedotto',
+  Assumed: 'Ipotizzato',
+};
 
 type SectionKey =
   | 'goals'
@@ -189,7 +215,7 @@ type AnalyzeState = 'idle' | 'sending' | 'uncertain';
  */
 @Component({
   selector: 'app-analysis-preview',
-  imports: [InferenceMetricsComponent],
+  imports: [InferenceMetricsComponent, SourcePartsComponent],
   templateUrl: './analysis-preview.component.html',
   styleUrl: './analysis-preview.component.scss',
 })
@@ -331,6 +357,9 @@ export class AnalysisPreviewComponent {
       new Map((this.analysis()?.content.sources ?? []).map((s, i) => [s.id, `F${i + 1}`] as const)),
   );
 
+  /** Voci (id) di cui sono aperte le fonti documentali. */
+  protected readonly openItems = signal<ReadonlySet<string>>(new Set());
+
   /** Richiesta esplicita di generazione sulla revisione confermata: il comando è eseguito dalla vista documento (T042). */
   readonly generateRequested = output<string>();
   /** Una generazione è in invio o in corso (stato reale dalla vista documento): Genera resta disabilitato. */
@@ -388,8 +417,29 @@ export class AnalysisPreviewComponent {
     return item.evidenceRefs.map((r) => this.sourceLabels().get(r) ?? '?').join(', ');
   }
 
+  /** Parti documentali citate da un elemento, nell'ordine di `evidenceRefs` (le parti di un gruppo restano distinte). */
+  protected docParts(item: { evidenceRefs: string[] }): SourcePart[] {
+    const sources = this.analysis()?.content.sources ?? [];
+    const parts: SourcePart[] = [];
+    for (const ref of item.evidenceRefs) {
+      const index = sources.findIndex((s) => s.id === ref);
+      const part = index >= 0 ? partOfSource(sources[index], `F${index + 1}`) : null;
+      if (part) parts.push(part);
+    }
+    return parts;
+  }
+
+  protected toggleItemSources(id: string): void {
+    this.openItems.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
   protected sourceLabel(index: number, kind: string, role: string | null): string {
     if (kind === 'PmRevision') return `F${index + 1} · revisione del PM`;
+    if (kind === 'DocumentPassage') return `F${index + 1} · passaggio di un documento`;
     return `F${index + 1} · messaggio ${role === 'assistant' ? "dell'assistente (solo contesto)" : 'del PM'}`;
   }
 
@@ -762,6 +812,12 @@ export class AnalysisPreviewComponent {
       if (e.status === 404) return 'Progetto non disponibile.';
       if (e.status === 422 && code === 'no_pm_input') {
         return "Scrivi almeno un messaggio nella chat prima di avviare l'analisi.";
+      }
+      if (e.status === 422 && code === 'no_source_input') {
+        return "Scrivi almeno un messaggio nella chat o carica un documento pronto prima di avviare l'analisi.";
+      }
+      if (e.status === 409 && code === 'sources_not_ready') {
+        return notReadyMessage(e.error);
       }
       if (e.status === 409 && code === 'processing_active') {
         const active = (e.error as { processingRunId?: string } | null)?.processingRunId;

@@ -37,7 +37,8 @@ export class DocumentPassageComponent {
 
   readonly projectId = input.required<string>();
   readonly documentId = input.required<string>();
-  readonly version = input.required<number>();
+  /** Numero di versione o id della versione (le fonti dell'analisi 1.1 portano l'id). */
+  readonly version = input.required<number | string>();
   /** Generazione, id della preparazione o `latest`. */
   readonly preparation = input<string>('latest');
   readonly highlight = input<PassageHighlight | null>(null);

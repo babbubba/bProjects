@@ -95,6 +95,7 @@ describe('DocumentViewComponent', () => {
       draft?: DraftView | null;
       run?: ProcessingRunView;
       current?: CurrentRevision | null;
+      revision?: RevisionView;
     } = {},
   ) {
     open.mockReset();
@@ -130,7 +131,7 @@ describe('DocumentViewComponent', () => {
       await settle();
       http
         .expectOne(`${BASE}/analyses/a-1/revisions/${opts.draft.analysisVersion}`)
-        .flush(revision());
+        .flush(opts.revision ?? revision());
     } else {
       req.flush({ code: 'draft_not_available' }, { status: 404, statusText: 'Not Found' });
     }
@@ -476,6 +477,86 @@ describe('DocumentViewComponent', () => {
 
       expect(q('generation-error')).not.toBeNull();
       expect(q('run-metrics')).toBeNull();
+    });
+  });
+
+  describe('percorso documentale (002 T063)', () => {
+    const docSource = {
+      id: 'ds-1',
+      kind: 'DocumentPassage' as const,
+      messageId: null,
+      messageRole: null,
+      revisionId: null,
+      documentId: 'doc-1',
+      documentVersionId: 'ver-1',
+      preparationId: 'prep-1',
+      artifactId: 'art-1',
+      blockId: 'b-1',
+      start: 0,
+      end: 12,
+      quote: '<b>Il sistema</b>',
+    };
+    const prepUrl = `${BASE}/documents/doc-1/versions/ver-1/preparations/prep-1`;
+    const docRevision = (): RevisionView => ({
+      ...revision(),
+      content: { schemaVersion: '1.1.0', sources: [docSource] } as unknown as RevisionView['content'],
+    });
+
+    it('una citazione DocumentPassage apre il passaggio nel documento e la citazione resta testo', async () => {
+      await setup({
+        draft: draft({ markdown: 'Esporta i dati [fonte:ds-1].' }),
+        revision: docRevision(),
+      });
+      expect(q('source-chip')!.textContent!.trim()).toBe('F1');
+      expect(q('draft-doc-sources')!.textContent).toContain('<b>Il sistema</b>');
+      expect(el.querySelector('.document b')).toBeNull();
+      http.expectNone(prepUrl);
+      q('source-chip')!.click();
+      await settle();
+      expect(q('source-notice')!.textContent).toContain('F1');
+      expect(q('focused-source')).not.toBeNull();
+      http.expectOne(prepUrl);
+    });
+
+    it('il Markdown non carica risorse remote: nessuna richiesta oltre alle API del progetto', async () => {
+      await setup({
+        draft: draft({ markdown: '![logo](https://evil.example/p.png)\n\n<img src="https://evil.example/x">' }),
+      });
+      expect(el.querySelector('img')).toBeNull();
+      expect(http.match(() => true).length).toBe(0);
+    });
+
+    it('una bozza della revisione 1 resta apribile con le sue fonti dopo il caricamento della revisione 2', async () => {
+      await setup({
+        draft: draft({ analysisVersion: 1, analysisRevisionId: 'rev-1' }),
+        current: { analysisId: 'a-1', revisionId: 'rev-2', confirmed: true },
+      });
+      expect(q('draft')).not.toBeNull();
+      expect(q('stale-banner')).not.toBeNull();
+      expect(q('source-chip')!.textContent!.trim()).toBe('F1');
+      expect(q('draft-sources')!.textContent).toContain('F1 · messaggio del PM');
+    });
+
+    it('hasSourceChanges avvisa senza chiedere una nuova conferma', async () => {
+      await setup({ draft: draft({ hasSourceChanges: true }) });
+      expect(q('draft-source-changes')!.textContent).toContain('conferma');
+      expect(q('reconfirm-banner')).toBeNull();
+    });
+
+    it('un run fallito per documento non pronto dichiara la causa e conserva la bozza', async () => {
+      await setup({
+        draft: draft(),
+        project: project({ activeProcessingRunId: 'd-run' }),
+        run: run({ status: 'Failed', error: { code: 'document_incomplete', message: null } }),
+      });
+      expect(q('generation-error')!.textContent).toContain('non è completo o non è pronto');
+      expect(q('draft')).not.toBeNull();
+    });
+
+    it('conferma mancante: messaggio chiaro, nessuna generazione', async () => {
+      await setup({ draft: null, current: { ...confirmed, confirmed: false } });
+      await fixture.componentInstance.generate('rev-1');
+      http.expectNone((r) => r.method === 'POST');
     });
   });
 });

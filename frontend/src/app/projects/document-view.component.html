@@ -123,6 +123,13 @@
           generare una nuova bozza. La bozza qui sotto resta l'ultima disponibile.
         </p>
       }
+      @if (d.hasSourceChanges) {
+        <p class="alert alert-info py-2" role="status" data-testid="draft-source-changes">
+          Le fonti documentali sono cambiate dopo questa bozza. La conferma dell'analisi resta
+          valida e la bozza usa le fonti storiche della sua revisione: premi «Analizza di nuovo» per
+          includere le modifiche.
+        </p>
+      }
       @if (d.hasNewNotes) {
         <p class="alert alert-info py-2" role="status" data-testid="draft-new-notes">
           Ci sono nuove note del PM successive all'analisi da cui nasce questa bozza.
@@ -220,6 +227,17 @@
         <p class="small text-secondary" role="status" data-testid="source-notice">
           {{ sourceNotice() }}
         </p>
+      }
+      @if (focusedPart(); as part) {
+        <section data-testid="focused-source" aria-label="Passaggio citato">
+          <app-source-parts [projectId]="projectId()" [parts]="[part]" [expanded]="true" />
+        </section>
+      }
+      @if (docParts().length) {
+        <section data-testid="draft-doc-sources" aria-label="Fonti documentali della bozza">
+          <h3 class="h6">Passaggi dei documenti</h3>
+          <app-source-parts [projectId]="projectId()" [parts]="docParts()" />
+        </section>
       }
       @if (sources().length) {
         <section data-testid="draft-sources" aria-label="Fonti della bozza">

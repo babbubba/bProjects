@@ -91,6 +91,13 @@
           {{ formatTime(view.confirmedAt) }}
         }
       </p>
+      @if (view.hasSourceChanges) {
+        <p class="alert alert-info py-2" role="status" data-testid="source-changes">
+          Le fonti documentali sono cambiate dopo questa analisi. La conferma resta valida e
+          generare userà le fonti di questa revisione; premi «Analizza di nuovo» per includere le
+          modifiche.
+        </p>
+      }
       @if (view.hasNewNotes) {
         <p class="alert alert-info py-2" role="status" data-testid="new-notes">
           Ci sono nuove note del PM successive a questa analisi. Premi «Analizza di nuovo» per
@@ -183,6 +190,19 @@
                     <span class="badge text-bg-light border">{{ classification(item) }}</span>
                     @if (item.evidenceRefs.length) {
                       <span>Fonti: {{ refs(item) }}</span>
+                      @if (docParts(item).length) {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-link p-0"
+                          data-testid="item-sources"
+                          [attr.aria-expanded]="openItems().has(item.id)"
+                          (click)="toggleItemSources(item.id)"
+                        >
+                          {{
+                            openItems().has(item.id) ? 'Nascondi documenti' : 'Vedi nei documenti'
+                          }}
+                        </button>
+                      }
                     } @else {
                       <span>Nessuna fonte</span>
                     }
@@ -198,6 +218,13 @@
                       </button>
                     }
                   </div>
+                  @if (openItems().has(item.id) && docParts(item).length) {
+                    <app-source-parts
+                      [projectId]="projectId()"
+                      [parts]="docParts(item)"
+                      [expanded]="true"
+                    />
+                  }
                 </div>
               }
               @if (canEdit()) {
@@ -320,7 +347,12 @@
           <h3 class="h6">Fonti</h3>
           <ul class="small text-secondary">
             @for (source of view.content.sources; track source.id; let i = $index) {
-              <li>{{ sourceLabel(i, source.kind, source.messageRole) }}</li>
+              <li>
+                {{ sourceLabel(i, source.kind, source.messageRole) }}
+                @if (source.kind === 'DocumentPassage' && source.quote) {
+                  <span class="d-block" data-testid="source-quote">«{{ source.quote }}»</span>
+                }
+              </li>
             }
           </ul>
         </section>

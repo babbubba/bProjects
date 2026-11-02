@@ -187,3 +187,22 @@ export function parseMarkdown(markdown: string): MdBlock[] {
   }
   return blocks;
 }
+
+export type TextSegment = { t: 'text'; v: string } | { t: 'source'; id: string };
+
+/**
+ * Divide un testo semplice (messaggio della chat) in testo e marcatori `[fonte:<id>]`, senza interpretare altro Markdown né HTML.
+ * Il testo resta sempre dato da interpolare: l'escaping è del template.
+ */
+export function splitSourceMarkers(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const pattern = /\[fonte:([A-Za-z0-9-]{1,64})\]/g;
+  let last = 0;
+  for (let m = pattern.exec(text); m; m = pattern.exec(text)) {
+    if (m.index > last) segments.push({ t: 'text', v: text.slice(last, m.index) });
+    segments.push({ t: 'source', id: m[1] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ t: 'text', v: text.slice(last) });
+  return segments;
+}
