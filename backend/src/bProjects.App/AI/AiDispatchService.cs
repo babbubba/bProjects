@@ -182,6 +182,17 @@ public sealed class AiDispatchService(
             return false;
         }
 
+        // Aggregazione documentale (T051): lavoro deterministico che pubblica la versione Evidence quando tutte le unità sono Completed. Ha claim e lock
+        // propri e non entra nel limite AI globale (non è inferenza), quindi non tiene mai lo slot e non attende le unità; un passo per giro del ciclo.
+        using (var aggregationScope = scopes.CreateScope())
+        {
+            if (aggregationScope.ServiceProvider.GetService<Documents.DocumentAggregationRunner>() is { } aggregation
+                && await aggregation.RunNextAsync(_owner, ct) is not null)
+            {
+                return true;
+            }
+        }
+
         WorkClaim? work;
         using (var scope = scopes.CreateScope())
         {

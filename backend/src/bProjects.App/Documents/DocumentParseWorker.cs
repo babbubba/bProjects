@@ -3,7 +3,9 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using bProjects.App.AI;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -45,7 +47,8 @@ public sealed class DocumentParseRunner(
     IOptions<ExecutionOptions> execution,
     IOptions<ParserOptions> parserOptions,
     IOptions<DocumentOptions> documentOptions,
-    ILogger<DocumentParseRunner> logger)
+    ILogger<DocumentParseRunner> logger,
+    IOptions<AiOptions>? ai = null)
 {
     /// <summary>Prende in carico il prossimo Parse eleggibile e lo esegue; null se non c'è nulla da fare (o il parser non è configurato).</summary>
     public async Task<ParseRunOutcome?> RunNextAsync(string owner, CancellationToken ct)
@@ -139,12 +142,18 @@ public sealed class DocumentParseRunner(
             }
 
             var rows = Rows.Build(claim, manifest, artifactId, stored);
+            var status = manifest.Status == ManifestStatus.Complete ? PreparationStatus.Extracting : PreparationStatus.Incomplete;
             db.ParsedArtifacts.Add(rows.Artifact);
             db.DocumentBlocks.AddRange(rows.Blocks);
             db.DocumentPortions.AddRange(rows.Portions);
             db.PreparationIssues.AddRange(rows.Issues);
+            if (status == PreparationStatus.Extracting)
+            {
+                // Stessa transazione e stesso fence del manifest: o ci sono porzioni, unità e aggregatore, o non c'è nulla (T051).
+                await ScheduleExtractionAsync(claim, rows.Portions, snapshot.Limits.MaxAiCallsPerPreparation, ct);
+            }
+
             await db.SaveChangesAsync(ct);
-            var status = manifest.Status == ManifestStatus.Complete ? PreparationStatus.Extracting : PreparationStatus.Incomplete;
             await jobs.CompleteParseAsync(claim, rows.ResultHash, status, manifest.ParserVersion, manifest.ConfigHash, stored.Sha256, ct);
             await transaction.CommitAsync(ct);
             published = true;
@@ -158,6 +167,58 @@ public sealed class DocumentParseRunner(
                 await RemoveOrphanAsync(stored.StorageKey);
             }
         }
+    }
+
+    /// <summary>
+    /// Chiude il GAP fra parsing ed estrazione (T051), nella transazione di pubblicazione del manifest, sotto il fence del job Parse: crea i
+    /// DocumentJob ExtractUnit (padre = preparazione, scadenza = cap di preparazione congelato, configurazione congelata con il tetto di chiamate),
+    /// assegna a ogni porzione il job che la possiede (<see cref="DocumentPortion.JobId"/>; UnitId = prima porzione dell'unità) secondo
+    /// <see cref="DocumentUnitPlan"/> e crea l'unico <see cref="EvidenceExtractionJob"/> aggregatore Queued della preparazione (unique partial).
+    /// L'aggregatore non è eleggibile finché tutte le unità non sono Completed e non occupa lo slot AI. Scelta del punto: il worker di parsing è
+    /// l'unico che conosce, sotto fence, l'istante in cui le porzioni nascono; farlo qui rende l'insieme atomico (nessuna preparazione Extracting
+    /// senza unità) e non richiede un secondo scheduler. La partizione misurata sul runtime resta all'agente di estrazione
+    /// (<c>DocumentPortionPlanner</c>), che non è disponibile in questo percorso CPU.
+    /// </summary>
+    private async Task ScheduleExtractionAsync(ParseClaim claim, IReadOnlyList<DocumentPortion> portions, int maxAiCalls, CancellationToken ct)
+    {
+        var now = await ProjectLock.NowAsync(db, ct);
+        var hardDeadline = await db.DocumentPreparations.AsNoTracking().Where(p => p.Id == claim.PreparationId).Select(p => p.HardDeadlineAt).SingleAsync(ct);
+        var config = (string.IsNullOrWhiteSpace(claim.ConfigJson) ? null : JsonNode.Parse(claim.ConfigJson) as JsonObject) ?? new JsonObject();
+        if (!config.Any(p => string.Equals(p.Key, nameof(DocumentOptions.MaxAiCallsPerPreparation), StringComparison.OrdinalIgnoreCase)))
+        {
+            config[nameof(DocumentOptions.MaxAiCallsPerPreparation)] = maxAiCalls;
+        }
+
+        var modelId = ai?.Value.ForPhase(AiPhase.Extraction).ModelId;
+        if (!string.IsNullOrWhiteSpace(modelId))
+        {
+            config["modelId"] = modelId;
+        }
+
+        var configJson = config.ToJsonString();
+        var units = DocumentUnitPlan.Group(portions);
+        foreach (var group in units)
+        {
+            var job = new DocumentJob
+            {
+                Id = Guid.NewGuid(), ProjectId = claim.ProjectId, PreparationId = claim.PreparationId, Kind = DocumentJobKind.ExtractUnit, UnitId = group[0].Id,
+                Status = DocumentJobStatus.Queued, RequestedAt = now, DeadlineAt = hardDeadline, MaxAttempts = DocumentUnitPlan.ExtractMaxAttempts,
+                ConfigJson = configJson, WorkflowDefinitionVersion = DocumentEvidenceAgent.DefinitionVersion,
+            };
+            db.DocumentJobs.Add(job);
+            foreach (var portion in group)
+            {
+                portion.JobId = job.Id;
+            }
+        }
+
+        db.EvidenceExtractionJobs.Add(new EvidenceExtractionJob
+        {
+            Id = Guid.NewGuid(), ProjectId = claim.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = claim.PreparationId,
+            Reason = ExtractionJobReason.Initial, Status = ExtractionJobStatus.Queued, RequestedAt = now, DeadlineAt = hardDeadline,
+            MaxAttempts = DocumentUnitPlan.ExtractMaxAttempts,
+            ExtractorConfig = JsonSerializer.Serialize(new { kind = "document-aggregation", algorithm = DocumentBundleStore.AlgorithmVersion, units = units.Count, modelId }),
+        });
     }
 
     private async Task RemoveOrphanAsync(string storageKey)
@@ -366,6 +427,9 @@ public static class DocumentParsingRegistration
         services.AddScoped<DocumentJobStore>();
         services.AddScoped<DocumentParseRunner>();
         services.AddHostedService<DocumentParseWorker>();
+        // Aggregazione documentale (T051): la esegue il dispatcher esistente (un passo per giro), senza slot AI né secondo scheduler.
+        services.AddScoped<DocumentBundleStore>();
+        services.AddScoped<DocumentAggregationRunner>();
         return services;
     }
 }

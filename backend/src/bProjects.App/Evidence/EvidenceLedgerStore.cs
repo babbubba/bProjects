@@ -323,6 +323,85 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         return new(ExtractionCommitOutcome.Committed, version.Id);
     }
 
+    // ------------------------------------------------------------------ aggregazione documentale (002 T051)
+
+    /// <summary>
+    /// Ricava, in sola lettura, la versione Evidence 1.1.0 di una Preparation dagli output immutabili delle sue unità: copertura dei range,
+    /// integrità di hash/manifesto/ordinali, fonti risolte sul testo canonico. <see cref="DocumentAggregationException"/> se non è aggregabile.
+    /// Il commit (autorità, numerazione, Completed, Ready, bundle corrente) è di <c>DocumentBundleStore</c>, che lo chiama sotto i propri lock.
+    /// </summary>
+    public Task<DocumentAggregate> LoadDocumentAggregateAsync(Guid preparationId, string? configuredModelId, CancellationToken ct) =>
+        DocumentEvidenceAggregator.LoadAsync(db, preparationId, configuredModelId, ct);
+
+    /// <summary>
+    /// Accoda (senza SaveChanges) versione, evidenze e relazioni dell'aggregazione documentale. La numerazione è per Preparation ed è calcolata qui:
+    /// il chiamante tiene il lock della Preparation, quindi due pubblicazioni non assegnano lo stesso numero (e Unique(JobId) rifiuta comunque la seconda).
+    /// Gli ID delle evidenze sono derivati dalla chiave globale, quindi stabili nel replay; le righe sono append-only e nessuna versione precedente è toccata.
+    /// </summary>
+    public async Task<EvidenceExtractionVersion> StageDocumentVersionAsync(
+        EvidenceExtractionJob job, DocumentAggregate aggregate, DateTimeOffset now, CancellationToken ct)
+    {
+        if (job.OriginKind != EvidenceOriginKind.Document || job.PreparationId != aggregate.PreparationId)
+        {
+            throw new ArgumentException("L'aggregatore non appartiene alla preparazione aggregata.", nameof(job));
+        }
+
+        var number = (await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.PreparationId == job.PreparationId).MaxAsync(v => (int?)v.Version, ct) ?? 0) + 1;
+        var version = new EvidenceExtractionVersion
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = job.ProjectId,
+            OriginKind = EvidenceOriginKind.Document,
+            PreparationId = job.PreparationId,
+            ManifestHash = aggregate.ManifestHash,
+            Version = number,
+            JobId = job.Id,
+            SchemaVersion = EvidenceExtractionVersion.DocumentSchemaVersion,
+            PromptVersion = DocumentEvidenceAgent.PromptVersion,
+            ModelId = aggregate.ModelId,
+            Parameters = aggregate.ParametersJson,
+            EvidenceCount = aggregate.Evidences.Count,
+            NoEvidenceReason = aggregate.Evidences.Count == 0 ? aggregate.NoEvidenceReason : null,
+            CreatedAt = now,
+        };
+        db.EvidenceExtractionVersions.Add(version);
+        foreach (var e in aggregate.Evidences)
+        {
+            db.Evidences.Add(new EvidenceItem
+            {
+                Id = e.Id,
+                VersionId = version.Id,
+                ProjectId = job.ProjectId,
+                OriginKind = EvidenceOriginKind.Document,
+                PreparationId = job.PreparationId,
+                Ordinal = e.Ordinal,
+                Key = e.Key,
+                Kind = e.Kind,
+                Polarity = e.Polarity,
+                Certainty = e.Certainty,
+                Statement = e.Statement,
+                Content = DocumentEvidenceCodec.EncodeContent(e.Content),
+            });
+        }
+
+        foreach (var r in aggregate.Relations)
+        {
+            db.EvidenceRelations.Add(new EvidenceRelation
+            {
+                Id = r.Id,
+                ProjectId = job.ProjectId,
+                VersionId = version.Id,
+                FromEvidenceId = r.FromEvidenceId,
+                ToEvidenceId = r.ToEvidenceId,
+                Type = r.Type,
+                Basis = r.Basis,
+                Rationale = r.Rationale,
+            });
+        }
+
+        return version;
+    }
+
     public static InferenceOwner Owner(ExtractionJobClaim claim) => new(null, null, claim.AttemptCount, claim.FencingToken, claim.JobId);
 
     /// <summary>Failed deciso dall'owner (es. output non valido); le chiamate del tentativo si scrivono nella stessa transazione.</summary>

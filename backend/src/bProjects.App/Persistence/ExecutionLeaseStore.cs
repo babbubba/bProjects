@@ -91,7 +91,8 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             Table.Runs => "\"ProcessingRuns\"",
             _ => "\"EvidenceExtractionJobs\"",
         }, StringComparison.Ordinal)
-        .Replace("{KIND}", table == Table.Runs ? " AND x.\"Kind\" = ANY(@kinds)" : "", StringComparison.Ordinal)
+        // Le estrazioni di messaggio non toccano l'aggregatore documentale (OriginKind = Document): ha claim, sweep e lease propri (DocumentBundleStore, T051).
+        .Replace("{KIND}", table switch { Table.Runs => " AND x.\"Kind\" = ANY(@kinds)", Table.Extractions => " AND x.\"OriginKind\" = 'Message'", _ => "" }, StringComparison.Ordinal)
         .Replace("{UPDATED}", table == Table.Runs ? ",\n                \"UpdatedAt\" = clock_timestamp()" : "", StringComparison.Ordinal),
         match => UntilOf(table, match.Groups[1].Value));
 
@@ -324,7 +325,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             """
             SELECT (SELECT count(*) FROM "ChatTurns" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
                  + (SELECT count(*) FROM "ProcessingRuns" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
-                 + (SELECT count(*) FROM "EvidenceExtractionJobs" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
+                 + (SELECT count(*) FROM "EvidenceExtractionJobs" WHERE "OriginKind" = 'Message' AND "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())   -- l'aggregatore documentale è lavoro deterministico: nessuno slot AI
                  + (SELECT count(*) FROM "DocumentJobs" WHERE "Kind" = 'ExtractUnit' AND "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
             """,
             ct);
@@ -597,8 +598,14 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                 FROM dead
                 WHERE s."PreparationId" = dead."PreparationId" AND s."Kind" = 'ExtractUnit' AND s."Status" IN ('Queued', 'Running')
                   AND s."Id" NOT IN (SELECT "Id" FROM dead)
-                RETURNING s."Id")
-            SELECT (SELECT count(*) FROM dead) + (SELECT count(*) FROM prep) + (SELECT count(*) FROM sib)
+                RETURNING s."Id"),
+            agg AS (
+                UPDATE "EvidenceExtractionJobs" g SET "Status" = 'Failed', "ErrorCode" = 'parent_failed', "ErrorMessage" = @parentFailed,
+                    "CompletedAt" = (SELECT t FROM clk), "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = g."FencingToken" + 1
+                FROM dead
+                WHERE g."PreparationId" = dead."PreparationId" AND g."OriginKind" = 'Document' AND g."Status" IN ('Queued', 'Running')
+                RETURNING g."Id")
+            SELECT (SELECT count(*) FROM dead) + (SELECT count(*) FROM prep) + (SELECT count(*) FROM sib) + (SELECT count(*) FROM agg)
             """,
             ct, ("message", UnitDeadMessage), ("parentFailed", UnitParentFailedMessage));
         await command.ExecuteScalarAsync(ct);
@@ -726,8 +733,14 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                 FROM upd
                 WHERE s."PreparationId" = upd."PreparationId" AND upd."Status" = 'Failed' AND s."Kind" = 'ExtractUnit'
                   AND s."Status" IN ('Queued', 'Running') AND s."Id" <> upd."Id"
-                RETURNING s."Id")
-            SELECT "Status", "NextAttemptAt", "ErrorCode", (SELECT count(*) FROM prep) + (SELECT count(*) FROM sib) FROM upd
+                RETURNING s."Id"),
+            agg AS (
+                UPDATE "EvidenceExtractionJobs" g SET "Status" = 'Failed', "ErrorCode" = 'parent_failed', "ErrorMessage" = @parentFailed,
+                    "CompletedAt" = (SELECT t FROM clk), "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = g."FencingToken" + 1
+                FROM upd
+                WHERE g."PreparationId" = upd."PreparationId" AND upd."Status" = 'Failed' AND g."OriginKind" = 'Document' AND g."Status" IN ('Queued', 'Running')
+                RETURNING g."Id")
+            SELECT "Status", "NextAttemptAt", "ErrorCode", (SELECT count(*) FROM prep) + (SELECT count(*) FROM sib) + (SELECT count(*) FROM agg) FROM upd
             """,
             ct,
             ("transient", failure.IsTransient), ("delay", delay.TotalSeconds), ("code", permanentCode), ("message", permanentMessage), ("exhausted", UnitDeadMessage),
