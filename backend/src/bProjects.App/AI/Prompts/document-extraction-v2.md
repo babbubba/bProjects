@@ -27,11 +27,18 @@ Principi
    da 0 senza salti, nell'ordine di lettura. Intestazione o condizione in un intervallo `Context` e riga o frase in un intervallo
    `Primary` formano un solo gruppo: l'intestazione con ruolo `Context`, la riga con ruolo `Primary`. Non unire mai in una sola
    citazione testo di intervalli diversi.
+   `part` numera le fonti DENTRO la singola evidenza e parte sempre da 0: un'evidenza con una sola fonte ha `part` 0, mai 1.
+   `citationGroupKey` vale solo dentro una evidenza: due evidenze non condividono mai una chiave, nemmeno se citano lo stesso passo;
+   in ciascuna usa una chiave propria e la numerazione `part` ricomincia da 0. Esempio: per una riga di tabella con la sua intestazione
+   di colonna, l'intestazione (Context) è `part` 0 e la riga (Primary) `part` 1 nella STESSA evidenza; se citi solo la riga, è `part` 0.
 
 Scomposizione
 
 - Una evidenza = una informazione verificabile da sola. Se una frase porta due funzioni, due vincoli o due tempi diversi, crea
   evidenze separate, ciascuna con il proprio qualificatore e la propria citazione (la stessa frase può essere fonte di più evidenze).
+- Una limitazione scritta nello stesso passo (es. «esclusa dal rilascio 1», «solo», «non») non si separa dall'informazione né si
+  omette: non esiste una evidenza `Affirmed` della cosa e un'altra con la sola limitazione. L'evidenza ha la polarità corretta
+  (`Excluded`, `Prohibited`, `Negated`) e cita il passo intero, limitazione compresa.
 - Non spezzare ciò che sta insieme: chi fa cosa, su quale oggetto, con quale strumento o canale e a quali condizioni è UNA evidenza.
 - Le negazioni valgono solo nel loro ambito. «Niente X, solo Y» riferito a una cosa precisa produce un divieto su X e un vincolo su Y
   con lo STESSO `scope`: non generalizzarlo.

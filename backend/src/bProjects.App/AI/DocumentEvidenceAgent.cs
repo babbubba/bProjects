@@ -373,6 +373,12 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan
 
     public int UnitOrdinal(int batchOrdinal) => _input.FirstPortionOrdinal * DocumentEvidenceAgent.UnitOrdinalStride + batchOrdinal;
 
+    private static string DescribeRules(IReadOnlyList<string> violations)
+    {
+        var text = string.Join(" | ", violations.Take(5).Select(v => System.Text.RegularExpressions.Regex.Replace(v, "«[^»]*»", "«…»")));
+        return text.Length <= 600 ? text : text[..600] + "…";
+    }
+
     public ValidatedBatch Validate(BatchRef batch, string responseText)
     {
         var planned = _partition.Batches[batch.Ordinal];
@@ -381,9 +387,10 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan
         var result = DocumentEvidenceValidator.ValidateText(responseText, context);
         if (!result.Accepted)
         {
-            // Solo il conteggio: i dettagli citano testo del modello/documento e non entrano nei messaggi persistiti.
+            // Regole violate senza il testo citato: i frammenti fra «» (citazioni del modello/documento) sono sostituiti da «…».
             throw new DocumentWorkException(
-                DocumentWorkException.WorkOutputInvalid, $"L'output del modello non è un'estrazione valida ({result.Violations.Count} violazioni): nessun output committato.");
+                DocumentWorkException.WorkOutputInvalid,
+                $"L'output del modello non è un'estrazione valida ({result.Violations.Count} violazioni): nessun output committato. Regole: {DescribeRules(result.Violations)}");
         }
 
         var output = new DocumentUnitOutput(

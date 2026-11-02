@@ -448,11 +448,11 @@ public static partial class DocumentEvidenceValidator
             }
             else if (!parts.Order().SequenceEqual(Enumerable.Range(0, parts.Count)))
             {
-                violations.Add($"{where}: gruppo «{group.Key}»: le part devono essere contigue da zero");
+                violations.Add($"{where}: gruppo «{group.Key}»: le part devono essere contigue da zero (ricevute [{string.Join(',', parts)}], ruoli [{string.Join(',', group.Select(g => g.Source.Role))}]; fonti dell'evidenza: [{string.Join(' ', sources.Select(x => $"{x.Source.Role}/p{x.Source.Part}/g{sources.Select(y => y.Source.CitationGroupKey).Distinct().ToList().IndexOf(x.Source.CitationGroupKey)}"))}])");
             }
             else if (!parts.SequenceEqual(parts.Order()))
             {
-                violations.Add($"{where}: gruppo «{group.Key}»: fonti elencate fuori ordine di part");
+                violations.Add($"{where}: gruppo «{group.Key}»: fonti elencate fuori ordine di part (ricevute [{string.Join(',', parts)}])");
             }
 
             if (group.Select(s => s.Persisted.Kind).Distinct().Count() > 1)

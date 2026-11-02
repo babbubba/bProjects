@@ -239,6 +239,9 @@ public sealed class DocumentExtractionMafRealTests
 
         public bool Negative => Item.Polarity is EvidencePolarity.Negated or EvidencePolarity.Excluded or EvidencePolarity.Prohibited || Item.Kind == EvidenceKind.Exclusion;
 
+        /// <summary>La riga di tabella e identificata dalla fonte Primary citata (testo esatto del blocco), non dalla riformulazione dello statement.</summary>
+        public bool CitesRow(string rowId) => Content.Sources.Any(s => s.Role == EvidenceSourceRole.Primary && Gold.Fold(s.Quote).Contains(Gold.Fold(rowId), StringComparison.Ordinal));
+
         public bool HasQualifier(params QualifierType[] types) => Content.Qualifiers.Any(q => types.Contains(q.Type));
 
         public override string ToString() =>
@@ -429,9 +432,9 @@ public sealed class DocumentExtractionMafRealTests
             ],
             "pdf-table-multipage.pdf" =>
             [
-                F("pdf-table-f1", evs => All(evs, "attesa: R-03 ricerca per numero ordine, priorita Alta", e => e.Has("r-03", "ricerca") && e.Has("alta"))),
+                F("pdf-table-f1", evs => All(evs, "attesa: R-03 ricerca per numero ordine, priorita Alta (la riga R-03 e identificata dalla fonte citata, non dal testo dello statement)", e => e.CitesRow("r-03") && e.Has("ricerca") && e.Has("alta"))),
                 F("pdf-table-f2", evs =>
-                    All(evs, "attesa: R-05 tema scuro, priorita Bassa, esclusa dal rilascio 1 (polarita negativa o testo di esclusione)", e => e.Has("r-05", "tema scuro") && e.Has("bassa") && (e.Negative || e.Has("esclus")))
+                    All(evs, "attesa: R-05 tema scuro, priorita Bassa, esclusa dal rilascio 1 (polarita negativa o testo di esclusione)", e => e.CitesRow("r-05") && e.Has("tema scuro") && e.Has("bassa") && (e.Negative || e.Has("esclus")))
                     ?? All(evs, "multi-blocco: la riga (pagina 2) e l'intestazione di colonna (pagina 1) devono essere fonti dello stesso gruppo su blocchi diversi",
                         e => e.Content.Sources.Select(s => s.BlockId).Distinct().Count() >= 2 && e.Content.Sources.Any(s => Fold(s.Quote).Contains("priorita")) && e.Content.Sources.Any(s => Fold(s.Quote).Contains("r-05")))),
             ],
