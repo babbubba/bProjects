@@ -95,6 +95,7 @@ builder.Services.AddSingleton<IDocumentUnitExecutor>(sp =>
 });
 builder.Services.AddHostedService<AiDispatchService>();
 builder.Services.AddHostedService<DocumentOrphanSweepService>();   // pulizia periodica degli originali orfani, indipendente dagli upload
+builder.Services.AddHostedService<bProjects.App.Documents.DocumentStateEvents>();   // document.state best-effort (T064)
 
 // Il middleware del framework registrerebbe il messaggio dell'eccezione (può contenere contenuti dei progetti):
 // il log degli errori non gestiti è quello sicuro dell'handler sotto.

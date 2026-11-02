@@ -433,6 +433,53 @@ namespace bProjects.App.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("bProjects.App.AI.ExecutionInterval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RootId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RootKind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("RootKind", "RootId", "Kind", "Attempt")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ExecutionIntervals_Root");
+
+                    b.ToTable("ExecutionIntervals", t =>
+                        {
+                            t.HasCheckConstraint("CK_ExecutionIntervals_Kinds", "\"Kind\" IN ('Queue', 'Preflight', 'Backoff', 'Recovery') AND \"RootKind\" IN ('ProcessingRun', 'ChatTurn', 'DocumentPreparation')");
+
+                            t.HasCheckConstraint("CK_ExecutionIntervals_Order", "\"EndedAt\" >= \"StartedAt\" AND \"Attempt\" >= 1");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.AI.InferenceCall", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3408,6 +3455,15 @@ namespace bProjects.App.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("OwnerKind", "OwnerId")
                         .HasPrincipalKey("OwnerKind", "OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.ExecutionInterval", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -32,6 +32,12 @@ public sealed record ContextComposition(IReadOnlyList<CompositionItem> Items)
     public const string AnalysisStructured = "analysis_structured";
     public const string DocumentSources = "document_sources";
 
+    /// <summary>
+    /// Proprietà del messaggio con cui il chiamante dichiara la categoria di un payload fatto SOLO di fonti documentali (nessuna istruzione
+    /// o testo del PM mescolato): la composizione la attribuisce a quella categoria. Un messaggio misto non la porta e resta nella sua categoria di ruolo.
+    /// </summary>
+    public const string CategoryProperty = "bprojects.context.category";
+
     public int AttributedTokens => Items.Sum(i => i.Tokens);
 
     /// <summary>Token dei soli messaggi (istruzioni escluse): il contesto operativo dopo l'eventuale compattazione.</summary>
@@ -464,6 +470,12 @@ internal sealed class InferenceCaptureChatClient(
     /// </summary>
     private string? Classify(ChatMessage message)
     {
+        if (message.AdditionalProperties?.TryGetValue(ContextComposition.CategoryProperty, out var category) == true
+            && category is ContextComposition.DocumentSources)
+        {
+            return ContextComposition.DocumentSources;
+        }
+
         if (message.AdditionalProperties?.TryGetValue(CompactionMessageGroup.SummaryPropertyKey, out var summary) == true
             && summary is true or JsonElement { ValueKind: JsonValueKind.True })
         {

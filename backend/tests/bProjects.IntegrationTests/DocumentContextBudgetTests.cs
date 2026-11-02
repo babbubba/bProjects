@@ -267,6 +267,24 @@ public sealed class DocumentContextBudgetTests
     }
 
     [Fact]
+    public async Task The_batch_payload_of_the_extraction_phase_is_attributed_to_document_sources_in_the_composition()
+    {
+        using var rig = new Rig();
+        var range = new bProjects.App.Evidence.DocumentSourceRange("r1", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Il fornitore consegna entro 30 giorni.", 0, 37, true);
+        using var inference = InferenceScope.Begin();
+        var scope = InferenceScope.Current!;
+
+        await rig.Factory.CreateBatchClient(AiPhase.Extraction)
+            .GetResponseAsync(DocumentEvidenceAgent.BuildMessages([range]), rig.ChatOptions(AiPhase.Extraction, "Estrai le evidenze.", schema: false), Ct);
+
+        var composition = Assert.Single(scope.Calls).Composition!;
+        var item = Assert.Single(composition.Items, i => i.Key == ContextComposition.DocumentSources);
+        Assert.True(item.Tokens > 0);
+        Assert.Equal(1, item.MessageCount);
+        Assert.DoesNotContain(composition.Items, i => i.Key is ContextComposition.UserMessages or ContextComposition.AnalysisStructured);
+    }
+
+    [Fact]
     public async Task Tokenizers_are_distinct_per_model_and_the_same_text_counts_differently()
     {
         using var rig = new Rig();

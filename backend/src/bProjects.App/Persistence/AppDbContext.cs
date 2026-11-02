@@ -24,6 +24,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<WorkflowCheckpoint> WorkflowCheckpoints => Set<WorkflowCheckpoint>();
     public DbSet<InferenceCall> InferenceCalls => Set<InferenceCall>();
+    public DbSet<ExecutionInterval> ExecutionIntervals => Set<ExecutionInterval>();
     public DbSet<EvidenceExtractionJob> EvidenceExtractionJobs => Set<EvidenceExtractionJob>();
     public DbSet<EvidenceExtractionVersion> EvidenceExtractionVersions => Set<EvidenceExtractionVersion>();
     public DbSet<EvidenceItem> Evidences => Set<EvidenceItem>();
@@ -753,6 +754,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         builder.Entity<ChatTurn>(turn => LegacyRoot(turn, "ChatTurns"));
         builder.Entity<ProcessingRun>(run => LegacyRoot(run, "ProcessingRuns"));
+
+        builder.Entity<ExecutionInterval>(interval =>
+        {
+            interval.HasKey(i => i.Id);
+            interval.Property(i => i.RootKind).HasConversion<string>().HasMaxLength(24);
+            interval.Property(i => i.Kind).HasConversion<string>().HasMaxLength(16);
+            // Un intervallo per (root, tipo, tentativo): il claim ripetuto non lo duplica. Il root è polimorfico (nessuna FK), il progetto sì.
+            interval.HasIndex(i => new { i.RootKind, i.RootId, i.Kind, i.Attempt }).IsUnique().HasDatabaseName("UX_ExecutionIntervals_Root");
+            interval.HasOne<Project>().WithMany().HasForeignKey(i => i.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            interval.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ExecutionIntervals_Order", "\"EndedAt\" >= \"StartedAt\" AND \"Attempt\" >= 1");
+                t.HasCheckConstraint("CK_ExecutionIntervals_Kinds", "\"Kind\" IN ('Queue', 'Preflight', 'Backoff', 'Recovery') AND \"RootKind\" IN ('ProcessingRun', 'ChatTurn', 'DocumentPreparation')");
+            });
+        });
 
         builder.Entity<ClassificationRecord>(record =>
         {

@@ -33,7 +33,8 @@ public sealed record ProcessingRunView(
     Guid? ResultRevisionId,
     Guid? DraftId,
     RunError? Error,
-    InferenceMetricsView? Metrics = null);
+    InferenceMetricsView? Metrics = null,
+    ExecutionView? Execution = null);
 
 /// <summary>Revisione dell'anteprima con provenienza e conferma (GET .../revisions/{v}).</summary>
 public sealed record RevisionView(
@@ -250,7 +251,13 @@ public static class AnalysisEndpoints
 
     /// <summary>ProcessingRunView con le metriche del risultato logico: solo per un run Completed (un Failed non ha metriche).</summary>
     public static async Task<ProcessingRunView> ViewAsync(AppDbContext db, ProcessingRun run, CancellationToken ct) =>
-        ToView(run, run.Status == ProcessingRunStatus.Completed ? await InferenceMetrics.ForRunAsync(db, run.ProjectId, run.Id, ct) : null);
+        ToView(run, run.Status == ProcessingRunStatus.Completed ? await InferenceMetrics.ForRunAsync(db, run.ProjectId, run.Id, ct) : null) with
+        {
+            // Solo i root documentali (regime valorizzato): il run 001 mantiene la vista invariata.
+            Execution = run.InitialRegime is null
+                ? null
+                : (await ExecutionTelemetry.ForRootAsync(db, run.ProjectId, ClassificationOwnerKind.ProcessingRun, run.Id, ct))?.Execution,
+        };
 
     private static async Task<IResult> GetAnalysis(Guid projectId, Guid analysisId, HttpContext http, AppDbContext db, CancellationToken ct)
     {

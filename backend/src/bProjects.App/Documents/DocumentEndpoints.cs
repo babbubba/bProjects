@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using bProjects.App.AI;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.AspNetCore.Http.Features;
@@ -436,7 +437,8 @@ public static class ProjectDocumentEndpoints
             artifact?.BlockCount, p.RetryOfId, p.RequestedAt,
             p.ErrorCode is { } code ? new IssuesSummary(code, IssuesSummary.FixedMessage) : null,
             issues.Select(i => new PreparationIssueView(i.Code, i.Severity.ToString(), i.Page, i.BlockId, i.Reason, i.AffectsCompleteness)).ToList(),
-            await preparations.IsRetryAllowedAsync(p, ct) ? ["download", "retry"] : ["download"], p.ParseJobId));
+            await preparations.IsRetryAllowedAsync(p, ct) ? ["download", "retry"] : ["download"], p.ParseJobId,
+            (await ExecutionTelemetry.ForRootAsync(db, p.ProjectId, ClassificationOwnerKind.DocumentPreparation, p.Id, ct))?.Execution));
     }
 
     private static async Task<IResult> ListBlocks(
@@ -557,7 +559,8 @@ public sealed record PreparationIssueView(string Code, string Severity, int? Pag
 public sealed record PreparationView(
     Guid Id, Guid DocumentVersionId, Guid DocumentId, int Version, int Generation, string ProcessingStatus, bool IsReady, string ContentState,
     int? BlockCount, Guid? RetryOfId, DateTimeOffset RequestedAt, IssuesSummary? IssuesSummary,
-    IReadOnlyList<PreparationIssueView> Issues, IReadOnlyList<string> AllowedActions, Guid? ParseJobId);
+    IReadOnlyList<PreparationIssueView> Issues, IReadOnlyList<string> AllowedActions, Guid? ParseJobId,
+    ExecutionView? Execution = null);
 
 /// <summary>Esito del retry manuale: job e preparazione nuovi, collegati ai precedenti; mai testo del documento né percorsi.</summary>
 public sealed record ParseRetryView(

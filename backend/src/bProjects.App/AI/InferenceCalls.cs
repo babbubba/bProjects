@@ -175,3 +175,53 @@ public static class InferenceCallLog
         }, Json);
     }
 }
+
+/// <summary>Tipo di intervallo di attesa persistito di un root: mutuamente esclusivi fra loro e con l'elaborazione osservata (Plan §Misure).</summary>
+public enum ExecutionIntervalKind
+{
+    Queue,
+    Preflight,
+    Backoff,
+    Recovery,
+}
+
+/// <summary>
+/// Intervallo di attesa (append-only) di un root documentale: per ora la coda del primo tentativo, da t0 al claim. Gli altri tipi sono
+/// previsti dallo schema ma non hanno ancora produttori; un intervallo non scritto resta unavailable, mai dedotto.
+/// </summary>
+public sealed class ExecutionInterval
+{
+    public Guid Id { get; set; }
+    public Guid ProjectId { get; set; }
+    public ClassificationOwnerKind RootKind { get; set; }
+    public Guid RootId { get; set; }
+    public ExecutionIntervalKind Kind { get; set; }
+    public int Attempt { get; set; }
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset EndedAt { get; set; }
+}
+
+/// <summary>Scrittura degli intervalli di attesa, con il clock del database (mai quello del processo).</summary>
+public static class ExecutionIntervalStore
+{
+    /// <summary>
+    /// Coda del primo tentativo: da t0 (RequestedAt) all'istante del claim, sul clock del database. Solo per un root documentale (regime
+    /// valorizzato) al suo primo tentativo; i tentativi successivi (backoff, recupero) non hanno ancora un produttore e restano non registrati.
+    /// Idempotente per (root, tipo, tentativo).
+    /// </summary>
+    public static async Task RecordQueueAsync(AppDbContext db, ClassificationOwnerKind kind, Guid rootId, CancellationToken ct)
+    {
+        var (from, project) = kind switch
+        {
+            ClassificationOwnerKind.ChatTurn => ("\"ChatTurns\" x JOIN \"Conversations\" c ON c.\"Id\" = x.\"ConversationId\"", "c.\"ProjectId\""),
+            ClassificationOwnerKind.ProcessingRun => ("\"ProcessingRuns\" x", "x.\"ProjectId\""),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), "La coda del primo claim riguarda un turno o un run."),
+        };
+        // from/project/kind sono costanti del codice (mai input): solo l'id del root è un parametro.
+        var sql = "INSERT INTO \"ExecutionIntervals\" (\"Id\",\"ProjectId\",\"RootKind\",\"RootId\",\"Kind\",\"Attempt\",\"StartedAt\",\"EndedAt\") "
+            + "SELECT gen_random_uuid(), " + project + ", '" + kind + "', x.\"Id\", 'Queue', 1, x.\"RequestedAt\", GREATEST(clock_timestamp(), x.\"RequestedAt\") "
+            + "FROM " + from + " WHERE x.\"Id\" = {0} AND x.\"AttemptCount\" = 1 AND x.\"InitialRegime\" IS NOT NULL "
+            + "ON CONFLICT (\"RootKind\",\"RootId\",\"Kind\",\"Attempt\") DO NOTHING";
+        await db.Database.ExecuteSqlRawAsync(sql, [rootId], ct);
+    }
+}

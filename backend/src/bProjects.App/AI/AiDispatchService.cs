@@ -206,6 +206,7 @@ public sealed class AiDispatchService(
             return false;
         }
 
+        await RecordQueueAsync(work, ct);
         if (work.Turn is { } turn)
         {
             await RunTurnAsync(turn, ct);
@@ -431,6 +432,29 @@ public sealed class AiDispatchService(
     /// di telemetria del tentativo (failed/interrupted, mai token inventati): se owner/fencing non sono più validi la transazione si
     /// annulla e non si scrive nulla. Null se la transizione è stata rifiutata.
     /// </summary>
+    /// <summary>Telemetria (T064): la coda del primo claim di un root documentale. Un guasto di scrittura non blocca mai il lavoro.</summary>
+    private async Task RecordQueueAsync(WorkClaim work, CancellationToken ct)
+    {
+        (ClassificationOwnerKind Kind, Guid Id) target = work.Turn is { } t ? (ClassificationOwnerKind.ChatTurn, t.TurnId)
+            : work.Run is { } r ? (ClassificationOwnerKind.ProcessingRun, r.RunId)
+            : work.Document is { } d ? (ClassificationOwnerKind.ProcessingRun, d.RunId)
+            : default;
+        if (target.Id == Guid.Empty)
+        {
+            return; // unità/estrazioni: non sono root del regime
+        }
+
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await ExecutionIntervalStore.RecordQueueAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), target.Kind, target.Id, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Intervallo di coda non registrato");
+        }
+    }
+
     private async Task<TurnRelease?> ReleaseAsync(
         Func<ExecutionLeaseStore, CancellationToken, Task<TurnRelease>> release, InferenceScope inference, InferenceOwner owner, CancellationToken ct)
     {

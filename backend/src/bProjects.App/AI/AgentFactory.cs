@@ -168,7 +168,8 @@ public sealed class AgentFactory
     public IChatClient CreateBatchClient(AiPhase phase, string? expectedFingerprint = null)
     {
         var timed = new PhaseTimeoutChatClient(_model, phase, TimeSpan.FromSeconds(_options.ForPhase(phase).RequestTimeoutSeconds));
-        var capture = new InferenceCaptureChatClient(timed, phase, _options, _runtime, count: null);
+        // Composizione per categoria (anche document_sources) sul payload realmente inviato, con il tokenizer del runtime.
+        var capture = new InferenceCaptureChatClient(timed, phase, _options, _runtime, _count);
         return new DocumentPayloadChatClient(capture, _preflight, phase, expectedFingerprint);
     }
 

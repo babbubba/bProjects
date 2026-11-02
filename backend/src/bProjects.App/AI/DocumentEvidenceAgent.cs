@@ -153,7 +153,8 @@ public sealed class DocumentEvidenceAgent(
         }
 
         text.Append("\nProduci ora l'unico oggetto JSON evidence-1.1.0 per i soli intervalli Primary.");
-        return [new ChatMessage(ChatRole.User, text.ToString())];
+        // Il payload dell'unità è composto dai soli intervalli sorgente e dai dati del server: è la categoria document_sources.
+        return [new ChatMessage(ChatRole.User, text.ToString()) { AdditionalProperties = new() { [ContextComposition.CategoryProperty] = ContextComposition.DocumentSources } }];
     }
 
     private async ValueTask<UnitMeasure> MeasureAsync(DocumentRuntimeProfile profile, bool structured, IReadOnlyList<DocumentSourceRange> ranges, CancellationToken ct)

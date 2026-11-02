@@ -205,7 +205,7 @@ public static class ExecutionTelemetry
         var execution = new ExecutionView(
             root.InitialRegime?.ToString(), root.Regime?.ToString(), root.ClassificationStatus?.ToString(), root.ClassificationVersion, recordHash, root.ClassificationReason,
             root.RequestedAt, root.OrdinaryDeadlineAt, root.HardDeadlineAt, root.EffectiveDeadlineAt, root.PromotedAt, root.PromotedReason, promotionHash,
-            elapsed, null, ProcessingMs(calls), root.Stage,
+            elapsed, await QueueMsAsync(db, projectId, kind, rootId, root, ct), ProcessingMs(calls), root.Stage,
             isPreparation ? units.Count(j => j.Status == DocumentJobStatus.Completed) : null,
             isPreparation ? units.Count : null);
         return new RootTelemetryView(execution, Metrics(calls, jobs));
@@ -240,7 +240,7 @@ public static class ExecutionTelemetry
     private sealed record RootRow(
         DateTimeOffset RequestedAt, DateTimeOffset? CompletedAt, bool Terminal, ExecutionRegime? InitialRegime, ExecutionRegime? Regime, ClassificationStatus? ClassificationStatus,
         string? ClassificationVersion, string? ClassificationReason, DateTimeOffset? OrdinaryDeadlineAt, DateTimeOffset? HardDeadlineAt, DateTimeOffset? EffectiveDeadlineAt,
-        DateTimeOffset? PromotedAt, string? PromotedReason, string? Stage);
+        DateTimeOffset? PromotedAt, string? PromotedReason, string? Stage, int Attempts);
 
     private sealed record JobRow(Guid Id, Guid? UnitId, DocumentJobKind Kind, DocumentJobStatus Status, DateTimeOffset? CompletedAt);
 
@@ -251,15 +251,15 @@ public static class ExecutionTelemetry
             join c in db.Conversations.AsNoTracking() on t.ConversationId equals c.Id
             where t.Id == rootId && c.ProjectId == projectId
             select new RootRow(t.RequestedAt, t.CompletedAt, t.CompletedAt != null, t.InitialRegime, t.Regime, t.ClassificationStatus, t.ClassificationVersion, t.ClassificationReason,
-                t.OrdinaryDeadlineAt, t.HardDeadlineAt, t.EffectiveDeadlineAt, t.PromotedAt, t.PromotedReason, null)).SingleOrDefaultAsync(ct),
+                t.OrdinaryDeadlineAt, t.HardDeadlineAt, t.EffectiveDeadlineAt, t.PromotedAt, t.PromotedReason, null, t.AttemptCount)).SingleOrDefaultAsync(ct),
         ClassificationOwnerKind.ProcessingRun => await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == rootId && r.ProjectId == projectId)
             .Select(r => new RootRow(r.RequestedAt, r.CompletedAt, r.CompletedAt != null, r.InitialRegime, r.Regime, r.ClassificationStatus, r.ClassificationVersion, r.ClassificationReason,
-                r.OrdinaryDeadlineAt, r.HardDeadlineAt, r.EffectiveDeadlineAt, r.PromotedAt, r.PromotedReason, r.LastObservedStage)).SingleOrDefaultAsync(ct),
+                r.OrdinaryDeadlineAt, r.HardDeadlineAt, r.EffectiveDeadlineAt, r.PromotedAt, r.PromotedReason, r.LastObservedStage, r.AttemptCount)).SingleOrDefaultAsync(ct),
         _ => await db.DocumentPreparations.AsNoTracking().Where(p => p.Id == rootId && p.ProjectId == projectId)
             .Select(p => new RootRow(p.RequestedAt, null,
                 p.Status == PreparationStatus.Ready || p.Status == PreparationStatus.Incomplete || p.Status == PreparationStatus.Failed,
                 p.InitialRegime, p.Regime, p.ClassificationStatus, p.ClassificationVersion, p.ClassificationReason, p.OrdinaryDeadlineAt, p.HardDeadlineAt, p.EffectiveDeadlineAt,
-                p.PromotedAt, p.PromotedReason, p.Status.ToString())).SingleOrDefaultAsync(ct),
+                p.PromotedAt, p.PromotedReason, p.Status.ToString(), 0)).SingleOrDefaultAsync(ct),
     };
 
     private static Task<List<InferenceCall>> CallsOfAsync(
@@ -278,6 +278,25 @@ public static class ExecutionTelemetry
 
         var ids = jobs.Select(j => (Guid?)j.Id).ToList();
         return rows.Where(c => ids.Contains(c.DocumentJobId)).ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Somma degli intervalli di coda persistiti. Solo per un root al primo tentativo: dopo un retry il backoff e il recupero non sono
+    /// persistiti, quindi il totale non sarebbe completo e resta unavailable (mai un valore parziale presentato come intero).
+    /// </summary>
+    private static async Task<long?> QueueMsAsync(AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, RootRow root, CancellationToken ct)
+    {
+        if (kind == ClassificationOwnerKind.DocumentPreparation || root.Attempts > 1)
+        {
+            return null;
+        }
+
+        var intervals = await db.ExecutionIntervals.AsNoTracking()
+            .Where(i => i.ProjectId == projectId && i.RootKind == kind && i.RootId == rootId && i.Kind == ExecutionIntervalKind.Queue)
+            .Select(i => new { i.StartedAt, i.EndedAt }).ToListAsync(ct);
+        return intervals.Count == 0
+            ? null
+            : UnionLength([.. intervals.Select(i => (i.StartedAt.ToUnixTimeMilliseconds(), i.EndedAt.ToUnixTimeMilliseconds()))]);
     }
 
     /// <summary>Unione degli intervalli osservati di tutte le chiamate (anche dei tentativi falliti); null se una durata non è nota o non c'è telemetria.</summary>

@@ -51,7 +51,8 @@ public static class ConversationEndpoints
         int MaxAttempts,
         DateTimeOffset? NextAttemptAt,
         Guid? ResultMessageId,
-        TurnError? Error);
+        TurnError? Error,
+        ExecutionView? Execution = null);
 
     public static IEndpointRouteBuilder MapConversationEndpoints(this IEndpointRouteBuilder app)
     {
@@ -252,7 +253,16 @@ public static class ConversationEndpoints
             join c in db.Conversations on t.ConversationId equals c.Id
             where t.Id == turnId && c.ProjectId == projectId
             select t).AsNoTracking().SingleOrDefaultAsync(ct);
-        return turn is null ? Results.NotFound() : Results.Ok(ToView(turn));
+        if (turn is null)
+        {
+            return Results.NotFound();
+        }
+
+        // Solo i root documentali (regime valorizzato) espongono «execution»: la vista del ramo 001 resta invariata.
+        var execution = turn.InitialRegime is null
+            ? null
+            : (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.ChatTurn, turn.Id, ct))?.Execution;
+        return Results.Ok(ToView(turn) with { Execution = execution });
     }
 
     private static async Task<Guid?> LockConversation(AppDbContext db, Guid projectId, CancellationToken ct)
