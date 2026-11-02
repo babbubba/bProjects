@@ -114,7 +114,9 @@ public sealed class PostgresCheckpointStore(AppDbContext db, CheckpointWriter wr
         // concorrenti. Un'unica istruzione calcolerebbe il massimo su uno snapshot precedente all'attesa sul lock.
         await using var owned = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync() : null;
 
-        var owner = await WorkOwnerGuard.LockAsync(db, writer, includeDeadline: writer.OwnerKind == WorkOwnerKind.DocumentJob);
+        // Un DocumentJob e i root con campi del regime (ChatTurn/ProcessingRun documentali) non scrivono oltre la scadenza corrente (T118);
+        // i ProcessingRun della 001, senza EffectiveDeadlineAt, mantengono il comportamento storico.
+        var owner = await WorkOwnerGuard.LockAsync(db, writer, includeDeadline: true, regimeRootsOnly: writer.OwnerKind != WorkOwnerKind.DocumentJob);
         var definition = writer.DefinitionVersion ?? owner.DefinitionVersion
             ?? throw new InvalidOperationException("Versione di definizione del workflow assente per il checkpoint.");
         var maf = writer.MafVersion ?? owner.MafVersion ?? Conversation.CurrentMafVersion;

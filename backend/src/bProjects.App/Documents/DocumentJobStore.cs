@@ -36,14 +36,12 @@ public sealed class DocumentJobStore(AppDbContext db, IOptions<ExecutionOptions>
     private const string ExhaustedMessage = "Il parsing del documento non è terminato entro i limiti di tentativi o di tempo.";
 
     /// <summary>Idoneità al claim, valutata dal candidato e ricontrollata nella UPDATE (READ COMMITTED: lock di riga e rinnovi concorrenti).</summary>
-    private const string EligibleSql = """
+    private static readonly string EligibleSql = $"""
         j."Kind" = 'Parse'
         AND ((j."Status" = 'Queued' AND (j."NextAttemptAt" IS NULL OR j."NextAttemptAt" <= clk.t))
              OR (j."Status" = 'Running' AND j."LeaseUntil" <= clk.t))
         AND j."AttemptCount" < j."MaxAttempts"
-        AND j."DeadlineAt" > clk.t
-        AND p."EffectiveDeadlineAt" > clk.t
-        AND p."Status" IN ('Queued', 'Parsing')
+        AND {DocumentDeadlineGuard.ChildAlive("j", "p", DocumentDeadlineGuard.ParseParentStatuses, "clk.t")}
         """;
 
     private readonly ExecutionOptions _policy = options.Value;
@@ -153,13 +151,12 @@ public sealed class DocumentJobStore(AppDbContext db, IOptions<ExecutionOptions>
     public async Task<bool> RenewAsync(ParseClaim claim, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             UPDATE "DocumentJobs" j SET "LeaseUntil" = clock_timestamp() + make_interval(secs => @lease)
             FROM "DocumentPreparations" p
             WHERE j."Id" = @id AND p."Id" = j."PreparationId"
               AND j."Status" = 'Running' AND j."LeaseOwner" = @owner AND j."FencingToken" = @fence
-              AND j."LeaseUntil" > clock_timestamp() AND j."DeadlineAt" > clock_timestamp()
-              AND p."EffectiveDeadlineAt" > clock_timestamp() AND p."Status" IN ('Queued', 'Parsing')
+              AND j."LeaseUntil" > clock_timestamp() AND {DocumentDeadlineGuard.ChildAlive("j", "p", DocumentDeadlineGuard.ParseParentStatuses)}
             """,
             ct, ("lease", _policy.LeaseDuration.TotalSeconds), ("id", claim.JobId), ("owner", claim.LeaseOwner), ("fence", claim.FencingToken));
         return await command.ExecuteNonQueryAsync(ct) == 1;
@@ -229,11 +226,10 @@ public sealed class DocumentJobStore(AppDbContext db, IOptions<ExecutionOptions>
     public async Task<bool> LockForCommitAsync(ParseClaim claim, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             SELECT 1 FROM "DocumentPreparations" p JOIN "DocumentJobs" j ON j."PreparationId" = p."Id"
             WHERE j."Id" = @id AND j."Status" = 'Running' AND j."LeaseOwner" = @owner AND j."FencingToken" = @fence
-              AND j."LeaseUntil" > clock_timestamp() AND j."DeadlineAt" > clock_timestamp()
-              AND p."EffectiveDeadlineAt" > clock_timestamp() AND p."Status" IN ('Queued', 'Parsing')
+              AND j."LeaseUntil" > clock_timestamp() AND {DocumentDeadlineGuard.ChildAlive("j", "p", DocumentDeadlineGuard.ParseParentStatuses)}
             FOR UPDATE OF p, j
             """,
             ct, ("id", claim.JobId), ("owner", claim.LeaseOwner), ("fence", claim.FencingToken));

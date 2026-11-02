@@ -82,6 +82,8 @@ public sealed class AiDispatchService(
     /// </summary>
     private Task IdleAsync(CancellationToken ct) => wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct);
 
+    public Task<ExpiredWork> SweepDeadlinesOnceAsync(CancellationToken ct) => Task.FromResult(ExpiredWork.None);
+
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {

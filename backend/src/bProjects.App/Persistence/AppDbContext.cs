@@ -53,6 +53,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<SourceSnapshotItem> SourceSnapshotItems => Set<SourceSnapshotItem>();
     public DbSet<WorkManifest> WorkManifests => Set<WorkManifest>();
     public DbSet<ClassificationRecord> ClassificationRecords => Set<ClassificationRecord>();
+    public DbSet<RegimeTransition> RegimeTransitions => Set<RegimeTransition>();
     public DbSet<DerivedBatch> DerivedBatches => Set<DerivedBatch>();
     public DbSet<WorkOutput> WorkOutputs => Set<WorkOutput>();
 
@@ -783,6 +784,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                     "(\"PlannedCalls\" IS NULL OR \"PlannedCalls\" >= 0) AND (\"PayloadTokens\" IS NULL OR \"PayloadTokens\" >= 0) AND (\"ShapeFloorTokens\" IS NULL OR \"ShapeFloorTokens\" >= 0)");
                 // Un'ammissione Ordinary presuppone una sola chiamata iniziale (regola 7).
                 t.HasCheckConstraint("CK_ClassificationRecords_OrdinaryOneCall", "\"Outcome\" <> 'AdmitOrdinary' OR \"PlannedCalls\" = 1");
+            });
+        });
+
+        // Transizione di regime (T047): append-only (trigger della migrazione), una sola per root e regime di arrivo. Il root è polimorfico: nessuna FK.
+        builder.Entity<RegimeTransition>(transition =>
+        {
+            transition.HasKey(r => r.Id);
+            transition.Property(r => r.RootKind).HasConversion<string>().HasMaxLength(24);
+            transition.Property(r => r.FromRegime).HasConversion<string>().HasMaxLength(16);
+            transition.Property(r => r.ToRegime).HasConversion<string>().HasMaxLength(16);
+            transition.Property(r => r.Reason).HasMaxLength(64);
+            transition.Property(r => r.PolicyHash).HasMaxLength(64);
+            transition.Property(r => r.DerivedPlanHash).HasMaxLength(64);
+            transition.Property(r => r.ReceiptJson).HasColumnType("jsonb");
+            transition.HasIndex(r => new { r.RootKind, r.RootId, r.ToRegime }).IsUnique().HasDatabaseName("UX_RegimeTransitions_RootTo");
+            transition.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            transition.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RegimeTransitions_Root", "\"RootKind\" IN ('ProcessingRun', 'ChatTurn')");
+                // L'unica transizione ammessa: Ordinary→Extended per additional_work, mai un downgrade né un tempo trascorso.
+                t.HasCheckConstraint("CK_RegimeTransitions_Promotion", "\"FromRegime\" = 'Ordinary' AND \"ToRegime\" = 'Extended' AND \"Reason\" = 'additional_work'");
+                t.HasCheckConstraint("CK_RegimeTransitions_Deadlines", "\"NewDeadlineAt\" > \"OldDeadlineAt\" AND \"ElapsedMs\" >= 0 AND \"Fence\" >= 0");
+                t.HasCheckConstraint("CK_RegimeTransitions_Hashes", $"\"PolicyHash\" {Hex} AND \"DerivedPlanHash\" {Hex}");
+                t.HasCheckConstraint("CK_RegimeTransitions_Receipt", "jsonb_typeof(\"ReceiptJson\") = 'object'");
             });
         });
     }

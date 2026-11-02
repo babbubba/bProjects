@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using System.Text.RegularExpressions;
 
 namespace bProjects.App.Persistence;
 
@@ -36,6 +37,15 @@ public readonly record struct TurnRelease(TurnTransition Outcome, DateTimeOffset
 /// </summary>
 public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run, DocumentRunClaim? Document = null, ExtractionJobClaim? Extraction = null);
 
+/// <summary>Lavoro documentale chiuso dallo sweep delle scadenze (T119).</summary>
+public sealed record ExpiredWork(
+    IReadOnlyList<Guid> Turns, IReadOnlyList<Guid> Runs, IReadOnlyList<Guid> Preparations, IReadOnlyList<Guid> Jobs, IReadOnlyList<Guid> Extractions)
+{
+    public static ExpiredWork None { get; } = new([], [], [], [], []);
+
+    public bool Any => Turns.Count + Runs.Count + Preparations.Count + Jobs.Count + Extractions.Count > 0;
+}
+
 /// <summary>
 /// Claim, lease e transizioni dei ChatTurn e dei ProcessingRun di Analysis su PostgreSQL (contracts/ai-workflow.md §2).
 /// Ogni istante e ogni scadenza sono calcolati dal database (<c>clock_timestamp()</c>); ogni scrittura di un owner è
@@ -43,7 +53,7 @@ public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run, Docum
 /// I due tipi condividono limite AI globale e lock di claim; le transizioni hanno la stessa semantica.
 /// Usa la transazione EF corrente, se presente, così il commit del risultato può comporsi con la transizione.
 /// </summary>
-public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptions> options)
+public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptions> options)
 {
     /// <summary>Esecuzioni AI contemporanee ammesse: una sola nell'istanza applicativa iniziale.</summary>
     public const int MaxConcurrentRuns = 1;
@@ -66,7 +76,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     /// I nomi di tabella sono costanti interne (mai input): la query resta parametrica per ogni valore. Per i run, {KIND} limita ai
     /// Kind di cui il chiamante ha un esecutore (parametro <c>@kinds</c>): Analysis e Document non si toccano a vicenda.
     /// </summary>
-    private static string Sql(Table table, string template) => template
+    private static string Sql(Table table, string template) => UntilPlaceholder().Replace(template
         .Replace("{TABLE}", table switch
         {
             Table.Turns => "\"ChatTurns\"",
@@ -74,7 +84,20 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             _ => "\"EvidenceExtractionJobs\"",
         }, StringComparison.Ordinal)
         .Replace("{KIND}", table == Table.Runs ? " AND x.\"Kind\" = ANY(@kinds)" : "", StringComparison.Ordinal)
-        .Replace("{UPDATED}", table == Table.Runs ? ",\n                \"UpdatedAt\" = clock_timestamp()" : "", StringComparison.Ordinal);
+        .Replace("{UPDATED}", table == Table.Runs ? ",\n                \"UpdatedAt\" = clock_timestamp()" : "", StringComparison.Ordinal),
+        match => UntilOf(table, match.Groups[1].Value));
+
+    [GeneratedRegex(@"\{UNTIL:(\w+)\}")]
+    private static partial Regex UntilPlaceholder();
+
+    /// <summary>
+    /// Scadenza corrente del lavoro (T118, autorità temporale): per i root documentali il minore fra DeadlineAt ed EffectiveDeadlineAt, quindi
+    /// mai il valore copiato in un vecchio claim; per l'aggregatore documentale anche l'EffectiveDeadlineAt della preparazione padre. I record
+    /// legacy (EffectiveDeadlineAt nullo, nessun padre) restano governati dalla sola DeadlineAt.
+    /// </summary>
+    private static string UntilOf(Table table, string alias) => table == Table.Extractions
+        ? $"LEAST({alias}.\"DeadlineAt\", COALESCE((SELECT pp.\"EffectiveDeadlineAt\" FROM \"DocumentPreparations\" pp WHERE pp.\"Id\" = {alias}.\"PreparationId\"), {alias}.\"DeadlineAt\"))"
+        : DocumentDeadlineGuard.Until(alias);
 
     private static string[] KindsOf(bool analysis, bool document) =>
         [.. new[] { analysis ? nameof(ProcessingRunKind.Analysis) : null, document ? nameof(ProcessingRunKind.Document) : null }.OfType<string>()];
@@ -157,6 +180,9 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
         return claim;
     }
 
+    public Task<ExpiredWork> SweepExpiredDocumentWorkAsync(bool turns, bool analysisRuns, bool documentRuns, CancellationToken ct) =>
+        Task.FromResult(ExpiredWork.None);
+
     private async Task SweepAsync(Table table, string[] kinds, CancellationToken ct)
     {
         await using var sweep = await CommandAsync(
@@ -164,7 +190,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             WITH clk AS (SELECT clock_timestamp() AS t)
             UPDATE {TABLE} x SET
                 "Status" = 'Failed',
-                "ErrorCode" = CASE WHEN x."DeadlineAt" <= clk.t THEN 'deadline_exceeded' ELSE 'attempts_exhausted' END,
+                "ErrorCode" = CASE WHEN {UNTIL:x} <= clk.t THEN 'deadline_exceeded' ELSE 'attempts_exhausted' END,
                 "ErrorMessage" = @message,
                 "CompletedAt" = clk.t,
                 "LeaseOwner" = NULL,
@@ -172,7 +198,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                 "FencingToken" = x."FencingToken" + 1{UPDATED}
             FROM clk
             WHERE (x."Status" = 'Queued' OR (x."Status" = 'Running' AND x."LeaseUntil" <= clk.t))
-              AND (x."DeadlineAt" <= clk.t OR x."AttemptCount" >= x."MaxAttempts"){KIND}
+              AND ({UNTIL:x} <= clk.t OR x."AttemptCount" >= x."MaxAttempts"){KIND}
             """),
             ct,
             table == Table.Runs ? [("message", ExhaustedMessage), ("kinds", kinds)] : [("message", ExhaustedMessage)]);
@@ -194,14 +220,14 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     private async Task<(Guid Id, DateTimeOffset RequestedAt)?> TurnCandidateAsync(CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             WITH clk AS (SELECT clock_timestamp() AS t)
             SELECT c."Id", c."RequestedAt"
             FROM "ChatTurns" c, clk
             WHERE ((c."Status" = 'Queued' AND (c."NextAttemptAt" IS NULL OR c."NextAttemptAt" <= clk.t))
                    OR (c."Status" = 'Running' AND c."LeaseUntil" <= clk.t))
               AND c."AttemptCount" < c."MaxAttempts"
-              AND c."DeadlineAt" > clk.t
+              AND {DocumentDeadlineGuard.RootAlive("c", "clk.t")}
               AND NOT EXISTS (
                     SELECT 1 FROM "ChatTurns" p
                     WHERE p."ConversationId" = c."ConversationId"
@@ -217,7 +243,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     private async Task<(Guid Id, DateTimeOffset RequestedAt, string Kind)?> RunCandidateAsync(string[] kinds, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             WITH clk AS (SELECT clock_timestamp() AS t)
             SELECT r."Id", r."RequestedAt", r."Kind"
             FROM "ProcessingRuns" r, clk
@@ -225,7 +251,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               AND ((r."Status" = 'Queued' AND (r."NextAttemptAt" IS NULL OR r."NextAttemptAt" <= clk.t))
                    OR (r."Status" = 'Running' AND r."LeaseUntil" <= clk.t))
               AND r."AttemptCount" < r."MaxAttempts"
-              AND r."DeadlineAt" > clk.t
+              AND {DocumentDeadlineGuard.RootAlive("r", "clk.t")}
               -- Gate del registro: un'analisi parte quando le estrazioni dei messaggi PM entro il suo cutoff sono concluse.
               AND NOT (r."Kind" = 'Analysis' AND EXISTS (
                     SELECT 1 FROM "EvidenceExtractionJobs" j
@@ -250,7 +276,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     private async Task<ChatTurnClaim?> ClaimTurnAsync(Guid id, string owner, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             WITH clk AS (SELECT clock_timestamp() AS t)
             UPDATE "ChatTurns" t SET
                 "Status" = 'Running',
@@ -268,7 +294,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               AND ((t."Status" = 'Queued' AND (t."NextAttemptAt" IS NULL OR t."NextAttemptAt" <= clk.t))
                    OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
               AND t."AttemptCount" < t."MaxAttempts"
-              AND t."DeadlineAt" > clk.t
+              AND {DocumentDeadlineGuard.RootAlive("t", "clk.t")}
             RETURNING t."Id", t."ConversationId", t."TriggerMessageId", t."SourceCutoffSequence",
                       t."FencingToken", t."AttemptCount", t."LeaseUntil", t."DeadlineAt"
             """,
@@ -292,7 +318,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     private async Task<WorkClaim?> ClaimRunAsync(Guid id, string kind, string owner, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             WITH clk AS (SELECT clock_timestamp() AS t)
             UPDATE "ProcessingRuns" t SET
                 "Status" = 'Running',
@@ -310,7 +336,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               AND ((t."Status" = 'Queued' AND (t."NextAttemptAt" IS NULL OR t."NextAttemptAt" <= clk.t))
                    OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
               AND t."AttemptCount" < t."MaxAttempts"
-              AND t."DeadlineAt" > clk.t
+              AND {DocumentDeadlineGuard.RootAlive("t", "clk.t")}
             RETURNING t."Id", t."FencingToken", t."AttemptCount"
             """,
             ct,
@@ -376,7 +402,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     private async Task<ExtractionJobClaim?> ClaimExtractionAsync(Guid id, string owner, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
+            $"""
             WITH clk AS (SELECT clock_timestamp() AS t)
             UPDATE "EvidenceExtractionJobs" t SET
                 "Status" = 'Running',
@@ -392,7 +418,7 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
               AND ((t."Status" = 'Queued' AND (t."NextAttemptAt" IS NULL OR t."NextAttemptAt" <= clk.t))
                    OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
               AND t."AttemptCount" < t."MaxAttempts"
-              AND t."DeadlineAt" > clk.t
+              AND {UntilOf(Table.Extractions, "t")} > clk.t
             RETURNING t."Id", t."FencingToken", t."AttemptCount"
             """,
             ct,
@@ -421,9 +447,9 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     {
         await using var command = await CommandAsync(
             Sql(table, """
-            UPDATE {TABLE} SET "LeaseUntil" = clock_timestamp() + make_interval(secs => @lease){UPDATED}
-            WHERE "Id" = @id AND "Status" = 'Running' AND "LeaseOwner" = @owner AND "FencingToken" = @fence
-              AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp()
+            UPDATE {TABLE} x SET "LeaseUntil" = clock_timestamp() + make_interval(secs => @lease){UPDATED}
+            WHERE x."Id" = @id AND x."Status" = 'Running' AND x."LeaseOwner" = @owner AND x."FencingToken" = @fence
+              AND x."LeaseUntil" > clock_timestamp() AND {UNTIL:x} > clock_timestamp()
             """),
             ct,
             ("lease", _policy.LeaseDuration.TotalSeconds), ("id", id), ("owner", owner), ("fence", fence));
@@ -477,9 +503,9 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
             FROM (
                 SELECT t."Id", clk.t AS now, clk.t + make_interval(secs => @delay) AS next,
                        (@transient AND t."AttemptCount" < t."MaxAttempts"
-                            AND clk.t + make_interval(secs => @delay) < t."DeadlineAt") AS retry,
+                            AND clk.t + make_interval(secs => @delay) < {UNTIL:t}) AS retry,
                        CASE WHEN NOT @transient THEN @code
-                            WHEN clk.t + make_interval(secs => @delay) >= t."DeadlineAt" THEN 'deadline_exceeded'
+                            WHEN clk.t + make_interval(secs => @delay) >= {UNTIL:t} THEN 'deadline_exceeded'
                             ELSE 'attempts_exhausted' END AS code
                 FROM {TABLE} t, clk
                 WHERE t."Id" = @id AND t."Status" = 'Running' AND t."LeaseOwner" = @owner AND t."FencingToken" = @fence
@@ -524,11 +550,11 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
     public async Task<bool> CompleteAsync(ChatTurnClaim claim, Guid resultMessageId, CancellationToken ct)
     {
         await using var command = await CommandAsync(
-            """
-            UPDATE "ChatTurns" SET "Status" = 'Completed', "ResultMessageId" = @result,
+            $"""
+            UPDATE "ChatTurns" x SET "Status" = 'Completed', "ResultMessageId" = @result,
                 "CompletedAt" = clock_timestamp(), "LeaseOwner" = NULL, "LeaseUntil" = NULL
-            WHERE "Id" = @id AND "Status" = 'Running' AND "LeaseOwner" = @owner AND "FencingToken" = @fence
-              AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp()
+            WHERE x."Id" = @id AND x."Status" = 'Running' AND x."LeaseOwner" = @owner AND x."FencingToken" = @fence
+              AND x."LeaseUntil" > clock_timestamp() AND {DocumentDeadlineGuard.RootAlive("x")}
             """,
             ct,
             ("result", resultMessageId), ("id", claim.TurnId), ("owner", claim.LeaseOwner), ("fence", claim.FencingToken));

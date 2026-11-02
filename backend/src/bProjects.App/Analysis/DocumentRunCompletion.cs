@@ -94,16 +94,10 @@ public sealed class DocumentRunCompletion(AppDbContext db) : IDocumentRunStore
             return new(DocumentCommitOutcome.Rejected, Reason: "run_missing");
         }
 
-        var state = (await db.Database.SqlQuery<string>($"""
-            SELECT CASE
-                WHEN "Status" = 'Completed' THEN 'completed'
-                WHEN "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner} AND "FencingToken" = {claim.FencingToken}
-                     AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp() THEN 'valid'
-                ELSE 'stale' END AS "Value"
-            FROM "ProcessingRuns" WHERE "Id" = {claim.RunId}
-            """).ToListAsync(ct)).Single();
+        // Stato di commit dalla guard dell'autorità temporale (T118): lease, fence e scadenza corrente (DeadlineAt ed EffectiveDeadlineAt) sotto lock di riga.
+        var state = await DocumentDeadlineGuard.CommitStateAsync(db, turn: false, claim.RunId, claim.LeaseOwner, claim.FencingToken, ct);
 
-        if (state == "completed")
+        if (state == RootCommitState.Completed)
         {
             await transaction.RollbackAsync(CancellationToken.None);
             return run.DraftId is { } existing
@@ -111,7 +105,7 @@ public sealed class DocumentRunCompletion(AppDbContext db) : IDocumentRunStore
                 : new(DocumentCommitOutcome.Rejected, Reason: "completed_without_result");
         }
 
-        if (state != "valid")
+        if (state != RootCommitState.Valid)
         {
             return new(DocumentCommitOutcome.Rejected, Reason: "lease_lost");
         }

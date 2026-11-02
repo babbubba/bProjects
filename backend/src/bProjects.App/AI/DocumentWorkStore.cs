@@ -74,34 +74,39 @@ internal static class WorkOwnerGuard
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    public static async Task<OwnerLock> LockAsync(AppDbContext db, CheckpointWriter writer, bool includeDeadline, CancellationToken ct = default)
+    /// <summary>
+    /// Blocca l'owner e ne verifica l'autorità (T118, <see cref="DocumentDeadlineGuard"/>). Con <paramref name="includeDeadline"/> vale anche la
+    /// scadenza corrente; con <paramref name="regimeRootsOnly"/> i root senza campi del regime (ramo 001) non sono guardati sulla deadline.
+    /// </summary>
+    public static async Task<OwnerLock> LockAsync(
+        AppDbContext db, CheckpointWriter writer, bool includeDeadline, CancellationToken ct = default, bool regimeRootsOnly = false)
     {
         if (db.Database.CurrentTransaction is null)
         {
             throw new InvalidOperationException("Il lock dell'owner richiede una transazione.");
         }
 
-        var deadline = includeDeadline ? " AND {0}.\"DeadlineAt\" > clock_timestamp()" : "";
+        string Deadline(string alias) => !includeDeadline ? ""
+            : " AND " + (regimeRootsOnly ? DocumentDeadlineGuard.RegimeRootAlive(alias) : DocumentDeadlineGuard.RootAlive(alias));
         var sql = writer.OwnerKind switch
         {
             WorkOwnerKind.ProcessingRun => $"""
                 SELECT r."ProjectId", r."MafVersion", r."WorkflowDefinitionVersion" FROM "ProcessingRuns" r
                 WHERE r."Id" = @owner AND r."Status" = 'Running' AND r."LeaseOwner" = @lease AND r."FencingToken" = @fence
-                  AND r."LeaseUntil" > clock_timestamp(){string.Format(deadline, "r")}
+                  AND r."LeaseUntil" > clock_timestamp(){Deadline("r")}
                 FOR UPDATE OF r
                 """,
             WorkOwnerKind.ChatTurn => $"""
                 SELECT c."ProjectId", NULL::text, NULL::text FROM "ChatTurns" t JOIN "Conversations" c ON c."Id" = t."ConversationId"
                 WHERE t."Id" = @owner AND t."Status" = 'Running' AND t."LeaseOwner" = @lease AND t."FencingToken" = @fence
-                  AND t."LeaseUntil" > clock_timestamp(){string.Format(deadline, "t")}
+                  AND t."LeaseUntil" > clock_timestamp(){Deadline("t")}
                 FOR UPDATE OF t
                 """,
             _ => $"""
                 SELECT j."ProjectId", NULL::text, j."WorkflowDefinitionVersion" FROM "DocumentJobs" j
                 JOIN "DocumentPreparations" p ON p."Id" = j."PreparationId" AND p."ProjectId" = j."ProjectId"
                 WHERE j."Id" = @owner AND j."Status" = 'Running' AND j."LeaseOwner" = @lease AND j."FencingToken" = @fence
-                  AND j."LeaseUntil" > clock_timestamp() AND j."DeadlineAt" > clock_timestamp()
-                  AND p."Status" IN ('Queued', 'Parsing', 'Extracting') AND p."EffectiveDeadlineAt" > clock_timestamp()
+                  AND j."LeaseUntil" > clock_timestamp() AND {DocumentDeadlineGuard.ChildAlive("j", "p")}
                 FOR UPDATE OF j
                 """,
         };

@@ -2,14 +2,13 @@
 
 Non è un piano: la fonte dei task è `tasks.md`. Solo stato per riprendere. Nessun segreto.
 
-## Stato
-- Branch `feature/002-implementation`. I2 chiuso (vedi `I2.md`). **Milestone corrente: I3.**
-- Completati e spuntati I3: T033–T046 (T044: `DocumentBatchPort`, seam `IBatchCallReservation`/`RootCallCounterReservation` da sostituire con CAS T047/T118; ripresa con risposta salvata rivalida senza reinferire = CONFERMATO; 16/16 recovery PG; rosso solo come compile error + mutazione Lookup→Miss). Migrations: `20261102012256_DocumentEvidence`, `20261102015659_DocumentWork` (append-only, trigger 23001; FK checkpoint in SQL raw), `20261102020839_DocumentRegime` (colonne root regime nullable su DocumentPreparation/ChatTurn/ProcessingRun, ClassificationRecord append-only; PromotionDueAt assente). `DocumentStorageMigrationTests` esclude le 14 colonne regime dal confronto to_jsonb 001.
-- Grafo nativo T043 dietro `IDocumentBatchPort` (fake); port di produzione = T044/T049. Ripresa dopo risposta salvata/prima commit rivalida senza reinferire (confermare in T044). Rosso non osservato per T037, T038, T042, T045; fixture A–G di T045 = mappatura dell'agente sul quickstart (verificare in T048).
-- Regime: a 190 s resta Ordinary e il root fallisce deadline_exceeded; `workload_unknown` senza `/apply-template` finché PayloadCalibration non ha config (T049).
-- In corso: agente guard/CAS/timer T118→T047→T119 (owner migrations, migration `DocumentRegimeTransition` in lavorazione, non committata). Prossimo: T048, poi T049–T055.
-- Regola: una sola migration alla volta (un solo agente scrive in Persistence/Migrations).
-- Rosso iniziale NON osservato per T037, T038 (test scritti dopo il codice). Dichiarato.
+## Stato (sessione sospesa su richiesta dell'utente)
+- Branch `feature/002-implementation`. I2 chiuso. **Milestone corrente: I3** (T033–T046 spuntati; ultimo commit verificato `410673e`, poi un commit WIP di checkpoint sotto).
+- **WIP NON VERIFICATO (T118/T047/T119 aperti)**: agente interrotto a metà. Nel checkpoint WIP: `AI/DocumentDeadlineGuard.cs`, `AI/DocumentRegimeTransitions.cs`, modifiche a AiDispatchService/ExecutionOptions/DocumentWorkStore/PostgresCheckpointStore/ExecutionLeaseStore/DocumentJobStore/committer (AnalysisRunCompletion, DocumentRunCompletion, ChatTurnCompletion), migration `20261102060756_DocumentRegimeTransition` (+ snapshot), test `DocumentDeadlineGuardTests`, `DocumentDeadlineDispatchTests`, `DocumentPromotionTransitionTests`, `DocumentRegimeRoots`. La build compila (0 errori); i test NON sono stati eseguiti/verificati; non so quali tre task siano a che punto (T118 probabilmente più avanti, T119 probabilmente appena iniziato). Prima azione alla ripresa: eseguire quei 3 file di test mirati (PG), leggere il diff, completare nell'ordine T118→T047→T119 senza duplicare file/migration (riusare la migration esistente se coerente; se va rifatta, non toccare quelle storiche).
+- Seam temporaneo: `IBatchCallReservation`/`RootCallCounterReservation` (T044) da sostituire con la CAS del root (T047/T118).
+- Dopo: T048 (campagna concorrenza), T049–T055 (agente estrazione, dispatcher ExtractUnit, aggregazione ledger, endpoint Evidence, ecc.), poi I4 (T056–T067, T120–T121, T123). T055/T067 richiedono DGX (variabili BPROJECTS_TEST_DGX_* presenti nell'ambiente: usarle solo per T055/T067/MafReal).
+- Rosso iniziale non osservato per T037, T038, T042, T045 (dichiarato). Regola: una sola migration alla volta, un solo agente su Persistence/Migrations.
+- Ambiente: `bprojects-002-test-pg` (porta 55432) può essere uscito: `docker start` e attendere `pg_isready`. Stack Docker I2 fermato.
 - `docs/acceptance-trace/` non tracciato: non toccare.
 
 ## Decisioni I3

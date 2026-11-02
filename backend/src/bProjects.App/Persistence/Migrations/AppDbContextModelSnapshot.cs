@@ -577,6 +577,89 @@ namespace bProjects.App.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("bProjects.App.AI.RegimeTransition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DerivedPlanHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("ElapsedMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Fence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FromRegime")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("NewDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("OldDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ReceiptJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("RootId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RootKind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("ToRegime")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("RootKind", "RootId", "ToRegime")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RegimeTransitions_RootTo");
+
+                    b.ToTable("RegimeTransitions", t =>
+                        {
+                            t.HasCheckConstraint("CK_RegimeTransitions_Deadlines", "\"NewDeadlineAt\" > \"OldDeadlineAt\" AND \"ElapsedMs\" >= 0 AND \"Fence\" >= 0");
+
+                            t.HasCheckConstraint("CK_RegimeTransitions_Hashes", "\"PolicyHash\" ~ '^[0-9a-f]{64}$' AND \"DerivedPlanHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RegimeTransitions_Promotion", "\"FromRegime\" = 'Ordinary' AND \"ToRegime\" = 'Extended' AND \"Reason\" = 'additional_work'");
+
+                            t.HasCheckConstraint("CK_RegimeTransitions_Receipt", "jsonb_typeof(\"ReceiptJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_RegimeTransitions_Root", "\"RootKind\" IN ('ProcessingRun', 'ChatTurn')");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.AI.WorkManifest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3316,6 +3399,15 @@ namespace bProjects.App.Persistence.Migrations
                         .HasForeignKey("DocumentJobId", "ProjectId")
                         .HasPrincipalKey("Id", "ProjectId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RegimeTransition", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("bProjects.App.AI.WorkManifest", b =>

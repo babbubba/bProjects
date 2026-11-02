@@ -47,27 +47,21 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
             .ToListAsync(ct)).SingleOrDefault();
 
         // La riga del turno è bloccata fino al commit: nessun reclaim può interporsi tra verifica e Completed.
-        var state = (await db.Database.SqlQuery<string>($"""
-            SELECT CASE
-                WHEN "Status" = 'Completed' THEN 'completed'
-                WHEN "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner} AND "FencingToken" = {claim.FencingToken}
-                     AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp() THEN 'valid'
-                ELSE 'stale' END AS "Value"
-            FROM "ChatTurns" WHERE "Id" = {claim.TurnId} FOR UPDATE
-            """).ToListAsync(ct)).SingleOrDefault();
+        // Stato di commit dalla guard dell'autorità temporale (T118): lease, fence e scadenza corrente (DeadlineAt ed EffectiveDeadlineAt) sotto lock di riga.
+        var state = await DocumentDeadlineGuard.CommitStateAsync(db, turn: true, claim.TurnId, claim.LeaseOwner, claim.FencingToken, ct);
 
-        if (conversation is null || state is null)
+        if (conversation is null || state == RootCommitState.Missing)
         {
             return new(ChatTurnCommitOutcome.Rejected, Reason: "turn_missing");
         }
 
-        if (state == "completed")
+        if (state == RootCommitState.Completed)
         {
             await transaction.RollbackAsync(CancellationToken.None);
             return await ReconcileAsync(claim.TurnId, ct) ?? new(ChatTurnCommitOutcome.Rejected, Reason: "completed_without_result");
         }
 
-        if (state != "valid")
+        if (state != RootCommitState.Valid)
         {
             return new(ChatTurnCommitOutcome.Rejected, Reason: "lease_lost");
         }
