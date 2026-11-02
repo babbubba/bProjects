@@ -10,7 +10,9 @@ namespace bProjects.App.AI;
 
 /// <summary>
 /// Esito di un'esecuzione conversazionale, in attesa del commit atomico (T018): testo completo della risposta e
-/// sessione MAF aggiornata. Nulla è stato scritto: né messaggi, né snapshot, né watermark.
+/// sessione MAF aggiornata. Nulla è stato scritto: né messaggi, né snapshot, né watermark. Per la chat documentale (002 T058)
+/// <paramref name="DocumentSnapshotHash"/> è l'hash della selezione congelata (filtra i riferimenti dello snapshot di sessione) e
+/// <paramref name="Document"/> la risposta validata con le sue fonti, ricontrollate dal commit nella stessa transazione.
 /// </summary>
 public sealed record ConversationalReply(
     string Text,
@@ -19,7 +21,9 @@ public sealed record ConversationalReply(
     RestoredChatSession Restored,
     Conversation Conversation,
     ChatTurn Turn,
-    string ChatConfigVersion);
+    string ChatConfigVersion,
+    string? DocumentSnapshotHash = null,
+    DocumentChatAnswer? Document = null);
 
 /// <summary>Chi committa atomicamente risposta, snapshot, watermark e Completed (T018). Deve rifiutare se lease/fencing/revisione non sono più validi.</summary>
 public interface IChatTurnCommitter
@@ -143,7 +147,8 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
 
     private static string LoadPrompt() => LoadPrompt("conversation.md");
 
-    private static string LoadPrompt(string file)
+    /// <summary>Prompt incorporato in AI/Prompts (condiviso con la chat documentale, che ha il proprio file).</summary>
+    internal static string LoadPrompt(string file)
     {
         using var stream = typeof(ConversationalAgent).Assembly.GetManifestResourceStream("Prompts." + file)
             ?? throw new InvalidOperationException($"Prompt {file} non incorporato nell'assembly.");

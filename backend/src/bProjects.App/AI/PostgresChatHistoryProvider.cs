@@ -30,25 +30,39 @@ public sealed record RestoredChatSession(AgentSession Session, bool Reused, stri
 /// non scrive nulla: la risposta, lo snapshot e il watermark sono committati insieme da T018. Il riuso di una
 /// sessione salvata è deciso da <see cref="RestoreAsync"/>, che altrimenti ne crea una nuova dagli originali.
 /// </summary>
-public sealed class PostgresChatHistoryProvider(AppDbContext db, Guid conversationId, long cutoffSequence, Guid triggerMessageId)
+public sealed class PostgresChatHistoryProvider(
+    AppDbContext db, Guid conversationId, long cutoffSequence, Guid triggerMessageId, string? documentSnapshotHash = null)
     : ChatHistoryProvider
 {
     protected override async ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(InvokingContext context, CancellationToken cancellationToken = default)
     {
-        var history = await LoadAdmittedAsync(db, conversationId, cutoffSequence, triggerMessageId, cancellationToken);
+        var history = await LoadAdmittedAsync(db, conversationId, cutoffSequence, triggerMessageId, cancellationToken, documentSnapshotHash);
         return history.Select(m => new ChatMessage(m.Role == MessageRole.User ? ChatRole.User : ChatRole.Assistant, m.Body));
     }
 
     // Nessuna persistenza anticipata: T018 committa risposta, snapshot e watermark nella stessa transazione.
     protected override ValueTask StoreChatHistoryAsync(InvokedContext context, CancellationToken cancellationToken = default) => default;
 
-    /// <summary>Originali ammessi dal cutoff, in ordine di Sequence, escluso il trigger.</summary>
+    /// <summary>
+    /// Originali ammessi dal cutoff, in ordine di Sequence, escluso il trigger. Con <paramref name="documentSnapshotHash"/> (chat documentale,
+    /// 002 T058) il contesto operativo contiene tutti i messaggi PM ma solo gli assistant nati da un turno con la STESSA selezione congelata
+    /// (hash dello snapshot): un assistant di un'altra selezione, o del ramo senza snapshot, resta nello storico ma non è input operativo,
+    /// così fonti escluse o non più valide non rientrano indirettamente tramite vecchie risposte o sintesi.
+    /// </summary>
     internal static async Task<List<ConversationMessage>> LoadAdmittedAsync(
-        AppDbContext db, Guid conversationId, long cutoffSequence, Guid triggerMessageId, CancellationToken ct) =>
-        await db.ConversationMessages.AsNoTracking()
-            .Where(m => m.ConversationId == conversationId && m.Sequence <= cutoffSequence && m.Id != triggerMessageId)
-            .OrderBy(m => m.Sequence)
-            .ToListAsync(ct);
+        AppDbContext db, Guid conversationId, long cutoffSequence, Guid triggerMessageId, CancellationToken ct, string? documentSnapshotHash = null)
+    {
+        var query = db.ConversationMessages.AsNoTracking()
+            .Where(m => m.ConversationId == conversationId && m.Sequence <= cutoffSequence && m.Id != triggerMessageId);
+        if (documentSnapshotHash is not null)
+        {
+            query = query.Where(m => m.Role == MessageRole.User
+                || db.ChatTurns.Any(t => t.Id == m.ChatTurnId
+                    && db.SourceSnapshots.Any(s => s.Id == t.SourceSnapshotId && s.Hash == documentSnapshotHash)));
+        }
+
+        return await query.OrderBy(m => m.Sequence).ToListAsync(ct);
+    }
 
     /// <summary>
     /// Restituisce la sessione del turno: lo snapshot salvato solo se watermark, versioni, provenienza e prefisso
@@ -128,13 +142,12 @@ public sealed class PostgresChatHistoryProvider(AppDbContext db, Guid conversati
     /// <summary>Snapshot da committare con la risposta (T018): riferimenti = originali &lt;= cutoff, trigger incluso, più la risposta.</summary>
     public static async Task<string> CreateSnapshotAsync(
         AIAgent agent, AgentSession session, AppDbContext db, Conversation conversation, ChatTurn turn,
-        ChatMessageRef response, string? chatConfigVersion, CancellationToken ct)
+        ChatMessageRef response, string? chatConfigVersion, CancellationToken ct, string? documentSnapshotHash = null)
     {
-        var used = await db.ConversationMessages.AsNoTracking()
-            .Where(m => m.ConversationId == conversation.Id && m.Sequence <= turn.SourceCutoffSequence)
-            .OrderBy(m => m.Sequence)
+        // Riferimenti = originali operativi fino al cutoff (trigger incluso); con la selezione documentale gli stessi che il turno ha visto.
+        var used = (await LoadAdmittedAsync(db, conversation.Id, turn.SourceCutoffSequence, Guid.Empty, ct, documentSnapshotHash))
             .Select(m => new ChatMessageRef(m.Id, m.Sequence))
-            .ToListAsync(ct);
+            .ToList();
         used.Add(response);
         var serialized = await agent.SerializeSessionAsync(session, cancellationToken: ct);
         return JsonSerializer.Serialize(new ChatSessionEnvelope(conversation.Id, Conversation.CurrentMafVersion, chatConfigVersion, used, serialized));

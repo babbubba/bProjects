@@ -66,6 +66,17 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
             return new(ChatTurnCommitOutcome.Rejected, Reason: "lease_lost");
         }
 
+        // Chat documentale: le fonti citate sono ricontrollate contro lo snapshot del turno sotto lo stesso lock, prima di scrivere qualunque cosa
+        // (la validazione del workflow non basta da sola: lo snapshot e le evidenze sono quelli congelati, mai la selezione corrente).
+        if (reply.Document is { SourceIds.Count: > 0 } cited)
+        {
+            var allowed = await DocumentChatSources.LoadAsync(db, claim.TurnId, ct);
+            if (cited.SourceIds.Any(id => !allowed.SourceIds.Contains(id)))
+            {
+                throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "La risposta cita una fonte che non appartiene allo snapshot del turno: nessun commit.");
+            }
+        }
+
         var startRevision = (await db.Database.SqlQuery<long>(
             $"""SELECT "SessionRevisionAtStart" AS "Value" FROM "ChatTurns" WHERE "Id" = {claim.TurnId}""").ToListAsync(ct)).Single();
         if (conversation.ChatSessionRevision != reply.Conversation.ChatSessionRevision
@@ -90,7 +101,7 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
         db.ConversationMessages.Add(message);
 
         conversation.MafChatSessionState = await PostgresChatHistoryProvider.CreateSnapshotAsync(
-            reply.Agent, reply.Session, db, conversation, reply.Turn, new(message.Id, message.Sequence), reply.ChatConfigVersion, ct);
+            reply.Agent, reply.Session, db, conversation, reply.Turn, new(message.Id, message.Sequence), reply.ChatConfigVersion, ct, reply.DocumentSnapshotHash);
         conversation.MafVersion = Conversation.CurrentMafVersion;
         conversation.ChatConfigVersion = reply.ChatConfigVersion;
         conversation.ContextThroughSequence = message.Sequence; // include la risposta appena committata
