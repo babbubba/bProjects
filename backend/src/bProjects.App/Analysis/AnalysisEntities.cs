@@ -144,6 +144,9 @@ public sealed class AnalysisRevision
 {
     public const string CurrentSchemaVersion = "1.0.0";
 
+    /// <summary>Schema delle revisioni documentali (slice 002, decoder dedicato): una revisione conserva il proprio schema in modifica e conferma, mai convertito.</summary>
+    public const string DocumentSchemaVersion = DocumentAnalysisContent.SchemaVersionValue;
+
     public Guid Id { get; set; }
     public Guid AnalysisId { get; set; }
     public int Version { get; set; }

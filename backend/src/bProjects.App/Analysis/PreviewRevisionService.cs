@@ -46,6 +46,16 @@ public sealed class PreviewRevisionService(AppDbContext db)
         }
 
         var current = state.Current;
+        if (current.SchemaVersion == AnalysisRevision.DocumentSchemaVersion)
+        {
+            return await EditDocumentAsync(state, analysisId, author, contentJson, transaction, ct);
+        }
+
+        if (SchemaMismatch(contentJson, current.SchemaVersion) is { } mismatch)
+        {
+            return new(PreviewStatus.Invalid, Violations: [mismatch]);
+        }
+
         if (!TryParse(contentJson, out var incoming, out var parseError))
         {
             return new(PreviewStatus.Invalid, Violations: [parseError!]);
@@ -106,6 +116,11 @@ public sealed class PreviewRevisionService(AppDbContext db)
             return new(PreviewStatus.ProcessingActive, ProcessingRunId: active);
         }
 
+        if (current.SchemaVersion == AnalysisRevision.DocumentSchemaVersion)
+        {
+            return await ConfirmDocumentAsync(state, confirmer, transaction, ct);
+        }
+
         if (!TryParse(current.ContentJson, out var currentContent, out _))
         {
             return new(PreviewStatus.Invalid, Violations: ["La revisione corrente non è un AnalysisContent valido."]);
@@ -125,6 +140,118 @@ public sealed class PreviewRevisionService(AppDbContext db)
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return new(PreviewStatus.Ok, current.Id);
+    }
+
+    /// <summary>Modifica di una revisione 1.1.0: stesso schema, stesse regole di attribuzione, decoder e validatore dedicati; la 1.0.0 non è toccata.</summary>
+    private async Task<PreviewResult> EditDocumentAsync(
+        State state, Guid analysisId, Guid author, string contentJson, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction, CancellationToken ct)
+    {
+        var current = state.Current;
+        if (SchemaMismatch(contentJson, current.SchemaVersion) is { } mismatch)
+        {
+            return new(PreviewStatus.Invalid, Violations: [mismatch]);
+        }
+
+        DocumentAnalysisContent incoming;
+        try
+        {
+            incoming = DocumentAnalysisContentJson.Deserialize(contentJson);
+        }
+        catch (JsonException ex)
+        {
+            return new(PreviewStatus.Invalid, Violations: ["JSON non valido per AnalysisContent 1.1.0: " + ex.Message]);
+        }
+
+        if (!TryDecodeDocument(current.ContentJson, out var currentContent))
+        {
+            return new(PreviewStatus.Invalid, Violations: ["La revisione corrente non è un AnalysisContent 1.1.0 valido."]);
+        }
+
+        var revisionId = Guid.NewGuid();
+        var attributed = DocumentPreviewAttribution.Apply(incoming, currentContent!, revisionId, Guid.NewGuid());
+        var context = await ContextAsync(state, extraPmRevision: revisionId, ct);
+        var validation = AnalysisContentValidator.Validate(attributed.Content, context, AnalysisActorKind.PmEdit, currentContent, await ReadyDocumentSourcesAsync(analysisId, ct));
+        var violations = attributed.Violations.Concat(validation.Violations).Distinct().ToList();
+        if (violations.Count > 0)
+        {
+            return new(PreviewStatus.Invalid, Violations: violations);
+        }
+
+        db.AnalysisRevisions.Add(new AnalysisRevision
+        {
+            Id = revisionId,
+            AnalysisId = analysisId,
+            Version = current.Version + 1,
+            ParentRevisionId = current.Id,
+            Origin = AnalysisRevisionOrigin.PmEdit,
+            CreatedBy = author,
+            CreatedAt = await NowAsync(ct),
+            SchemaVersion = AnalysisRevision.DocumentSchemaVersion,
+            ContentJson = DocumentAnalysisContentJson.Serialize(attributed.Content),
+            ValidationState = AnalysisValidationState.Unvalidated,
+        });
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return new(PreviewStatus.Ok, revisionId);
+    }
+
+    /// <summary>Conferma di una revisione 1.1.0: solo stato e metadati; gli item Documented restano Documented e nessuna fonte viene aggiunta.</summary>
+    private async Task<PreviewResult> ConfirmDocumentAsync(
+        State state, Guid confirmer, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction, CancellationToken ct)
+    {
+        var current = state.Current;
+        if (!TryDecodeDocument(current.ContentJson, out var currentContent))
+        {
+            return new(PreviewStatus.Invalid, Violations: ["La revisione corrente non è un AnalysisContent 1.1.0 valido."]);
+        }
+
+        var confirmed = currentContent! with { ValidationState = AnalysisContentState.PmConfirmed };
+        var validation = AnalysisContentValidator.Validate(
+            confirmed, await ContextAsync(state, extraPmRevision: null, ct), AnalysisActorKind.PmConfirm, currentContent, await ReadyDocumentSourcesAsync(current.AnalysisId, ct));
+        if (!validation.Accepted)
+        {
+            return new(PreviewStatus.Invalid, Violations: validation.Violations);
+        }
+
+        current.ContentJson = DocumentAnalysisContentJson.Serialize(confirmed);
+        current.ValidationState = AnalysisValidationState.PmConfirmed;
+        current.ConfirmedBy = confirmer;
+        current.ConfirmedAt = await NowAsync(ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return new(PreviewStatus.Ok, current.Id);
+    }
+
+    /// <summary>Fonti documentali della selezione congelata del run (per l'unico caso in cui il cutoff 0 è ammesso).</summary>
+    private Task<int> ReadyDocumentSourcesAsync(Guid analysisId, CancellationToken ct) =>
+        db.AnalysisEvidenceSelectionItems.AsNoTracking().CountAsync(i => i.RunId == analysisId && i.OriginKind == Evidence.EvidenceOriginKind.Document, ct);
+
+    /// <summary>Lo schema del corpo deve essere quello della revisione corrente: nessuna conversione 1.0/1.1 né versioni ignote.</summary>
+    private static string? SchemaMismatch(string json, string expected)
+    {
+        try
+        {
+            var declared = AnalysisSchemaDispatch.ReadSchemaVersion(json);
+            return declared == expected ? null : $"schemaVersion: la modifica deve conservare lo schema della revisione ({expected}).";
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            return null; // assente o malformato: lo segnala il decoder tipizzato con i suoi messaggi
+        }
+    }
+
+    private static bool TryDecodeDocument(string json, out DocumentAnalysisContent? content)
+    {
+        try
+        {
+            content = DocumentAnalysisContentJson.Deserialize(json);
+            return true;
+        }
+        catch (JsonException)
+        {
+            content = null;
+            return false;
+        }
     }
 
     private sealed record State(
