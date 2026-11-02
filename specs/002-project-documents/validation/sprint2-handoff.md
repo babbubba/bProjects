@@ -66,3 +66,6 @@ I3: T033 (+T038) eseguibili subito.
 ## Comandi
 - Backend (da `backend/`): `dotnet test --solution bProjects.sln` con `BPROJECTS_TEST_POSTGRES` (container `bprojects-002-test-pg`, porta 55432, credenziali da `docker inspect`), senza `BPROJECTS_TEST_DGX_*`. Parser reale: `BPROJECTS_TEST_PARSER_ENDPOINT`/`_SECRET`.
 - Frontend: `npm --prefix frontend run test:ci`, `npm --prefix frontend run build`.
+
+## Decisione utente: T124 aggiunto a I4 (2026-11-02)
+Buco di piano: nessun task invocava `DocumentRegimePolicy.Classify` nei POST. Autorizzato da utente: T124 «Classificazione iniziale dei root documentali» in I4 prima di T065; T064 dipende da T124 per la chiusura, T065 da T064, T066 verifica il percorso reale con modello simulato. Ordine: T124 → chiusura T064 → T065 → T066 → T067. WIP T064 (0646af8) conservato.
