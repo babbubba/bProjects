@@ -52,6 +52,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<SourceSnapshot> SourceSnapshots => Set<SourceSnapshot>();
     public DbSet<SourceSnapshotItem> SourceSnapshotItems => Set<SourceSnapshotItem>();
     public DbSet<WorkManifest> WorkManifests => Set<WorkManifest>();
+    public DbSet<ClassificationRecord> ClassificationRecords => Set<ClassificationRecord>();
     public DbSet<DerivedBatch> DerivedBatches => Set<DerivedBatch>();
     public DbSet<WorkOutput> WorkOutputs => Set<WorkOutput>();
 
@@ -67,6 +68,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureEvidence(builder);
         ConfigureDocuments(builder);
         ConfigureDocumentWork(builder);
+        ConfigureDocumentRegime(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -687,6 +689,100 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 t.HasCheckConstraint("CK_WorkOutputs_Payload",
                     "(\"PayloadJson\" IS NOT NULL)::int + (\"StorageKey\" IS NOT NULL)::int = 1 AND (\"StorageKey\" IS NULL) = (\"PayloadByteLength\" IS NULL)");
                 t.HasCheckConstraint("CK_WorkOutputs_Fence", "\"CommittedFence\" >= 0 AND (\"PayloadByteLength\" IS NULL OR \"PayloadByteLength\" >= 0)");
+            });
+        });
+    }
+
+    /// <summary>
+    /// Root del regime (002 T046, document-regime-v2): campi nullable sui tre root (i record 001 non li valorizzano), CHECK di coerenza
+    /// (cap finito, Effective&lt;=Hard, PromotionCount in 0/1, DeadlineAt=EffectiveDeadlineAt dove presente) e ClassificationRecord append-only.
+    /// </summary>
+    private static void ConfigureDocumentRegime(ModelBuilder builder)
+    {
+        const string Hex = "~ '^[0-9a-f]{64}$'";
+
+        static void Common<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity, string table) where T : class
+        {
+            entity.Property<ExecutionRegime?>("InitialRegime").HasConversion<string>().HasMaxLength(16);
+            entity.Property<ExecutionRegime?>("Regime").HasConversion<string>().HasMaxLength(16);
+            entity.Property<ClassificationStatus?>("ClassificationStatus").HasConversion<string>().HasMaxLength(16);
+            entity.Property<string?>("ClassificationVersion").HasMaxLength(32);
+            entity.Property<string?>("ClassificationReason").HasMaxLength(64);
+            entity.Property<string?>("PromotedReason").HasMaxLength(64);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint($"CK_{table}_Regime",
+                    "(\"InitialRegime\" IS NULL OR \"InitialRegime\" IN ('Ordinary', 'Extended')) AND (\"Regime\" IS NULL OR \"Regime\" IN ('Ordinary', 'Extended')) " +
+                    "AND (\"ClassificationStatus\" IS NULL OR \"ClassificationStatus\" IN ('Pending', 'Classified', 'Rejected'))");
+                // Pending nasce Extended provvisorio senza InitialRegime; Classified li fissa entrambi; nessun downgrade.
+                t.HasCheckConstraint($"CK_{table}_Classification",
+                    "\"ClassificationStatus\" IS NULL OR (\"ClassificationStatus\" = 'Pending' AND \"InitialRegime\" IS NULL AND \"Regime\" = 'Extended') " +
+                    "OR (\"ClassificationStatus\" = 'Classified' AND \"InitialRegime\" IS NOT NULL AND \"Regime\" IS NOT NULL) " +
+                    "OR (\"ClassificationStatus\" = 'Rejected' AND \"InitialRegime\" IS NULL)");
+                t.HasCheckConstraint($"CK_{table}_NoDowngrade",
+                    "\"Regime\" IS DISTINCT FROM 'Ordinary' OR (\"InitialRegime\" = 'Ordinary' AND COALESCE(\"PromotionCount\", 0) = 0 AND \"OrdinaryDeadlineAt\" IS NOT NULL)");
+                t.HasCheckConstraint($"CK_{table}_Promotion",
+                    "(\"PromotionCount\" IS NULL OR \"PromotionCount\" IN (0, 1)) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedAt\" IS NOT NULL) " +
+                    "AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedReason\" IS NOT NULL) " +
+                    "AND (COALESCE(\"PromotionCount\", 0) = 0 OR (\"InitialRegime\" = 'Ordinary' AND \"Regime\" = 'Extended' AND \"PromotedReason\" = 'additional_work'))");
+            });
+        }
+
+        // Preparazione: HardDeadlineAt/EffectiveDeadlineAt/PolicyHash/CallCount esistono già (T115) e hanno già il CHECK Effective<=Hard.
+        builder.Entity<DocumentPreparation>(preparation => Common(preparation, "DocumentPreparations"));
+
+        void LegacyRoot<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity, string table) where T : class
+        {
+            Common(entity, table);
+            entity.Property<string?>("PolicyHash").HasMaxLength(64);
+            entity.HasIndex("RetryOfId");
+            entity.HasOne(typeof(T)).WithMany().HasForeignKey("RetryOfId").OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint($"CK_{table}_Cap",
+                    "(\"HardDeadlineAt\" IS NULL AND \"EffectiveDeadlineAt\" IS NULL) OR (\"HardDeadlineAt\" IS NOT NULL AND \"EffectiveDeadlineAt\" IS NOT NULL " +
+                    "AND \"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\" AND (\"OrdinaryDeadlineAt\" IS NULL OR \"OrdinaryDeadlineAt\" <= \"HardDeadlineAt\"))");
+                t.HasCheckConstraint($"CK_{table}_DeadlineIsEffective", "\"EffectiveDeadlineAt\" IS NULL OR \"DeadlineAt\" = \"EffectiveDeadlineAt\"");
+                t.HasCheckConstraint($"CK_{table}_RegimeFields", "\"ClassificationStatus\" IS NULL OR \"EffectiveDeadlineAt\" IS NOT NULL");
+                t.HasCheckConstraint($"CK_{table}_PolicyHash", $"\"PolicyHash\" IS NULL OR \"PolicyHash\" {Hex}");
+                t.HasCheckConstraint($"CK_{table}_CallCount", "\"CallCount\" IS NULL OR \"CallCount\" >= 0");
+            });
+        }
+
+        builder.Entity<ChatTurn>(turn => LegacyRoot(turn, "ChatTurns"));
+        builder.Entity<ProcessingRun>(run => LegacyRoot(run, "ProcessingRuns"));
+
+        builder.Entity<ClassificationRecord>(record =>
+        {
+            record.HasKey(r => r.Id);
+            record.Property(r => r.OwnerKind).HasConversion<string>().HasMaxLength(24);
+            record.Property(r => r.Outcome).HasConversion<string>().HasMaxLength(16);
+            record.Property(r => r.Version).HasMaxLength(32);
+            record.Property(r => r.InputHash).HasMaxLength(64);
+            record.Property(r => r.PolicyHash).HasMaxLength(64);
+            record.Property(r => r.Reason).HasMaxLength(64);
+            record.Property(r => r.RuntimeFingerprint).HasMaxLength(256);
+            record.Property(r => r.TokenQuality).HasMaxLength(32);
+            record.Property(r => r.ShapeSkeletonHash).HasMaxLength(64);
+            record.Property(r => r.ProvenanceJson).HasColumnType("jsonb");
+            record.Property(r => r.UnknownReasonsJson).HasColumnType("jsonb");
+            record.Property(r => r.ObservedAt).HasDefaultValueSql("clock_timestamp()");
+            // Unique(owner, ordinal): l'owner è polimorfico (nessuna FK), il progetto sì.
+            record.HasIndex(r => new { r.OwnerKind, r.OwnerId, r.Ordinal }).IsUnique().HasDatabaseName("UX_ClassificationRecords_OwnerOrdinal");
+            record.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            record.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ClassificationRecords_Outcome", "\"Outcome\" IN ('AdmitOrdinary', 'AdmitExtended', 'Reject', 'Fail')");
+                t.HasCheckConstraint("CK_ClassificationRecords_Owner", "\"OwnerKind\" IN ('ProcessingRun', 'ChatTurn', 'DocumentPreparation') AND \"Ordinal\" >= 1");
+                t.HasCheckConstraint("CK_ClassificationRecords_Hashes",
+                    $"\"InputHash\" {Hex} AND \"PolicyHash\" {Hex} AND (\"ShapeSkeletonHash\" IS NULL OR \"ShapeSkeletonHash\" {Hex})");
+                t.HasCheckConstraint("CK_ClassificationRecords_Json", "jsonb_typeof(\"ProvenanceJson\") = 'object' AND jsonb_typeof(\"UnknownReasonsJson\") = 'array'");
+                t.HasCheckConstraint("CK_ClassificationRecords_TokenQuality",
+                    "\"TokenQuality\" IS NULL OR \"TokenQuality\" IN ('measured', 'calibrated_upper_bound', 'unavailable')");
+                t.HasCheckConstraint("CK_ClassificationRecords_Numbers",
+                    "(\"PlannedCalls\" IS NULL OR \"PlannedCalls\" >= 0) AND (\"PayloadTokens\" IS NULL OR \"PayloadTokens\" >= 0) AND (\"ShapeFloorTokens\" IS NULL OR \"ShapeFloorTokens\" >= 0)");
+                // Un'ammissione Ordinary presuppone una sola chiamata iniziale (regola 7).
+                t.HasCheckConstraint("CK_ClassificationRecords_OrdinaryOneCall", "\"Outcome\" <> 'AdmitOrdinary' OR \"PlannedCalls\" = 1");
             });
         });
     }

@@ -217,6 +217,126 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("bProjects.App.AI.ClassificationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("InputBudgetTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("MarginTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("clock_timestamp()");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OwnerKind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<int?>("PayloadTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PlannedCalls")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProvenanceJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RuntimeFingerprint")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("ShapeFloorTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ShapeSkeletonHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TokenQuality")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("UnknownReasonsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("VisibleReserveTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WindowTokens")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("OwnerKind", "OwnerId", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ClassificationRecords_OwnerOrdinal");
+
+                    b.ToTable("ClassificationRecords", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClassificationRecords_Hashes", "\"InputHash\" ~ '^[0-9a-f]{64}$' AND \"PolicyHash\" ~ '^[0-9a-f]{64}$' AND (\"ShapeSkeletonHash\" IS NULL OR \"ShapeSkeletonHash\" ~ '^[0-9a-f]{64}$')");
+
+                            t.HasCheckConstraint("CK_ClassificationRecords_Json", "jsonb_typeof(\"ProvenanceJson\") = 'object' AND jsonb_typeof(\"UnknownReasonsJson\") = 'array'");
+
+                            t.HasCheckConstraint("CK_ClassificationRecords_Numbers", "(\"PlannedCalls\" IS NULL OR \"PlannedCalls\" >= 0) AND (\"PayloadTokens\" IS NULL OR \"PayloadTokens\" >= 0) AND (\"ShapeFloorTokens\" IS NULL OR \"ShapeFloorTokens\" >= 0)");
+
+                            t.HasCheckConstraint("CK_ClassificationRecords_OrdinaryOneCall", "\"Outcome\" <> 'AdmitOrdinary' OR \"PlannedCalls\" = 1");
+
+                            t.HasCheckConstraint("CK_ClassificationRecords_Outcome", "\"Outcome\" IN ('AdmitOrdinary', 'AdmitExtended', 'Reject', 'Fail')");
+
+                            t.HasCheckConstraint("CK_ClassificationRecords_Owner", "\"OwnerKind\" IN ('ProcessingRun', 'ChatTurn', 'DocumentPreparation') AND \"Ordinal\" >= 1");
+
+                            t.HasCheckConstraint("CK_ClassificationRecords_TokenQuality", "\"TokenQuality\" IS NULL OR \"TokenQuality\" IN ('measured', 'calibrated_upper_bound', 'unavailable')");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.AI.DerivedBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -882,6 +1002,21 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("CallCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ClassificationReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ClassificationStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ClassificationVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -894,6 +1029,9 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("EffectiveDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -904,6 +1042,13 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.Property<long>("FencingToken")
                         .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("HardDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InitialRegime")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<Guid?>("InputRevisionId")
                         .HasColumnType("uuid");
@@ -935,11 +1080,32 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("OrdinaryDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolicyHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotedReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("PromotionCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PromptVersions")
                         .HasColumnType("jsonb");
+
+                    b.Property<string>("Regime")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<Guid>("RequestKey")
                         .HasColumnType("uuid");
@@ -951,6 +1117,9 @@ namespace bProjects.App.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("ResultRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RetryOfId")
                         .HasColumnType("uuid");
 
                     b.Property<long?>("SourceCutoffSequence")
@@ -998,6 +1167,8 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("ResultRevisionId");
 
+                    b.HasIndex("RetryOfId");
+
                     b.HasIndex("SourceSnapshotId");
 
                     b.HasIndex("Id", "InputRevisionId")
@@ -1017,11 +1188,29 @@ namespace bProjects.App.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_ProcessingRuns_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
 
+                            t.HasCheckConstraint("CK_ProcessingRuns_CallCount", "\"CallCount\" IS NULL OR \"CallCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Cap", "(\"HardDeadlineAt\" IS NULL AND \"EffectiveDeadlineAt\" IS NULL) OR (\"HardDeadlineAt\" IS NOT NULL AND \"EffectiveDeadlineAt\" IS NOT NULL AND \"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\" AND (\"OrdinaryDeadlineAt\" IS NULL OR \"OrdinaryDeadlineAt\" <= \"HardDeadlineAt\"))");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Classification", "\"ClassificationStatus\" IS NULL OR (\"ClassificationStatus\" = 'Pending' AND \"InitialRegime\" IS NULL AND \"Regime\" = 'Extended') OR (\"ClassificationStatus\" = 'Classified' AND \"InitialRegime\" IS NOT NULL AND \"Regime\" IS NOT NULL) OR (\"ClassificationStatus\" = 'Rejected' AND \"InitialRegime\" IS NULL)");
+
                             t.HasCheckConstraint("CK_ProcessingRuns_Completed_Result", "\"Status\" <> 'Completed' OR (\"Kind\" = 'Analysis' AND \"ResultRevisionId\" IS NOT NULL) OR (\"Kind\" = 'Document' AND \"DraftId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_DeadlineIsEffective", "\"EffectiveDeadlineAt\" IS NULL OR \"DeadlineAt\" = \"EffectiveDeadlineAt\"");
 
                             t.HasCheckConstraint("CK_ProcessingRuns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
 
                             t.HasCheckConstraint("CK_ProcessingRuns_Kind_Fields", "(\"Kind\" = 'Analysis' AND \"ConversationId\" IS NOT NULL AND \"SourceCutoffSequence\" IS NOT NULL AND \"SourceCutoffSequence\" >= 0 AND \"AnalysisId\" IS NULL AND \"InputRevisionId\" IS NULL AND \"DraftId\" IS NULL) OR (\"Kind\" = 'Document' AND \"AnalysisId\" IS NOT NULL AND \"InputRevisionId\" IS NOT NULL AND \"ResultRevisionId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_NoDowngrade", "\"Regime\" IS DISTINCT FROM 'Ordinary' OR (\"InitialRegime\" = 'Ordinary' AND COALESCE(\"PromotionCount\", 0) = 0 AND \"OrdinaryDeadlineAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_PolicyHash", "\"PolicyHash\" IS NULL OR \"PolicyHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Promotion", "(\"PromotionCount\" IS NULL OR \"PromotionCount\" IN (0, 1)) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedAt\" IS NOT NULL) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedReason\" IS NOT NULL) AND (COALESCE(\"PromotionCount\", 0) = 0 OR (\"InitialRegime\" = 'Ordinary' AND \"Regime\" = 'Extended' AND \"PromotedReason\" = 'additional_work'))");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_Regime", "(\"InitialRegime\" IS NULL OR \"InitialRegime\" IN ('Ordinary', 'Extended')) AND (\"Regime\" IS NULL OR \"Regime\" IN ('Ordinary', 'Extended')) AND (\"ClassificationStatus\" IS NULL OR \"ClassificationStatus\" IN ('Pending', 'Classified', 'Rejected'))");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_RegimeFields", "\"ClassificationStatus\" IS NULL OR \"EffectiveDeadlineAt\" IS NOT NULL");
                         });
                 });
 
@@ -1037,6 +1226,21 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("CallCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ClassificationReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ClassificationStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ClassificationVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1044,6 +1248,9 @@ namespace bProjects.App.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("EffectiveDeadlineAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ErrorCode")
@@ -1056,6 +1263,13 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.Property<long>("FencingToken")
                         .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("HardDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InitialRegime")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("LeaseOwner")
                         .HasMaxLength(128)
@@ -1070,14 +1284,38 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("OrdinaryDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolicyHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotedReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("PromotionCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PromptVersion")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Regime")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("RequestedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ResultMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RetryOfId")
                         .HasColumnType("uuid");
 
                     b.Property<long>("SessionRevisionAtStart")
@@ -1109,6 +1347,8 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("ResultMessageId");
 
+                    b.HasIndex("RetryOfId");
+
                     b.HasIndex("SourceSnapshotId");
 
                     b.HasIndex("TriggerMessageId")
@@ -1122,9 +1362,27 @@ namespace bProjects.App.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_ChatTurns_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
 
+                            t.HasCheckConstraint("CK_ChatTurns_CallCount", "\"CallCount\" IS NULL OR \"CallCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_ChatTurns_Cap", "(\"HardDeadlineAt\" IS NULL AND \"EffectiveDeadlineAt\" IS NULL) OR (\"HardDeadlineAt\" IS NOT NULL AND \"EffectiveDeadlineAt\" IS NOT NULL AND \"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\" AND (\"OrdinaryDeadlineAt\" IS NULL OR \"OrdinaryDeadlineAt\" <= \"HardDeadlineAt\"))");
+
+                            t.HasCheckConstraint("CK_ChatTurns_Classification", "\"ClassificationStatus\" IS NULL OR (\"ClassificationStatus\" = 'Pending' AND \"InitialRegime\" IS NULL AND \"Regime\" = 'Extended') OR (\"ClassificationStatus\" = 'Classified' AND \"InitialRegime\" IS NOT NULL AND \"Regime\" IS NOT NULL) OR (\"ClassificationStatus\" = 'Rejected' AND \"InitialRegime\" IS NULL)");
+
                             t.HasCheckConstraint("CK_ChatTurns_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultMessageId\" IS NOT NULL");
 
+                            t.HasCheckConstraint("CK_ChatTurns_DeadlineIsEffective", "\"EffectiveDeadlineAt\" IS NULL OR \"DeadlineAt\" = \"EffectiveDeadlineAt\"");
+
                             t.HasCheckConstraint("CK_ChatTurns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_ChatTurns_NoDowngrade", "\"Regime\" IS DISTINCT FROM 'Ordinary' OR (\"InitialRegime\" = 'Ordinary' AND COALESCE(\"PromotionCount\", 0) = 0 AND \"OrdinaryDeadlineAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ChatTurns_PolicyHash", "\"PolicyHash\" IS NULL OR \"PolicyHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_ChatTurns_Promotion", "(\"PromotionCount\" IS NULL OR \"PromotionCount\" IN (0, 1)) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedAt\" IS NOT NULL) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedReason\" IS NOT NULL) AND (COALESCE(\"PromotionCount\", 0) = 0 OR (\"InitialRegime\" = 'Ordinary' AND \"Regime\" = 'Extended' AND \"PromotedReason\" = 'additional_work'))");
+
+                            t.HasCheckConstraint("CK_ChatTurns_Regime", "(\"InitialRegime\" IS NULL OR \"InitialRegime\" IN ('Ordinary', 'Extended')) AND (\"Regime\" IS NULL OR \"Regime\" IN ('Ordinary', 'Extended')) AND (\"ClassificationStatus\" IS NULL OR \"ClassificationStatus\" IN ('Pending', 'Classified', 'Rejected'))");
+
+                            t.HasCheckConstraint("CK_ChatTurns_RegimeFields", "\"ClassificationStatus\" IS NULL OR \"EffectiveDeadlineAt\" IS NOT NULL");
                         });
                 });
 
@@ -1546,6 +1804,18 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<int>("CallCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ClassificationReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ClassificationStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ClassificationVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("ConfigHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -1578,9 +1848,16 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<DateTimeOffset>("HardDeadlineAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("InitialRegime")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("ManifestHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("OrdinaryDeadlineAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ParseJobId")
                         .HasColumnType("uuid");
@@ -1596,6 +1873,20 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotedReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("PromotionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Regime")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("RequestedAt")
                         .ValueGeneratedOnAdd()
@@ -1634,13 +1925,21 @@ namespace bProjects.App.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_DocumentPreparations_Calls", "\"CallCount\" >= 0");
 
+                            t.HasCheckConstraint("CK_DocumentPreparations_Classification", "\"ClassificationStatus\" IS NULL OR (\"ClassificationStatus\" = 'Pending' AND \"InitialRegime\" IS NULL AND \"Regime\" = 'Extended') OR (\"ClassificationStatus\" = 'Classified' AND \"InitialRegime\" IS NOT NULL AND \"Regime\" IS NOT NULL) OR (\"ClassificationStatus\" = 'Rejected' AND \"InitialRegime\" IS NULL)");
+
                             t.HasCheckConstraint("CK_DocumentPreparations_Deadlines", "\"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\"");
 
                             t.HasCheckConstraint("CK_DocumentPreparations_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
 
                             t.HasCheckConstraint("CK_DocumentPreparations_Generation", "\"Generation\" >= 1");
 
+                            t.HasCheckConstraint("CK_DocumentPreparations_NoDowngrade", "\"Regime\" IS DISTINCT FROM 'Ordinary' OR (\"InitialRegime\" = 'Ordinary' AND COALESCE(\"PromotionCount\", 0) = 0 AND \"OrdinaryDeadlineAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_DocumentPreparations_Promotion", "(\"PromotionCount\" IS NULL OR \"PromotionCount\" IN (0, 1)) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedAt\" IS NOT NULL) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedReason\" IS NOT NULL) AND (COALESCE(\"PromotionCount\", 0) = 0 OR (\"InitialRegime\" = 'Ordinary' AND \"Regime\" = 'Extended' AND \"PromotedReason\" = 'additional_work'))");
+
                             t.HasCheckConstraint("CK_DocumentPreparations_Ready_Evidence", "\"Status\" <> 'Ready' OR \"CurrentEvidenceVersionId\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_DocumentPreparations_Regime", "(\"InitialRegime\" IS NULL OR \"InitialRegime\" IN ('Ordinary', 'Extended')) AND (\"Regime\" IS NULL OR \"Regime\" IN ('Ordinary', 'Extended')) AND (\"ClassificationStatus\" IS NULL OR \"ClassificationStatus\" IN ('Pending', 'Classified', 'Rejected'))");
                         });
                 });
 
@@ -2964,6 +3263,15 @@ namespace bProjects.App.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("bProjects.App.AI.ClassificationRecord", b =>
+                {
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("bProjects.App.AI.DerivedBatch", b =>
                 {
                     b.HasOne("bProjects.App.Projects.Project", null)
@@ -3152,6 +3460,11 @@ namespace bProjects.App.Persistence.Migrations
                         .HasForeignKey("ResultRevisionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("bProjects.App.Documents.SourceSnapshot", null)
                         .WithMany()
                         .HasForeignKey("SourceSnapshotId", "ProjectId")
@@ -3170,6 +3483,11 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("ResultMessageId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Conversations.ChatTurn", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Documents.SourceSnapshot", null)

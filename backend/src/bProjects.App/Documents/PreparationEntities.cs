@@ -1,3 +1,5 @@
+using bProjects.App.AI;
+
 namespace bProjects.App.Documents;
 
 // Metadati minimi di preparazione condivisi (T115). Solo il modello: nessun worker, classificatore, WorkOutput o dato Evidence
@@ -47,6 +49,21 @@ public sealed class DocumentPreparation
     /// <summary>Chiamate AI già riservate dal root (limite MaxAiCallsPerPreparation, controllato dal servizio).</summary>
     public int CallCount { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+
+    // ---- Root del regime (document-regime-v2, Plan §Classificazione). Nullable: i record 001 non li valorizzano e mantengono DeadlineAt/regole 001.
+    public ExecutionRegime? InitialRegime { get; set; }
+    public ExecutionRegime? Regime { get; set; }
+    public ClassificationStatus? ClassificationStatus { get; set; }
+    public string? ClassificationVersion { get; set; }
+    public string? ClassificationReason { get; set; }
+
+    /// <summary>t0+180 s nel regime Ordinary; null per Extended e per i root legacy. PromotionDueAt non esiste (sempre null per Plan).</summary>
+    public DateTimeOffset? OrdinaryDeadlineAt { get; set; }
+
+    /// <summary>0 o 1: l'unica promozione Ordinary→Extended (additional_work, T047).</summary>
+    public int? PromotionCount { get; set; }
+    public DateTimeOffset? PromotedAt { get; set; }
+    public string? PromotedReason { get; set; }
 }
 
 // ---- Artefatti di parsing (T028) ----------------------------------------------------------------------------------------------------
