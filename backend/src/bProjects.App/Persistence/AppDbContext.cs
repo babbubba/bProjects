@@ -51,6 +51,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<PreparationIssue> PreparationIssues => Set<PreparationIssue>();
     public DbSet<SourceSnapshot> SourceSnapshots => Set<SourceSnapshot>();
     public DbSet<SourceSnapshotItem> SourceSnapshotItems => Set<SourceSnapshotItem>();
+    public DbSet<WorkManifest> WorkManifests => Set<WorkManifest>();
+    public DbSet<DerivedBatch> DerivedBatches => Set<DerivedBatch>();
+    public DbSet<WorkOutput> WorkOutputs => Set<WorkOutput>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -63,6 +66,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureInferenceCalls(builder);
         ConfigureEvidence(builder);
         ConfigureDocuments(builder);
+        ConfigureDocumentWork(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -377,6 +381,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             job.Property(j => j.ErrorMessage).HasMaxLength(1_000);
             job.Property(j => j.RequestedAt).HasDefaultValueSql("now()");
             job.HasAlternateKey(j => new { j.Id, j.PreparationId });
+            job.HasAlternateKey(j => new { j.Id, j.ProjectId });   // owner di checkpoint e telemetria nello stesso progetto
             // Un solo lavoro per owner e unità logica (UnitId nullo = lavoro della preparazione, es. Parse).
             job.HasIndex(j => new { j.PreparationId, j.Kind, j.UnitId }).IsUnique().AreNullsDistinct(false);
             job.HasIndex(j => new { j.ProjectId, j.RequestKey }).IsUnique();
@@ -577,6 +582,115 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             });
         });
 
+    /// <summary>
+    /// Dati di lavoro del workflow documentale (002 T040): manifesto, batch derivati e output committati, append-only (trigger nella migrazione).
+    /// L'owner è polimorfico (kind + id, nessuna FK sull'owner: lease, fence e progetto li verifica lo store sotto lock); il progetto è una FK.
+    /// </summary>
+    private static void ConfigureDocumentWork(ModelBuilder builder)
+    {
+        const string Hex = "~ '^[0-9a-f]{64}$'";
+
+        builder.Entity<WorkManifest>(manifest =>
+        {
+            manifest.HasKey(m => m.Id);
+            manifest.Property(m => m.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            manifest.Property(m => m.ConfigHash).HasMaxLength(64);
+            manifest.Property(m => m.SourceHash).HasMaxLength(64);
+            manifest.Property(m => m.PolicyHash).HasMaxLength(64);
+            manifest.Property(m => m.Hash).HasMaxLength(64);
+            manifest.Property(m => m.RuntimeFingerprint).HasMaxLength(256);
+            manifest.Property(m => m.DefinitionVersion).HasMaxLength(64);
+            manifest.Property(m => m.AlgorithmVersion).HasMaxLength(64);
+            manifest.Property(m => m.PlanJson).HasColumnType("jsonb");
+            manifest.Property(m => m.CreatedAt).HasDefaultValueSql("clock_timestamp()");
+            // Un solo manifesto per owner; la seconda chiave consente a WorkOutput di agganciare il manifesto per hash.
+            manifest.HasAlternateKey(m => new { m.OwnerKind, m.OwnerId });
+            manifest.HasAlternateKey(m => new { m.OwnerKind, m.OwnerId, m.Hash });
+            manifest.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            manifest.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_WorkManifests_Hashes", $"\"ConfigHash\" {Hex} AND \"SourceHash\" {Hex} AND \"PolicyHash\" {Hex} AND \"Hash\" {Hex}");
+                t.HasCheckConstraint("CK_WorkManifests_Plan", "jsonb_typeof(\"PlanJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<DerivedBatch>(batch =>
+        {
+            batch.HasKey(b => b.Id);
+            batch.Property(b => b.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            batch.Property(b => b.BatchId).HasMaxLength(128);
+            batch.Property(b => b.Stage).HasMaxLength(32);
+            batch.Property(b => b.View).HasMaxLength(16);
+            batch.Property(b => b.ParentOutputHashes).HasColumnType("jsonb");
+            batch.Property(b => b.InputIdsJson).HasColumnType("jsonb");
+            batch.Property(b => b.TokenProvenance).HasMaxLength(32);
+            batch.Property(b => b.InputHash).HasMaxLength(64);
+            batch.Property(b => b.SchemaVersion).HasMaxLength(32);
+            batch.Property(b => b.PromptVersion).HasMaxLength(64);
+            batch.Property(b => b.CreatedAt).HasDefaultValueSql("clock_timestamp()");
+            // unique(owner,batchId): l'identità del batch è una sola; la chiave con inputHash serve alla FK dell'output.
+            batch.HasAlternateKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId });
+            batch.HasAlternateKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId, b.InputHash });
+            batch.HasIndex(b => new { b.OwnerKind, b.OwnerId, b.Ordinal });
+            batch.HasOne<Project>().WithMany().HasForeignKey(b => b.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            batch.HasOne<WorkManifest>().WithMany()
+                .HasForeignKey(b => new { b.OwnerKind, b.OwnerId })
+                .HasPrincipalKey(m => new { m.OwnerKind, m.OwnerId })
+                .OnDelete(DeleteBehavior.Restrict);
+            batch.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DerivedBatches_InputHash", $"\"InputHash\" {Hex}");
+                t.HasCheckConstraint("CK_DerivedBatches_Parents", "jsonb_typeof(\"ParentOutputHashes\") = 'array'");
+                t.HasCheckConstraint("CK_DerivedBatches_Numbers",
+                    "\"Ordinal\" >= 0 AND (\"Pass\" IS NULL OR \"Pass\" >= 0) AND (\"Level\" IS NULL OR \"Level\" >= 0) AND (\"MeasuredTokens\" IS NULL OR \"MeasuredTokens\" >= 0)");
+                t.HasCheckConstraint("CK_DerivedBatches_TokenProvenance", "\"TokenProvenance\" IN ('measured', 'calibrated_upper_bound', 'unavailable')");
+            });
+        });
+
+        builder.Entity<WorkOutput>(output =>
+        {
+            output.HasKey(o => o.Id);
+            output.Property(o => o.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            output.Property(o => o.Status).HasConversion<string>().HasMaxLength(16);
+            output.Property(o => o.BatchId).HasMaxLength(128);
+            output.Property(o => o.NodeId).HasMaxLength(128);
+            output.Property(o => o.InputHash).HasMaxLength(64);
+            output.Property(o => o.OutputHash).HasMaxLength(64);
+            output.Property(o => o.ManifestHash).HasMaxLength(64);
+            output.Property(o => o.DerivedFromOutputHash).HasMaxLength(64);
+            output.Property(o => o.PayloadJson).HasColumnType("jsonb");
+            output.Property(o => o.StorageKey).HasMaxLength(128);
+            output.Property(o => o.CoveredIdsJson).HasColumnType("jsonb");
+            output.Property(o => o.MapsJson).HasColumnType("jsonb");
+            output.Property(o => o.ExpansionReceiptJson).HasColumnType("jsonb");
+            output.Property(o => o.SchemaVersion).HasMaxLength(32);
+            output.Property(o => o.ValidationVersion).HasMaxLength(64);
+            output.Property(o => o.CommittedAt).HasDefaultValueSql("clock_timestamp()");
+            // Unique(owner,batchId) impedisce anche un inputHash diverso sullo stesso batch: l'hash discordante è errore, non update.
+            output.HasIndex(o => new { o.OwnerKind, o.OwnerId, o.BatchId }).IsUnique().HasDatabaseName("UX_WorkOutputs_OwnerBatch");
+            output.HasIndex(o => new { o.OwnerKind, o.OwnerId, o.OutputHash });
+            output.HasIndex(o => o.StorageKey).HasFilter("\"StorageKey\" IS NOT NULL");
+            output.HasOne<Project>().WithMany().HasForeignKey(o => o.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            output.HasOne<DerivedBatch>().WithMany()
+                .HasForeignKey(o => new { o.OwnerKind, o.OwnerId, o.BatchId, o.InputHash })
+                .HasPrincipalKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId, b.InputHash })
+                .OnDelete(DeleteBehavior.Restrict);
+            output.HasOne<WorkManifest>().WithMany()
+                .HasForeignKey(o => new { o.OwnerKind, o.OwnerId, o.ManifestHash })
+                .HasPrincipalKey(m => new { m.OwnerKind, m.OwnerId, m.Hash })
+                .OnDelete(DeleteBehavior.Restrict);
+            output.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_WorkOutputs_Status", "\"Status\" = 'Committed'");
+                t.HasCheckConstraint("CK_WorkOutputs_Hashes",
+                    $"\"InputHash\" {Hex} AND \"OutputHash\" {Hex} AND \"ManifestHash\" {Hex} AND (\"DerivedFromOutputHash\" IS NULL OR \"DerivedFromOutputHash\" {Hex})");
+                t.HasCheckConstraint("CK_WorkOutputs_Payload",
+                    "(\"PayloadJson\" IS NOT NULL)::int + (\"StorageKey\" IS NOT NULL)::int = 1 AND (\"StorageKey\" IS NULL) = (\"PayloadByteLength\" IS NULL)");
+                t.HasCheckConstraint("CK_WorkOutputs_Fence", "\"CommittedFence\" >= 0 AND (\"PayloadByteLength\" IS NULL OR \"PayloadByteLength\" >= 0)");
+            });
+        });
+    }
+
     private static void ConfigureCheckpoints(ModelBuilder builder)
     {
         builder.Entity<WorkflowCheckpoint>(checkpoint =>
@@ -590,16 +704,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             checkpoint.Property(c => c.Payload).HasColumnType("jsonb");
             checkpoint.Property(c => c.MafVersion).HasMaxLength(32);
             checkpoint.Property(c => c.WorkflowDefinitionVersion).HasMaxLength(64);
-            // Unicità V28 e indice oldest-first: l'ordine di scrittura è CommitSequence, univoco per run.
+            // Unicità V28 e indice oldest-first: l'ordine di scrittura è CommitSequence, univoco per owner (ProcessingRun 001, ChatTurn, DocumentJob).
             checkpoint.HasIndex(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
             checkpoint.HasIndex(c => new { c.ProcessingRunId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_OldestFirst");
+            checkpoint.HasIndex(c => new { c.ChatTurnId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
+            checkpoint.HasIndex(c => new { c.ChatTurnId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_Turn_OldestFirst");
+            checkpoint.HasIndex(c => new { c.DocumentJobId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
+            checkpoint.HasIndex(c => new { c.DocumentJobId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_Job_OldestFirst");
             checkpoint.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
-            // Il parent è un checkpoint già scritto dello stesso run e della stessa sessione.
-            checkpoint.HasOne<WorkflowCheckpoint>().WithMany()
-                .HasForeignKey(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.ParentCheckpointKey })
-                .HasPrincipalKey(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.CheckpointKey })
+            checkpoint.HasOne<ChatTurn>().WithMany().HasForeignKey(c => c.ChatTurnId).OnDelete(DeleteBehavior.Restrict);
+            checkpoint.HasOne<Project>().WithMany().HasForeignKey(c => c.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            // Il progetto del job è quello del job: FK composta (le righe 001 di ProcessingRun non hanno progetto).
+            checkpoint.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(c => new { c.DocumentJobId, c.ProjectId })
+                .HasPrincipalKey(j => new { j.Id, j.ProjectId })
                 .OnDelete(DeleteBehavior.Restrict);
-            checkpoint.ToTable(t => t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1"));
+            // Il parent è un checkpoint già scritto dello stesso owner e della stessa sessione. EF non esprime una chiave alternativa su colonne
+            // nullable (l'owner è esclusivo): le FK del parent per i tre owner referenziano gli indici unici sopra e sono create dalla migrazione SQL.
+            checkpoint.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1");
+                t.HasCheckConstraint("CK_WorkflowCheckpoints_Owner",
+                    "(\"ProcessingRunId\" IS NOT NULL)::int + (\"ChatTurnId\" IS NOT NULL)::int + (\"DocumentJobId\" IS NOT NULL)::int = 1");
+                t.HasCheckConstraint("CK_WorkflowCheckpoints_Project", "\"ProcessingRunId\" IS NOT NULL OR \"ProjectId\" IS NOT NULL");
+            });
         });
     }
 
@@ -621,20 +749,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             call.HasOne<ChatTurn>().WithMany().HasForeignKey(c => c.ChatTurnId).OnDelete(DeleteBehavior.Restrict);
             call.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
             call.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(c => c.EvidenceExtractionJobId).OnDelete(DeleteBehavior.Restrict);
+            // Quarto owner (002): un DocumentJob dello stesso progetto della chiamata.
+            call.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(c => new { c.DocumentJobId, c.ProjectId })
+                .HasPrincipalKey(j => new { j.Id, j.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             // Letture del risultato logico: righe di un turno/run/lavoro di estrazione per tentativo.
             call.HasIndex(c => new { c.ChatTurnId, c.Attempt });
             call.HasIndex(c => new { c.ProcessingRunId, c.Attempt });
             call.HasIndex(c => new { c.EvidenceExtractionJobId, c.Attempt });
+            call.HasIndex(c => new { c.DocumentJobId, c.Attempt });
             // Un solo risultato logico per turno, per run e per lavoro di estrazione, anche fra tentativi diversi.
             call.HasIndex(c => c.ChatTurnId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerTurn");
             call.HasIndex(c => c.ProcessingRunId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerRun");
             call.HasIndex(c => c.EvidenceExtractionJobId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerExtraction");
+            call.HasIndex(c => c.DocumentJobId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerDocumentJob");
             // Monitor del contesto: ultima inferenza finale del progetto.
             call.HasIndex(c => new { c.ProjectId, c.StartedAt }).IsDescending(false, true).HasFilter("\"IsFinal\"").HasDatabaseName("IX_InferenceCalls_Project_LastFinal");
             call.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_InferenceCalls_Owner",
-                    "(\"ChatTurnId\" IS NOT NULL)::int + (\"ProcessingRunId\" IS NOT NULL)::int + (\"EvidenceExtractionJobId\" IS NOT NULL)::int = 1");
+                    "(\"ChatTurnId\" IS NOT NULL)::int + (\"ProcessingRunId\" IS NOT NULL)::int + (\"EvidenceExtractionJobId\" IS NOT NULL)::int + (\"DocumentJobId\" IS NOT NULL)::int = 1");
                 t.HasCheckConstraint("CK_InferenceCalls_Final", "NOT \"IsFinal\" OR (\"State\" = 'Completed' AND \"Phase\" <> 'Compaction')");
                 t.HasCheckConstraint("CK_InferenceCalls_Tokens",
                     "(\"PromptTokens\" IS NULL OR \"PromptTokens\" >= 0) AND (\"CompletionTokens\" IS NULL OR \"CompletionTokens\" >= 0) " +

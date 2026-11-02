@@ -20,6 +20,9 @@ public sealed class InferenceCall
     /// <summary>Lavoro di estrazione del registro delle evidenze (terzo proprietario possibile, esclusivo).</summary>
     public Guid? EvidenceExtractionJobId { get; set; }
 
+    /// <summary>Lavoro documentale (quarto proprietario possibile, esclusivo): estrazione di un'unità di una preparazione.</summary>
+    public Guid? DocumentJobId { get; set; }
+
     public int Attempt { get; set; }
     public long FencingToken { get; set; }
     public AiPhase Phase { get; set; }
@@ -55,7 +58,7 @@ public sealed class InferenceCall
 }
 
 /// <summary>Esecuzione a cui appartengono le chiamate di uno scope: un turno, un run o un lavoro di estrazione, con tentativo e fencing del lease.</summary>
-public sealed record InferenceOwner(Guid? ChatTurnId, Guid? ProcessingRunId, int Attempt, long FencingToken, Guid? EvidenceExtractionJobId = null);
+public sealed record InferenceOwner(Guid? ChatTurnId, Guid? ProcessingRunId, int Attempt, long FencingToken, Guid? EvidenceExtractionJobId = null, Guid? DocumentJobId = null);
 
 /// <summary>Scrittura delle righe di un tentativo, sempre nella transazione del chiamante (commit del risultato o rilascio dopo un errore).</summary>
 public static class InferenceCallLog
@@ -91,6 +94,7 @@ public static class InferenceCallLog
                 ChatTurnId = owner.ChatTurnId,
                 ProcessingRunId = owner.ProcessingRunId,
                 EvidenceExtractionJobId = owner.EvidenceExtractionJobId,
+                DocumentJobId = owner.DocumentJobId,
                 Attempt = owner.Attempt,
                 FencingToken = owner.FencingToken,
                 Phase = call.Phase,
@@ -137,6 +141,8 @@ public static class InferenceCallLog
                      join c in db.Conversations on t.ConversationId equals c.Id
                      where t.Id == turnId
                      select c.ProjectId).SingleAsync(ct)
+            : owner.DocumentJobId is { } documentJobId
+                ? await db.DocumentJobs.Where(j => j.Id == documentJobId).Select(j => j.ProjectId).SingleAsync(ct)
             : owner.EvidenceExtractionJobId is { } jobId
                 ? await db.EvidenceExtractionJobs.Where(j => j.Id == jobId).Select(j => j.ProjectId).SingleAsync(ct)
                 : await db.ProcessingRuns.Where(r => r.Id == owner.ProcessingRunId).Select(r => r.ProjectId).SingleAsync(ct);

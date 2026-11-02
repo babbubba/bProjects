@@ -505,7 +505,8 @@ public sealed class DocumentUploadService(AppDbContext db, DocumentFileStore sto
             return await store.DeleteOrphanAsync(
                 storageKey,
                 async (key, token) => await db.DocumentVersions.AsNoTracking().AnyAsync(v => v.StorageKey == key, token)
-                    || await db.ParsedArtifacts.AsNoTracking().AnyAsync(a => a.StorageKey == key, token),   // gli artefatti di parsing vivono nello stesso volume
+                    || await db.ParsedArtifacts.AsNoTracking().AnyAsync(a => a.StorageKey == key, token)   // gli artefatti di parsing vivono nello stesso volume
+                    || await db.Set<bProjects.App.AI.WorkOutput>().AsNoTracking().AnyAsync(o => o.StorageKey == key, token),   // e i payload dei WorkOutput
                 CancellationToken.None);
         }
         catch (Exception ex) when (ex is DocumentStoreException or IOException or UnauthorizedAccessException)
