@@ -242,7 +242,18 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
         var input = BuildInput(measurement, row.RequestedAt, row.HardDeadlineAt.Value, row.Now, limits);
         var decision = DocumentRegimePolicy.Classify(input, extendedSeconds);
         var ordinal = (await write.ClassificationRecords.Where(r => r.OwnerKind == kind && r.OwnerId == rootId).MaxAsync(r => (int?)r.Ordinal, ct) ?? 0) + 1;
-        write.ClassificationRecords.Add(DocumentRegimePolicy.ToRecord(kind, rootId, row.ProjectId, ordinal, input, decision));
+        var record = DocumentRegimePolicy.ToRecord(kind, rootId, row.ProjectId, ordinal, input, decision);
+        write.ClassificationRecords.Add(record);
+        await write.SaveChangesAsync(ct);
+
+        // Intervallo Preflight (T064): dall'inizio della misura (clock del database, prima della sonda) all'istante del ClassificationRecord, nella STESSA
+        // transazione. Un worker perdente non arriva qui (il root non è più Pending sotto lock), quindi l'intervallo è scritto una sola volta; la coda del
+        // primo tentativo partirà dalla sua fine, così preflight e coda non si sovrappongono.
+        write.ExecutionIntervals.Add(new ExecutionInterval
+        {
+            Id = Guid.NewGuid(), ProjectId = row.ProjectId, RootKind = kind, RootId = rootId, Kind = ExecutionIntervalKind.Preflight, Attempt = 1,
+            StartedAt = first.Now < record.ObservedAt ? first.Now : record.ObservedAt, EndedAt = record.ObservedAt,
+        });
         await write.SaveChangesAsync(ct);
         var failed = await ApplyAsync(write, kind, rootId, decision, ct);
         await transaction.CommitAsync(ct);

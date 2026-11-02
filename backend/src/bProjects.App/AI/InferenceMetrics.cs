@@ -135,6 +135,9 @@ public sealed record ExecutionView(
     long ElapsedMs,
     long? QueueMs,
     long? ProcessingMs,
+    long? PreflightMs,
+    long? BackoffMs,
+    long? RecoveryMs,
     string? Stage,
     int? CompletedUnits,
     int? PlannedUnits);
@@ -163,7 +166,7 @@ public sealed record RootTelemetryView(ExecutionView Execution, RootMetricsView 
 /// viene dai timestamp del database (t0 e chiusura, oppure il clock del database per un root in corso). Le metriche aggregano solo le chiamate
 /// del tentativo vincente di ciascun proprietario (il root o, per la preparazione, ogni job figlio): le righe dei figli non si sommano mai
 /// a quelle del padre. Il tempo di elaborazione è l'unione temporale degli intervalli osservati delle chiamate; basta una chiamata senza
-/// durata (crash, interruzione) perché diventi unavailable. La coda non ha intervalli persistiti: resta unavailable, mai zero.
+/// durata (crash, interruzione) perché diventi unavailable. Coda, preflight e backoff sono la somma di intervalli persistiti mutuamente esclusivi, null se un intervallo manca; il recupero non ha produttore (T102): sempre null, mai zero.
 /// </summary>
 public static class ExecutionTelemetry
 {
@@ -201,11 +204,12 @@ public static class ExecutionTelemetry
             .Where(r => r.ProjectId == projectId && r.OwnerKind == kind && r.OwnerId == rootId)
             .OrderByDescending(r => r.Ordinal).Select(r => r.InputHash).FirstOrDefaultAsync(ct);
 
+        var waits = await WaitTimesAsync(db, projectId, kind, rootId, root, ct);
         var units = jobs.Where(j => j.Kind == DocumentJobKind.ExtractUnit).ToList();
         var execution = new ExecutionView(
             root.InitialRegime?.ToString(), root.Regime?.ToString(), root.ClassificationStatus?.ToString(), root.ClassificationVersion, recordHash, root.ClassificationReason,
             root.RequestedAt, root.OrdinaryDeadlineAt, root.HardDeadlineAt, root.EffectiveDeadlineAt, root.PromotedAt, root.PromotedReason, promotionHash,
-            elapsed, await QueueMsAsync(db, projectId, kind, rootId, root, ct), ProcessingMs(calls), root.Stage,
+            elapsed, waits.Queue, ProcessingMs(calls), waits.Preflight, waits.Backoff, null, root.Stage,
             isPreparation ? units.Count(j => j.Status == DocumentJobStatus.Completed) : null,
             isPreparation ? units.Count : null);
         return new RootTelemetryView(execution, Metrics(calls, jobs));
@@ -280,23 +284,46 @@ public static class ExecutionTelemetry
         return rows.Where(c => ids.Contains(c.DocumentJobId)).ToListAsync(ct);
     }
 
+    private readonly record struct WaitTimes(long? Queue, long? Preflight, long? Backoff);
+
     /// <summary>
-    /// Somma degli intervalli di coda persistiti. Solo per un root al primo tentativo: dopo un retry il backoff e il recupero non sono
-    /// persistiti, quindi il totale non sarebbe completo e resta unavailable (mai un valore parziale presentato come intero).
+    /// Attese persistite di un root documentale classificato, mutuamente esclusive (Plan §Misure). Preflight = intervallo di misura del primo tentativo. Backoff =
+    /// somma dei backoff dei tentativi falliti (zero se non c'è stato alcun retry; null se un retry è avvenuto senza backoff registrato, per esempio per recupero
+    /// del lease: quel tempo è del recupero, T102). Coda = attesa fra t0 e l'inizio del preflight più le code di ogni tentativo claimato (da fine preflight o
+    /// fine backoff al claim); null se manca il preflight o la coda di un tentativo (mai un totale parziale presentato come intero). I root senza regime
+    /// (001, Pending) e le preparazioni non hanno intervalli: tutto null. Il recupero non ha produttore: la vista lo lascia sempre null.
     /// </summary>
-    private static async Task<long?> QueueMsAsync(AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, RootRow root, CancellationToken ct)
+    private static async Task<WaitTimes> WaitTimesAsync(AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, RootRow root, CancellationToken ct)
     {
-        if (kind == ClassificationOwnerKind.DocumentPreparation || root.Attempts > 1)
+        if (kind == ClassificationOwnerKind.DocumentPreparation || root.InitialRegime is null)
         {
-            return null;
+            return new(null, null, null);
         }
 
-        var intervals = await db.ExecutionIntervals.AsNoTracking()
-            .Where(i => i.ProjectId == projectId && i.RootKind == kind && i.RootId == rootId && i.Kind == ExecutionIntervalKind.Queue)
-            .Select(i => new { i.StartedAt, i.EndedAt }).ToListAsync(ct);
-        return intervals.Count == 0
-            ? null
-            : UnionLength([.. intervals.Select(i => (i.StartedAt.ToUnixTimeMilliseconds(), i.EndedAt.ToUnixTimeMilliseconds()))]);
+        var rows = await db.ExecutionIntervals.AsNoTracking()
+            .Where(i => i.ProjectId == projectId && i.RootKind == kind && i.RootId == rootId)
+            .Select(i => new { i.Kind, i.Attempt, i.StartedAt, i.EndedAt }).ToListAsync(ct);
+        long Union(IEnumerable<(DateTimeOffset Start, DateTimeOffset End)> items) =>
+            UnionLength([.. items.Select(i => (i.Start.ToUnixTimeMilliseconds(), i.End.ToUnixTimeMilliseconds()))]);
+
+        var preflight = rows.Where(r => r.Kind == ExecutionIntervalKind.Preflight && r.Attempt == 1).ToList();
+        long? preflightMs = preflight.Count == 1 ? Union([(preflight[0].StartedAt, preflight[0].EndedAt)]) : null;
+
+        long? backoffMs = root.Attempts <= 1
+            ? 0
+            : Enumerable.Range(1, root.Attempts - 1).All(a => rows.Any(r => r.Kind == ExecutionIntervalKind.Backoff && r.Attempt == a))
+                ? Union(rows.Where(r => r.Kind == ExecutionIntervalKind.Backoff).Select(r => (r.StartedAt, r.EndedAt)))
+                : null;
+
+        long? queueMs = null;
+        if (preflight.Count == 1 && root.Attempts >= 1
+            && Enumerable.Range(1, root.Attempts).All(a => rows.Any(r => r.Kind == ExecutionIntervalKind.Queue && r.Attempt == a)))
+        {
+            var beforePreflight = Math.Max(0, (long)(preflight[0].StartedAt - root.RequestedAt).TotalMilliseconds);
+            queueMs = beforePreflight + Union(rows.Where(r => r.Kind == ExecutionIntervalKind.Queue).Select(r => (r.StartedAt, r.EndedAt)));
+        }
+
+        return new(queueMs, preflightMs, backoffMs);
     }
 
     /// <summary>Unione degli intervalli osservati di tutte le chiamate (anche dei tentativi falliti); null se una durata non è nota o non c'è telemetria.</summary>

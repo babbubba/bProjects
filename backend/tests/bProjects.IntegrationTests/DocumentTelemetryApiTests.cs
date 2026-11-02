@@ -29,6 +29,7 @@ public sealed class DocumentTelemetryApiTests
     {
         await using var database = await ParsingDatabase.CreateAsync();
         var root = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { ElapsedSeconds = 50, AttemptCount = 1 });
+        await DocumentExecutionIntervalsTests.SeedIntervalAsync(database, root, "Preflight", 1, 10, 12);   // misura da t0+10 s a t0+12 s
 
         await using var db = database.NewContext();
         await ExecutionIntervalStore.RecordQueueAsync(db, ClassificationOwnerKind.ChatTurn, root.Id, Ct);
@@ -36,8 +37,9 @@ public sealed class DocumentTelemetryApiTests
 
         Assert.Equal(1L, await database.ScalarAsync<long>($"""SELECT count(*) FROM "ExecutionIntervals" WHERE "RootId" = '{root.Id}' AND "Kind" = 'Queue' AND "Attempt" = 1"""));
         var view = (await ExecutionTelemetry.ForRootAsync(db, root.Project, ClassificationOwnerKind.ChatTurn, root.Id, Ct))!;
-        // Il t0 è a -50 s sul clock del database: la coda è l'intervallo t0 -> claim, mai l'intero Running né zero inventato.
-        Assert.InRange(view.Execution.QueueMs!.Value, 49_000, 54_000);
+        // Il t0 è a -50 s sul clock del database: la coda è t0 -> inizio preflight (10 s) più fine preflight (t0+12 s) -> claim (38 s), mai il preflight né l'intero Running.
+        Assert.InRange(view.Execution.QueueMs!.Value, 47_000, 52_000);
+        Assert.Equal(2_000, view.Execution.PreflightMs);
         Assert.Null(view.Execution.ProcessingMs); // nessuna chiamata osservata: unavailable, non coda attribuita all'elaborazione
     }
 
@@ -65,6 +67,7 @@ public sealed class DocumentTelemetryApiTests
         {
             Status = "Queued", LeaseOwner = null, AttemptCount = 0, Fence = 0, ElapsedSeconds = 20,
         });
+        await DocumentExecutionIntervalsTests.SeedIntervalAsync(database, root, "Preflight", 1, 5, 6);   // la coda parte dalla fine del preflight (t0+6 s)
         var executor = new HoldingExecutor();
         await using var services = new ServiceCollection()
             .AddLogging()
@@ -79,7 +82,7 @@ public sealed class DocumentTelemetryApiTests
         try
         {
             Assert.Equal(1L, await database.ScalarAsync<long>($"""SELECT count(*) FROM "ExecutionIntervals" WHERE "RootId" = '{root.Id}' AND "Kind" = 'Queue' AND "Attempt" = 1"""));
-            Assert.True(await database.ScalarAsync<bool>($"""SELECT "EndedAt" - "StartedAt" >= interval '19 seconds' FROM "ExecutionIntervals" WHERE "RootId" = '{root.Id}'"""));
+            Assert.True(await database.ScalarAsync<bool>($"""SELECT "EndedAt" - "StartedAt" >= interval '13 seconds' FROM "ExecutionIntervals" WHERE "RootId" = '{root.Id}' AND "Kind" = 'Queue'"""));
         }
         finally
         {
@@ -139,6 +142,30 @@ public sealed class DocumentTelemetryApiTests
         Assert.Equal(2, preparation.GetProperty("plannedUnits").GetInt32());
         Assert.Equal(1, preparation.GetProperty("completedUnits").GetInt32());
         Assert.Equal("Queued", preparation.GetProperty("stage").GetString());
+    }
+
+    [Fact]
+    public async Task A_late_completed_turn_exposes_only_measures_through_the_api_and_never_a_target_verdict_or_unmeasured_zero()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        await using var host = await MetricsHost.StartAsync(database.ConnectionString, new CannedLlamaServer(), MetricsHost.CannedOptions(), chat: false, formal: false);
+        using var pm = await host.App.LoginAsync();
+        var turn = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { ElapsedSeconds = 200, Regime = ExecutionRegime.Extended, InitialRegime = ExecutionRegime.Ordinary, PromotionCount = 1, AttemptCount = 1 });
+        await database.ExecuteAsync($"""UPDATE "ChatTurns" SET "Status" = 'Completed', "CompletedAt" = clock_timestamp(), "ResultMessageId" = "TriggerMessageId", "LeaseOwner" = NULL, "LeaseUntil" = NULL WHERE "Id" = '{turn.Id}'""");
+        await DocumentExecutionIntervalsTests.SeedIntervalAsync(database, turn, "Preflight", 1, 1, 2);
+        await DocumentExecutionIntervalsTests.SeedIntervalAsync(database, turn, "Queue", 1, 2, 8);
+
+        var execution = (await GetAsync(pm, $"/api/projects/{turn.Project}/chat-turns/{turn.Id}")).GetProperty("execution");
+
+        // Il turno è finito dopo oltre 180 s (200 s): la vista riporta i tempi misurati e nessun verdetto sul target (Completed non certifica il profilo N).
+        Assert.InRange(execution.GetProperty("elapsedMs").GetInt64(), 200_000, 206_000);
+        Assert.Equal(1_000, execution.GetProperty("preflightMs").GetInt64());
+        Assert.Equal(1_000 + 6_000, execution.GetProperty("queueMs").GetInt64());
+        Assert.Equal(0, execution.GetProperty("backoffMs").GetInt64());                            // un solo tentativo: nessun retry
+        Assert.Equal(JsonValueKind.Null, execution.GetProperty("recoveryMs").ValueKind);           // nessun produttore (T102): unavailable, mai zero
+        Assert.Equal(JsonValueKind.Null, execution.GetProperty("processingMs").ValueKind);         // nessuna chiamata osservata
+        string[] forbidden = ["target", "nominal", "certif", "within", "respect", "complian", "sla", "met", "ok"];
+        Assert.DoesNotContain(execution.EnumerateObject().Select(p => p.Name), name => forbidden.Any(f => string.Equals(name, f, StringComparison.OrdinalIgnoreCase) || (f.Length > 3 && name.Contains(f, StringComparison.OrdinalIgnoreCase))));
     }
 
     private static async Task<JsonElement> GetAsync(HttpClient client, string url)

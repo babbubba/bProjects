@@ -2,6 +2,7 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
@@ -37,6 +38,13 @@ public sealed record ContextComposition(IReadOnlyList<CompositionItem> Items)
     /// o testo del PM mescolato): la composizione la attribuisce a quella categoria. Un messaggio misto non la porta e resta nella sua categoria di ruolo.
     /// </summary>
     public const string CategoryProperty = "bprojects.context.category";
+
+    /// <summary>
+    /// Proprietà di un messaggio MISTO: coppie piatte [inizio, lunghezza, ...] (caratteri del testo) dei segmenti composti dal server esclusivamente da fonti
+    /// documentali. La composizione attribuisce quei segmenti a document_sources e il resto del messaggio alla sua categoria di ruolo. Un intervallo fuori dal
+    /// testo, negativo o sovrapposto invalida l'intera proprietà: nessuna attribuzione inventata.
+    /// </summary>
+    public const string DocumentSpansProperty = "bprojects.context.document-spans";
 
     public int AttributedTokens => Items.Sum(i => i.Tokens);
 
@@ -444,6 +452,24 @@ internal sealed class InferenceCaptureChatClient(
             foreach (var message in messages)
             {
                 var text = message.Text;
+                if (text.Length > 0 && DocumentParts(message, text) is { } parts)
+                {
+                    // Messaggio misto: i segmenti dichiarati dal server come sole fonti documentali vanno a document_sources, il resto alla categoria di ruolo.
+                    if (parts.Document.Trim().Length > 0)
+                    {
+                        var documentTotal = totals.GetValueOrDefault(ContextComposition.DocumentSources);
+                        totals[ContextComposition.DocumentSources] = (documentTotal.Tokens + await count(parts.Document, ct), documentTotal.Messages + 1);
+                    }
+
+                    if (parts.Remainder.Trim().Length > 0 && Classify(message) is { } restKey)
+                    {
+                        var restTotal = totals.GetValueOrDefault(restKey);
+                        totals[restKey] = (restTotal.Tokens + await count(parts.Remainder, ct), restTotal.Messages + 1);
+                    }
+
+                    continue;
+                }
+
                 if (text.Length == 0 || Classify(message) is not { } key)
                 {
                     continue; // contenuti non testuali: restano nella quota non attribuita
@@ -461,6 +487,47 @@ internal sealed class InferenceCaptureChatClient(
         {
             return null;
         }
+    }
+
+    /// <summary>I segmenti come array di interi in memoria, o come array JSON dopo il ripristino di un checkpoint; qualunque altra forma è invalida.</summary>
+    private static int[]? SpansOf(object? value) => value switch
+    {
+        int[] spans => spans,
+        JsonElement { ValueKind: JsonValueKind.Array } json when json.EnumerateArray().All(i => i.ValueKind == JsonValueKind.Number && i.TryGetInt32(out _)) =>
+            [.. json.EnumerateArray().Select(i => i.GetInt32())],
+        _ => null,
+    };
+
+    /// <summary>
+    /// Separa il testo di un messaggio nei segmenti dichiarati documentali (<see cref="ContextComposition.DocumentSpansProperty"/>) e nel resto. Null se la
+    /// proprietà manca o è incoerente (fuori dal testo, negativa, sovrapposta o non ordinata): in quel caso nessuna attribuzione parziale.
+    /// </summary>
+    private static (string Document, string Remainder)? DocumentParts(ChatMessage message, string text)
+    {
+        if (message.AdditionalProperties?.TryGetValue(ContextComposition.DocumentSpansProperty, out var value) != true
+            || SpansOf(value) is not { Length: > 0 } spans || spans.Length % 2 != 0)
+        {
+            return null;
+        }
+
+        var document = new StringBuilder();
+        var rest = new StringBuilder();
+        var cursor = 0;
+        for (var i = 0; i < spans.Length; i += 2)
+        {
+            var (start, length) = (spans[i], spans[i + 1]);
+            if (start < cursor || length <= 0 || start + length > text.Length)
+            {
+                return null;
+            }
+
+            rest.Append(text, cursor, start - cursor);
+            document.Append(text, start, length);
+            cursor = start + length;
+        }
+
+        rest.Append(text, cursor, text.Length - cursor);
+        return (document.ToString(), rest.ToString());
     }
 
     /// <summary>

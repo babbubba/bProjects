@@ -360,11 +360,14 @@ public sealed class DocumentChatWorkflow(
             text.Append("<<<FINE EVIDENZA>>>\n");
         }
 
+        // Fino a qui il testo è composto solo dal server a partire dalle evidenze documentali congelate e dalle loro fonti (T064: attribuzione document_sources);
+        // la domanda del PM e l'istruzione di risposta che seguono restano nella categoria del messaggio utente.
+        var documentLength = text.Length;
         text.Append("\nMessaggio del project manager:\n").Append(question)
             .Append("\n\nRispondi ora con l'unico oggetto JSON {\"mode\":...,\"answer\":...}.");
 
         var messages = history.Select(m => new ChatMessage(m.Role == MessageRole.User ? ChatRole.User : ChatRole.Assistant, m.Body)).ToList();
-        messages.Add(new ChatMessage(ChatRole.User, text.ToString()));
+        messages.Add(new ChatMessage(ChatRole.User, text.ToString()) { AdditionalProperties = new() { [ContextComposition.DocumentSpansProperty] = new[] { 0, documentLength } } });
         return messages;
     }
 

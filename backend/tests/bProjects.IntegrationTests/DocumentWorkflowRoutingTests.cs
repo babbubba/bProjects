@@ -118,6 +118,75 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", generation, expectedPayloadMeasured: true);
     }
 
+    // ================================================================ T064: attribuzione document_sources nella composizione della chiamata realmente inviata
+
+    private static int WordsOf(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private async Task<Dictionary<string, (int Tokens, int Messages)>> CompositionOfAsync(string ownerColumn, Guid owner)
+    {
+        var json = await Scalar<string>($"SELECT \"Composition\"::text FROM \"InferenceCalls\" WHERE \"{ownerColumn}\" = @o AND \"IsFinal\" = true", ("o", owner));
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("items").EnumerateArray()
+            .ToDictionary(i => i.GetProperty("key").GetString()!, i => (i.GetProperty("tokens").GetInt32(), i.TryGetProperty("messageCount", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : 0));
+    }
+
+    [Fact]
+    public async Task The_document_chat_composition_attributes_the_evidence_block_to_document_sources_and_the_pm_question_to_user_messages()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var turn = await PostChat(client, project, "Quanti ordini al giorno puo emettere il cliente A?");
+        await DrainAsync();
+
+        var sent = Assert.Single(_model.Texts);                                         // un solo messaggio utente: evidenze + domanda
+        var split = sent.IndexOf("\nMessaggio del project manager:\n", StringComparison.Ordinal);
+        Assert.True(split > 0);
+        var composition = await CompositionOfAsync("ChatTurnId", turn);
+
+        // Né il testo del PM né l'istruzione di risposta sono fonti documentali; né le evidenze sono testo del PM: ogni parte nella sua categoria.
+        Assert.Equal(WordsOf(sent[..split]), composition[ContextComposition.DocumentSources].Tokens);
+        Assert.Equal(WordsOf(sent[split..]), composition[ContextComposition.UserMessages].Tokens);
+        Assert.Equal(1, composition[ContextComposition.DocumentSources].Messages);
+    }
+
+    [Fact]
+    public async Task The_document_analysis_composition_attributes_only_the_evidence_entries_to_document_sources_not_the_server_data_or_the_dialog()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        await DrainAsync();
+
+        var sent = Assert.Single(_model.Texts);
+        var entries = Regex.Matches(sent, "<<<VOCE .*?<<<FINE VOCE>>>\n", RegexOptions.Singleline).Select(m => m.Value).ToList();
+        Assert.NotEmpty(entries);
+        Assert.Contains("origine=Document", entries[0]);
+        var composition = await CompositionOfAsync("ProcessingRunId", run);
+
+        Assert.Equal(entries.Sum(WordsOf), composition[ContextComposition.DocumentSources].Tokens);
+        Assert.Equal(WordsOf(sent) - entries.Sum(WordsOf), composition[ContextComposition.UserMessages].Tokens);
+    }
+
+    [Fact]
+    public async Task The_document_draft_composition_is_not_attributed_to_document_sources_because_pm_edits_and_sources_share_the_revision_json()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var analysis = await StartAnalysis(client, project);
+        await DrainAsync();
+        var revision = await ConfirmAsync(client, project, analysis);
+        var generation = await StartGeneration(client, project, analysis, revision);
+        await DrainAsync();
+
+        var composition = await CompositionOfAsync("ProcessingRunId", generation);
+
+        Assert.DoesNotContain(ContextComposition.DocumentSources, composition.Keys);   // attribuzione non dimostrabile: nessuna cifra inventata
+        Assert.True(composition[ContextComposition.AnalysisStructured].Tokens > 0);
+    }
+
     /// <summary>T124: il root documentale e stato classificato (record unico, payload misurato se determinabile) PRIMA del primo claim, con la deadline dal t0 originale.</summary>
     private async Task AssertClassifiedBeforeFirstClaim(string table, string ownerKind, Guid root, bool expectedPayloadMeasured)
     {

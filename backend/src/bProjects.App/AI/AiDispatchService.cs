@@ -465,7 +465,7 @@ public sealed class AiDispatchService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Intervallo di coda non registrato");
+            logger.LogWarning("Intervallo di coda non registrato: {ExceptionType}", ex.GetType().Name);
         }
     }
 
@@ -484,7 +484,35 @@ public sealed class AiDispatchService(
         await InferenceCallLog.AppendAttemptAsync(db, inference, owner, ct);
         await transaction.CommitAsync(ct);
         inference.MarkWritten();
+        await RecordBackoffAsync(released, owner, ct);
         return released;
+    }
+
+    /// <summary>Telemetria (T064): il backoff di un retry di un turno o run documentale, dopo il commit del rilascio. Un guasto di scrittura non blocca mai il lavoro.</summary>
+    private async Task RecordBackoffAsync(TurnRelease released, InferenceOwner owner, CancellationToken ct)
+    {
+        if (released is not { Outcome: TurnTransition.Requeued, NextAttemptAt: { } next, Delay: { } delay })
+        {
+            return;
+        }
+
+        (ClassificationOwnerKind Kind, Guid Id) target = owner.ChatTurnId is { } turn ? (ClassificationOwnerKind.ChatTurn, turn)
+            : owner.ProcessingRunId is { } run ? (ClassificationOwnerKind.ProcessingRun, run)
+            : default;
+        if (target.Id == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await ExecutionIntervalStore.RecordBackoffAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), target.Kind, target.Id, owner.Attempt, next, delay, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Intervallo di backoff non registrato: {ExceptionType}", ex.GetType().Name);
+        }
     }
 
     private static bool IsLeaseLost(Exception exception)

@@ -398,10 +398,13 @@ public sealed class DocumentAnalysisWorkflow(
             text.Append("(nessuna evidenza disponibile)\n");
         }
 
+        // T064: solo le voci di origine documentale sono «fonti documentali»; le voci da messaggi PM, il dialogo e i dati del server restano nella categoria del messaggio.
+        var documentSpans = new List<int>();
         for (var i = 0; i < input.Evidence.Count; i++)
         {
             var e = input.Evidence[i];
             var snapshot = input.Snapshot.Evidence[i];
+            var entryStart = text.Length;
             text.Append($"<<<VOCE entryId={ReconciliationIds.EntryId(input.Snapshot.SourceHash, e.EvidenceId, e.ContentHash)} evidenza={e.EvidenceId:D} hash={e.ContentHash} origine={e.Origin} tipo={e.Kind} polarita={e.Polarity} certezza={e.Certainty}>>>\n")
                 .Append(e.Statement).Append('\n');
             foreach (var s in snapshot.Sources)
@@ -413,10 +416,20 @@ public sealed class DocumentAnalysisWorkflow(
             }
 
             text.Append("<<<FINE VOCE>>>\n");
+            if (e.Origin == EvidenceOriginKind.Document)
+            {
+                documentSpans.AddRange([entryStart, text.Length - entryStart]);
+            }
         }
 
         text.Append("\nRispondi ora con l'unico oggetto JSON {\"results\":...,\"analysis\":...,\"evidenceMap\":...}.");
-        return [new ChatMessage(ChatRole.User, text.ToString())];
+        var payload = new ChatMessage(ChatRole.User, text.ToString());
+        if (documentSpans.Count > 0)
+        {
+            payload.AdditionalProperties = new() { [ContextComposition.DocumentSpansProperty] = documentSpans.ToArray() };
+        }
+
+        return [payload];
     }
 
     private async Task<AnalysisRunResult> ReadAsync(Guid runId, CancellationToken ct)

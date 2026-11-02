@@ -186,8 +186,8 @@ public enum ExecutionIntervalKind
 }
 
 /// <summary>
-/// Intervallo di attesa (append-only) di un root documentale: per ora la coda del primo tentativo, da t0 al claim. Gli altri tipi sono
-/// previsti dallo schema ma non hanno ancora produttori; un intervallo non scritto resta unavailable, mai dedotto.
+/// Intervallo di attesa (append-only) di un root documentale, mutuamente esclusivo con gli altri e con l'elaborazione: Preflight (misura, scritto dalla classificazione),
+/// Queue (fine preflight o fine backoff -> claim) e Backoff (rilascio con retry -> NextAttemptAt). Recovery non ha ancora un produttore (T102); un intervallo non scritto resta unavailable, mai dedotto.
 /// </summary>
 public sealed class ExecutionInterval
 {
@@ -205,8 +205,8 @@ public sealed class ExecutionInterval
 public static class ExecutionIntervalStore
 {
     /// <summary>
-    /// Coda del primo tentativo: da t0 (RequestedAt) all'istante del claim, sul clock del database. Solo per un root documentale (regime
-    /// valorizzato) al suo primo tentativo; i tentativi successivi (backoff, recupero) non hanno ancora un produttore e restano non registrati.
+    /// Coda del tentativo appena claimato, sul clock del database. Solo per un root documentale (regime
+    /// valorizzato) e solo se esiste l'intervallo che la precede (preflight o backoff).
     /// Idempotente per (root, tipo, tentativo).
     /// </summary>
     public static async Task RecordQueueAsync(AppDbContext db, ClassificationOwnerKind kind, Guid rootId, CancellationToken ct)
@@ -217,11 +217,35 @@ public static class ExecutionIntervalStore
             ClassificationOwnerKind.ProcessingRun => ("\"ProcessingRuns\" x", "x.\"ProjectId\""),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), "La coda del primo claim riguarda un turno o un run."),
         };
-        // from/project/kind sono costanti del codice (mai input): solo l'id del root è un parametro.
+        // from/project/kind sono costanti del codice (mai input): solo l'id del root è un parametro. La coda del tentativo k parte dalla fine dell'intervallo
+        // che lo precede: il preflight (k = 1) o il backoff del tentativo k-1 (k > 1). Senza quell'intervallo (per esempio un tentativo raggiunto per recupero
+        // del lease) il punto di partenza non è osservabile e la coda non si scrive: resta unavailable.
         var sql = "INSERT INTO \"ExecutionIntervals\" (\"Id\",\"ProjectId\",\"RootKind\",\"RootId\",\"Kind\",\"Attempt\",\"StartedAt\",\"EndedAt\") "
-            + "SELECT gen_random_uuid(), " + project + ", '" + kind + "', x.\"Id\", 'Queue', 1, x.\"RequestedAt\", GREATEST(clock_timestamp(), x.\"RequestedAt\") "
-            + "FROM " + from + " WHERE x.\"Id\" = {0} AND x.\"AttemptCount\" = 1 AND x.\"InitialRegime\" IS NOT NULL "
+            + "SELECT gen_random_uuid(), " + project + ", '" + kind + "', x.\"Id\", 'Queue', x.\"AttemptCount\", s.\"EndedAt\", GREATEST(clock_timestamp(), s.\"EndedAt\") "
+            + "FROM " + from + " JOIN \"ExecutionIntervals\" s ON s.\"RootKind\" = '" + kind + "' AND s.\"RootId\" = x.\"Id\" AND "
+            + "((x.\"AttemptCount\" = 1 AND s.\"Kind\" = 'Preflight' AND s.\"Attempt\" = 1) OR (x.\"AttemptCount\" > 1 AND s.\"Kind\" = 'Backoff' AND s.\"Attempt\" = x.\"AttemptCount\" - 1)) "
+            + "WHERE x.\"Id\" = {0} AND x.\"InitialRegime\" IS NOT NULL "
             + "ON CONFLICT (\"RootKind\",\"RootId\",\"Kind\",\"Attempt\") DO NOTHING";
         await db.Database.ExecuteSqlRawAsync(sql, [rootId], ct);
+    }
+
+    /// <summary>
+    /// Backoff del tentativo fallito e rilasciato con retry: da (NextAttemptAt - ritardo) = istante del rilascio a NextAttemptAt, entrambi sul clock del
+    /// database. Scritto dal dispatcher DOPO il commit del rilascio, mai dentro la sua transazione: un guasto della telemetria non blocca il lavoro; il backoff
+    /// mancante rende non disponibili backoff e coda del tentativo successivo (mai dedotti). Solo root documentali (regime valorizzato); idempotente.
+    /// </summary>
+    public static async Task RecordBackoffAsync(AppDbContext db, ClassificationOwnerKind kind, Guid rootId, int attempt, DateTimeOffset nextAttemptAt, TimeSpan delay, CancellationToken ct)
+    {
+        var (from, project) = kind switch
+        {
+            ClassificationOwnerKind.ChatTurn => ("\"ChatTurns\" x JOIN \"Conversations\" c ON c.\"Id\" = x.\"ConversationId\"", "c.\"ProjectId\""),
+            ClassificationOwnerKind.ProcessingRun => ("\"ProcessingRuns\" x", "x.\"ProjectId\""),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), "Il backoff riguarda un turno o un run."),
+        };
+        var sql = "INSERT INTO \"ExecutionIntervals\" (\"Id\",\"ProjectId\",\"RootKind\",\"RootId\",\"Kind\",\"Attempt\",\"StartedAt\",\"EndedAt\") "
+            + "SELECT gen_random_uuid(), " + project + ", '" + kind + "', x.\"Id\", 'Backoff', {1}, {2}::timestamptz - make_interval(secs => {3}), {2}::timestamptz "
+            + "FROM " + from + " WHERE x.\"Id\" = {0} AND x.\"Status\" = 'Queued' AND x.\"AttemptCount\" = {1} AND x.\"InitialRegime\" IS NOT NULL "
+            + "ON CONFLICT (\"RootKind\",\"RootId\",\"Kind\",\"Attempt\") DO NOTHING";
+        await db.Database.ExecuteSqlRawAsync(sql, [rootId, attempt, nextAttemptAt, delay.TotalSeconds], ct);
     }
 }

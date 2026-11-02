@@ -29,7 +29,7 @@ public enum TurnTransition
     Failed,
 }
 
-public readonly record struct TurnRelease(TurnTransition Outcome, DateTimeOffset? NextAttemptAt = null, string? ErrorCode = null);
+public readonly record struct TurnRelease(TurnTransition Outcome, DateTimeOffset? NextAttemptAt = null, string? ErrorCode = null, TimeSpan? Delay = null);
 
 /// <summary>
 /// Unità di estrazione documentale presa in carico (DocumentJob ExtractUnit): owner e fencing token identificano in modo esclusivo questo
@@ -857,7 +857,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
         }
 
         return reader.GetString(0) == "Queued"
-            ? new TurnRelease(TurnTransition.Requeued, reader.GetFieldValue<DateTimeOffset>(1))
+            ? new TurnRelease(TurnTransition.Requeued, reader.GetFieldValue<DateTimeOffset>(1), Delay: delay)
             : new TurnRelease(TurnTransition.Failed, ErrorCode: reader.GetString(2));
     }
 
