@@ -64,3 +64,36 @@ Non soddisfatta: fedelta e validita del PDF a tabella multipagina (FAIL), da ris
 - pdf-table-multipage: causa = prompt ambiguo su citationGroupKey/part (output rifiutato dal validatore, correttamente) + gold con requisito multi-blocco non naturale col layout del parser. Corretti prompt e test; validatore invariato. 4 PASS su 4 run valide (1 run scartata per guasto parser rc=-4, Requeued, non attribuibile al modello).
 - Residuo onesto: relazioni fra evidenze e quote multi-blocco gold con il modello reale restano NOT VERIFIED (0 osservate; il parser non produce header in blocco separato in questa fixture); T055 NON spuntato in tasks.md: la verifica dichiara «relazioni e quote multi-blocco gold». Decisione al coordinatore: accettare come NOT VERIFIED o aggiungere una fixture con header in blocco separato.
 - Nota di prod.: a modello DGX scaricato il preflight da `runtime_unverified` (warm-up); il parser a volte termina con rc=-4 (Requeued gestito, riprova automatica).
+
+## Ripresa 3 (2026-11-02): fixture multi-blocco + relazione, R-05 riesaminato
+Mandato: T055 non si chiude con relazioni e citazioni multi-blocco NOT VERIFIED.
+
+### Fixture aggiunta (T002 coerente): `tests/fixtures/documents/pdf-split-clause.pdf`
+- PDF sintetico a 2 pagine (1298 byte, hash nel manifest, licenza «sintetico»). Art. 4 «... entro il quinto giorno lavorativo del mese successivo,» a fine pagina 1 e continuazione «purche' il cliente non abbia comunicato per iscritto la sospensione del servizio.» a pagina 2; Art. 9 «In deroga all'Art. 4, per il mese di dicembre ... decimo giorno lavorativo.»
+- Manifest: file `pdf-split-clause`; fatti `pdf-split-f1` (con `multiBlock.parts`: 2 blocchi Primary) e `pdf-split-f2`; nuova sezione `relations` (`pdf-split-rel`: f2 -> f1, tipi attesi Qualifies/Corrects/Supersedes, basis Declared). Nessun'altra fixture modificata.
+- Verifica con parser REALE (Docling nel container `bprojects-t055-parser`, 127.0.0.1:58300, conversione diretta di /convert, poi test end-to-end): status Complete, 4 blocchi paragrafo: b2 (pagina 1, Art. 4 prima meta) e b3 (pagina 2, seconda meta) distinti, b4 (pagina 2, Art. 9); un chunk con tutti i blocchi Primary, range 0..len. Nessun manifest artificiale, nessun bypass del parser.
+
+### Gold e asserzioni VINCOLANTI (test `A_clause_split_by_a_page_break_is_cited_on_two_distinct_Primary_blocks_and_the_explicit_derogation_is_related_to_it`)
+1. Presupposto parser: ciascuna parte gold sta in un solo blocco e i due blocchi sono distinti.
+2. Fatto f1: statement/qualificatori con rapporto mensile, quinto giorno lavorativo e sospensione del servizio, non negato.
+3. Fatto f2: dicembre, decimo giorno lavorativo, rapporto.
+4. Citazione multi-blocco: UN'evidenza con fonti Primary sui DUE blocchi gold, ciascuna che copre la sua parte, stesso gruppo, part contigue da 0 e in ordine di lettura.
+5. Relazione: da evidenza dell'Art. 9 a quella dell'Art. 4, tipo Qualifies/Corrects/Supersedes, basis Declared (la formula «In deroga all'Art. 4» e letterale).
+- Piu i controlli di pipeline comuni (Ready, 1 tentativo, finish=stop, usage, citazioni esatte UTF-16, Primary presente). Nessuna nota al posto di un assert.
+
+### Gold R-05 (pdf-table-f2): ripartizione statement / fonte
+- NELLO STATEMENT (struttura/qualificatori inclusi), perche perderlo cambia il significato: la funzione «tema scuro», l'esclusione (polarita negativa o kind Exclusion) e il suo AMBITO «rilascio 1» (senza, «esclusa» diventerebbe «mai prevista/mai da fare»).
+- GARANTITO DALLA FONTE Primary citata (testo esatto, verificato dal validatore sul blocco): id riga R-05 e priorita «Bassa», attributi della riga che non cambiano l'esclusione; la fonte e la riga intera.
+- Cambiamento rispetto a prima: l'assert non richiede piu «bassa» nello statement (richiesto invece nella fonte Primary: `CitesRow("bassa")`) e richiede in piu l'ambito «rilascio 1» e la polarita negativa (prima bastava il testo «esclus»). Non e un allentamento della fedelta: l'informazione critica (esclusione + ambito) e piu vincolata di prima, quella di attributo e garantita dal blocco citato.
+
+### Esiti reali (DGX interno, parser Docling reale, PostgreSQL 18 reale; seriali; warm-up del router nel test)
+- `pdf-split-clause.pdf`: 6 esecuzioni. 5 valide PASS (Ready, 1 unita, 2 evidenze, 1 chiamata, 1 tentativo, finish=stop, ~28-31 s): f1 con Deadline e Condition «purche'... sospensione del servizio», fonti Primary sui DUE blocchi (part 0 e 1, stesso gruppo); f2 dicembre/decimo giorno con «In deroga all'Art. 4» come Condition; relazione persistita `Supersedes/Declared` Art. 9 -> Art. 4 in 5/5. 1 esecuzione scartata: il parser ha risposto 422 (`parse_input_invalid`) prima di qualunque chiamata al modello (0 unita, 0 chiamate), non riprodotta su 5 rerun ne con conversione diretta della stessa fixture; classificata parser/infrastruttura (container, nel suo log compare `rc=-4` in conversioni anomale), non modello ne prompt ne validatore. Il tipo di relazione scelto dal modello (Supersedes) e uno dei tre ammessi dal gold; una deroga puntuale per dicembre e piu propriamente Qualifies: limite di precisione semantica non vincolato dal gold.
+- `pdf-table-multipage.pdf` con il gold R-05 riesaminato: 3 esecuzioni PASS (R-05 `Exclusion/Excluded`, «escluso dal rilascio 1» nello statement, riga R-05/Bassa nella fonte Primary; priorita anche come qualificatore Other).
+- `DocumentCorpusTests` (manifest/hash/licenza): 5/5 superati con la nuova fixture. Nessuna suite completa eseguita (come da mandato).
+- Il processo di test termina a volte con codice 0xC0000005 dopo aver riportato 0 falliti e il report PASS (crash host intermittente noto).
+- Nessun cambiamento a prompt, validatore, contratto o altri gold; la diagnostica e il prompt v2 di 34ea56b sono invariati.
+
+## Esito finale T055 (sostituisce «NOT VERIFIED» di relazioni e multi-blocco)
+- Relazioni e quote multi-blocco gold: VERIFICATE col modello reale sulla fixture dedicata (asserzioni vincolanti, non note).
+- Condizione di chiusura soddisfatta: T055 spuntato in `tasks.md`.
+- Limiti che restano dichiarati: relazioni FRA unita diverse (conflitto F01/F13, qualificatore F06/F14 come relazioni) = I5, non provate qui; la citazione multi-blocco e verificata su un caso (frase spezzata da salto pagina), non su tabelle con header in blocco separato (il parser di questo corpus unisce header e righe nello stesso blocco); perdita provocata dal modello reale in caso controllato = solo modello finto (T054); guasto intermittente del parser (rc=-4 / 422 spurio) puo far fallire una preparazione prima del modello; a modello DGX scaricato serve warm-up (`runtime_unverified`).

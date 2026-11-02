@@ -41,6 +41,21 @@
       }
     },
     {
+      "id": "pdf-split-clause",
+      "path": "pdf-split-clause.pdf",
+      "format": "pdf",
+      "mediaType": "application/pdf",
+      "byteLength": 1298,
+      "sha256": "0cbeb47798635bde06169f136a997ef40ef2e4c4d84b0818deff71fbd125bc58",
+      "license": "sintetico, generato per il progetto bProjects (nessuna risorsa esterna)",
+      "purpose": "PDF a due pagine: una clausola (Art. 4) interrotta dal salto pagina fra due blocchi Primary distinti, piu una deroga esplicita (Art. 9) che la qualifica",
+      "expected": {
+        "parse": "Complete",
+        "pages": 2,
+        "text": true
+      }
+    },
+    {
       "id": "pdf-mixed",
       "path": "pdf-mixed.pdf",
       "format": "pdf",
@@ -297,6 +312,31 @@
         "page": 2
       },
       "note": "l'esclusione e' nella riga, la colonna Priorita e' nell'header della pagina 1/2"
+    },
+    {
+      "id": "pdf-split-f1",
+      "fileId": "pdf-split-clause",
+      "quote": "Art. 4. Il fornitore consegna al cliente il rapporto mensile degli ordini entro il quinto giorno lavorativo del mese successivo, purche' il cliente non abbia comunicato per iscritto la sospensione del servizio.",
+      "locator": {
+        "kind": "pdf",
+        "page": 1
+      },
+      "multiBlock": {
+        "primaryBlocks": 2,
+        "pages": [1, 2],
+        "parts": ["Art. 4. Il fornitore consegna al cliente il rapporto mensile degli ordini entro il quinto giorno lavorativo del mese successivo,", "purche' il cliente non abbia comunicato per iscritto la sospensione del servizio."]
+      },
+      "note": "la frase e' interrotta dal salto pagina: il termine (pagina 1) e la condizione di sospensione (pagina 2) stanno in due blocchi Primary distinti; l'evidenza deve citarli entrambi come parti ordinate dello stesso gruppo"
+    },
+    {
+      "id": "pdf-split-f2",
+      "fileId": "pdf-split-clause",
+      "quote": "Art. 9. In deroga all'Art. 4, per il mese di dicembre il rapporto mensile degli ordini e' consegnato entro il decimo giorno lavorativo.",
+      "locator": {
+        "kind": "pdf",
+        "page": 2
+      },
+      "note": "deroga dichiarata letteralmente all'Art. 4: relazione attesa pdf-split-rel"
     },
     {
       "id": "pdf-mixed-f1",
@@ -733,6 +773,17 @@
         "endCodepoint": 47,
         "line": 3
       }
+    }
+  ],
+  "relations": [
+    {
+      "id": "pdf-split-rel",
+      "fileId": "pdf-split-clause",
+      "fromFactId": "pdf-split-f2",
+      "toFactId": "pdf-split-f1",
+      "expectedTypes": ["Qualifies", "Corrects", "Supersedes"],
+      "basis": "Declared",
+      "description": "l'Art. 9 deroga all'Art. 4 con la formula letterale «In deroga all'Art. 4»: relazione esplicita dall'evidenza dell'Art. 9 a quella dell'Art. 4"
     }
   ],
   "conflicts": [

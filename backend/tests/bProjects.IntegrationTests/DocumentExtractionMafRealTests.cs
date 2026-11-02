@@ -147,7 +147,7 @@ public sealed class DocumentExtractionMafRealTests
     }
 
     [Fact]
-    public async Task Multipage_table_row_keeps_its_exclusion_and_cites_the_shared_header_as_a_multi_block_source()
+    public async Task Multipage_table_row_keeps_its_exclusion_with_its_release_scope_and_the_row_priority_in_the_cited_source()
     {
         await using var pipe = await Pipeline.CreateAsync();
         var result = await pipe.RunFixtureAsync("pdf-table-multipage.pdf");
@@ -159,11 +159,46 @@ public sealed class DocumentExtractionMafRealTests
             v.Fact(result, fact);
         }
 
-        // Il parser unisce intestazione e righe di ogni pagina nello STESSO blocco (c1:2, c1:4 sono Primary con la propria intestazione): una citazione multi-blocco
-        // riga+intestazione non e necessaria ne naturale con questo layout. Non e un assert: si annota solo se osservata (quote multi-blocco gold = NOT VERIFIED qui).
-        var multiBlock = result.Evidences.Count(e => e.Content.Sources.Select(x => x.BlockId).Distinct().Count() >= 2);
-        v.Note($"quote multi-blocco osservate nelle evidenze: {multiBlock} (NOT VERIFIED se 0: layout del parser a blocco unico per pagina)");
+        // Il parser unisce intestazione e righe di ogni pagina nello STESSO blocco: qui non esiste una citazione multi-blocco naturale. La prova vincolante
+        // di citazione multi-blocco e di relazione e nel test sulla fixture dedicata pdf-split-clause.
 
+        v.Flush();
+    }
+
+    [Fact]
+    public async Task A_clause_split_by_a_page_break_is_cited_on_two_distinct_Primary_blocks_and_the_explicit_derogation_is_related_to_it()
+    {
+        await using var pipe = await Pipeline.CreateAsync();
+        var result = await pipe.RunFixtureAsync("pdf-split-clause.pdf");
+        var v = new Verdicts("pdf-split-clause");
+        v.Describe(result);
+        await v.AssertPipelineAsync(result, pipe);
+        foreach (var fact in Gold.For("pdf-split-clause.pdf"))
+        {
+            v.Fact(result, fact);
+        }
+
+        // Presupposto di PARSER (non del modello): i due frammenti della frase sono davvero due blocchi distinti, ciascuno contenente la propria parte.
+        var parts = Gold.Parts("pdf-split-f1");
+        var blocksOfParts = parts.Select(part => result.Blocks.Where(b => Gold.Fold(b.Value).Contains(Gold.Fold(part), StringComparison.Ordinal)).Select(b => b.Key).ToList()).ToList();
+        v.Check("parser: ciascuna delle 2 parti gold sta in UN blocco e i due blocchi sono distinti",
+            blocksOfParts.All(b => b.Count == 1) && blocksOfParts.Select(b => b.FirstOrDefault()).Distinct().Count() == 2,
+            string.Join(",", blocksOfParts.Select(b => b.Count.ToString())));
+        var blockIds = blocksOfParts.Select(b => b.FirstOrDefault()).ToList();
+
+        // Citazione multi-blocco VINCOLANTE: fonti Primary sui DUE blocchi gold, ciascuna che copre la propria parte, stesso gruppo, part contigue da zero in ordine di lettura.
+        var split = result.Evidences.Where(e => Gold.IsSplitClause(e, parts, blockIds)).ToList();
+        v.Check("citazione multi-blocco: un'evidenza cita Primary su entrambi i blocchi gold (termine e condizione), stesso gruppo, part contigue da 0", split.Count > 0,
+            string.Join(" // ", result.Evidences.Select(e => e.ToString())));
+
+        // Relazione VINCOLANTE: dall'evidenza della deroga (Art. 9) a quella dell'Art. 4, tipo di qualifica/correzione, dichiarata.
+        var art4 = split.Select(e => e.Item.Id).ToHashSet();
+        var art9 = result.Match(Gold.Quote("pdf-split-f2")).Where(e => e.Has("dicembre", "decimo")).Select(e => e.Item.Id).ToHashSet();
+        var related = result.Relations.Where(r => art9.Contains(r.FromEvidenceId) && art4.Contains(r.ToEvidenceId)).ToList();
+        v.Note($"relazioni persistite={result.Relations.Count}: {string.Join("; ", result.Relations.Select(r => $"{r.Type}/{r.Basis}"))}");
+        v.Check("relazione esplicita Art. 9 -> Art. 4 (Qualifies/Corrects/Supersedes, basis Declared)",
+            related.Any(r => r.Type is EvidenceRelationType.Qualifies or EvidenceRelationType.Corrects or EvidenceRelationType.Supersedes && r.Basis == EvidenceRelationBasis.Declared),
+            related.Count == 0 ? "nessuna relazione fra le evidenze attese" : string.Join(";", related.Select(r => $"{r.Type}/{r.Basis}")));
         v.Flush();
     }
 
@@ -424,6 +459,43 @@ public sealed class DocumentExtractionMafRealTests
 
         public static string Quote(string id) => Facts.Value[id].Quote;
 
+        /// <summary>Le parti (un blocco Primary ciascuna) di un fatto gold multi-blocco, dal manifest.</summary>
+        public static IReadOnlyList<string> Parts(string id)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(DocumentTestEnvironment.FixturesDirectory, "manifest.json")));
+            return [.. document.RootElement.GetProperty("facts").EnumerateArray().Single(f => f.GetProperty("id").GetString() == id)
+                .GetProperty("multiBlock").GetProperty("parts").EnumerateArray().Select(p => p.GetString()!)];
+        }
+
+        /// <summary>
+        /// Citazione multi-blocco gold: per ogni parte esiste una fonte Primary sul blocco atteso che la copre; le fonti scelte stanno nello stesso gruppo,
+        /// le part del gruppo sono contigue da zero e l'ordine delle parti gold e rispettato.
+        /// </summary>
+        public static bool IsSplitClause(Ev e, IReadOnlyList<string> parts, IReadOnlyList<Guid> blockIds)
+        {
+            if (blockIds.Count != parts.Count || blockIds.Any(b => b == Guid.Empty))
+            {
+                return false;
+            }
+
+            foreach (var group in e.Content.Sources.Select(s => s.CitationGroupId).Distinct())
+            {
+                var sources = e.Content.Sources.Where(s => s.CitationGroupId == group).OrderBy(s => s.Part).ToList();
+                if (!sources.Select(s => s.Part).SequenceEqual(Enumerable.Range(0, sources.Count)))
+                {
+                    continue;
+                }
+
+                var parts0 = parts.Select((part, i) => sources.FirstOrDefault(s => s.Role == EvidenceSourceRole.Primary && s.BlockId == blockIds[i] && Covers(part, s.Quote))).ToList();
+                if (parts0.All(s => s is not null) && parts0.Zip(parts0.Skip(1)).All(pair => pair.First!.Part < pair.Second!.Part))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static GoldFact F(string id, Func<List<Ev>, string?> expect) => new(id, Facts.Value[id].Quote, Facts.Value[id].Note, expect);
 
         private static string? All(List<Ev> evs, string what, Func<Ev, bool> ok) => evs.Any(ok) ? null : what;
@@ -438,8 +510,19 @@ public sealed class DocumentExtractionMafRealTests
             "pdf-table-multipage.pdf" =>
             [
                 F("pdf-table-f1", evs => All(evs, "attesa: R-03 ricerca per numero ordine, priorita Alta (la riga R-03 e identificata dalla fonte citata, non dal testo dello statement)", e => e.CitesRow("r-03") && e.Has("ricerca") && e.Has("alta"))),
+                // R-05, ripartizione fra statement e fonte. NELLO STATEMENT/struttura/qualificatori (cio che cambia il significato se perso): la funzione (tema scuro),
+                // l'esclusione (polarita negativa o kind Exclusion) e il suo AMBITO «rilascio 1» (senza, «esclusa» diventerebbe «mai prevista»). NELLA FONTE Primary citata
+                // (testo esatto verificato dal validatore): l'id riga R-05 e la priorita Bassa, attributi della riga che non alterano l'esclusione.
                 F("pdf-table-f2", evs =>
-                    All(evs, "attesa: R-05 tema scuro, priorita Bassa, esclusa dal rilascio 1 (polarita negativa o testo di esclusione)", e => e.CitesRow("r-05") && e.Has("tema scuro") && e.Has("bassa") && (e.Negative || e.Has("esclus")))),
+                    All(evs, "attesa: R-05 tema scuro ESCLUSA (polarita negativa o kind Exclusion) con ambito «rilascio 1» nello statement; riga R-05 con priorita Bassa nella fonte Primary citata",
+                        e => e.CitesRow("r-05") && e.CitesRow("bassa") && e.Has("tema scuro") && e.Negative && (e.Has("rilascio 1") || e.Has("rilascio", "1")))),
+            ],
+            "pdf-split-clause.pdf" =>
+            [
+                F("pdf-split-f1", evs => All(evs, "attesa: rapporto mensile degli ordini entro il quinto giorno lavorativo CON la condizione di sospensione del servizio (seconda pagina)",
+                    e => e.Has("rapporto", "mensile") && e.Has("quinto", "giorno lavorativo") && e.Has("sospension") && !e.Negative)),
+                F("pdf-split-f2", evs => All(evs, "attesa: per dicembre il rapporto mensile entro il decimo giorno lavorativo, in deroga all'Art. 4",
+                    e => e.Has("dicembre", "decimo") && e.Has("rapporto") && !e.Negative)),
             ],
             "docx-basic.docx" =>
             [
