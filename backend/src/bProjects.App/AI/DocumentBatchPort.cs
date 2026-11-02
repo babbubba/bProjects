@@ -54,8 +54,8 @@ public interface IDocumentBatchPlan
 }
 
 /// <summary>
-/// Seam della riserva del contatore chiamate del root PRIMA della rete (AI §5.2 punto 5). Può rifiutare lanciando (lease/fence/deadline;
-/// in seguito anche limite di chiamate): nessuna sessione è creata prima. L'implementazione atomica con limiti, regime e CAS è T047/T118.
+/// Seam della riserva del contatore chiamate del root PRIMA della rete (AI §5.2 punto 5). Può rifiutare lanciando (lease/fence/deadline,
+/// limite di chiamate): nessuna sessione è creata prima.
 /// </summary>
 public interface IBatchCallReservation
 {
@@ -63,27 +63,47 @@ public interface IBatchCallReservation
 }
 
 /// <summary>
-/// Riserva minima di oggi: sotto il lock fenced del job (Running, owner, fence, lease e deadline ancora validi) incrementa il
-/// <c>CallCount</c> della preparazione radice. Nessun limite, regime né CAS: li aggiunge T047 sostituendo questa implementazione.
-/// Un crash fra riserva e rete consuma una chiamata non effettuata (costo prudenziale dichiarato, AI §5.3).
+/// Riserva del contatore chiamate del root (preparazione per un DocumentJob; ChatTurn o ProcessingRun documentali per gli altri owner), sotto
+/// la guard dell'autorità temporale (T118): lock della riga dell'owner, Running, owner, fence e lease validi, e now &lt; min(deadline locale,
+/// EffectiveDeadlineAt corrente del root/padre); un worker senza autorità riceve <see cref="CheckpointFencedException"/> e non incrementa nulla.
+/// Con <paramref name="maxCalls"/> (MaxAiCallsPerPreparation/PerRun, congelato dal chiamante) una riserva oltre il massimo è rifiutata con
+/// <see cref="DocumentWorkException.CallLimitExceeded"/>: esattamente il massimo è ammesso, e un risultato finale già completo non riserva
+/// nulla. Il contatore appartiene al root: la promozione (T047) non lo azzera. Un crash fra riserva e rete consuma una chiamata non
+/// effettuata (costo prudenziale dichiarato, AI §5.3).
 /// </summary>
-public sealed class RootCallCounterReservation(AppDbContext db, CheckpointWriter writer) : IBatchCallReservation
+public sealed class RootCallCounterReservation(AppDbContext db, CheckpointWriter writer, int? maxCalls = null) : IBatchCallReservation
 {
     public async ValueTask ReserveAsync(BatchRef batch, CancellationToken ct)
     {
-        if (writer.OwnerKind != WorkOwnerKind.DocumentJob)
-        {
-            throw new NotSupportedException("Il contatore del root è definito per i DocumentJob; ChatTurn e ProcessingRun lo avranno con T047.");
-        }
-
         await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
         await WorkOwnerGuard.LockAsync(db, writer, includeDeadline: true, ct);
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            UPDATE "DocumentPreparations" p SET "CallCount" = p."CallCount" + 1
-            FROM "DocumentJobs" j WHERE j."Id" = {writer.OwnerId} AND p."Id" = j."PreparationId"
-            """,
-            ct);
+
+        var max = maxCalls ?? int.MaxValue;
+        var updated = writer.OwnerKind switch
+        {
+            WorkOwnerKind.DocumentJob => await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                UPDATE "DocumentPreparations" p SET "CallCount" = p."CallCount" + 1
+                FROM "DocumentJobs" j WHERE j."Id" = {writer.OwnerId} AND p."Id" = j."PreparationId" AND p."CallCount" < {max}
+                """,
+                ct),
+            WorkOwnerKind.ChatTurn => await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""UPDATE "ChatTurns" SET "CallCount" = "CallCount" + 1 WHERE "Id" = {writer.OwnerId} AND "CallCount" IS NOT NULL AND "CallCount" < {max}""", ct),
+            _ => await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""UPDATE "ProcessingRuns" SET "CallCount" = "CallCount" + 1 WHERE "Id" = {writer.OwnerId} AND "CallCount" IS NOT NULL AND "CallCount" < {max}""", ct),
+        };
+
+        if (updated != 1)
+        {
+            // Il lock è già nostro: o il root non ha i campi del regime (ramo 001, nessun contatore) o il massimo è raggiunto.
+            var hasCounter = writer.OwnerKind == WorkOwnerKind.DocumentJob || (writer.OwnerKind == WorkOwnerKind.ChatTurn
+                ? await db.Database.SqlQuery<int>($"""SELECT count(*)::int AS "Value" FROM "ChatTurns" WHERE "Id" = {writer.OwnerId} AND "CallCount" IS NOT NULL""").SingleAsync(ct)
+                : await db.Database.SqlQuery<int>($"""SELECT count(*)::int AS "Value" FROM "ProcessingRuns" WHERE "Id" = {writer.OwnerId} AND "CallCount" IS NOT NULL""").SingleAsync(ct)) == 1;
+            throw hasCounter
+                ? new DocumentWorkException(DocumentWorkException.CallLimitExceeded, "Il limite di chiamate AI del root è stato raggiunto: nessun nuovo invio.")
+                : new NotSupportedException("Il contatore delle chiamate è definito per i root documentali; il ramo 001 non ne ha uno.");
+        }
+
         if (transaction is not null)
         {
             await transaction.CommitAsync(ct);

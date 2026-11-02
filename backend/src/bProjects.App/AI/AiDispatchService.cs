@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
 using bProjects.App.Evidence;
@@ -53,6 +54,9 @@ public sealed class AiDispatchService(
 
         try
         {
+            // Il monitor delle scadenze è un ciclo distinto dal ciclo di lavoro: continua a girare mentre l'unico slot AI è occupato da
+            // un'esecuzione (che il ciclo di lavoro attende). Non è uno scheduler: non prende in carico lavoro e non promuove.
+            var monitor = MonitorDeadlinesAsync(stoppingToken);
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -69,6 +73,8 @@ public sealed class AiDispatchService(
                     await Task.Delay(PollInterval, stoppingToken);
                 }
             }
+
+            await monitor;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -77,12 +83,92 @@ public sealed class AiDispatchService(
     }
 
     /// <summary>
+    /// Monitor/sweep delle scadenze (T119): la prima passata è la riconciliazione al restart (al riavvio le scadenze si leggono dal database, il
+    /// budget non riparte), poi una passata per ogni <see cref="ExecutionOptions.DeadlineSweepInterval"/>. Ogni passata rilegge il database:
+    /// nessun timer in memoria sopravvive a una promozione o a un reclaim.
+    /// </summary>
+    private async Task MonitorDeadlinesAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(_policy.DeadlineSweepInterval);
+        try
+        {
+            do
+            {
+                try
+                {
+                    await SweepDeadlinesOnceAsync(ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning("Sweep delle scadenze non riuscito: {ExceptionType}", ex.GetType().Name);
+                }
+            }
+            while (await timer.WaitForNextTickAsync(ct));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Arresto dell'applicazione.
+        }
+    }
+
+    // Esecuzioni in corso in questa istanza, per id del lavoro: lo sweep che chiude un root scaduto ne annulla il token (cooperativo; il fence
+    // già impedisce ogni pubblicazione, l'annullamento evita solo calcolo inutile).
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _active = new();
+
+    /// <summary>
+    /// Una passata dello sweep delle scadenze: chiude i root documentali e i figli scaduti (<see cref="ExecutionLeaseStore.SweepExpiredDocumentWorkAsync"/>),
+    /// annulla l'esecuzione in corso del lavoro chiuso e notifica gli stati terminali. Nessuna promozione, nessun claim.
+    /// </summary>
+    public async Task<ExpiredWork> SweepDeadlinesOnceAsync(CancellationToken ct)
+    {
+        ExpiredWork closed;
+        using (var scope = scopes.CreateScope())
+        {
+            closed = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
+                .SweepExpiredDocumentWorkAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct);
+        }
+
+        foreach (var id in closed.Turns.Concat(closed.Runs).Concat(closed.Extractions))
+        {
+            if (_active.TryGetValue(id, out var running))
+            {
+                try
+                {
+                    await running.CancelAsync();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // L'esecuzione si è appena conclusa.
+                }
+            }
+        }
+
+        foreach (var id in closed.Turns)
+        {
+            await PublishState(id);
+        }
+
+        foreach (var id in closed.Runs)
+        {
+            await PublishRunState(id);
+        }
+
+        if (evidenceEvents is not null)
+        {
+            foreach (var id in closed.Extractions)
+            {
+                await evidenceEvents.PublishStateAsync(id);
+            }
+        }
+
+        return closed;
+    }
+
+    /// <summary>
     /// Attesa a riposo: al massimo un intervallo di polling, interrotta subito da un endpoint che ha appena accodato un turno o un run.
     /// Il lavoro resta comunque letto dal database, quindi un segnale perso costa al più <see cref="PollInterval"/>.
     /// </summary>
     private Task IdleAsync(CancellationToken ct) => wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct);
-
-    public Task<ExpiredWork> SweepDeadlinesOnceAsync(CancellationToken ct) => Task.FromResult(ExpiredWork.None);
 
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
@@ -133,6 +219,7 @@ public sealed class AiDispatchService(
         var inference = InferenceScope.Current!;
         var owner = new InferenceOwner(claim.TurnId, null, claim.AttemptCount, claim.FencingToken);
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _active[claim.TurnId] = leaseLost;
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync((store, c) => store.RenewAsync(claim, c), claim.TurnId, leaseLost, stopHeartbeat.Token);
         var executed = false;
@@ -172,6 +259,7 @@ public sealed class AiDispatchService(
         }
         finally
         {
+            _active.TryRemove(claim.TurnId, out _);
             await stopHeartbeat.CancelAsync();
             await heartbeat;
         }
@@ -252,6 +340,7 @@ public sealed class AiDispatchService(
         using var inferenceScope = InferenceScope.Begin();
         var inference = InferenceScope.Current!;
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _active[runId] = leaseLost;
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync(renew, runId, leaseLost, stopHeartbeat.Token);
         var completed = false;
@@ -290,6 +379,7 @@ public sealed class AiDispatchService(
         }
         finally
         {
+            _active.TryRemove(runId, out _);
             await stopHeartbeat.CancelAsync();
             await heartbeat;
         }

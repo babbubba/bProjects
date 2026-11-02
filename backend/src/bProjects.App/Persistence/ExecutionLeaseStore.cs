@@ -180,8 +180,92 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
         return claim;
     }
 
-    public Task<ExpiredWork> SweepExpiredDocumentWorkAsync(bool turns, bool analysisRuns, bool documentRuns, CancellationToken ct) =>
-        Task.FromResult(ExpiredWork.None);
+    private const string DeadlineMessage = "Il lavoro non è terminato entro la scadenza del comando.";
+    private const string ParentDeadlineMessage = "La scadenza del lavoro padre è trascorsa.";
+
+    /// <summary>
+    /// Sweep delle scadenze dei root documentali (T119, Plan §Autorità temporale): sotto il clock del database chiude con deadline_exceeded
+    /// ChatTurn/ProcessingRun con campi del regime (EffectiveDeadlineAt valorizzato) non terminali la cui scadenza corrente
+    /// (min(DeadlineAt, EffectiveDeadlineAt), mai il valore copiato in un claim) è raggiunta, anche con il lease ancora valido, e le
+    /// Preparation scadute insieme ai figli aperti (DocumentJob, aggregatore) con parent_deadline_exceeded. Il fencing token sale: il vecchio
+    /// possessore non rinnova, non committa e non scrive checkpoint. Non promuove, non prende in carico lavoro e non tocca i root della 001.
+    /// Idempotente e indipendente dallo slot AI. Un tipo senza chi lo esegue (flag falso) non si legge né si modifica.
+    /// </summary>
+    public async Task<ExpiredWork> SweepExpiredDocumentWorkAsync(
+        bool turns, bool analysisRuns, bool documentRuns, CancellationToken ct, bool preparations = true)
+    {
+        var expiredTurns = turns ? await ExpireRootsAsync(Table.Turns, [], ct) : [];
+        var kinds = KindsOf(analysisRuns, documentRuns);
+        var expiredRuns = kinds.Length > 0 ? await ExpireRootsAsync(Table.Runs, kinds, ct) : [];
+        if (!preparations)
+        {
+            return new(expiredTurns, expiredRuns, [], [], []);
+        }
+
+        // Una sola istruzione, un solo istante: preparazione e figli aperti vengono chiusi con la stessa fotografia del database.
+        await using var command = await CommandAsync(
+            """
+            WITH clk AS (SELECT clock_timestamp() AS t),
+            prep AS (
+                UPDATE "DocumentPreparations" p SET "Status" = 'Failed', "ErrorCode" = 'deadline_exceeded', "ErrorMessage" = @message
+                FROM clk
+                WHERE p."Status" IN ('Queued', 'Parsing', 'Extracting') AND p."EffectiveDeadlineAt" <= clk.t
+                RETURNING p."Id"),
+            jobs AS (
+                UPDATE "DocumentJobs" j SET "Status" = 'Failed', "ErrorCode" = 'parent_deadline_exceeded', "ErrorMessage" = @parent,
+                    "CompletedAt" = clk.t, "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = j."FencingToken" + 1
+                FROM clk, "DocumentPreparations" p
+                WHERE p."Id" = j."PreparationId" AND j."Status" IN ('Queued', 'Running') AND p."EffectiveDeadlineAt" <= clk.t
+                RETURNING j."Id"),
+            ext AS (
+                UPDATE "EvidenceExtractionJobs" e SET "Status" = 'Failed', "ErrorCode" = 'parent_deadline_exceeded', "ErrorMessage" = @parent,
+                    "CompletedAt" = clk.t, "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = e."FencingToken" + 1
+                FROM clk, "DocumentPreparations" p
+                WHERE p."Id" = e."PreparationId" AND e."Status" IN ('Queued', 'Running') AND p."EffectiveDeadlineAt" <= clk.t
+                RETURNING e."Id")
+            SELECT 'p', "Id" FROM prep UNION ALL SELECT 'j', "Id" FROM jobs UNION ALL SELECT 'e', "Id" FROM ext
+            """,
+            ct, ("message", DeadlineMessage), ("parent", ParentDeadlineMessage));
+        List<Guid> expiredPreparations = [], expiredJobs = [], expiredExtractions = [];
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                (reader.GetString(0) switch { "p" => expiredPreparations, "j" => expiredJobs, _ => expiredExtractions }).Add(reader.GetGuid(1));
+            }
+        }
+
+        return new(expiredTurns, expiredRuns, expiredPreparations, expiredJobs, expiredExtractions);
+    }
+
+    private async Task<IReadOnlyList<Guid>> ExpireRootsAsync(Table table, string[] kinds, CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            Sql(table, """
+            WITH clk AS (SELECT clock_timestamp() AS t)
+            UPDATE {TABLE} x SET
+                "Status" = 'Failed',
+                "ErrorCode" = 'deadline_exceeded',
+                "ErrorMessage" = @message,
+                "CompletedAt" = clk.t,
+                "LeaseOwner" = NULL,
+                "LeaseUntil" = NULL,
+                "FencingToken" = x."FencingToken" + 1{UPDATED}
+            FROM clk
+            WHERE x."Status" IN ('Queued', 'Running') AND x."EffectiveDeadlineAt" IS NOT NULL AND {UNTIL:x} <= clk.t{KIND}
+            RETURNING x."Id"
+            """),
+            ct,
+            table == Table.Runs ? [("message", DeadlineMessage), ("kinds", kinds)] : [("message", DeadlineMessage)]);
+        List<Guid> closed = [];
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            closed.Add(reader.GetGuid(0));
+        }
+
+        return closed;
+    }
 
     private async Task SweepAsync(Table table, string[] kinds, CancellationToken ct)
     {

@@ -21,6 +21,7 @@ public sealed class DocumentWorkException(string code, string message) : Excepti
     public const string WorkOutputInvalid = "work_output_invalid";
     public const string CheckpointIncompatible = "checkpoint_incompatible";
     public const string InvalidInput = "invalid_work_input";
+    public const string CallLimitExceeded = "document_limit_exceeded";
 
     public string Code { get; } = code;
 }

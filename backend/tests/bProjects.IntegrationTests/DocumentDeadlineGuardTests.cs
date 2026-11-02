@@ -261,6 +261,71 @@ public sealed class DocumentDeadlineGuardTests
         Assert.Equal(DeadlineDenial.DeadlineExceeded, authority.Denial);
     }
 
+    // ------------------------------------------------------------------ riserva del contatore chiamate del root (seam T044 → T118/T047)
+
+    private static CheckpointWriter WriterOf(SeededRoot root, string lease = Lease, long fence = 3) => root.Kind == RootKind.Turn
+        ? CheckpointWriter.ForChatTurn(root.Id, lease, fence, "chat-docs-1")
+        : new CheckpointWriter(root.Id, lease, fence, WorkOwnerKind.ProcessingRun, "project-analysis-documents-v2", "1.26.0");
+
+    private static readonly BatchRef AnyBatch = new(0, "b1", new string('1', 64));
+
+    [Theory]
+    [InlineData(RootKind.Turn)]
+    [InlineData(RootKind.Run)]
+    public async Task Call_reservation_counts_under_the_guard_and_never_resets_the_counter_across_promotion(RootKind kind)
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var root = await DocumentRegimeRoots.SeedAsync(database, kind, new RootSpec { ElapsedSeconds = 100, CallCount = 4 });
+        await using var context = database.NewContext();
+        var reservation = new RootCallCounterReservation(context, WriterOf(root));
+        Task<int> Calls() => database.ScalarAsync<int>($"SELECT \"CallCount\" FROM \"{root.Table}\" WHERE \"Id\" = '{root.Id}'");
+
+        await reservation.ReserveAsync(AnyBatch, Ct);
+        Assert.Equal(5, await Calls());
+
+        // Autorità persa: fence vecchio, lease scaduto, scadenza corrente raggiunta → nessuna riserva, nessun incremento, nessuna sessione.
+        await Assert.ThrowsAsync<CheckpointFencedException>(async () =>
+            await new RootCallCounterReservation(context, WriterOf(root, fence: 2)).ReserveAsync(AnyBatch, Ct));
+        await ExpireAsync(database, root);
+        await Assert.ThrowsAsync<CheckpointFencedException>(async () => await reservation.ReserveAsync(AnyBatch, Ct));
+        Assert.Equal(5, await Calls());
+
+        // Dopo la promozione (DeadlineAt=EffectiveDeadlineAt=Hard) si riserva di nuovo: il contatore prosegue, non riparte.
+        await database.ExecuteAsync($"UPDATE \"{root.Table}\" SET \"DeadlineAt\" = \"HardDeadlineAt\", \"EffectiveDeadlineAt\" = \"HardDeadlineAt\", \"Regime\" = 'Extended', \"PromotionCount\" = 1, \"PromotedAt\" = clock_timestamp(), \"PromotedReason\" = 'additional_work' WHERE \"Id\" = '{root.Id}'");
+        await reservation.ReserveAsync(AnyBatch, Ct);
+        Assert.Equal(6, await Calls());
+    }
+
+    [Theory]
+    [InlineData(RootKind.Turn)]
+    [InlineData(RootKind.Run)]
+    public async Task Call_reservation_refuses_beyond_the_limit_but_allows_exactly_the_maximum(RootKind kind)
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var root = await DocumentRegimeRoots.SeedAsync(database, kind, new RootSpec { ElapsedSeconds = 10, CallCount = 1 });
+        await using var context = database.NewContext();
+        var reservation = new RootCallCounterReservation(context, WriterOf(root), maxCalls: 2);
+        Task<int> Calls() => database.ScalarAsync<int>($"SELECT \"CallCount\" FROM \"{root.Table}\" WHERE \"Id\" = '{root.Id}'");
+
+        await reservation.ReserveAsync(AnyBatch, Ct);   // 2 = massimo ammesso: non è un superamento
+        Assert.Equal(2, await Calls());
+
+        var refused = await Assert.ThrowsAsync<DocumentWorkException>(async () => await reservation.ReserveAsync(AnyBatch, Ct));
+        Assert.Equal(DocumentWorkException.CallLimitExceeded, refused.Code);
+        Assert.Equal(2, await Calls());   // nessun incremento oltre il massimo
+    }
+
+    [Fact]
+    public async Task Call_reservation_is_not_defined_for_legacy_roots()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var legacy = await DocumentRegimeRoots.SeedAsync(database, RootKind.Run, new RootSpec { Legacy = true });
+        await using var context = database.NewContext();
+
+        await Assert.ThrowsAsync<NotSupportedException>(async () => await new RootCallCounterReservation(context, WriterOf(legacy)).ReserveAsync(AnyBatch, Ct));
+        Assert.Equal(0L, await database.ScalarAsync<long>($"SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Id\" = '{legacy.Id}' AND \"CallCount\" IS NOT NULL"));
+    }
+
     // ------------------------------------------------------------------ timeout della chiamata
 
     [Fact]

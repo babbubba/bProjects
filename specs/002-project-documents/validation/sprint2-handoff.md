@@ -2,13 +2,15 @@
 
 Non è un piano: la fonte dei task è `tasks.md`. Solo stato per riprendere. Nessun segreto.
 
-## Stato (sessione sospesa su richiesta dell'utente)
-- Branch `feature/002-implementation`. I2 chiuso. **Milestone corrente: I3** (T033–T046 spuntati; ultimo commit verificato `410673e`, poi un commit WIP di checkpoint sotto).
-- **WIP NON VERIFICATO (T118/T047/T119 aperti)**: agente interrotto a metà. Nel checkpoint WIP: `AI/DocumentDeadlineGuard.cs`, `AI/DocumentRegimeTransitions.cs`, modifiche a AiDispatchService/ExecutionOptions/DocumentWorkStore/PostgresCheckpointStore/ExecutionLeaseStore/DocumentJobStore/committer (AnalysisRunCompletion, DocumentRunCompletion, ChatTurnCompletion), migration `20261102060756_DocumentRegimeTransition` (+ snapshot), test `DocumentDeadlineGuardTests`, `DocumentDeadlineDispatchTests`, `DocumentPromotionTransitionTests`, `DocumentRegimeRoots`. La build compila (0 errori); i test NON sono stati eseguiti/verificati; non so quali tre task siano a che punto (T118 probabilmente più avanti, T119 probabilmente appena iniziato). Prima azione alla ripresa: eseguire quei 3 file di test mirati (PG), leggere il diff, completare nell'ordine T118→T047→T119 senza duplicare file/migration (riusare la migration esistente se coerente; se va rifatta, non toccare quelle storiche).
-- Seam temporaneo: `IBatchCallReservation`/`RootCallCounterReservation` (T044) da sostituire con la CAS del root (T047/T118).
-- Dopo: T048 (campagna concorrenza), T049–T055 (agente estrazione, dispatcher ExtractUnit, aggregazione ledger, endpoint Evidence, ecc.), poi I4 (T056–T067, T120–T121, T123). T055/T067 richiedono DGX (variabili BPROJECTS_TEST_DGX_* presenti nell'ambiente: usarle solo per T055/T067/MafReal).
-- Rosso iniziale non osservato per T037, T038, T042, T045 (dichiarato). Regola: una sola migration alla volta, un solo agente su Persistence/Migrations.
-- Ambiente: `bprojects-002-test-pg` (porta 55432) può essere uscito: `docker start` e attendere `pg_isready`. Stack Docker I2 fermato.
+## Stato
+- Branch `feature/002-implementation`. I2 chiuso. **Milestone corrente: I3**; spuntati T033–T047, T118, T119. Aperto/prossimo: **T048** (campagna `DocumentRegimeConcurrencyTests.cs`, non esistente), poi T049–T055.
+- T118/T047/T119 PASS: guard 19/19, CAS 34/34, dispatch/timer 8/8 (rosso osservato solo per T119: sweep era stub); 309 mirati + 169 PASS, 0 FAIL. Migration `20261102060756_DocumentRegimeTransition` (RegimeTransitions append-only, unique RootKind+RootId+ToRegime).
+- Seam contatore: `RootCallCounterReservation` ora sotto guard con `maxCalls` opzionale (`document_limit_exceeded`); `maxCalls` NON ancora passato da DocumentOptions (manca DI produzione → T049/T050); `CallTimeout` esiste ma nessun percorso di inferenza lo usa ancora.
+- Sweep: chiude ChatTurn/Run documentali scaduti anche con lease valido (fence++), Preparation e figli con `parent_deadline_exceeded`; root 001 intatti. Monitor separato dal ciclo di lavoro (`DeadlineSweepIntervalSeconds`=1). Due guard SQL grezze non unificate (ChatTurnEvents, selezione Analysis in EvidenceLedgerStore): equivalenti per i CHECK.
+- T048 deve coprire: gare a 119.999/120/179.999/180/3600 con due worker e fence scaduto; retry dopo promozione a 110 e restart; preflight tardivo; limiti esatti chiamate/byte; finale al massimo contatore non fallisce; fixture A–G da verificare vs QS.
+- Poi I3: T049–T055 (T055 richiede DGX; variabili BPROJECTS_TEST_DGX_* nell'ambiente), poi I4 (T056–T067, T120–T121, T123).
+- Rosso iniziale non osservato per T037, T038, T042, T045, T047, T118. Una sola migration alla volta.
+- Ambiente: `bprojects-002-test-pg` può risultare uscito: `docker start` + `pg_isready`.
 - `docs/acceptance-trace/` non tracciato: non toccare.
 
 ## Decisioni I3
