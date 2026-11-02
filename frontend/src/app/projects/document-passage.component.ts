@@ -41,6 +41,8 @@ export class DocumentPassageComponent {
   /** Generazione, id della preparazione o `latest`. */
   readonly preparation = input<string>('latest');
   readonly highlight = input<PassageHighlight | null>(null);
+  /** false = solo il passaggio citato (link da un'evidenza), senza elenco dei blocchi del documento. */
+  readonly showBlocks = input(true);
   readonly downloadRequested = output<void>();
 
   protected readonly prep = signal<PreparationView | null>(null);
@@ -109,7 +111,7 @@ export class DocumentPassageComponent {
       );
       if (key !== this.key()) return;
       this.prep.set(prep);
-      await this.loadBlocks(null, key);
+      if (this.showBlocks()) await this.loadBlocks(null, key);
       if (highlight && key === this.key()) {
         await this.openPassage(highlight.blockId, { start: highlight.start, end: highlight.end });
       }

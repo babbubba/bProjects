@@ -1,5 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { EvidenceView } from './evidence-api.service';
+import {
+  DocumentEvidenceSource,
+  DocumentEvidenceView,
+  EvidenceEnvelope,
+  EvidenceQualifier,
+  EvidenceView,
+  SourceDocumentView,
+} from './evidence-api.service';
 
 /** Segmento di un testo originale: `role` non nullo = passo citato da un'evidenza (da rendere con <mark>). */
 export interface TextSegment {
@@ -196,7 +203,12 @@ export const confidenceLabel = (k: string | null | undefined) => labelOf(confide
 export const relationLabel = (k: string | null | undefined) => labelOf(relationLabels, k);
 
 /** Campi strutturali non nulli di un'evidenza, nell'ordine di lettura; i campi assenti non si mostrano. */
-export function structureFields(e: EvidenceView): { label: string; value: string }[] {
+export function structureFields(
+  e: Pick<
+    EvidenceView,
+    'subject' | 'action' | 'object' | 'scope' | 'purpose' | 'instrument' | 'channel' | 'recipient'
+  >,
+): { label: string; value: string }[] {
   const all: [string, string | null][] = [
     ['Soggetto', e.subject],
     ['Azione', e.action],
@@ -208,6 +220,116 @@ export function structureFields(e: EvidenceView): { label: string; value: string
     ['Destinatario', e.recipient],
   ];
   return all.filter(([, v]) => !!v).map(([label, value]) => ({ label, value: value! }));
+}
+
+/** Discrimina l'evidenza documentale (1.1.0, ha `origin`) da quella di messaggio (1.0.0). */
+export const isDocumentEvidence = (
+  e: EvidenceView | DocumentEvidenceView,
+): e is DocumentEvidenceView => 'origin' in e && e.origin?.kind === 'Document';
+
+/** Parti di una citazione documentale, ordinate: le citazioni multi-blocco restano parti separate, mai fuse. */
+export interface SourceGroup {
+  citationGroupId: string;
+  parts: { source: DocumentEvidenceSource; resolved: SourceDocumentView | null }[];
+}
+
+/** Riga comune di lista: un solo modello per le due origini, con i campi propri di ciascuna già discriminati. */
+export interface EvidenceRow {
+  id: string;
+  origin: 'Message' | 'Document';
+  kind: string;
+  polarity: string;
+  certainty: string;
+  statement: string;
+  fields: { label: string; value: string }[];
+  qualifiers: EvidenceQualifier[];
+  /** Solo origine messaggio: numero del messaggio; nessun MessageId fittizio per i documenti. */
+  messageSequence: number | null;
+  groups: SourceGroup[];
+  document: { documentId: string; documentVersionId: string; preparationId: string } | null;
+}
+
+export function sourceGroups(
+  sources: readonly DocumentEvidenceSource[],
+  resolved: readonly SourceDocumentView[] = [],
+): SourceGroup[] {
+  const bySource = new Map(resolved.map((r) => [r.sourceId, r]));
+  const groups = new Map<string, SourceGroup>();
+  for (const s of sources) {
+    const g = groups.get(s.citationGroupId) ?? { citationGroupId: s.citationGroupId, parts: [] };
+    g.parts.push({ source: s, resolved: bySource.get(s.sourceId) ?? null });
+    groups.set(s.citationGroupId, g);
+  }
+  return [...groups.values()].map((g) => ({
+    ...g,
+    parts: [...g.parts].sort((a, b) => a.source.part - b.source.part),
+  }));
+}
+
+/** Righe di lista per un elenco misto; gli envelope di versione ignota non si deformano: restano fuori e vengono contati. */
+export function evidenceRows(items: readonly EvidenceEnvelope[]): {
+  rows: EvidenceRow[];
+  unsupported: number;
+} {
+  const rows: EvidenceRow[] = [];
+  let unsupported = 0;
+  for (const env of items) {
+    if (env.evidenceViewVersion === '1.0.0') {
+      const e = env.evidence;
+      rows.push({
+        id: e.id,
+        origin: 'Message',
+        kind: e.kind,
+        polarity: e.polarity,
+        certainty: e.certainty,
+        statement: e.statement,
+        fields: structureFields(e),
+        qualifiers: e.qualifiers,
+        messageSequence: e.messageSequence,
+        groups: [],
+        document: null,
+      });
+    } else if (env.evidenceViewVersion === '1.1.0' && isDocumentEvidence(env.evidence)) {
+      const e = env.evidence;
+      rows.push({
+        id: e.id,
+        origin: 'Document',
+        kind: e.kind,
+        polarity: e.polarity,
+        certainty: e.certainty,
+        statement: e.statement,
+        fields: structureFields(e.content.structure),
+        qualifiers: e.content.qualifiers,
+        messageSequence: null,
+        groups: sourceGroups(e.content.sources),
+        document: {
+          documentId: e.origin.documentId,
+          documentVersionId: e.origin.documentVersionId,
+          preparationId: e.origin.preparationId,
+        },
+      });
+    } else {
+      unsupported++;
+    }
+  }
+  return { rows, unsupported };
+}
+
+/** Posizione di una parte citata come la fornisce il server; i dati mancanti non si inventano. */
+export function locatorText(r: SourceDocumentView | null): string {
+  if (!r) return 'Posizione non risolvibile';
+  const l = r.locator;
+  const parts = [`${r.originalName} v${r.documentVersion}`];
+  if (l.page !== null) parts.push(`pagina ${l.page}`);
+  if (l.headingPath.length > 0) parts.push(l.headingPath.join(' › '));
+  if (l.sourceLines) {
+    parts.push(
+      l.sourceLines.start === l.sourceLines.end
+        ? `riga ${l.sourceLines.start}`
+        : `righe ${l.sourceLines.start}-${l.sourceLines.end}`,
+    );
+  }
+  return parts.join(' · ');
 }
 
 /** Estratto su una riga (spazi compressi), troncato per punti di codice senza spezzare coppie surrogate. */

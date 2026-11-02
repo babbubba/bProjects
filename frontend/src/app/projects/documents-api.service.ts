@@ -24,6 +24,15 @@ export interface IssuesSummary {
   message: string | null;
 }
 
+export interface CandidatePreparation {
+  preparationId: string;
+  generation: number;
+  processingStatus: PreparationState;
+  evidenceVersionId: string | null;
+  createdAt: string;
+  canPromote: boolean;
+}
+
 export interface DocumentVersionView {
   id: string;
   documentId: string;
@@ -40,7 +49,8 @@ export interface DocumentVersionView {
   currentPreparationId: string | null;
   currentEvidenceVersionId: string | null;
   bundleRevision: number;
-  candidatePreparations: unknown[];
+  /** Preparazioni complete o fallite non ancora promosse: distinte dal bundle corrente, mai fonte di analisi. */
+  candidatePreparations?: CandidatePreparation[];
   latestJobId: string | null;
   included: boolean;
   selectionMode: SourceModeName;

@@ -163,10 +163,25 @@
     <div class="ev-block-head">
       <h3 id="ev-items-title" class="h6 mb-0">Evidenze correnti</h3>
       <span class="small text-secondary" role="status" data-testid="items-count">
-        {{ itemsLoading() ? 'Caricamento…' : plural(items().length, 'evidenza', 'evidenze') }}
+        {{ itemsLoading() ? 'Caricamento…' : plural(list().rows.length, 'evidenza', 'evidenze') }}
       </span>
     </div>
     <form class="ev-filters" aria-label="Filtri delle evidenze" (submit)="$event.preventDefault()">
+      <div>
+        <label for="ev-f-origin" class="form-label small mb-0">Origine</label>
+        <select
+          id="ev-f-origin"
+          class="form-select form-select-sm"
+          data-testid="ev-f-origin"
+          (change)="setFilter('originKind', $event)"
+        >
+          <option value="" [selected]="!filters().originKind">Tutte</option>
+          <option value="Message" [selected]="filters().originKind === 'Message'">Messaggi</option>
+          <option value="Document" [selected]="filters().originKind === 'Document'">
+            Documenti
+          </option>
+        </select>
+      </div>
       <div>
         <label for="ev-f-message" class="form-label small mb-0">Messaggio</label>
         <select
@@ -241,7 +256,7 @@
         </button>
       </div>
     }
-    @if (!itemsLoading() && !itemsError() && items().length === 0) {
+    @if (!itemsLoading() && !itemsError() && list().rows.length === 0) {
       <p class="ev-empty" data-testid="no-items">
         @if (hasFilters()) {
           Nessuna evidenza corrisponde ai filtri.
@@ -250,8 +265,14 @@
         }
       </p>
     }
+    @if (list().unsupported > 0) {
+      <div class="alert alert-warning py-2 mb-0" role="status" data-testid="items-unsupported">
+        {{ plural(list().unsupported, 'elemento', 'elementi') }} in un formato non supportato: non
+        mostrati, per non presentarli in modo deformato.
+      </div>
+    }
     <ul class="list-unstyled mb-0 ev-list" aria-label="Evidenze correnti">
-      @for (e of items(); track e.id) {
+      @for (e of list().rows; track e.id) {
         <li class="ev-row" [attr.data-testid]="'evidence-' + e.id">
           <div class="ev-row-head">
             <span class="badge text-bg-primary" data-testid="ev-kind">{{ kindLabel(e.kind) }}</span>
@@ -261,12 +282,17 @@
             <span class="badge text-bg-light border" data-testid="ev-certainty"
               >Certezza: {{ certaintyLabel(e.certainty) }}</span
             >
-            <span class="small text-secondary">Messaggio #{{ e.messageSequence }}</span>
+            @if (e.origin === 'Document') {
+              <span class="badge text-bg-info" data-testid="ev-origin">Documento</span>
+            } @else {
+              <span class="badge text-bg-light border" data-testid="ev-origin">Messaggio</span>
+              <span class="small text-secondary">Messaggio #{{ e.messageSequence }}</span>
+            }
           </div>
           <p class="ev-statement" data-testid="ev-statement">{{ e.statement }}</p>
-          @if (structureFields(e).length > 0) {
+          @if (e.fields.length > 0) {
             <dl class="ev-fields">
-              @for (f of structureFields(e); track f.label) {
+              @for (f of e.fields; track f.label) {
                 <div>
                   <dt>{{ f.label }}</dt>
                   <dd>{{ f.value }}</dd>
@@ -292,7 +318,13 @@
               [attr.aria-controls]="'ev-detail-' + e.id"
               (click)="toggleDetail(e.id)"
             >
-              {{ selectedId() === e.id ? 'Nascondi originale' : 'Mostra originale' }}
+              {{
+                selectedId() === e.id
+                  ? 'Nascondi originale'
+                  : e.origin === 'Document'
+                    ? 'Mostra fonti'
+                    : 'Mostra originale'
+              }}
             </button>
           </div>
 
@@ -328,7 +360,64 @@
                   Evidenziato: passo citato (sfondo giallo), contesto precedente (sottolineato
                   tratteggiato).
                 </p>
-                @if (d.evidence.sources.length > 0) {
+                @if (detailGroups().length > 0) {
+                  <h4 class="h6 mb-1">Fonti nel documento</h4>
+                  @for (g of detailGroups(); track g.citationGroupId) {
+                    <div class="ev-source-group" data-testid="source-group">
+                      @if (g.parts.length > 1) {
+                        <p class="small mb-1">
+                          Citazione in {{ g.parts.length }} parti (blocchi distinti, non fuse).
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-primary ms-1"
+                            data-testid="open-group"
+                            (click)="openGroup(g)"
+                          >
+                            Apri tutte le parti
+                          </button>
+                        </p>
+                      }
+                      <ol class="small ps-3 mb-2">
+                        @for (p of g.parts; track p.source.sourceId) {
+                          <li data-testid="source-part">
+                            <span class="text-secondary" data-testid="source-locator">{{
+                              locatorText(p.resolved)
+                            }}</span>
+                            <span class="d-block">«{{ p.source.quote }}»</span>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-link p-0"
+                              data-testid="open-part"
+                              [disabled]="!p.resolved"
+                              [attr.aria-expanded]="openParts().has(p.source.sourceId)"
+                              (click)="togglePart(p.source.sourceId)"
+                            >
+                              {{
+                                openParts().has(p.source.sourceId)
+                                  ? 'Chiudi passaggio'
+                                  : 'Apri passaggio'
+                              }}
+                            </button>
+                            @if (p.resolved && openParts().has(p.source.sourceId)) {
+                              <app-document-passage
+                                [projectId]="projectId()"
+                                [documentId]="p.resolved.documentId"
+                                [version]="p.resolved.documentVersion"
+                                [preparation]="p.resolved.preparationId"
+                                [highlight]="{
+                                  blockId: p.source.blockId,
+                                  start: p.source.start,
+                                  end: p.source.end,
+                                }"
+                                [showBlocks]="false"
+                              />
+                            }
+                          </li>
+                        }
+                      </ol>
+                    </div>
+                  }
+                } @else if (!isDocument(d.evidence) && d.evidence.sources.length > 0) {
                   <h4 class="h6 mb-1">Fonti</h4>
                   <ul class="small ps-3">
                     @for (s of d.evidence.sources; track $index) {
@@ -338,9 +427,9 @@
                     }
                   </ul>
                 }
-                @if (d.evidence.kindRationale) {
+                @if (kindRationale(d.evidence)) {
                   <p class="small mb-2">
-                    <strong>Perché questa tipologia:</strong> {{ d.evidence.kindRationale }}
+                    <strong>Perché questa tipologia:</strong> {{ kindRationale(d.evidence) }}
                   </p>
                 }
                 <h4 class="h6 mb-1">Relazioni</h4>
@@ -358,7 +447,7 @@
                             ? relationLabel(r.type)
                             : 'è ' + relationLabel(r.type) + ' da'
                         }}
-                        «{{ r.otherStatement }}» (messaggio #{{ r.otherMessageSequence }}) ·
+                        «{{ r.otherStatement }}»{{ relationSequence(r) }} ·
                         {{ r.basis === 'Declared' ? 'dichiarata nel testo' : 'inferita' }}
                         @if (r.rationale) {
                           <span class="text-secondary"> · {{ r.rationale }}</span>

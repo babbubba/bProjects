@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import {
   CoverageReportView,
   EvidenceDetailView,
+  EvidenceEnvelope,
   EvidenceStatusView,
   EvidenceView,
   ExtractionJobView,
@@ -17,6 +18,13 @@ import { ProjectEventsService, ProjectStreamHandlers } from './project-events.se
 
 const P = 'p-1';
 const BASE = `/api/projects/${P}`;
+const listUrl = (r: { url: string }) => r.url === `${BASE}/evidence`;
+const detailUrl = (r: { url: string }) => r.url === `${BASE}/evidence/e-1`;
+const detailUrl_doc = (r: { url: string }) => r.url === `${BASE}/evidence/e-doc`;
+const envelope = (e: EvidenceView): EvidenceEnvelope => ({
+  evidenceViewVersion: '1.0.0',
+  evidence: e,
+});
 
 const job = (over: Partial<ExtractionJobView> = {}): ExtractionJobView => ({
   id: 'j-1',
@@ -162,6 +170,8 @@ describe('EvidenceViewComponent', () => {
     opts: {
       messages?: MessageEvidenceStatus[];
       items?: EvidenceView[];
+      /** Elenco già in formato envelope (liste miste, versioni ignote). */
+      envelopes?: unknown[];
       analysisId?: string | null;
       pollMs?: number;
     } = {},
@@ -190,7 +200,9 @@ describe('EvidenceViewComponent', () => {
     fixture.detectChanges();
     await Promise.resolve();
     http.expectOne(`${BASE}/evidence/status`).flush(status(opts.messages ?? [message()]));
-    http.expectOne(`${BASE}/evidence`).flush({ items: opts.items ?? [evidence()] });
+    http
+      .expectOne(listUrl)
+      .flush({ items: opts.envelopes ?? (opts.items ?? [evidence()]).map(envelope) });
     if (opts.analysisId) {
       http.expectOne(`${BASE}/analyses/${opts.analysisId}/coverage-reports`).flush({ items: [] });
     }
@@ -419,7 +431,9 @@ describe('EvidenceViewComponent', () => {
     await click('ev-detail');
     const detail: EvidenceDetailView = {
       evidence: evidence(),
-      messages: [{ id: 'm-1', sequence: 1, role: 'user', text: TEXT }],
+      evidenceViewVersion: '1.1.0',
+      sourceDocuments: [],
+      sourceMessages: [{ id: 'm-1', sequence: 1, role: 'user', text: TEXT }],
       relations: [
         {
           id: 'r-1',
@@ -433,7 +447,7 @@ describe('EvidenceViewComponent', () => {
         },
       ],
     };
-    http.expectOne(`${BASE}/evidence/e-1`).flush(detail);
+    http.expectOne(detailUrl).flush(detail);
     await settle();
     const marks = el.querySelectorAll('[data-testid=original] mark');
     expect(marks).toHaveLength(1);
@@ -447,13 +461,15 @@ describe('EvidenceViewComponent', () => {
     const text = '<b id="injected">x</b> vincolo';
     await setup();
     await click('ev-detail');
-    http.expectOne(`${BASE}/evidence/e-1`).flush({
+    http.expectOne(detailUrl).flush({
       evidence: evidence({
         sources: [
           { messageId: 'm-1', sequence: 1, role: 'Primary', start: 0, end: 6, quote: '<b id="' },
         ],
       }),
-      messages: [{ id: 'm-1', sequence: 1, role: 'user', text }],
+      evidenceViewVersion: '1.1.0',
+      sourceDocuments: [],
+      sourceMessages: [{ id: 'm-1', sequence: 1, role: 'user', text }],
       relations: [],
     });
     await settle();
@@ -556,7 +572,7 @@ describe('EvidenceViewComponent', () => {
       .expectOne(`${BASE}/messages/m-1/evidence/versions`)
       .flush(versions({ stateRevision: 6, currentVersionId: 'v-2' }));
     http.expectOne(`${BASE}/evidence/status`).flush(status([message()]));
-    http.expectOne(`${BASE}/evidence`).flush({ items: [evidence()] });
+    http.expectOne(listUrl).flush({ items: [envelope(evidence())] });
     await settle();
     expect(q('evidence-live')!.textContent).toContain('Versione 2 promossa');
     expect(q('evidence-live')!.textContent).toContain('2 rimappate');
@@ -580,7 +596,7 @@ describe('EvidenceViewComponent', () => {
     );
     http.expectOne(`${BASE}/messages/m-1/evidence/versions`).flush(versions({ stateRevision: 7 }));
     http.expectOne(`${BASE}/evidence/status`).flush(status([message()]));
-    http.expectOne(`${BASE}/evidence`).flush({ items: [evidence()] });
+    http.expectOne(listUrl).flush({ items: [envelope(evidence())] });
     await settle();
     // Dopo il ricaricamento la richiesta di conferma è chiusa: nessuna promozione parte da sola.
     expect(q('promote-confirm')).toBeNull();
@@ -720,5 +736,186 @@ describe('EvidenceViewComponent', () => {
     create.flush({ code: 'selection_not_available' }, { status: 409, statusText: 'Conflict' });
     await settle();
     expect(q('coverage-error')!.textContent).toContain('selezione di evidenze');
+  });
+
+  describe('evidence from documents (envelope 1.1.0)', () => {
+    const src = (over: Record<string, unknown> = {}) => ({
+      sourceId: 's-1',
+      kind: 'Document',
+      role: 'Primary',
+      citationGroupId: 'g-1',
+      part: 0,
+      documentId: 'd-1',
+      documentVersionId: 'dv-1',
+      preparationId: 'prep-1',
+      artifactId: 'a-1',
+      blockId: 'b-1',
+      start: 4,
+      end: 12,
+      quote: 'Requisito',
+      ...over,
+    });
+    const docEvidence = (sources = [src()]) => ({
+      id: 'e-doc',
+      versionId: 'ev-1',
+      version: 1,
+      isCurrent: true,
+      projectId: P,
+      ordinal: 0,
+      key: 'k-doc',
+      kind: 'Requirement',
+      polarity: 'Affirmed',
+      certainty: 'Inferred',
+      statement: 'Il sistema esporta in CSV',
+      origin: {
+        kind: 'Document',
+        documentId: 'd-1',
+        documentVersionId: 'dv-1',
+        preparationId: 'prep-1',
+      },
+      content: {
+        schemaVersion: '1.1.0',
+        kindRationale: 'Obbligo esplicito',
+        structure: {
+          subject: 'sistema',
+          action: 'esporta',
+          object: null,
+          scope: null,
+          purpose: null,
+          instrument: null,
+          channel: null,
+          recipient: null,
+        },
+        qualifiers: [],
+        sources,
+      },
+    });
+    const resolved = (sourceId: string, blockId: string, page: number | null) => ({
+      sourceId,
+      documentId: 'd-1',
+      documentVersionId: 'dv-1',
+      documentVersion: 2,
+      originalName: 'spec.pdf',
+      preparationId: 'prep-1',
+      generation: 1,
+      artifactId: 'a-1',
+      blockId,
+      blockRef: 'p1',
+      locator: { page, headingPath: ['Export'], bbox: null, sourceLines: null, doclingRef: null },
+      passageUrl: '',
+      downloadUrl: '',
+    });
+    const mixed = () => [
+      { evidenceViewVersion: '1.0.0', evidence: evidence() },
+      { evidenceViewVersion: '1.1.0', evidence: docEvidence() },
+    ];
+
+    it('lists messages and documents together, each with its own origin and no invented message', async () => {
+      await setup({ envelopes: mixed() });
+      expect(qa('ev-origin').map((b) => b.textContent!.trim())).toEqual(['Messaggio', 'Documento']);
+      const docRow = q('evidence-e-doc')!;
+      expect(docRow.textContent).toContain('Il sistema esporta in CSV');
+      expect(docRow.textContent).toContain('Soggetto');
+      expect(docRow.textContent).not.toContain('Messaggio #');
+      expect(q('evidence-e-1')!.textContent).toContain('Messaggio #1');
+    });
+
+    it('filters by origin through originKind', async () => {
+      await setup({ envelopes: mixed() });
+      const select = el.querySelector<HTMLSelectElement>('#ev-f-origin')!;
+      select.value = 'Document';
+      select.dispatchEvent(new Event('change'));
+      await settle();
+      http
+        .expectOne((r) => listUrl(r) && true)
+        .flush({ items: [{ evidenceViewVersion: '1.1.0', evidence: docEvidence() }] });
+      await settle();
+      expect(qa('ev-origin')).toHaveLength(1);
+    });
+
+    it('declares unknown envelope versions instead of rendering them deformed', async () => {
+      await setup({
+        envelopes: [...mixed(), { evidenceViewVersion: '2.0.0', evidence: { id: 'x' } }],
+      });
+      expect(qa('ev-origin')).toHaveLength(2);
+      expect(q('items-unsupported')!.textContent).toContain('1 elemento');
+    });
+
+    it('keeps the parts of a multi-block quote separate and opens every exact range', async () => {
+      await setup({
+        envelopes: [{ evidenceViewVersion: '1.1.0', evidence: docEvidence() }],
+      });
+      await click('ev-detail');
+      const parts = [
+        src({ sourceId: 's-2', part: 1, blockId: 'b-2', start: 0, end: 5, quote: 'secondo' }),
+        src({ sourceId: 's-1', part: 0, blockId: 'b-1', start: 4, end: 12, quote: 'primo' }),
+      ];
+      http.expectOne(detailUrl_doc).flush({
+        evidenceViewVersion: '1.1.0',
+        evidence: docEvidence(parts),
+        relations: [],
+        sourceDocuments: [resolved('s-1', 'b-1', 3), resolved('s-2', 'b-2', 4)],
+        sourceMessages: [],
+      });
+      await settle();
+      expect(qa('source-group')).toHaveLength(1);
+      const shown = qa('source-part').map((p) => p.textContent!.replace(/\s+/g, ' ').trim());
+      expect(shown[0]).toContain('«primo»');
+      expect(shown[0]).toContain('pagina 3');
+      expect(shown[1]).toContain('«secondo»');
+      expect(shown[1]).toContain('pagina 4');
+      expect(el.textContent).toContain('Obbligo esplicito');
+
+      await click('open-group');
+      const prep = http.match((r) => r.url.endsWith('/preparations/prep-1'));
+      expect(prep).toHaveLength(2);
+      prep.forEach((r) =>
+        r.flush({
+          id: 'prep-1',
+          processingStatus: 'Ready',
+          isReady: true,
+          issues: [],
+          blockCount: 2,
+        }),
+      );
+      await settle();
+      const passages = http.match((r) => r.url.includes('/preparations/prep-1/passages/'));
+      expect(
+        passages.map(
+          (r) =>
+            `${r.request.url.split('/').pop()}:${r.request.params.get('start')}-${r.request.params.get('end')}`,
+        ),
+      ).toEqual(['b-1:4-12', 'b-2:0-5']);
+      expect(http.match((r) => r.url.endsWith('/blocks'))).toHaveLength(0);
+      passages.forEach((r) => r.flush({ code: 'x' }, { status: 404, statusText: 'Not Found' }));
+      await settle();
+    });
+
+    it('does not offer to open a part whose block cannot be resolved by the server', async () => {
+      await setup({ envelopes: [{ evidenceViewVersion: '1.1.0', evidence: docEvidence() }] });
+      await click('ev-detail');
+      http.expectOne(detailUrl_doc).flush({
+        evidenceViewVersion: '1.1.0',
+        evidence: docEvidence(),
+        relations: [
+          {
+            id: 'r',
+            type: 'Confirms',
+            basis: 'Inferred',
+            rationale: null,
+            direction: 'outgoing',
+            otherEvidenceId: 'e-9',
+            otherStatement: 'Altro',
+          },
+        ],
+        sourceDocuments: [],
+        sourceMessages: [],
+      });
+      await settle();
+      expect(q('source-locator')!.textContent).toContain('Posizione non risolvibile');
+      expect(q('open-part')!.hasAttribute('disabled')).toBe(true);
+      expect(q('relations')!.textContent).toContain('Altro');
+      expect(q('relations')!.textContent).not.toContain('messaggio #');
+    });
   });
 });

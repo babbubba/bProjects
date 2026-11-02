@@ -31,7 +31,9 @@ describe('EvidenceApiService', () => {
     await versions;
 
     const detail = api.getEvidence(P, 'e-1');
-    http.expectOne(`${BASE}/evidence/e-1`).flush({ evidence: {}, messages: [], relations: [] });
+    http
+      .expectOne((r) => r.url === `${BASE}/evidence/e-1` && r.params.get('viewVersion') === '1.1.0')
+      .flush({ evidence: {}, sourceMessages: [], sourceDocuments: [], relations: [] });
     await detail;
 
     const diff = api.compareVersions(P, 'v-1', 'v-2');
@@ -44,14 +46,24 @@ describe('EvidenceApiService', () => {
   });
 
   it('sends only the non empty filters and unwraps items', async () => {
-    const list = api.listEvidence(P, { messageId: 'm-1', kind: 'Requirement', polarity: '' });
+    const list = api.listEvidence(P, {
+      messageId: 'm-1',
+      kind: 'Requirement',
+      polarity: '',
+      originKind: 'Document',
+      documentId: 'd-1',
+    });
     const req = http.expectOne((r) => r.url === `${BASE}/evidence`);
+    expect(req.request.params.get('viewVersion')).toBe('1.1.0');
     expect(req.request.params.get('messageId')).toBe('m-1');
     expect(req.request.params.get('kind')).toBe('Requirement');
+    expect(req.request.params.get('originKind')).toBe('Document');
+    expect(req.request.params.get('documentId')).toBe('d-1');
     expect(req.request.params.has('polarity')).toBe(false);
     expect(req.request.params.has('certainty')).toBe(false);
-    req.flush({ items: [{ id: 'e-1' }] });
-    expect(await list).toEqual([{ id: 'e-1' }]);
+    const envelope = { evidenceViewVersion: '1.0.0', evidence: { id: 'e-1' } };
+    req.flush({ items: [envelope], nextCursor: null });
+    expect(await list).toEqual([envelope]);
   });
 
   it('sends the Idempotency-Key on message reanalysis and job retry', async () => {
@@ -125,7 +137,7 @@ describe('EvidenceApiService', () => {
 
   it('encodes ids placed in the path', async () => {
     const detail = api.getEvidence('p/1', 'e 1');
-    http.expectOne('/api/projects/p%2F1/evidence/e%201').flush({});
+    http.expectOne('/api/projects/p%2F1/evidence/e%201?viewVersion=1.1.0').flush({});
     await detail;
   });
 });

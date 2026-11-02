@@ -29,7 +29,9 @@
   }
 
   @if (error()) {
-    <div class="alert alert-danger py-2 mb-0" role="alert" data-testid="passage-error-load">{{ error() }}</div>
+    <div class="alert alert-danger py-2 mb-0" role="alert" data-testid="passage-error-load">
+      {{ error() }}
+    </div>
   }
   @if (unparsed()) {
     <p class="small text-secondary mb-0" role="status" data-testid="passage-unparsed">
@@ -41,38 +43,59 @@
   }
 
   @if (passageError()) {
-    <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="passage-error">{{ passageError() }}</div>
+    <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="passage-error">
+      {{ passageError() }}
+    </div>
   }
   @if (passage(); as ps) {
     <section class="passage-open" aria-label="Passaggio selezionato" data-testid="passage-open">
       <p class="small text-secondary mb-1">{{ location(ps.block) }}</p>
       @if (ps.quote; as q) {
-        <p class="passage-text" data-testid="passage-quote">{{ q.before }}<mark>{{ q.text }}</mark>{{ q.after }}</p>
+        <p class="passage-text" data-testid="passage-quote">
+          {{ q.before }}<mark>{{ q.text }}</mark
+          >{{ q.after }}
+        </p>
       } @else {
         <p class="passage-text" data-testid="passage-quote">{{ ps.block.text }}</p>
       }
       <div class="passage-actions">
-        <button type="button" class="btn btn-sm btn-outline-primary" data-testid="passage-download" (click)="downloadRequested.emit()">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary"
+          data-testid="passage-download"
+          (click)="downloadRequested.emit()"
+        >
           Scarica originale ({{ ps.original.originalName }})
         </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closePassage()">Chiudi passaggio</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closePassage()">
+          Chiudi passaggio
+        </button>
       </div>
     </section>
   }
 
-  <ol class="list-unstyled mb-0 passage-blocks">
-    @for (b of blocks(); track b.id) {
-      <li class="passage-block" data-testid="passage-block">
-        <p class="small text-secondary mb-0">{{ b.type }} · {{ location(b) }}</p>
-        <p class="passage-text mb-1">{{ b.text }}</p>
-        <button type="button" class="btn btn-sm btn-link p-0" (click)="openPassage(b.id)">Mostra passaggio</button>
-      </li>
-    }
-  </ol>
+  @if (showBlocks()) {
+    <ol class="list-unstyled mb-0 passage-blocks">
+      @for (b of blocks(); track b.id) {
+        <li class="passage-block" data-testid="passage-block">
+          <p class="small text-secondary mb-0">{{ b.type }} · {{ location(b) }}</p>
+          <p class="passage-text mb-1">{{ b.text }}</p>
+          <button type="button" class="btn btn-sm btn-link p-0" (click)="openPassage(b.id)">
+            Mostra passaggio
+          </button>
+        </li>
+      }
+    </ol>
 
-  @if (nextCursor() && !loading()) {
-    <button type="button" class="btn btn-link align-self-start" data-testid="passage-more" (click)="loadMore()">
-      Carica altri blocchi
-    </button>
+    @if (nextCursor() && !loading()) {
+      <button
+        type="button"
+        class="btn btn-link align-self-start"
+        data-testid="passage-more"
+        (click)="loadMore()"
+      >
+        Carica altri blocchi
+      </button>
+    }
   }
 </section>

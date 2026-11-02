@@ -19,7 +19,7 @@ import {
   EvidenceDetailView,
   EvidenceStatusView,
   EvidenceApiService,
-  EvidenceView,
+  EvidenceEnvelope,
   FindingCategory,
   MessageVersionsView,
   VersionDiffView,
@@ -32,23 +32,28 @@ import {
   confidenceLabel,
   diffFieldLabel,
   diffStatusLabel,
+  evidenceRows,
   excerpt,
   highlightSegments,
+  isDocumentEvidence,
   isPromotionConflict,
   isUncertainOutcome,
   jobErrorText,
   kindLabel,
   kindLabels,
+  locatorText,
   plural,
   polarityLabel,
   polarityLabels,
   problemOf,
   qualifierLabel,
   relationLabel,
+  sourceGroups,
   sourceRoleLabel,
   stateBadge,
   structureFields,
 } from './evidence-format';
+import { DocumentPassageComponent } from './document-passage.component';
 import { ProjectApiService } from './project-api.service';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 
@@ -66,8 +71,9 @@ interface Filters {
   kind: string;
   polarity: string;
   certainty: string;
+  originKind: string;
 }
-const noFilters: Filters = { messageId: '', kind: '', polarity: '', certainty: '' };
+const noFilters: Filters = { messageId: '', kind: '', polarity: '', certainty: '', originKind: '' };
 
 /**
  * Vista leggera del registro delle evidenze: stato reale delle estrazioni, evidenze correnti con il testo originale
@@ -76,6 +82,7 @@ const noFilters: Filters = { messageId: '', kind: '', polarity: '', certainty: '
  */
 @Component({
   selector: 'app-evidence-view',
+  imports: [DocumentPassageComponent],
   templateUrl: './evidence-view.component.html',
   styleUrl: './evidence-view.component.scss',
 })
@@ -104,6 +111,17 @@ export class EvidenceViewComponent {
   protected readonly categoryHint = categoryHint;
   protected readonly confidenceLabel = confidenceLabel;
   protected readonly structureFields = structureFields;
+  protected readonly locatorText = locatorText;
+  protected readonly isDocument = isDocumentEvidence;
+
+  protected kindRationale(e: EvidenceDetailView['evidence']): string | null {
+    return isDocumentEvidence(e) ? e.content.kindRationale : e.kindRationale;
+  }
+
+  /** « (messaggio #N)» solo per relazioni con evidenze di messaggio: per i documenti il numero non esiste. */
+  protected relationSequence(r: EvidenceDetailView['relations'][number]): string {
+    return 'otherMessageSequence' in r ? ` (messaggio #${r.otherMessageSequence})` : '';
+  }
   protected readonly plural = plural;
   protected readonly kindOptions = Object.entries(kindLabels);
   protected readonly polarityOptions = Object.entries(polarityLabels);
@@ -150,7 +168,9 @@ export class EvidenceViewComponent {
 
   // Evidenze correnti.
   protected readonly filters = signal<Filters>(noFilters);
-  protected readonly items = signal<EvidenceView[]>([]);
+  protected readonly items = signal<EvidenceEnvelope[]>([]);
+  /** Righe di lista (messaggi e documenti) e numero di elementi di versione ignota, non mostrati ma dichiarati. */
+  protected readonly list = computed(() => evidenceRows(this.items()));
   protected readonly itemsLoading = signal(false);
   protected readonly itemsError = signal('');
   protected readonly selectedId = signal<string | null>(null);
@@ -164,18 +184,27 @@ export class EvidenceViewComponent {
   /** Testi originali del dettaglio, con i passi citati evidenziati (segmenti, mai HTML). */
   protected readonly detailMessages = computed(() => {
     const d = this.detail();
-    if (!d) return [];
-    return d.messages.map((m) => ({
+    if (!d || isDocumentEvidence(d.evidence)) return [];
+    const sources = d.evidence.sources;
+    return d.sourceMessages.map((m) => ({
       id: m.id,
       sequence: m.sequence,
       assistant: m.role === 'assistant',
       segments: highlightSegments(
         m.text,
-        d.evidence.sources.filter((s) => s.messageId === m.id),
+        sources.filter((s) => s.messageId === m.id),
       ),
     }));
   });
-
+  /** Evidenza documentale aperta: parti citate raggruppate per citazione, con il locator risolto dal server. */
+  protected readonly detailGroups = computed(() => {
+    const d = this.detail();
+    return d && isDocumentEvidence(d.evidence)
+      ? sourceGroups(d.evidence.content.sources, d.sourceDocuments)
+      : [];
+  });
+  /** Parti (sourceId) di cui è aperto il passaggio: una per volta oppure tutte le parti di un gruppo. */
+  protected readonly openParts = signal<ReadonlySet<string>>(new Set());
   // Versioni di un messaggio.
   protected readonly versionsFor = signal<string | null>(null);
   protected readonly versions = signal<MessageVersionsView | null>(null);
@@ -545,7 +574,7 @@ export class EvidenceViewComponent {
       this.items.set(items);
       this.itemsError.set('');
       const selected = this.selectedId();
-      if (selected && !items.some((i) => i.id === selected)) {
+      if (selected && !items.some((i) => i.evidence.id === selected)) {
         this.selectedId.set(null);
         this.detail.set(null);
       }
@@ -562,7 +591,25 @@ export class EvidenceViewComponent {
     }
   }
 
+  protected togglePart(sourceId: string): void {
+    this.openParts.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(sourceId)) next.add(sourceId);
+      return next;
+    });
+  }
+
+  /** «Apri tutte le parti»: ogni parte di una citazione multi-blocco apre il proprio blocco, nessuna fusa con un'altra. */
+  protected openGroup(group: ReturnType<typeof sourceGroups>[number]): void {
+    this.openParts.update((set) => {
+      const next = new Set(set);
+      for (const p of group.parts) if (p.resolved) next.add(p.source.sourceId);
+      return next;
+    });
+  }
+
   protected async toggleDetail(evidenceId: string): Promise<void> {
+    this.openParts.set(new Set());
     if (this.selectedId() === evidenceId) {
       this.selectedId.set(null);
       this.detail.set(null);

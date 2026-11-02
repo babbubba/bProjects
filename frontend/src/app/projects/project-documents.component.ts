@@ -13,6 +13,7 @@ import { FormsModule } from '@angular/forms';
 import { DocumentPassageComponent } from './document-passage.component';
 import { Observable } from 'rxjs';
 import {
+  CandidatePreparation,
   DocumentDetailView,
   DocumentFailure,
   DocumentListItem,
@@ -574,8 +575,31 @@ export class ProjectDocumentsComponent implements OnDestroy {
     }));
   }
 
+  /** Il bundle corrente (parsing + estrazione) è stato consolidato dal server: entrambi gli id sono presenti. */
+  protected hasCommittedBundle(version: DocumentVersionView): boolean {
+    return !!version.currentPreparationId && !!version.currentEvidenceVersionId;
+  }
+
+  /** Pronto solo con il commit aggregato: uno stato Ready senza bundle corrente non è una fonte utilizzabile. */
   protected isReady(version: DocumentVersionView): boolean {
-    return version.processingStatus === 'Ready';
+    return version.processingStatus === 'Ready' && this.hasCommittedBundle(version);
+  }
+
+  protected versionLabel(version: DocumentVersionView): string {
+    return version.processingStatus === 'Ready' && !this.hasCommittedBundle(version)
+      ? 'Estrazione non consolidata'
+      : this.processingLabel(version.processingStatus);
+  }
+
+  protected versionBadge(version: DocumentVersionView): string {
+    return version.processingStatus === 'Ready' && !this.hasCommittedBundle(version)
+      ? 'text-bg-warning'
+      : this.badge(version.processingStatus);
+  }
+
+  /** Preparazioni candidate (non correnti): distinte dal bundle corrente, con il loro stato reale. */
+  protected candidates(version: DocumentVersionView): CandidatePreparation[] {
+    return version.candidatePreparations ?? [];
   }
 
   /** Il contratto ammette di fissare anche una versione non pronta: resta indisponibile (e blocca Analizza) finché non lo è. */

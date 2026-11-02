@@ -321,6 +321,44 @@ describe('ProjectDocumentsComponent', () => {
     expect(component().selectionRevision()).toBe(5);
   });
 
+  it('does not call Ready a version whose aggregate bundle is not committed, and shows candidates as distinct', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(
+      detail([
+        version({ id: 'v-1', version: 1, processingStatus: 'Ready' }),
+        version({
+          id: 'v-2',
+          version: 2,
+          processingStatus: 'Ready',
+          currentPreparationId: 'prep-2',
+          currentEvidenceVersionId: 'ev-2',
+          candidatePreparations: [
+            {
+              preparationId: 'prep-3',
+              generation: 3,
+              processingStatus: 'Ready',
+              evidenceVersionId: 'ev-3',
+              createdAt: '2030-01-02T10:00:00Z',
+              canPromote: true,
+            },
+          ],
+        }),
+      ]),
+    );
+    await settle();
+    const statuses = [...el.querySelectorAll('[data-testid="docs-version-status"]')].map((s) =>
+      s.textContent!.trim(),
+    );
+    expect(statuses).toEqual(['Estrazione non consolidata', 'Pronto']);
+    const candidate = el.querySelector('[data-testid="docs-candidate"]')!;
+    expect(candidate.textContent).toContain('Candidata (generazione 3)');
+    expect(candidate.textContent).toContain('non corrente');
+    // Solo la versione senza bundle consolidato dichiara di non essere pronta per l'analisi.
+    expect(el.querySelectorAll('[data-testid="docs-pin-note"]')).toHaveLength(1);
+  });
+
   it('pins a ready version and offers the pin on a not-ready one with its consequence stated', async () => {
     await flushLoad();
     q('docs-versions')!.click();
@@ -329,7 +367,13 @@ describe('ProjectDocumentsComponent', () => {
       .expectOne(`${BASE}/documents/d-1`)
       .flush(
         detail([
-          version({ id: 'v-1', version: 1, processingStatus: 'Ready' }),
+          version({
+            id: 'v-1',
+            version: 1,
+            processingStatus: 'Ready',
+            currentPreparationId: 'prep-1',
+            currentEvidenceVersionId: 'ev-1',
+          }),
           version({ id: 'v-2', version: 2, processingStatus: 'Queued' }),
         ]),
       );
@@ -612,7 +656,6 @@ describe('ProjectDocumentsComponent', () => {
     expect(q('docs-read')).toBeNull();
   });
 
-
   describe('retry parsing (T117)', () => {
     const PREP = `${BASE}/documents/d-1/versions/1/preparations/latest`;
     const RETRY_URL = `${BASE}/document-jobs/job-1/retry`;
@@ -801,7 +844,8 @@ describe('ProjectDocumentsComponent', () => {
       pollCfg.maxPolls = config.maxPolls;
     };
     const wait = () => new Promise((r) => setTimeout(r, 40));
-    const pollGet = () => http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+    const pollGet = () =>
+      http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET');
 
     it('rilegge con GET finché in lavorazione e si ferma a Ready', async () => {
       mountWithPoll({ intervalMs: 5, maxPolls: 5 });
