@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using bProjects.App.AI;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,8 @@ public sealed class ProjectEventHub
     public const string ChatDelta = "chat.delta";
     public const string ChatState = "chat.state";
     public const string ProcessingState = "processing.state";
+    public const string DocumentState = "document.state";
+    public const string ExecutionRegimeChanged = "execution.regime-changed";
 
     private const int Capacity = 256;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -51,6 +54,24 @@ public sealed class ProjectEventHub
             channel.Writer.TryComplete();
         }, channel.Reader);
     }
+
+    /// <summary>
+    /// execution.regime-changed: solo identificativo del root, istante, motivo, nuova scadenza effettiva e hash della ricevuta tecnica.
+    /// Mai il corpo della ricevuta, prompt o contenuti (best-effort come gli altri eventi: il GET resta la fonte).
+    /// </summary>
+    public void PublishRegimeChanged(RegimeTransition transition) =>
+        Publish(transition.ProjectId, ExecutionRegimeChanged, new
+        {
+            rootId = transition.RootId,
+            at = transition.At,
+            reason = transition.Reason,
+            effectiveDeadlineAt = transition.NewDeadlineAt,
+            receiptHash = transition.DerivedPlanHash,
+        });
+
+    /// <summary>document.state: job, versione, preparazione e stato; nessuna percentuale né contenuto.</summary>
+    public void PublishDocumentState(Guid projectId, Guid? jobId, Guid versionId, Guid preparationId, string state) =>
+        Publish(projectId, DocumentState, new { jobId, versionId, preparationId, state });
 
     /// <summary>Pubblica a chi è connesso in questo momento; senza sottoscrittori non fa nulla.</summary>
     public void Publish(Guid projectId, string name, object payload)

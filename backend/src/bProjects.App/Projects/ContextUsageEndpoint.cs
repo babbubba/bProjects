@@ -32,7 +32,8 @@ public sealed record LastInferenceView(
     int OutputReservedTokens,
     int SafetyMarginTokens,
     TokenValue RemainingTokens,
-    string? StaleReason);
+    string? StaleReason,
+    ExecutionView? Execution = null);
 
 public sealed record CompositionItemView(string Key, string Label, TokenValue Tokens, int? MessageCount);
 
@@ -70,6 +71,7 @@ public static class ContextUsageEndpoint
         [ContextComposition.AssistantMessages] = "Risposte dell'assistente",
         [ContextComposition.DerivedSummary] = "Riassunto derivato",
         [ContextComposition.AnalysisStructured] = "Analisi strutturata confermata",
+        [ContextComposition.DocumentSources] = "Fonti documentali",
     };
 
     public static IEndpointRouteBuilder MapContextUsageEndpoint(this IEndpointRouteBuilder app)
@@ -136,17 +138,28 @@ public static class ContextUsageEndpoint
     {
         var attempt = await db.InferenceCalls.AsNoTracking()
             .Where(c => c.ProjectId == projectId && c.Attempt == final.Attempt && c.FencingToken == final.FencingToken
-                && (final.ChatTurnId != null ? c.ChatTurnId == final.ChatTurnId : c.ProcessingRunId == final.ProcessingRunId))
+                && (final.ChatTurnId != null ? c.ChatTurnId == final.ChatTurnId
+                    : final.DocumentJobId != null ? c.DocumentJobId == final.DocumentJobId : c.ProcessingRunId == final.ProcessingRunId))
             .ToListAsync(ct);
 
         // Riferimento e cutoff del risultato logico: il messaggio assistant del turno, oppure il run (il documento eredita il cutoff dell'analisi).
         string refId;
         long? cutoff;
+        ExecutionView? execution;
         if (final.ChatTurnId is { } turnId)
         {
             var turn = await db.ChatTurns.AsNoTracking().SingleAsync(t => t.Id == turnId, ct);
             refId = (turn.ResultMessageId ?? turn.Id).ToString();
             cutoff = turn.SourceCutoffSequence;
+            execution = (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.ChatTurn, turn.Id, ct))?.Execution;
+        }
+        else if (final.DocumentJobId is { } jobId)
+        {
+            // Lavoro documentale: il riferimento è il job, il root del regime è la sua preparazione; nessun cutoff di dialogo.
+            refId = jobId.ToString();
+            cutoff = null;
+            var preparationId = await db.DocumentJobs.AsNoTracking().Where(j => j.Id == jobId && j.ProjectId == projectId).Select(j => j.PreparationId).SingleAsync(ct);
+            execution = (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.DocumentPreparation, preparationId, ct))?.Execution;
         }
         else
         {
@@ -155,6 +168,7 @@ public static class ContextUsageEndpoint
             cutoff = run.Kind == ProcessingRunKind.Analysis
                 ? run.SourceCutoffSequence
                 : await db.ProcessingRuns.AsNoTracking().Where(a => a.Id == run.AnalysisId).Select(a => a.SourceCutoffSequence).SingleOrDefaultAsync(ct);
+            execution = (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.ProcessingRun, run.Id, ct))?.Execution;
         }
 
         var stale = cutoff is { } c && await db.ConversationMessages.AsNoTracking()
@@ -174,7 +188,8 @@ public static class ContextUsageEndpoint
             reserved,
             margin,
             prompt is { } used && ctx is { } window ? TokenValue.Calculated(window - used - reserved - margin) : TokenValue.Unavailable,
-            stale ? "newer_messages" : null);
+            stale ? "newer_messages" : null,
+            execution);
     }
 
     /// <summary>Composizione della chiamata finale: token per categoria (tokenizer reale) e quota non attribuita = prompt - attribuiti.</summary>

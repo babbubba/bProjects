@@ -30,6 +30,7 @@ public sealed record ContextComposition(IReadOnlyList<CompositionItem> Items)
     public const string AssistantMessages = "assistant_messages";
     public const string DerivedSummary = "derived_summary";
     public const string AnalysisStructured = "analysis_structured";
+    public const string DocumentSources = "document_sources";
 
     public int AttributedTokens => Items.Sum(i => i.Tokens);
 

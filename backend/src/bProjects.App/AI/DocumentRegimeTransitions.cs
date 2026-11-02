@@ -1,5 +1,6 @@
 using System.Text.Json;
 using bProjects.App.Persistence;
+using bProjects.App.Projects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -117,7 +118,7 @@ public sealed class RegimeTransition
 /// RegimeTransition, PromotionCount 0→1 e DeadlineAt=EffectiveDeadlineAt=HardDeadlineAt; Hard, t0, fence, tentativi e contatori non si
 /// azzerano. Possiede la propria transazione (non si compone con una esterna): ogni rifiuto la annulla per intero.
 /// </summary>
-public sealed class DocumentRegimeTransitions(AppDbContext db)
+public sealed class DocumentRegimeTransitions(AppDbContext db, ProjectEventHub? events = null)
 {
     /// <summary>
     /// hash tipizzato (SHA-256 su JSON canonico, ordine normativo di AI §4.1) di ricevuta e manifesti dei batch aggiuntivi, escluso il campo
@@ -167,6 +168,7 @@ public sealed class DocumentRegimeTransitions(AppDbContext db)
         if (result.Outcome == PromotionOutcome.Promoted)
         {
             await transaction.CommitAsync(ct);
+            await PublishRegimeChangedAsync(result);
         }
         else
         {
@@ -174,6 +176,25 @@ public sealed class DocumentRegimeTransitions(AppDbContext db)
         }
 
         return result;
+    }
+
+    /// <summary>Evento best-effort dopo il commit: un errore di lettura o di pubblicazione non annulla né altera la promozione già durevole (il GET resta la fonte).</summary>
+    private async Task PublishRegimeChangedAsync(PromotionResult result)
+    {
+        if (events is null || result.TransitionId is not { } id)
+        {
+            return;
+        }
+
+        try
+        {
+            var transition = await db.RegimeTransitions.AsNoTracking().SingleAsync(t => t.Id == id, CancellationToken.None);
+            events.PublishRegimeChanged(transition);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Nessun log del contenuto: la transizione è già persistita e leggibile via GET.
+        }
     }
 
     private async Task<PromotionResult> DecideAndPromoteAsync(PromotionRequest request, CancellationToken ct)

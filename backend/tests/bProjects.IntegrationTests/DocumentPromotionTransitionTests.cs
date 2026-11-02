@@ -1,5 +1,6 @@
 using bProjects.App.AI;
 using bProjects.App.Persistence;
+using bProjects.App.Projects;
 using Npgsql;
 
 namespace bProjects.IntegrationTests;
@@ -381,6 +382,38 @@ public sealed class DocumentPromotionTransitionTests
         Assert.NotEqual(hash, DocumentRegimeTransitions.ComputeDerivedPlanHash(receipt with { RemainingObligationIds = ["o2"] }, [batch]));
         Assert.NotEqual(hash, DocumentRegimeTransitions.ComputeDerivedPlanHash(receipt, [Batch("b2", H('9'), H('1'), H('3'))]));
         Assert.Equal(hash, DocumentRegimeTransitions.ComputeDerivedPlanHash(receipt with { DerivedPlanHash = H('f') }, [batch]));   // il proprio campo è escluso
+    }
+
+    // ------------------------------------------------------------------ evento dello stream (T064)
+
+    [Fact]
+    public async Task Promotion_publishes_regime_changed_only_when_it_commits()
+    {
+        await using var s = Disposable(await NewScenarioAsync(RootKind.Turn));
+        var hub = new ProjectEventHub();
+        using var subscription = hub.Subscribe(s.Value.Root.Project);
+
+        await using (var context = s.Value.Database.NewContext())
+        {
+            // Rifiuto (fence errato): nessuna transizione, quindi nessun evento.
+            var fenced = await new DocumentRegimeTransitions(context, hub).PromoteAsync(s.Value.Request(fence: Fence + 1), Ct);
+            Assert.NotEqual(PromotionOutcome.Promoted, fenced.Outcome);
+            Assert.False(subscription.Reader.TryRead(out _));
+        }
+
+        await using (var context = s.Value.Database.NewContext())
+        {
+            Assert.Equal(PromotionOutcome.Promoted, (await new DocumentRegimeTransitions(context, hub).PromoteAsync(s.Value.Request(), Ct)).Outcome);
+        }
+
+        Assert.True(subscription.Reader.TryRead(out var evt));
+        Assert.Equal(ProjectEventHub.ExecutionRegimeChanged, evt.Name);
+        using var json = System.Text.Json.JsonDocument.Parse(evt.Data);
+        Assert.Equal(s.Value.Root.Id, json.RootElement.GetProperty("rootId").GetGuid());
+        Assert.Equal("additional_work", json.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(s.Value.Receipt.DerivedPlanHash, json.RootElement.GetProperty("receiptHash").GetString());
+        Assert.Equal(1, await s.Value.Database.ScalarAsync<int>($"""SELECT count(*) FROM "{s.Value.Root.Table}" WHERE "Id" = '{s.Value.Root.Id}' AND "HardDeadlineAt" = "EffectiveDeadlineAt" AND to_char("EffectiveDeadlineAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') = '{json.RootElement.GetProperty("effectiveDeadlineAt").GetDateTimeOffset().UtcDateTime:yyyy-MM-ddTHH:mm:ss}'"""));
+        Assert.False(subscription.Reader.TryRead(out _));
     }
 
     // ------------------------------------------------------------------ supporto
