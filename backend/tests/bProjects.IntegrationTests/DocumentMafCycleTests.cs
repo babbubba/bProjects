@@ -232,8 +232,8 @@ public sealed class DocumentMafCycleTests
                 ChatOptions = new ChatOptions { Instructions = "Istruzioni della fase batch." },
             });
 
-        public IReadOnlyList<ChatMessage> Compose(BatchRef batch) =>
-            [new ChatMessage(ChatRole.User, $"BATCH-{batch.Ordinal}|" + new string('x', BatchChars))];
+        public ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, CancellationToken ct) =>
+            new([new ChatMessage(ChatRole.User, $"BATCH-{batch.Ordinal}|" + new string('x', BatchChars))]);
 
         public ValueTask PersistAsync(BatchRef batch, string responseText, CancellationToken ct)
         {

@@ -4,10 +4,10 @@ Non è un piano: la fonte dei task è `tasks.md`. Solo stato per riprendere. Nes
 
 ## Stato
 - Branch `feature/002-implementation`. I2 chiuso (vedi `I2.md`). **Milestone corrente: I3.**
-- Completati e spuntati I3: T033–T043, T045, T046. Migrations: `20261102012256_DocumentEvidence`, `20261102015659_DocumentWork` (append-only, trigger 23001; FK checkpoint in SQL raw), `20261102020839_DocumentRegime` (colonne root regime nullable su DocumentPreparation/ChatTurn/ProcessingRun, ClassificationRecord append-only; PromotionDueAt assente). `DocumentStorageMigrationTests` esclude le 14 colonne regime dal confronto to_jsonb 001.
+- Completati e spuntati I3: T033–T046 (T044: `DocumentBatchPort`, seam `IBatchCallReservation`/`RootCallCounterReservation` da sostituire con CAS T047/T118; ripresa con risposta salvata rivalida senza reinferire = CONFERMATO; 16/16 recovery PG; rosso solo come compile error + mutazione Lookup→Miss). Migrations: `20261102012256_DocumentEvidence`, `20261102015659_DocumentWork` (append-only, trigger 23001; FK checkpoint in SQL raw), `20261102020839_DocumentRegime` (colonne root regime nullable su DocumentPreparation/ChatTurn/ProcessingRun, ClassificationRecord append-only; PromotionDueAt assente). `DocumentStorageMigrationTests` esclude le 14 colonne regime dal confronto to_jsonb 001.
 - Grafo nativo T043 dietro `IDocumentBatchPort` (fake); port di produzione = T044/T049. Ripresa dopo risposta salvata/prima commit rivalida senza reinferire (confermare in T044). Rosso non osservato per T037, T038, T042, T045; fixture A–G di T045 = mappatura dell'agente sul quickstart (verificare in T048).
 - Regime: a 190 s resta Ordinary e il root fallisce deadline_exceeded; `workload_unknown` senza `/apply-template` finché PayloadCalibration non ha config (T049).
-- Prossimo: T044 (agente X) e T118→T047→T119 (agente Y, catena guard/CAS/timer) in parallelo; poi T048, T049–T055.
+- In corso: agente guard/CAS/timer T118→T047→T119 (owner migrations, migration `DocumentRegimeTransition` in lavorazione, non committata). Prossimo: T048, poi T049–T055.
 - Regola: una sola migration alla volta (un solo agente scrive in Persistence/Migrations).
 - Rosso iniziale NON osservato per T037, T038 (test scritti dopo il codice). Dichiarato.
 - `docs/acceptance-trace/` non tracciato: non toccare.

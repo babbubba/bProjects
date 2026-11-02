@@ -57,8 +57,11 @@ public interface IDocumentBatchPort
     /// <summary>Agente batch della fase (senza history né tool): ogni invio gira in una sessione nuova, vedi <see cref="AgentFactory.RunBatchAsync"/>.</summary>
     ChatClientAgent CreateAgent(BatchRef batch);
 
-    /// <summary>Messaggi del solo batch: input e contesto esplicito congelato, già misurati dal preflight del client.</summary>
-    IReadOnlyList<ChatMessage> Compose(BatchRef batch);
+    /// <summary>
+    /// Messaggi del solo batch: input e contesto esplicito congelato, già misurati dal preflight del client. Asincrono perché dopo una
+    /// ripresa da checkpoint il processo nuovo non ha eseguito PrepareBatch e rilegge dal database ciò che serve (es. output dei genitori).
+    /// </summary>
+    ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, CancellationToken ct);
 
     /// <summary>
     /// ValidatePersistBatch: valida la risposta e, solo se valida, committa l'output (e i figli determinabili) in una transazione fenced.
@@ -137,7 +140,7 @@ internal sealed class InvokeBatchExecutor(IDocumentBatchPort port, BatchInvocati
 
         await port.ReserveCallAsync(batch, cancellationToken);
         counter.Increment();
-        var response = await AgentFactory.RunBatchAsync(port.CreateAgent(batch), port.Compose(batch), cancellationToken);
+        var response = await AgentFactory.RunBatchAsync(port.CreateAgent(batch), await port.ComposeAsync(batch, cancellationToken), cancellationToken);
         await context.SendMessageAsync(message with { Kind = BatchKind.Responded, Text = response.Text }, cancellationToken: cancellationToken);
     }
 }
