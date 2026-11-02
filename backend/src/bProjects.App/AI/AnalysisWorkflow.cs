@@ -318,7 +318,8 @@ public sealed record AnalysisRunResult(ProcessingRunStatus Status, Guid? ResultR
 /// <c>RunStreamingAsync</c>/<c>ResumeStreamingAsync</c>. La validazione precede il commit di revisione AI + Completed +
 /// CurrentAnalysisId; un output non valido fa fallire il run senza riparazione e senza revisione.
 /// </summary>
-public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, ConversationalAgent conversational, ChatOptions analysisOptions)
+public sealed class AnalysisWorkflow(
+    IServiceScopeFactory scopes, ConversationalAgent conversational, ChatOptions analysisOptions, DocumentAnalysisWorkflow? documentary = null)
 {
     public const string LoadDialogId = "LoadDialog";
     /// <summary>Id nativo dell'executor che ospita l'agente: «{Name}_{Id}» come assegnato da MAF.</summary>
@@ -387,6 +388,13 @@ public sealed class AnalysisWorkflow(IServiceScopeFactory scopes, Conversational
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Analysis, ct);
+        if (documentary is not null && run.WorkflowDefinitionVersion == DocumentAnalysisWorkflow.DefinitionVersion)
+        {
+            // Definizione documentale congelata alla richiesta (T057/T123): il grafo 2 ha il proprio guard di prompt, schema e versione MAF e il proprio
+            // resume; il run non passa dal guard 001, che lo rifiuterebbe. Con una definizione ignota si resta qui sotto e fallisce workflow_incompatible.
+            return await documentary.ExecuteAsync(claim, ct);
+        }
+
         if (run.WorkflowDefinitionVersion != ProcessingRun.AnalysisWorkflowVersion || run.MafVersion != Conversation.CurrentMafVersion
             || !run.PromptVersionMatches("analysis", ConversationalAgent.ConsolidationPromptVersion))
         {

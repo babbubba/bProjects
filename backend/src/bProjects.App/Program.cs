@@ -68,20 +68,8 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<IChatTurnCommitter, ChatTurnCompletion>();
 builder.Services.AddScoped<bProjects.App.Analysis.IAnalysisRunStore, bProjects.App.Analysis.AnalysisRunCompletion>();
 builder.Services.AddScoped<bProjects.App.Analysis.PreviewRevisionService>();
-builder.Services.AddSingleton(sp => new AnalysisWorkflow(
-    sp.GetRequiredService<IServiceScopeFactory>(),
-    sp.GetRequiredService<ConversationalAgent>(),
-    sp.GetRequiredService<InternalModelClient>().CreateChatOptions(AnalysisSchema.Element, AnalysisSchema.Name, temperature: 0, phase: AiPhase.Analysis)));
 builder.Services.AddScoped<bProjects.App.Analysis.IDocumentRunStore, bProjects.App.Analysis.DocumentRunCompletion>();
-builder.Services.AddSingleton(sp =>
-{
-    var model = sp.GetRequiredService<InternalModelClient>();
-    return new DocumentAgent(
-        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>()),
-        model.CreateChatOptions(temperature: 0.2f, phase: AiPhase.Document));
-});
-builder.Services.AddSingleton(sp => new DocumentWorkflow(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentAgent>()));
-builder.Services.AddSingleton<IChatTurnExecutor, ConversationalTurnExecutor>();
+builder.Services.AddAiWorkflows();   // grafi 001 e documentali, esecutore dei turni e raccordo dei guard (T123)
 // Registro atomico delle evidenze: estrattore MAF della fase Extraction nello stesso dispatcher (priorità inferiore alla chat).
 builder.Services.AddSingleton<bProjects.App.Evidence.EvidenceEvents>();
 builder.Services.AddSingleton<IEvidenceExtractionExecutor>(sp =>

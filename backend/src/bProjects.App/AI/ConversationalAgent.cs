@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
@@ -162,12 +163,19 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
 /// <see cref="IChatTurnCommitter"/>. Il token ricevuto si annulla quando il lease si perde.
 /// </summary>
 public sealed class ConversationalTurnExecutor(
-    IServiceScopeFactory scopes, ConversationalAgent agent, ChatTurnEvents? events = null) : IChatTurnExecutor
+    IServiceScopeFactory scopes, ConversationalAgent agent, ChatTurnEvents? events = null, DocumentChatTurnExecutor? documentChat = null) : IChatTurnExecutor
 {
     public async Task ExecuteAsync(ChatTurnClaim claim, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (documentChat is not null && await UsesDocumentGraphAsync(db, claim.TurnId, ct))
+        {
+            // Snapshot congelato alla richiesta con almeno una fonte Ready e inclusa (stessa regola di Analizza): grafo 2 della chat documentale (T058/T123).
+            await documentChat.ExecuteAsync(claim, ct);
+            return;
+        }
+
         var reply = await agent.RunAsync(db, claim, onDelta: events?.DeltaSink(claim), ct);
         // Fonti documentali non pronte congelate nello snapshot del turno: la risposta lo dichiara (testo deterministico, non del modello).
         var unavailable = await ChatSourceNotice.UnavailableCountAsync(db, claim.TurnId, ct);
@@ -191,4 +199,12 @@ public sealed class ConversationalTurnExecutor(
             await events.PublishStateAsync(claim.TurnId); // post-commit: Completed rimanda al resultMessageId persistito
         }
     }
+
+    /// <summary>
+    /// Il turno non ha un campo di definizione: la selezione fissata alla richiesta (<c>SourceSnapshotId</c>, immutabile) decide il grafo, mai la selezione corrente.
+    /// Senza snapshot, o con righe soltanto escluse o non pronte, il turno resta sul dialogo 001 (che dichiara le fonti non pronte).
+    /// </summary>
+    internal static async Task<bool> UsesDocumentGraphAsync(AppDbContext db, Guid turnId, CancellationToken ct) =>
+        await db.ChatTurns.AsNoTracking().Where(t => t.Id == turnId && t.SourceSnapshotId != null)
+            .AnyAsync(t => db.SourceSnapshotItems.Any(i => i.SnapshotId == t.SourceSnapshotId && i.Included && i.Availability == SourceAvailability.Ready), ct);
 }

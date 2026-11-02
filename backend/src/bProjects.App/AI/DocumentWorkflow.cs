@@ -21,7 +21,7 @@ public sealed record DocumentRunResult(ProcessingRunStatus Status, Guid? DraftId
 /// Completed + LatestDraftId; un output non valido fa fallire il run senza riparazione e senza bozza. Un commit riuscito prevale su
 /// un guasto successivo del checkpoint (il lease è già rilasciato): il run resta Completed.
 /// </summary>
-public sealed class DocumentWorkflow(IServiceScopeFactory scopes, DocumentAgent documentAgent)
+public sealed class DocumentWorkflow(IServiceScopeFactory scopes, DocumentAgent documentAgent, DocumentSourceDraftWorkflow? documentary = null)
 {
     public const string LoadId = "LoadConfirmedRevision";
 
@@ -64,6 +64,12 @@ public sealed class DocumentWorkflow(IServiceScopeFactory scopes, DocumentAgent 
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Document, ct);
+        if (documentary is not null && run.WorkflowDefinitionVersion == DocumentSourceDraftWorkflow.DefinitionVersion)
+        {
+            // Definizione documentale congelata alla richiesta (T057/T123): grafo 2 con guard e resume propri, mai il guard 001 che la rifiuterebbe.
+            return await documentary.ExecuteAsync(claim, ct);
+        }
+
         if (run.WorkflowDefinitionVersion != ProcessingRun.DocumentWorkflowVersion || run.MafVersion != Conversation.CurrentMafVersion
             || !run.PromptVersionMatches("document", DocumentAgent.PromptVersion))
         {

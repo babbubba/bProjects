@@ -37,6 +37,10 @@ public sealed class ApiHarness : IAsyncDisposable
             services.RemoveAll<bProjects.App.AI.AnalysisWorkflow>(); // dipende dal client AI, che qui non deve esistere
             services.RemoveAll<bProjects.App.AI.DocumentWorkflow>(); // idem: dipende dal client AI
             services.RemoveAll<bProjects.App.AI.DocumentAgent>();
+            services.RemoveAll<bProjects.App.AI.DocumentChatTurnExecutor>(); // workflow documentali (T123): dipendono dal client AI
+            services.RemoveAll<bProjects.App.AI.DocumentChatWorkflow>();
+            services.RemoveAll<bProjects.App.AI.DocumentAnalysisWorkflow>();
+            services.RemoveAll<bProjects.App.AI.DocumentSourceDraftWorkflow>();
             services.RemoveAll<IEvidenceExtractionExecutor>(); // l'estrattore reale dipende dal client AI
             services.RemoveAll<bProjects.App.AI.IDocumentUnitExecutor>(); // l'agente di estrazione delle unità dipende dal client AI
             configure?.Invoke(services);
