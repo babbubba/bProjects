@@ -517,7 +517,7 @@ public static class ProjectDocumentEndpoints
             new OriginalLink(v.OriginalName, $"/api/projects/{projectId}/documents/{documentId}/versions/{v.Version}/download")));
     }
 
-    private static async Task<(DocumentVersion Version, DocumentPreparation Preparation)?> FindPreparationAsync(
+    internal static async Task<(DocumentVersion Version, DocumentPreparation Preparation)?> FindPreparationAsync(
         Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, CancellationToken ct)
     {
         var v = await catalog.FindVersionAsync(projectId, documentId, version, ct);

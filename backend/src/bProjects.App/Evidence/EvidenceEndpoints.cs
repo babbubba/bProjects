@@ -3,6 +3,7 @@ using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
 using Microsoft.EntityFrameworkCore;
@@ -139,6 +140,7 @@ public static class EvidenceEndpoints
         group.MapGet("/evidence/batches/{batchId:guid}", Batch);
         group.MapPost("/messages/{messageId:guid}/evidence/promotions", Promote);
         group.MapGet("/analyses/{analysisId:guid}/evidence-selection", Selection);
+        group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/coverage", PreparationCoverage);
         group.MapCoverageEndpoints();
         return app;
     }
@@ -538,6 +540,23 @@ public static class EvidenceEndpoints
     {
         var batch = await db.EvidenceBatches.AsNoTracking().SingleOrDefaultAsync(b => b.Id == batchId && b.ProjectId == projectId, ct);
         return batch is null ? Results.NotFound() : Results.Ok(await ToViewAsync(db, batch, ct));
+    }
+
+    /// <summary>coverage-2 della preparazione prima dell'analisi: porzioni attese/elaborate/senza evidenza/mancanti e hash. Sola lettura: nessun lavoro, nessun report persistito.</summary>
+    private static async Task<IResult> PreparationCoverage(
+        Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var found = await ProjectDocumentEndpoints.FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        var (record, portions) = await DocumentCoverageLoader.PreparationAsync(db, projectId, found.Value.Preparation.Id, ct);
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new PreparationCoverageView(
+            DocumentCoverage.CheckerVersion, record.PreparationId, record.DocumentId, record.DocumentVersionId, record.Generation, record.Status, record.Hashes, record.Portions,
+            [.. DocumentCoverage.PortionFindings(portions).Select(DocumentCoverageLoader.ToView)], DocumentCoverage.Limits));
     }
 
     private static async Task<IResult> Selection(Guid projectId, Guid analysisId, AppDbContext db, CancellationToken ct)
