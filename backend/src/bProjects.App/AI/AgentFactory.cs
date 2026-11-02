@@ -47,9 +47,13 @@ public sealed class AgentFactory
         return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime, phase);
     }
 
-    public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null) =>
+    /// <summary>
+    /// Factory di produzione. <paramref name="calibration"/> (da <c>Documents:Calibration</c>) è la sola origine ammessa di un limite superiore del
+    /// payload documentale quando il runtime non espone template o tokenizer; senza, quel ramo resta <c>runtime_unverified</c>.
+    /// </summary>
+    public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null, PayloadCalibration? calibration = null) =>
         new(options, client.ChatClient, async (text, ct) => await client.CountTokensAsync(text, ct),
-            client.CreateChatOptions(temperature: 0, phase: AiPhase.Compaction), runtime, meter: client);
+            client.CreateChatOptions(temperature: 0, phase: AiPhase.Compaction), runtime, meter: client, calibration: calibration);
 
     /// <summary>Client per la chat (budget della fase Chat).</summary>
     public Task<IChatClient> CreateCompactingClientAsync(string instructions, CancellationToken cancellationToken = default) =>

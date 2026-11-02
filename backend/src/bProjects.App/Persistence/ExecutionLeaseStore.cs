@@ -32,10 +32,18 @@ public enum TurnTransition
 public readonly record struct TurnRelease(TurnTransition Outcome, DateTimeOffset? NextAttemptAt = null, string? ErrorCode = null);
 
 /// <summary>
-/// Lavoro AI preso in carico: esattamente uno fra un ChatTurn, un ProcessingRun di Analysis, un ProcessingRun di Document e un lavoro
-/// di estrazione delle evidenze.
+/// Unità di estrazione documentale presa in carico (DocumentJob ExtractUnit): owner e fencing token identificano in modo esclusivo questo
+/// tentativo. <paramref name="UnitId"/> è l'unità logica (porzione) del job; <paramref name="ConfigJson"/> la configurazione congelata del job.
 /// </summary>
-public sealed record WorkClaim(ChatTurnClaim? Turn, AnalysisRunClaim? Run, DocumentRunClaim? Document = null, ExtractionJobClaim? Extraction = null);
+public sealed record DocumentUnitClaim(
+    Guid JobId, Guid PreparationId, Guid ProjectId, Guid? UnitId, string LeaseOwner, long FencingToken, int AttemptCount, int MaxAttempts, string? ConfigJson);
+
+/// <summary>
+/// Lavoro AI preso in carico: esattamente uno fra un ChatTurn, un ProcessingRun di Analysis, un ProcessingRun di Document, un lavoro
+/// di estrazione delle evidenze e un'unità di estrazione documentale.
+/// </summary>
+public sealed record WorkClaim(
+    ChatTurnClaim? Turn, AnalysisRunClaim? Run, DocumentRunClaim? Document = null, ExtractionJobClaim? Extraction = null, DocumentUnitClaim? Unit = null);
 
 /// <summary>Lavoro documentale chiuso dallo sweep delle scadenze (T119).</summary>
 public sealed record ExpiredWork(
@@ -128,7 +136,18 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
     /// ordine di sequenza (il contesto di un messaggio comprende le evidenze dei precedenti). I run di Analysis attendono che nessuna
     /// estrazione aperta riguardi messaggi entro il loro cutoff.
     /// </summary>
-    public async Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, bool extractions, CancellationToken ct)
+    public Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, bool extractions, CancellationToken ct) =>
+        ClaimNextWorkAsync(owner, turns, runs, documents, extractions, units: false, ct);
+
+    /// <summary>
+    /// Come <see cref="ClaimNextWorkAsync(string, bool, bool, bool, bool, CancellationToken)"/> anche per le unità di estrazione documentale
+    /// (<paramref name="units"/>, DocumentJob ExtractUnit, T050): stesso advisory lock, stesso limite AI globale (<see cref="MaxConcurrentRuns"/>),
+    /// stessi owner/lease/fence. Un'unità è un lavoro di sfondo bounded: è presa in carico soltanto se nessun turno, run o estrazione di messaggio
+    /// è eleggibile, quindi la chat e i run formali non vengono mai sorpassati e, rilasciato lo slot a fine unità, hanno la precedenza sulla
+    /// prossima. Nessuna preemption: una chiamata in corso non si interrompe. Il parsing (CPU) non passa di qui. Le unità non più eseguibili
+    /// (scadenza, tentativi) si chiudono a ogni claim di questa istanza, insieme alla preparazione.
+    /// </summary>
+    public async Task<WorkClaim?> ClaimNextWorkAsync(string owner, bool turns, bool runs, bool documents, bool extractions, bool units, CancellationToken ct)
     {
         await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
 
@@ -153,6 +172,11 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             await SweepAsync(Table.Extractions, [], ct);
         }
 
+        if (units)
+        {
+            await SweepUnitsAsync(ct);
+        }
+
         WorkClaim? claim = null;
         if (await RunningCountAsync(ct) < MaxConcurrentRuns)
         {
@@ -169,6 +193,11 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             else if (extractions && await ExtractionCandidateAsync(ct) is { } job)
             {
                 claim = await ClaimExtractionAsync(job, owner, ct) is { } extraction ? new WorkClaim(null, null, null, extraction) : null;
+            }
+            else if (units && await UnitCandidateAsync(ct) is { } unitId)
+            {
+                // Ultima nella priorità: chat, run formali ed estrazioni di messaggio precedono sempre la prossima unità documentale.
+                claim = await ClaimUnitAsync(unitId, owner, ct) is { } unit ? new WorkClaim(null, null, null, null, unit) : null;
             }
         }
 
@@ -296,6 +325,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             SELECT (SELECT count(*) FROM "ChatTurns" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
                  + (SELECT count(*) FROM "ProcessingRuns" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
                  + (SELECT count(*) FROM "EvidenceExtractionJobs" WHERE "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
+                 + (SELECT count(*) FROM "DocumentJobs" WHERE "Kind" = 'ExtractUnit' AND "Status" = 'Running' AND "LeaseUntil" > clock_timestamp())
             """,
             ct);
         return (long)(await command.ExecuteScalarAsync(ct))!;
@@ -509,6 +539,208 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             ("id", id), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? new ExtractionJobClaim(reader.GetGuid(0), owner, reader.GetInt64(1), reader.GetInt32(2)) : null;
+    }
+
+    // ------------------------------------------------------------------ unità di estrazione documentale (DocumentJob ExtractUnit, T050)
+
+    private const string UnitDeadMessage = "L'estrazione dell'unità non è terminata entro i limiti di tentativi o di tempo.";
+    private const string UnitParentFailedMessage = "Un'altra unità della preparazione è fallita: la preparazione non può più completarsi.";
+
+    /// <summary>Codici permanenti che lasciano la preparazione Incomplete (limite/copertura noti) invece che Failed (Data model §Lifecycle).</summary>
+    private static readonly string[] IncompleteCodes =
+        [DocumentWorkException.DocumentIncomplete, DocumentWorkException.CallLimitExceeded, DocumentWorkException.CoverageIncomplete];
+
+    /// <summary>
+    /// Idoneità di un'unità, valutata dal candidato e ricontrollata nella UPDATE (READ COMMITTED): Queued con NextAttemptAt raggiunto oppure Running con
+    /// lease scaduto (reclaim), tentativi residui, deadline propria e della preparazione nel futuro e preparazione in Extracting (dopo il parse).
+    /// </summary>
+    private static readonly string UnitEligibleSql = $"""
+        j."Kind" = 'ExtractUnit'
+        AND ((j."Status" = 'Queued' AND (j."NextAttemptAt" IS NULL OR j."NextAttemptAt" <= clk.t))
+             OR (j."Status" = 'Running' AND j."LeaseUntil" <= clk.t))
+        AND j."AttemptCount" < j."MaxAttempts"
+        AND {DocumentDeadlineGuard.ChildAlive("j", "p", "'Extracting'", "clk.t")}
+        """;
+
+    /// <summary>
+    /// Chiude le unità non più eseguibili (scadenza propria o della preparazione, tentativi esauriti) sotto il clock del database: la preparazione
+    /// diventa Failed con lo stesso codice e le unità sorelle ancora aperte vengono chiuse (<c>parent_failed</c>), perché una preparazione chiusa non
+    /// riparte. Un solo statement, una sola fotografia. Il fence sale: il vecchio possessore non rinnova né committa.
+    /// </summary>
+    private async Task SweepUnitsAsync(CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            """
+            WITH clk AS (SELECT clock_timestamp() AS t),
+            dead AS (
+                UPDATE "DocumentJobs" j SET
+                    "Status" = 'Failed',
+                    "ErrorCode" = CASE WHEN p."EffectiveDeadlineAt" <= clk.t THEN 'parent_deadline_exceeded'
+                                       WHEN j."DeadlineAt" <= clk.t THEN 'deadline_exceeded'
+                                       ELSE 'attempts_exhausted' END,
+                    "ErrorMessage" = @message, "CompletedAt" = clk.t, "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = j."FencingToken" + 1
+                FROM clk, "DocumentPreparations" p
+                WHERE p."Id" = j."PreparationId" AND j."Kind" = 'ExtractUnit' AND p."Status" = 'Extracting'
+                  AND (j."Status" = 'Queued' OR (j."Status" = 'Running' AND j."LeaseUntil" <= clk.t))
+                  AND (p."EffectiveDeadlineAt" <= clk.t OR j."DeadlineAt" <= clk.t OR j."AttemptCount" >= j."MaxAttempts")
+                RETURNING j."Id", j."PreparationId", j."ErrorCode", j."ErrorMessage"),
+            prep AS (
+                UPDATE "DocumentPreparations" q SET "Status" = 'Failed',
+                    "ErrorCode" = CASE WHEN dead."ErrorCode" = 'parent_deadline_exceeded' THEN 'deadline_exceeded' ELSE dead."ErrorCode" END,
+                    "ErrorMessage" = dead."ErrorMessage"
+                FROM dead
+                WHERE q."Id" = dead."PreparationId" AND q."Status" IN ('Queued', 'Parsing', 'Extracting')
+                RETURNING q."Id"),
+            sib AS (
+                UPDATE "DocumentJobs" s SET "Status" = 'Failed', "ErrorCode" = 'parent_failed', "ErrorMessage" = @parentFailed,
+                    "CompletedAt" = (SELECT t FROM clk), "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = s."FencingToken" + 1
+                FROM dead
+                WHERE s."PreparationId" = dead."PreparationId" AND s."Kind" = 'ExtractUnit' AND s."Status" IN ('Queued', 'Running')
+                  AND s."Id" NOT IN (SELECT "Id" FROM dead)
+                RETURNING s."Id")
+            SELECT (SELECT count(*) FROM dead) + (SELECT count(*) FROM prep) + (SELECT count(*) FROM sib)
+            """,
+            ct, ("message", UnitDeadMessage), ("parentFailed", UnitParentFailedMessage));
+        await command.ExecuteScalarAsync(ct);
+    }
+
+    /// <summary>
+    /// Prossima unità eleggibile: le più vecchie prima (preparazione, poi richiesta). Non parte se un turno o un run è in backoff di retry entro
+    /// <see cref="ExtractionBackoffHold"/>: il modello non si occupa un attimo prima del loro ritorno (come per le estrazioni di messaggio).
+    /// </summary>
+    private async Task<Guid?> UnitCandidateAsync(CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            $"""
+            WITH clk AS (SELECT clock_timestamp() AS t)
+            SELECT j."Id"
+            FROM "DocumentJobs" j JOIN "DocumentPreparations" p ON p."Id" = j."PreparationId", clk
+            WHERE {UnitEligibleSql}
+              AND NOT EXISTS (
+                    SELECT 1 FROM "ChatTurns" b
+                    WHERE b."Status" = 'Queued' AND b."NextAttemptAt" > clk.t AND b."NextAttemptAt" <= clk.t + make_interval(secs => @hold)
+                      AND b."AttemptCount" < b."MaxAttempts" AND b."DeadlineAt" > clk.t)
+              AND NOT EXISTS (
+                    SELECT 1 FROM "ProcessingRuns" b
+                    WHERE b."Status" = 'Queued' AND b."NextAttemptAt" > clk.t AND b."NextAttemptAt" <= clk.t + make_interval(secs => @hold)
+                      AND b."AttemptCount" < b."MaxAttempts" AND b."DeadlineAt" > clk.t)
+            ORDER BY p."RequestedAt", j."RequestedAt", j."Id"
+            LIMIT 1
+            """,
+            ct, ("hold", ExtractionBackoffHold.TotalSeconds));
+        return await command.ExecuteScalarAsync(ct) is Guid id ? id : null;
+    }
+
+    private async Task<DocumentUnitClaim?> ClaimUnitAsync(Guid id, string owner, CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            $"""
+            WITH clk AS (SELECT clock_timestamp() AS t)
+            UPDATE "DocumentJobs" j SET
+                "Status" = 'Running',
+                "LeaseOwner" = @owner,
+                "LeaseUntil" = clk.t + make_interval(secs => @lease),
+                "FencingToken" = j."FencingToken" + 1,
+                "AttemptCount" = j."AttemptCount" + 1,
+                "StartedAt" = COALESCE(j."StartedAt", clk.t),
+                "NextAttemptAt" = NULL
+            FROM clk, "DocumentPreparations" p
+            WHERE j."Id" = @id AND p."Id" = j."PreparationId" AND {UnitEligibleSql}
+            RETURNING j."Id", j."PreparationId", j."ProjectId", j."UnitId", j."FencingToken", j."AttemptCount", j."MaxAttempts", j."ConfigJson"::text
+            """,
+            ct, ("id", id), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct)
+            ? new DocumentUnitClaim(
+                reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.IsDBNull(3) ? null : reader.GetGuid(3), owner, reader.GetInt64(4), reader.GetInt32(5),
+                reader.GetInt32(6), reader.IsDBNull(7) ? null : reader.GetString(7))
+            : null;
+    }
+
+    /// <summary>Estende LeaseUntil dell'unità dell'owner corrente; le scadenze non si spostano. False se owner/fencing/padre non sono più validi.</summary>
+    public async Task<bool> RenewAsync(DocumentUnitClaim claim, CancellationToken ct)
+    {
+        await using var command = await CommandAsync(
+            $"""
+            UPDATE "DocumentJobs" j SET "LeaseUntil" = clock_timestamp() + make_interval(secs => @lease)
+            FROM "DocumentPreparations" p
+            WHERE j."Id" = @id AND j."Kind" = 'ExtractUnit' AND p."Id" = j."PreparationId"
+              AND j."Status" = 'Running' AND j."LeaseOwner" = @owner AND j."FencingToken" = @fence
+              AND j."LeaseUntil" > clock_timestamp() AND {DocumentDeadlineGuard.ChildAlive("j", "p")}
+            """,
+            ct, ("lease", _policy.LeaseDuration.TotalSeconds), ("id", claim.JobId), ("owner", claim.LeaseOwner), ("fence", claim.FencingToken));
+        return await command.ExecuteNonQueryAsync(ct) == 1;
+    }
+
+    /// <summary>
+    /// Esito di un errore osservato dall'owner di un'unità. Transitorio con tentativi e tempo residui (unità e padre): Queued con NextAttemptAt
+    /// (backoff 2/4 s, o Retry-After se maggiore), stessa deadline. Altrimenti Failed terminale; la preparazione si chiude con lo stesso codice nella
+    /// stessa istruzione (Incomplete per limite o copertura noti, Failed per gli altri) e le unità sorelle ancora aperte con <c>parent_failed</c>.
+    /// Rejected se owner/fencing non sono più validi: il vecchio possessore non scrive nulla.
+    /// </summary>
+    public async Task<TurnRelease> ReleaseAfterFailureAsync(
+        DocumentUnitClaim claim, ModelFailure failure, string permanentCode, string permanentMessage, CancellationToken ct)
+    {
+        var delay = _policy.BackoffAfterAttempt(claim.AttemptCount);
+        if (failure.RetryAfter is { } retryAfter && retryAfter > delay)
+        {
+            delay = retryAfter;
+        }
+
+        await using var command = await CommandAsync(
+            """
+            WITH clk AS (SELECT clock_timestamp() AS t),
+            upd AS (
+                UPDATE "DocumentJobs" x SET
+                    "Status" = CASE WHEN d.retry THEN 'Queued' ELSE 'Failed' END,
+                    "LeaseOwner" = NULL,
+                    "LeaseUntil" = NULL,
+                    "NextAttemptAt" = CASE WHEN d.retry THEN d.next ELSE x."NextAttemptAt" END,
+                    "CompletedAt" = CASE WHEN d.retry THEN NULL ELSE d.now END,
+                    "ErrorCode" = CASE WHEN d.retry THEN NULL ELSE d.code END,
+                    "ErrorMessage" = CASE WHEN d.retry THEN NULL WHEN @transient THEN @exhausted ELSE @message END
+                FROM (
+                    SELECT t."Id", clk.t AS now, clk.t + make_interval(secs => @delay) AS next,
+                           (@transient AND t."AttemptCount" < t."MaxAttempts"
+                                AND clk.t + make_interval(secs => @delay) < LEAST(t."DeadlineAt", p."EffectiveDeadlineAt")) AS retry,
+                           CASE WHEN NOT @transient THEN @code
+                                WHEN clk.t >= p."EffectiveDeadlineAt" THEN 'parent_deadline_exceeded'
+                                WHEN clk.t + make_interval(secs => @delay) >= LEAST(t."DeadlineAt", p."EffectiveDeadlineAt") THEN 'deadline_exceeded'
+                                ELSE 'attempts_exhausted' END AS code
+                    FROM "DocumentJobs" t JOIN "DocumentPreparations" p ON p."Id" = t."PreparationId", clk
+                    WHERE t."Id" = @id AND t."Kind" = 'ExtractUnit' AND t."Status" = 'Running' AND t."LeaseOwner" = @owner AND t."FencingToken" = @fence
+                ) d
+                WHERE x."Id" = d."Id" AND x."Status" = 'Running' AND x."LeaseOwner" = @owner AND x."FencingToken" = @fence
+                RETURNING x."Id", x."PreparationId", x."Status", x."NextAttemptAt", x."ErrorCode", x."ErrorMessage"),
+            prep AS (
+                UPDATE "DocumentPreparations" q SET
+                    "Status" = CASE WHEN upd."ErrorCode" = ANY(@incomplete) THEN 'Incomplete' ELSE 'Failed' END,
+                    "ErrorCode" = CASE WHEN upd."ErrorCode" = 'parent_deadline_exceeded' THEN 'deadline_exceeded' ELSE upd."ErrorCode" END,
+                    "ErrorMessage" = upd."ErrorMessage"
+                FROM upd
+                WHERE q."Id" = upd."PreparationId" AND upd."Status" = 'Failed' AND q."Status" IN ('Queued', 'Parsing', 'Extracting')
+                RETURNING q."Id"),
+            sib AS (
+                UPDATE "DocumentJobs" s SET "Status" = 'Failed', "ErrorCode" = 'parent_failed', "ErrorMessage" = @parentFailed,
+                    "CompletedAt" = (SELECT t FROM clk), "LeaseOwner" = NULL, "LeaseUntil" = NULL, "FencingToken" = s."FencingToken" + 1
+                FROM upd
+                WHERE s."PreparationId" = upd."PreparationId" AND upd."Status" = 'Failed' AND s."Kind" = 'ExtractUnit'
+                  AND s."Status" IN ('Queued', 'Running') AND s."Id" <> upd."Id"
+                RETURNING s."Id")
+            SELECT "Status", "NextAttemptAt", "ErrorCode", (SELECT count(*) FROM prep) + (SELECT count(*) FROM sib) FROM upd
+            """,
+            ct,
+            ("transient", failure.IsTransient), ("delay", delay.TotalSeconds), ("code", permanentCode), ("message", permanentMessage), ("exhausted", UnitDeadMessage),
+            ("id", claim.JobId), ("owner", claim.LeaseOwner), ("fence", claim.FencingToken), ("incomplete", IncompleteCodes), ("parentFailed", UnitParentFailedMessage));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+        {
+            return new TurnRelease(TurnTransition.Rejected);
+        }
+
+        return reader.GetString(0) == "Queued"
+            ? new TurnRelease(TurnTransition.Requeued, reader.GetFieldValue<DateTimeOffset>(1))
+            : new TurnRelease(TurnTransition.Failed, ErrorCode: reader.GetString(2));
     }
 
     /// <summary>Estende LeaseUntil dell'owner corrente; DeadlineAt non si sposta. False se owner/fencing non sono più validi o la deadline è passata.</summary>

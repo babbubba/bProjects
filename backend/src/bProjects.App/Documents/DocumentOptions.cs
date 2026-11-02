@@ -1,3 +1,4 @@
+using bProjects.App.AI;
 using Microsoft.Extensions.Options;
 
 namespace bProjects.App.Documents;
@@ -38,10 +39,33 @@ public sealed class DocumentOptions
     public int MaxReconciliationLevels { get; set; } = 32;
     public int MaxCandidatesPerRun { get; set; } = 100_000;
 
+    /// <summary>
+    /// Calibrazione identificata del runtime (template e tokenizer) per il conteggio del payload documentale quando il server non espone
+    /// <c>/apply-template</c> o <c>/tokenize</c>: senza (<c>Id</c> vuoto) il ramo documentale resta <c>runtime_unverified</c>, mai una stima.
+    /// Configurazione del server, non un limite modificabile dall'Admin né un requisito di prodotto.
+    /// </summary>
+    public PayloadCalibrationOptions Calibration { get; set; } = new();
+
     public DocumentLimits ToLimits() => new(
         MaxFileBytes, ProjectQuotaBytes, DerivedQuotaBytes, MaxExpandedBytes, MaxPages, MaxBlocks, ParseTimeoutSeconds, UploadTimeoutSeconds,
         PreparationDeadlineSeconds, OrdinaryDeadlineSeconds, ExtendedDeadlineSeconds, MaxAiCallsPerPreparation, MaxAiCallsPerRun,
         MaxDerivedBytes, MaxReconciliationLevels, MaxCandidatesPerRun);
+}
+
+/// <summary>Sezione <c>Documents:Calibration</c>: proiezione in <see cref="PayloadCalibration"/> (null se non identificata).</summary>
+public sealed class PayloadCalibrationOptions
+{
+    public string? Id { get; set; }
+    public int PerMessageFramingTokens { get; set; }
+    public int FixedOverheadTokens { get; set; }
+
+    /// <summary>Minimo di caratteri per token per un limite superiore senza tokenizer; assente = serve il tokenizer del runtime.</summary>
+    public double? MinCharsPerToken { get; set; }
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Id);
+
+    public PayloadCalibration? ToCalibration() =>
+        IsConfigured ? new PayloadCalibration(Id!.Trim(), PerMessageFramingTokens, FixedOverheadTokens, MinCharsPerToken) : null;
 }
 
 /// <summary>Convalida all'avvio della configurazione server (stesse regole del PUT Admin: <see cref="DocumentLimits.Validate"/>).</summary>
@@ -53,6 +77,12 @@ public sealed class DocumentOptionsValidator : IValidateOptions<DocumentOptions>
         if (!string.IsNullOrWhiteSpace(options.StorageRoot) && !Path.IsPathFullyQualified(options.StorageRoot))
         {
             return ValidateOptionsResult.Fail($"{DocumentOptions.SectionName}:StorageRoot deve essere un percorso assoluto.");
+        }
+
+        var calibration = options.Calibration;
+        if (calibration.IsConfigured && (calibration.PerMessageFramingTokens < 0 || calibration.FixedOverheadTokens < 0 || calibration.MinCharsPerToken is <= 0))
+        {
+            return ValidateOptionsResult.Fail($"{DocumentOptions.SectionName}:Calibration: token di framing e fissi non negativi, MinCharsPerToken positivo.");
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors.Select(e => $"{DocumentOptions.SectionName}:{e}"));

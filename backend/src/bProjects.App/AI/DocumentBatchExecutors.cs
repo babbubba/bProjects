@@ -54,6 +54,13 @@ public interface IDocumentBatchPort
     /// </summary>
     ValueTask ReserveCallAsync(BatchRef batch, CancellationToken ct);
 
+    /// <summary>
+    /// Timeout dell'invio (T119): il minore fra il timeout configurato della fase e il residuo corrente di locale e padre, letto dal database
+    /// dopo la riserva. Null = nessun timeout aggiuntivo (la fase ha il proprio). Se il residuo è esaurito l'invio non parte e il port lancia
+    /// <see cref="CheckpointFencedException"/>: decide lo sweep. Predefinito: nessun override, per i port che non conoscono la scadenza.
+    /// </summary>
+    ValueTask<TimeSpan?> CallTimeoutAsync(BatchRef batch, CancellationToken ct) => new((TimeSpan?)null);
+
     /// <summary>Agente batch della fase (senza history né tool): ogni invio gira in una sessione nuova, vedi <see cref="AgentFactory.RunBatchAsync"/>.</summary>
     ChatClientAgent CreateAgent(BatchRef batch);
 
@@ -140,7 +147,31 @@ internal sealed class InvokeBatchExecutor(IDocumentBatchPort port, BatchInvocati
 
         await port.ReserveCallAsync(batch, cancellationToken);
         counter.Increment();
-        var response = await AgentFactory.RunBatchAsync(port.CreateAgent(batch), await port.ComposeAsync(batch, cancellationToken), cancellationToken);
+        var input = await port.ComposeAsync(batch, cancellationToken);
+        var timeout = await port.CallTimeoutAsync(batch, cancellationToken);
+        using var call = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeout is { } limit)
+        {
+            call.CancelAfter(limit);
+        }
+
+        AgentResponse response;
+        try
+        {
+            response = await AgentFactory.RunBatchAsync(port.CreateAgent(batch), input, call.Token);
+        }
+        catch (OperationCanceledException ex) when (call.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // Scaduto il timeout residuo dell'invio (non l'arresto né la perdita del lease): come il timeout di fase, transitorio (model_timeout).
+            throw new TaskCanceledException($"Nessuna risposta del modello entro il residuo di {timeout?.TotalSeconds:0.##} s.", new TimeoutException(ex.Message, ex));
+        }
+
+        if (response.FinishReason == ChatFinishReason.Length)
+        {
+            // Output troncato dal limite di lunghezza: incompleto anche se il JSON risultasse chiuso (AI §5.3), mai un elenco tagliato accettato.
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Output del modello troncato dal limite di lunghezza: nessun output committato.");
+        }
+
         await context.SendMessageAsync(message with { Kind = BatchKind.Responded, Text = response.Text }, cancellationToken: cancellationToken);
     }
 }

@@ -92,6 +92,18 @@ builder.Services.AddSingleton<IEvidenceExtractionExecutor>(sp =>
         model.CreateChatOptions(bProjects.App.Evidence.EvidenceExtractionSchema.Base, bProjects.App.Evidence.EvidenceExtractionSchema.Name, temperature: 0, phase: AiPhase.Extraction),
         sp.GetRequiredService<bProjects.App.Evidence.EvidenceEvents>());
 });
+// Estrazione delle evidenze documentali per unità (T049/T050): esecutore delle unità nello stesso dispatcher e nello stesso slot AI (nessun secondo
+// scheduler). Il conteggio del payload documentale usa la calibrazione identificata di Documents:Calibration; senza, il ramo resta runtime_unverified.
+builder.Services.AddSingleton<IDocumentUnitExecutor>(sp =>
+{
+    var model = sp.GetRequiredService<InternalModelClient>();
+    var documentOptions = sp.GetRequiredService<IOptions<DocumentOptions>>();
+    return new DocumentEvidenceAgent(
+        sp.GetRequiredService<IServiceScopeFactory>(),
+        AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>(), documentOptions.Value.Calibration.ToCalibration()),
+        model,
+        documentOptions);
+});
 builder.Services.AddHostedService<AiDispatchService>();
 builder.Services.AddHostedService<DocumentOrphanSweepService>();   // pulizia periodica degli originali orfani, indipendente dagli upload
 

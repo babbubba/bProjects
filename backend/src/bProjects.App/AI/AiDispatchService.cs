@@ -23,7 +23,9 @@ public interface IChatTurnExecutor
 /// ProcessingRun di Analysis e di Document (stessa coda, stesso limite globale, FIFO per richiesta); claim, lease e fencing sono nel
 /// database (<see cref="ExecutionLeaseStore"/>). Un turno è eseguito dall'<see cref="IChatTurnExecutor"/>; un run di
 /// Analysis dal workflow nativo <see cref="AnalysisWorkflow"/> e uno di Document da <see cref="DocumentWorkflow"/>, che scelgono da soli avvio o ripresa dal checkpoint: il
-/// dispatcher non decide mai il passo successivo. Senza esecutore o workflow registrati il rispettivo tipo di lavoro
+/// dispatcher non decide mai il passo successivo. Le unità di estrazione documentale (DocumentJob ExtractUnit, T050) sono lavoro di sfondo
+/// bounded dello stesso slot: una per claim, con precedenza di chat, run ed estrazioni di messaggio alla successiva e nessuna preemption; il
+/// routing dei workflow formali e della chat documentale è T123. Senza esecutore o workflow registrati il rispettivo tipo di lavoro
 /// non viene letto né modificato: resta Queued finché esiste chi può eseguirlo davvero.
 /// </summary>
 public sealed class AiDispatchService(
@@ -37,16 +39,18 @@ public sealed class AiDispatchService(
     DocumentWorkflow? documentWorkflow = null,
     IEvidenceExtractionExecutor? extractor = null,
     EvidenceEvents? evidenceEvents = null,
-    DispatchWakeup? wakeup = null) : BackgroundService
+    DispatchWakeup? wakeup = null,
+    IDocumentUnitExecutor? unitExecutor = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
     private readonly ExecutionOptions _policy = options.Value;
+    private readonly IDocumentUnitExecutor? _unitExecutor = unitExecutor;
     private readonly string _owner = $"{Environment.MachineName}:{Guid.NewGuid():N}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (executor is null && workflow is null && documentWorkflow is null && extractor is null)
+        if (executor is null && workflow is null && documentWorkflow is null && extractor is null && _unitExecutor is null)
         {
             logger.LogInformation("Nessun esecutore dei turni né workflow formale registrati: il dispatcher non prende in carico lavori.");
             return;
@@ -128,7 +132,7 @@ public sealed class AiDispatchService(
                 .SweepExpiredDocumentWorkAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct);
         }
 
-        foreach (var id in closed.Turns.Concat(closed.Runs).Concat(closed.Extractions))
+        foreach (var id in closed.Turns.Concat(closed.Runs).Concat(closed.Extractions).Concat(closed.Jobs))
         {
             if (_active.TryGetValue(id, out var running))
             {
@@ -173,7 +177,7 @@ public sealed class AiDispatchService(
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
-        if (executor is null && workflow is null && documentWorkflow is null && extractor is null)
+        if (executor is null && workflow is null && documentWorkflow is null && extractor is null && _unitExecutor is null)
         {
             return false;
         }
@@ -183,7 +187,7 @@ public sealed class AiDispatchService(
         {
             work = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
                 .ClaimNextWorkAsync(_owner, turns: executor is not null, runs: workflow is not null, documents: documentWorkflow is not null,
-                    extractions: extractor is not null, ct);
+                    extractions: extractor is not null, units: _unitExecutor is not null, ct);
         }
 
         if (work is null)
@@ -202,6 +206,10 @@ public sealed class AiDispatchService(
         else if (work.Document is { } document)
         {
             await RunDocumentAsync(document, ct);
+        }
+        else if (work.Unit is { } unit)
+        {
+            await RunUnitAsync(unit, ct);
         }
         else
         {
@@ -323,6 +331,22 @@ public sealed class AiDispatchService(
         (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
         ct,
         publish: id => evidenceEvents is null ? Task.CompletedTask : evidenceEvents.PublishStateAsync(id));
+
+    /// <summary>
+    /// Esegue un'unità di estrazione documentale con lo stesso ciclo, lo stesso lease/heartbeat/fence e le stesse regole di retry dei run formali
+    /// (T050): l'esecutore committa da sé dati di lavoro e chiusura dell'unità; un errore del modello o dell'infrastruttura è classificato qui
+    /// (transitorio: Queued con backoff entro tentativi e tempo; permanente: Failed con la preparazione). Lo slot si libera a fine unità, quindi
+    /// il claim successivo ricontrolla chat e run prima di una nuova unità. Nessun evento SSE per le unità (T064).
+    /// </summary>
+    private Task RunUnitAsync(DocumentUnitClaim claim, CancellationToken ct) => RunFormalAsync(
+        "estrazione di un'unità documentale",
+        claim.JobId,
+        new InferenceOwner(null, null, claim.AttemptCount, claim.FencingToken, null, claim.JobId),
+        (store, c) => store.RenewAsync(claim, c),
+        c => _unitExecutor!.ExecuteAsync(claim, c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
+        ct,
+        publish: _ => Task.CompletedTask);
 
     private async Task RunFormalAsync(
         string label,

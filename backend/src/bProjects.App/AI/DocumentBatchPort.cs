@@ -34,6 +34,12 @@ public interface IDocumentBatchPlan
     /// <summary>Agente della fase.</summary>
     BatchAgentSpec Agent { get; }
 
+    /// <summary>
+    /// Agente di UN batch, quando le opzioni dell'invio dipendono dal batch (es. uno schema strict che ammette solo le chiavi dei suoi range).
+    /// Predefinito: l'agente della fase. Stessa fase, stesso modello e stessa impronta congelata del manifesto.
+    /// </summary>
+    BatchAgentSpec AgentFor(BatchRef batch) => Agent;
+
     /// <summary>Vero se esiste un batch con questo ordinale (cursore del grafo).</summary>
     bool HasBatch(int ordinal);
 
@@ -142,9 +148,26 @@ public sealed class DocumentBatchPort(
 
     public ValueTask ReserveCallAsync(BatchRef batch, CancellationToken ct) => calls.ReserveAsync(batch, ct);
 
+    /// <summary>
+    /// T119: timeout dell'invio = min(timeout configurato della fase, residuo corrente di locale e padre dal database). Il residuo si rilegge a
+    /// ogni invio (un vecchio claim o timer non vale) e un heartbeat non lo prolunga; esaurito, non parte alcuna richiesta.
+    /// </summary>
+    public async ValueTask<TimeSpan?> CallTimeoutAsync(BatchRef batch, CancellationToken ct)
+    {
+        var authority = await DocumentDeadlineGuard.EvaluateAsync(db, writer.OwnerKind, writer.OwnerId, writer.LeaseOwner, writer.FencingToken, lockRow: false, ct);
+        if (!authority.Allowed)
+        {
+            throw new CheckpointFencedException(writer.OwnerId);
+        }
+
+        var seconds = factory.Options.ForPhase(plan.Agent.Phase).RequestTimeoutSeconds;
+        var configured = seconds > 0 ? TimeSpan.FromSeconds(seconds) : TimeSpan.FromDays(1);
+        return DocumentDeadlineGuard.CallTimeout(configured, authority.Remaining) ?? throw new CheckpointFencedException(writer.OwnerId);
+    }
+
     public ChatClientAgent CreateAgent(BatchRef batch)
     {
-        var agent = plan.Agent;
+        var agent = plan.AgentFor(batch);
         return factory.CreateBatchAgent(agent.Name, agent.Id, agent.Instructions, agent.ChatOptions, agent.Phase, agent.ExpectedFingerprint);
     }
 

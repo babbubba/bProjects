@@ -23,6 +23,12 @@ public sealed class DocumentWorkException(string code, string message) : Excepti
     public const string InvalidInput = "invalid_work_input";
     public const string CallLimitExceeded = "document_limit_exceeded";
 
+    /// <summary>Unità irriducibile fuori budget: la preparazione resta incompleta in modo esplicito (AI §3, §6).</summary>
+    public const string DocumentIncomplete = "document_incomplete";
+
+    /// <summary>Un'unità non dimostra la copertura attesa di tutti i suoi range proprietari.</summary>
+    public const string CoverageIncomplete = "coverage_incomplete";
+
     public string Code { get; } = code;
 }
 
@@ -44,6 +50,9 @@ public sealed record WorkOutputInput(
     string CoveredIdsJson, string? MapsJson, string? ExpansionReceiptJson, string SchemaVersion, string ValidationVersion, string? DerivedFromOutputHash);
 
 public sealed record WorkCommitResult(WorkOutput Output, bool Replayed);
+
+/// <summary>Esito di una porzione alla chiusura dell'unità: ordinale, hash del risultato e, se nessuna evidenza, la motivazione.</summary>
+public sealed record PortionCompletion(int Ordinal, string? NoEvidenceReason);
 
 /// <summary>Versioni che un output deve avere per essere riusato da questo contesto (oltre a input e manifesto, confrontati dallo store).</summary>
 public sealed record WorkLookupExpectation(string SchemaVersion, string ValidationVersion);
@@ -323,6 +332,69 @@ public sealed partial class DocumentWorkStore(AppDbContext db, CheckpointWriter 
 
         var payload = await VerifyPayloadAsync(output.ProjectId, output.PayloadJson, output.StorageKey, output.PayloadByteLength, output.OutputHash, ct);
         return new WorkLookup(WorkLookupKind.Hit, output, payload);
+    }
+
+    /// <summary>
+    /// Chiude un'unità di estrazione (DocumentJob ExtractUnit) sotto il fence corrente: job Completed con l'hash del risultato, rilascio del lease,
+    /// porzioni Completed con risultato e, se l'unità non ha prodotto evidenze, la motivazione; le chiamate del tentativo si scrivono nella stessa
+    /// transazione. NON pubblica Evidence né rende Ready la preparazione: l'unico proprietario del commit aggregato è l'aggregatore (T051).
+    /// Replay su un job già Completed: il lock fenced rifiuta (nessun secondo stato finale).
+    /// </summary>
+    public async Task CompleteUnitAsync(string resultHash, IReadOnlyList<PortionCompletion> portions, int attempt, CancellationToken ct)
+    {
+        if (writer.OwnerKind != WorkOwnerKind.DocumentJob)
+        {
+            throw new InvalidOperationException("Il completamento di un'unità appartiene a un DocumentJob.");
+        }
+
+        RequireHash(resultHash, "resultHash dell'unità");
+        var inference = InferenceScope.Current;
+        await InTransactionAsync<object?>(async owner =>
+        {
+            int updated;
+            await using (var job = Command(
+                """
+                UPDATE "DocumentJobs" SET "Status" = 'Completed', "ResultHash" = @hash, "CompletedAt" = clock_timestamp(), "LeaseOwner" = NULL, "LeaseUntil" = NULL
+                WHERE "Id" = @id AND "Kind" = 'ExtractUnit' AND "Status" = 'Running' AND "LeaseOwner" = @lease AND "FencingToken" = @fence
+                """))
+            {
+                job.Parameters.AddWithValue("hash", resultHash);
+                job.Parameters.AddWithValue("id", writer.OwnerId);
+                job.Parameters.AddWithValue("lease", writer.LeaseOwner);
+                job.Parameters.AddWithValue("fence", writer.FencingToken);
+                updated = await job.ExecuteNonQueryAsync(ct);
+            }
+
+            if (updated != 1)
+            {
+                throw new CheckpointFencedException(writer.OwnerId);
+            }
+
+            foreach (var portion in portions)
+            {
+                await using var command = Command(
+                    """
+                    UPDATE "DocumentPortions" SET "Status" = 'Completed', "JobId" = @id, "ResultHash" = @hash, "NoEvidenceReason" = @reason
+                    WHERE "PreparationId" = (SELECT "PreparationId" FROM "DocumentJobs" WHERE "Id" = @id) AND "Ordinal" = @ordinal AND "Status" = 'Pending'
+                    """);
+                command.Parameters.AddWithValue("id", writer.OwnerId);
+                command.Parameters.AddWithValue("hash", resultHash);
+                command.Parameters.AddWithValue("ordinal", portion.Ordinal);
+                command.Parameters.Add(new NpgsqlParameter("reason", NpgsqlDbType.Varchar)
+                {
+                    Value = portion.NoEvidenceReason is { } reason ? (reason.Length <= 1_000 ? reason : reason[..1_000]) : DBNull.Value,
+                });
+                if (await command.ExecuteNonQueryAsync(ct) != 1)
+                {
+                    throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, $"La porzione {portion.Ordinal} non è in attesa o non appartiene alla preparazione dell'unità.");
+                }
+            }
+
+            InferenceCallLog.Stage(db, inference, owner.ProjectId, new InferenceOwner(null, null, attempt, writer.FencingToken, null, writer.OwnerId), result: false);
+            await db.SaveChangesAsync(ct);
+            return null;
+        }, ct);
+        inference?.MarkWritten();
     }
 
     // ------------------------------------------------------------------ interni

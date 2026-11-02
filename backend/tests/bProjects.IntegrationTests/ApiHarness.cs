@@ -38,6 +38,7 @@ public sealed class ApiHarness : IAsyncDisposable
             services.RemoveAll<bProjects.App.AI.DocumentWorkflow>(); // idem: dipende dal client AI
             services.RemoveAll<bProjects.App.AI.DocumentAgent>();
             services.RemoveAll<IEvidenceExtractionExecutor>(); // l'estrattore reale dipende dal client AI
+            services.RemoveAll<bProjects.App.AI.IDocumentUnitExecutor>(); // l'agente di estrazione delle unità dipende dal client AI
             configure?.Invoke(services);
 
             // Chi chiede l'esecuzione reale dell'analisi attraversa il gate delle evidenze: se configure non registra un estrattore, un
