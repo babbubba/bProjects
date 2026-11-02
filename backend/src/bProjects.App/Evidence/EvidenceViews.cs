@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using bProjects.App.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace bProjects.App.Evidence;
 
@@ -444,5 +447,178 @@ public sealed record EvidenceSelectionView(
         }
 
         return -1;
+    }
+}
+
+// ============================================================ Viste 1.1 (origine Document) — contracts/http-api.md §Bundle corrente e payload Evidence
+
+public sealed record DocumentOriginView(string Kind, Guid DocumentId, Guid DocumentVersionId, Guid PreparationId);
+
+public sealed record DocumentQualifierView(string Type, string Text);
+
+/// <summary>Fonte persistita presentata con enum testuali; le parti di una citazione multi-blocco restano separate (citationGroupId, part).</summary>
+public sealed record DocumentSourceView(
+    Guid SourceId, string Kind, string Role, Guid CitationGroupId, int Part, Guid DocumentId, Guid DocumentVersionId, Guid PreparationId,
+    Guid ArtifactId, Guid BlockId, int Start, int End, string Quote);
+
+public sealed record DocumentEvidenceContentView(
+    string SchemaVersion, string? KindRationale, DocumentEvidenceStructure Structure, IReadOnlyList<DocumentQualifierView> Qualifiers,
+    IReadOnlyList<DocumentSourceView> Sources);
+
+public sealed record DocumentEvidenceView(
+    Guid Id, Guid VersionId, int Version, bool IsCurrent, Guid ProjectId, int Ordinal, string Key, string Kind, string Polarity, string Certainty,
+    string Statement, DocumentOriginView Origin, DocumentEvidenceContentView Content);
+
+public sealed record LocatorBboxView(double[] Coordinates, string? CoordinateSystem);
+
+public sealed record LocatorLinesView(int Start, int End);
+
+/// <summary>Locator risolto dal server sul blocco originale: null esplicito quando il dato non esiste, mai una pagina presunta.</summary>
+public sealed record LocatorView(int? Page, IReadOnlyList<string> HeadingPath, LocatorBboxView? Bbox, LocatorLinesView? SourceLines, string? DoclingRef);
+
+public sealed record SourceDocumentView(
+    Guid SourceId, Guid DocumentId, Guid DocumentVersionId, int DocumentVersion, string OriginalName, Guid PreparationId, int Generation,
+    Guid ArtifactId, Guid BlockId, string BlockRef, LocatorView Locator, string PassageUrl, string DownloadUrl);
+
+public sealed record DocumentRelationView(Guid Id, string Type, string Basis, string? Rationale, Guid FromEvidenceId, Guid ToEvidenceId);
+
+public sealed record DocumentRelationDetailView(Guid Id, string Type, string Basis, string? Rationale, string Direction, Guid OtherEvidenceId, string OtherStatement);
+
+public sealed record DocumentVersionSummaryView(
+    Guid Id, int Version, Guid PreparationId, int Generation, DateTimeOffset CreatedAt, int EvidenceCount, string? NoEvidenceReason, string PromptVersion,
+    string SchemaVersion, string ModelId, Guid JobId, string? ManifestHash, bool IsCurrent);
+
+public sealed record DocumentEvidenceDetailView(
+    string EvidenceViewVersion, object Evidence, IReadOnlyList<object> Relations, IReadOnlyList<SourceDocumentView> SourceDocuments,
+    IReadOnlyList<SourceMessageView> SourceMessages);
+
+public sealed record DocumentExtractionVersionView(
+    string EvidenceViewVersion, DocumentVersionSummaryView Version, Guid DocumentId, Guid DocumentVersionId, JsonElement Parameters,
+    IReadOnlyList<DocumentEvidenceView> Evidences, IReadOnlyList<DocumentRelationView> Relations, IReadOnlyList<SourceDocumentView> SourceDocuments);
+
+public sealed record DocumentDiffEntryView(string Status, DocumentEvidenceView? From, DocumentEvidenceView? To, IReadOnlyList<FieldChangeView> Changes);
+
+public sealed record DocumentVersionDiffView(
+    string EvidenceViewVersion, Guid FromVersionId, Guid ToVersionId, Guid DocumentVersionId, DiffSummaryView Summary, IReadOnlyList<DocumentDiffEntryView> Entries);
+
+public sealed record DocumentBundleVersionsView(
+    string EvidenceViewVersion, Guid DocumentId, Guid DocumentVersionId, int BundleRevision, Guid? CurrentPreparationId, Guid? CurrentEvidenceVersionId,
+    IReadOnlyList<DocumentVersionSummaryView> Versions);
+
+/// <summary>Origine documentale risolta di una preparazione.</summary>
+public sealed record DocumentPreparationInfo(Guid PreparationId, int Generation, Guid DocumentId, Guid DocumentVersionId, int DocumentVersion, string OriginalName);
+
+/// <summary>
+/// Costruzione delle viste 1.1 a partire dalle righe del ledger e dagli artefatti di parsing persistiti: documento, preparazione, blocco e
+/// locator sono risolti dal server (mai dal modello). Nessuna scrittura e nessuna chiamata AI.
+/// </summary>
+public static class DocumentEvidenceViews
+{
+    public const string ViewVersion = "1.1.0";
+    public const string LegacyViewVersion = "1.0.0";
+
+    public static async Task<Dictionary<Guid, DocumentPreparationInfo>> PreparationsAsync(AppDbContext db, Guid projectId, IEnumerable<Guid> ids, CancellationToken ct)
+    {
+        var wanted = ids.Distinct().ToList();
+        return await (from p in db.DocumentPreparations.AsNoTracking()
+                      join v in db.DocumentVersions.AsNoTracking() on p.DocumentVersionId equals v.Id
+                      where p.ProjectId == projectId && wanted.Contains(p.Id)
+                      select new DocumentPreparationInfo(p.Id, p.Generation, v.DocumentId, v.Id, v.Version, v.OriginalName))
+            .ToDictionaryAsync(x => x.PreparationId, ct);
+    }
+
+    public static DocumentEvidenceView ToView(EvidenceItem e, int version, bool isCurrent, IReadOnlyDictionary<Guid, DocumentPreparationInfo> preparations)
+    {
+        var preparationId = e.PreparationId ?? throw new InvalidOperationException("Evidenza documentale senza preparazione.");
+        var info = preparations[preparationId];
+        var content = DocumentEvidenceCodec.DecodeContent(e.Content);
+        return new(
+            e.Id, e.VersionId, version, isCurrent, e.ProjectId, e.Ordinal, e.Key, e.Kind.ToString(), e.Polarity.ToString(), e.Certainty.ToString(), e.Statement,
+            new("Document", info.DocumentId, info.DocumentVersionId, info.PreparationId),
+            new(content.SchemaVersion, content.KindRationale, content.Structure,
+                [.. content.Qualifiers.Select(q => new DocumentQualifierView(q.Type.ToString(), q.Text))],
+                [.. content.Sources.OrderBy(s => s.CitationGroupId).ThenBy(s => s.Part).Select(s => new DocumentSourceView(
+                    s.SourceId, s.Kind.ToString(), s.Role.ToString(), s.CitationGroupId, s.Part, s.DocumentId!.Value, s.DocumentVersionId!.Value, s.PreparationId!.Value,
+                    s.ArtifactId!.Value, s.BlockId!.Value, s.Start, s.End, s.Quote))]));
+    }
+
+    /// <summary>Risolve ogni sourceId distinto in versione, preparazione, artefatto, blocco e locator; le versioni storiche restano risolvibili.</summary>
+    public static async Task<IReadOnlyList<SourceDocumentView>> SourcesAsync(
+        AppDbContext db, Guid projectId, IEnumerable<DocumentEvidenceView> evidences, IReadOnlyDictionary<Guid, DocumentPreparationInfo> preparations, CancellationToken ct)
+    {
+        var sources = evidences.SelectMany(e => e.Content.Sources).GroupBy(s => s.SourceId).Select(g => g.First()).OrderBy(s => s.SourceId).ToList();
+        var wanted = sources.Select(s => s.PreparationId).Where(id => !preparations.ContainsKey(id)).ToList();
+        if (wanted.Count > 0)
+        {
+            // Le fonti possono stare su una preparazione diversa da quella della versione (artefatti storici restano risolvibili).
+            preparations = preparations.Concat(await PreparationsAsync(db, projectId, wanted, ct)).ToDictionary(x => x.Key, x => x.Value);
+        }
+
+        var blockIds = sources.Select(s => s.BlockId).Distinct().ToList();
+        var blocks = await (from b in db.DocumentBlocks.AsNoTracking()
+                            join a in db.ParsedArtifacts.AsNoTracking() on b.ArtifactId equals a.Id
+                            where b.ProjectId == projectId && blockIds.Contains(b.Id)
+                            select new { Block = b, a.PreparationId }).ToDictionaryAsync(x => x.Block.Id, ct);
+        var result = new List<SourceDocumentView>();
+        foreach (var s in sources)
+        {
+            if (!blocks.TryGetValue(s.BlockId, out var found) || found.PreparationId != s.PreparationId || found.Block.ArtifactId != s.ArtifactId
+                || !preparations.TryGetValue(s.PreparationId, out var info))
+            {
+                continue;   // fonte non risolvibile nel progetto: omessa, mai inventata
+            }
+
+            var b = found.Block;
+            var root = $"/api/projects/{projectId}/documents/{info.DocumentId}/versions/{info.DocumentVersion}";
+            result.Add(new(
+                s.SourceId, info.DocumentId, info.DocumentVersionId, info.DocumentVersion, info.OriginalName, info.PreparationId, info.Generation, b.ArtifactId, b.Id, b.Ref,
+                new(b.Page, JsonSerializer.Deserialize<string[]>(b.HeadingPathJson) ?? [],
+                    b.BboxJson is null ? null : new LocatorBboxView(JsonSerializer.Deserialize<double[]>(b.BboxJson)!, b.CoordinateSystem),
+                    b.LineStart is { } ls && b.LineEnd is { } le ? new LocatorLinesView(ls, le) : null, b.DoclingRef),
+                $"{root}/preparations/{info.PreparationId}/passages/{b.Id}?start={s.Start}&end={s.End}", $"{root}/download"));
+        }
+
+        return result;
+    }
+
+    public static DocumentVersionSummaryView Summary(EvidenceExtractionVersion v, int generation, bool isCurrent) => new(
+        v.Id, v.Version, v.PreparationId!.Value, generation, v.CreatedAt, v.EvidenceCount, v.NoEvidenceReason, v.PromptVersion, v.SchemaVersion, v.ModelId, v.JobId,
+        v.ManifestHash, isCurrent);
+
+    /// <summary>Confronto per chiave fra due versioni documentali già dichiarate comparabili: nessun abbinamento semantico.</summary>
+    public static (DiffSummaryView Summary, IReadOnlyList<DocumentDiffEntryView> Entries) Compare(IReadOnlyList<DocumentEvidenceView> from, IReadOnlyList<DocumentEvidenceView> to)
+    {
+        var entries = new List<DocumentDiffEntryView>();
+        var toByKey = to.ToDictionary(e => e.Key);
+        var fromKeys = from.Select(e => e.Key).ToHashSet();
+        foreach (var f in from.OrderBy(e => e.Ordinal))
+        {
+            if (!toByKey.TryGetValue(f.Key, out var t))
+            {
+                entries.Add(new("Removed", f, null, []));
+                continue;
+            }
+
+            var changes = new List<FieldChangeView>();
+            void Field(string name, string? a, string? b)
+            {
+                if (a != b)
+                {
+                    changes.Add(new(name, a, b));
+                }
+            }
+
+            string Locations(DocumentEvidenceView e) => string.Join(",", e.Content.Sources.Select(s => $"{s.BlockId}:{s.Start}-{s.End}"));
+            Field("statement", f.Statement, t.Statement);
+            Field("kind", f.Kind, t.Kind);
+            Field("polarity", f.Polarity, t.Polarity);
+            Field("certainty", f.Certainty, t.Certainty);
+            Field("sources", Locations(f), Locations(t));
+            entries.Add(new(changes.Count == 0 ? "Unchanged" : "Modified", f, t, changes));
+        }
+
+        entries.AddRange(to.Where(e => !fromKeys.Contains(e.Key)).OrderBy(e => e.Ordinal).Select(e => new DocumentDiffEntryView("Added", null, e, [])));
+        int Count(string s) => entries.Count(e => e.Status == s);
+        return (new(Count("Added"), Count("Removed"), Count("Unchanged"), Count("Modified"), 0), entries);
     }
 }

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.WebUtilities;
@@ -37,6 +38,7 @@ public static class ProjectDocumentEndpoints
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}", GetPreparation);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/blocks", ListBlocks);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/passages/{blockId:guid}", GetPassage);
+        group.MapGet("/documents/{documentId:guid}/versions/{version}/evidence/versions", EvidenceVersions);
         group.MapPost("/document-jobs/{jobId:guid}/retry", RetryParse);
         return app;
     }
@@ -286,6 +288,41 @@ public static class ProjectDocumentEndpoints
         var view = await catalog.GetVersionAsync(projectId, documentId, version, ct);
         http.Response.Headers.CacheControl = "no-store";
         return view is null ? Results.NotFound() : Results.Ok(view);
+    }
+
+    /// <summary>
+    /// Versioni Evidence documentali della versione file (sempre formato 1.1.0): bundle corrente e candidate distinti, mai dedotti dall'ultima
+    /// riga Ready. Solo lettura: nessun lavoro AI.
+    /// </summary>
+    private static async Task<IResult> EvidenceVersions(
+        Guid projectId, Guid documentId, string version, string? viewVersion, DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        if (EvidenceEndpoints.ParseView(viewVersion, out var modern) is { } badView)
+        {
+            return badView;
+        }
+
+        if (viewVersion is not null && !modern)
+        {
+            return EvidenceEndpoints.NotSupportedInLegacy();
+        }
+
+        var found = await catalog.FindVersionAsync(projectId, documentId, version, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        var state = await db.EvidenceDocumentStates.AsNoTracking().SingleOrDefaultAsync(s => s.DocumentVersionId == found.Id, ct);
+        var rows = await (from v in db.EvidenceExtractionVersions.AsNoTracking()
+                          join p in db.DocumentPreparations.AsNoTracking() on v.PreparationId equals p.Id
+                          where v.ProjectId == projectId && v.OriginKind == EvidenceOriginKind.Document && p.DocumentVersionId == found.Id
+                          orderby p.Generation, v.Version
+                          select new { v, p.Generation }).ToListAsync(ct);
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new DocumentBundleVersionsView(
+            DocumentEvidenceViews.ViewVersion, documentId, found.Id, state?.Revision ?? 0, state?.CurrentPreparationId, state?.CurrentEvidenceVersionId,
+            [.. rows.Select(x => DocumentEvidenceViews.Summary(x.v, x.Generation, x.v.Id == state?.CurrentEvidenceVersionId))]));
     }
 
     private static async Task<IResult> Download(
