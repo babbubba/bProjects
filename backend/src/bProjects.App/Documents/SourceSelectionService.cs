@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -224,47 +222,5 @@ public sealed class SourceSelectionService(AppDbContext db)
         await tx.CommitAsync(ct);
         db.ChangeTracker.Clear();
         return new SelectionUpdate.Applied(await ViewAsync(projectId, ct));
-    }
-
-    /// <summary>
-    /// Fissa la selezione alla richiesta (chat o Analizza): un SourceSnapshot immutabile con una riga per documento. Chiamare sotto il
-    /// lock di progetto e nella transazione del comando. Solo Ready porta preparazione ed evidenza; la versione è registrata anche se non pronta e risolta.
-    /// </summary>
-    public SourceSnapshot AddSnapshot(Guid projectId, SourceEvaluation evaluation, DateTimeOffset now)
-    {
-        var snapshotId = Guid.NewGuid();
-        var rows = evaluation.Entries.Select(e => new SourceSnapshotItem
-        {
-            Id = Guid.NewGuid(),
-            SnapshotId = snapshotId,
-            ProjectId = projectId,
-            DocumentId = e.Document.Id,
-            Included = e.Included,
-            Availability = e.Availability,
-            // Identità della versione selezionata, ove determinabile: una Pinned non pronta la conserva (senza preparazione né evidenza),
-            // così una v2 successiva non cambia retroattivamente cosa il PM aveva scelto. Esclusa o senza versione risolta: nessuna.
-            DocumentVersionId = e.Availability == SourceAvailability.Excluded ? null : e.Resolved?.Id,
-            PreparationId = e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.Id : null,
-            EvidenceVersionId = e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.CurrentEvidenceVersionId : null,
-        }).ToList();
-
-        var canonical = new StringBuilder().Append("snapshot-v1;").Append(evaluation.Revision);
-        foreach (var row in rows.OrderBy(r => r.DocumentId))
-        {
-            canonical.Append(';').Append(row.DocumentId.ToString("N")).Append('|').Append(row.Included).Append('|').Append(row.Availability)
-                .Append('|').Append(row.DocumentVersionId?.ToString("N")).Append('|').Append(row.PreparationId?.ToString("N")).Append('|').Append(row.EvidenceVersionId?.ToString("N"));
-        }
-
-        var snapshot = new SourceSnapshot
-        {
-            Id = snapshotId,
-            ProjectId = projectId,
-            SelectionRevision = evaluation.Revision,
-            Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))),
-            CreatedAt = now,
-        };
-        db.SourceSnapshots.Add(snapshot);
-        db.SourceSnapshotItems.AddRange(rows);
-        return snapshot;
     }
 }

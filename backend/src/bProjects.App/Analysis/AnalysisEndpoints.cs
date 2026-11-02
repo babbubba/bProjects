@@ -101,6 +101,7 @@ public static class AnalysisEndpoints
         IOptions<AiOptions> ai,
         ProcessingRunEvents events,
         SourceSelectionService selection,
+        SourceSnapshotStore snapshots,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -165,12 +166,19 @@ public static class AnalysisEndpoints
                     extensions: new Dictionary<string, object?> { ["code"] = "sources_not_ready", ["blockingSources"] = blocking });
             }
 
+            var documentary = SourceSnapshotStore.HasReadySource(sources);
             if (cutoff is null)
             {
-                // Nessun messaggio PM: con documenti nel progetto manca ogni input analizzabile (nessuna fonte pronta), altrimenti ramo 001.
-                return sources is not null
-                    ? Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager o un documento pronto", "no_source_input")
-                    : Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager", "no_pm_input");
+                // Nessun messaggio PM: con almeno una fonte pronta il ramo documentale parte con cutoff 0 (nessun input di dialogo);
+                // senza, con documenti nel progetto manca ogni input analizzabile, altrimenti ramo 001.
+                if (!documentary)
+                {
+                    return sources is not null
+                        ? Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager o un documento pronto", "no_source_input")
+                        : Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager", "no_pm_input");
+                }
+
+                cutoff = 0;
             }
 
             var active = await db.ProcessingRuns.AsNoTracking()
@@ -195,16 +203,17 @@ public static class AnalysisEndpoints
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.AnalysisRunDeadline,
-                WorkflowDefinitionVersion = ProcessingRun.AnalysisWorkflowVersion,
+                // Definizione/prompt/schema documentali v2 persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
+                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.AnalysisDefinition : ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
-                PromptVersions = JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
+                PromptVersions = documentary ? SourceSnapshotStore.AnalysisPromptVersions() : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };
             if (sources is not null)
             {
-                run.SourceSnapshotId = selection.AddSnapshot(projectId, sources, now).Id;   // manifest fissato alla richiesta, mai al claim
+                run.SourceSnapshotId = snapshots.Add(projectId, sources, now).Id;   // manifest fissato alla richiesta, mai al claim
             }
 
             db.ProcessingRuns.Add(run);

@@ -38,6 +38,7 @@ builder.Services.AddScoped<DocumentPolicyService>();
 builder.Services.AddScoped<DocumentUploadService>();
 builder.Services.AddScoped<DocumentPreparationService>();
 builder.Services.AddScoped<SourceSelectionService>();
+builder.Services.AddScoped<SourceSnapshotStore>();
 builder.Services.AddScoped<DocumentCatalog>();
 builder.Services.AddSingleton<DocumentFileStore>();   // originali su volume privato (T011); la radice si valida al primo uso
 builder.Services.AddDocumentParsing(builder.Configuration);   // worker CPU del parsing (T029): claim SQL e lease propri, nessuno slot DGX; inattivo senza Parser:BaseUrl

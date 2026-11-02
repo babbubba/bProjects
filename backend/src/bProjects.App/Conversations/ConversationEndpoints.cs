@@ -72,6 +72,7 @@ public static class ConversationEndpoints
         ChatTurnEvents events,
         EvidenceEvents evidenceEvents,
         SourceSelectionService selection,
+        SourceSnapshotStore snapshots,
         CancellationToken ct,
         bProjects.App.AI.DispatchWakeup? wakeup = null)
     {
@@ -172,7 +173,7 @@ public static class ConversationEndpoints
         // Fonti fissate alla richiesta anche quando non pronte: il turno conserva il messaggio e dichiara l'indisponibilità senza attenderla.
         if (hasDocuments)
         {
-            turn.SourceSnapshotId = selection.AddSnapshot(projectId, await selection.EvaluateAsync(projectId, ct), now).Id;
+            turn.SourceSnapshotId = snapshots.Add(projectId, await selection.EvaluateAsync(projectId, ct), now).Id;
         }
 
         // Lavoro durevole di estrazione delle evidenze (contracts/ai-workflow.md §10.1): nella stessa transazione, mai dipendente dal modello.

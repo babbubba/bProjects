@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -54,6 +55,7 @@ public static class DocumentEndpoints
         IOptions<ExecutionOptions> execution,
         IOptions<AiOptions> ai,
         ProcessingRunEvents events,
+        SourceSnapshotStore snapshots,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -150,12 +152,16 @@ public static class DocumentEndpoints
                 return Problem(StatusCodes.Status409Conflict, "Un'elaborazione formale è già attiva", "processing_active", active);
             }
 
+            // Snapshot ereditato dalla revisione (root dell'analisi), mai la selezione corrente; null per le analisi legacy.
+            var inheritedSnapshot = await snapshots.InheritedFromAnalysisAsync(projectId, analysisId, ct);
+            var documentary = inheritedSnapshot is { } inheritedId && await snapshots.HasReadyAsync(inheritedId, ct);
             var now = (await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").ToListAsync(ct)).Single();
             var run = new ProcessingRun
             {
                 Id = Guid.NewGuid(),
                 ProjectId = projectId,
                 Kind = ProcessingRunKind.Document,
+                SourceSnapshotId = inheritedSnapshot,
                 AnalysisId = analysisId,
                 InputRevisionId = revisionId,
                 RequestKey = requestKey,
@@ -163,10 +169,10 @@ public static class DocumentEndpoints
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.RunDeadline,
-                WorkflowDefinitionVersion = ProcessingRun.DocumentWorkflowVersion,
+                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.DocumentDefinition : ProcessingRun.DocumentWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = AnalysisEndpoints.FrozenConfig(ai.Value, policy, AiPhase.Document),
-                PromptVersions = JsonSerializer.Serialize(new { document = DocumentAgent.PromptVersion }),
+                PromptVersions = documentary ? SourceSnapshotStore.DocumentPromptVersions() : JsonSerializer.Serialize(new { document = DocumentAgent.PromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };
