@@ -69,6 +69,9 @@ services:
       # Originali dei documenti (slice 002): volume privato fuori dal webroot, nessuna porta né URL pubblica. Limiti e quote: Documents__* (default
       # nel codice, modificabili dall'Admin); account Admin: solo con bootstrap-accounts esplicito, mai da questo file.
       Documents__StorageRoot: /var/lib/bprojects/documents
+      # Parser documenti (T029/T031): vuoto = parsing non configurato (i documenti restano In coda). Con il profilo `parser`: PARSER_BASE_URL=http://parser:8000.
+      Parser__BaseUrl: ${PARSER_BASE_URL:-}
+      Parser__Secret: ${PARSER_INTERNAL_SECRET:-}
     volumes:
       - documents:/var/lib/bprojects/documents
     # default: rete applicativa esistente; parser_net: rete privata verso il parser (nessun egress, vedi servizio parser).

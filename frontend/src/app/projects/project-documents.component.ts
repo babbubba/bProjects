@@ -1,4 +1,14 @@
-import { Component, ElementRef, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  InjectionToken,
+  OnDestroy,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DocumentPassageComponent } from './document-passage.component';
 import { Observable } from 'rxjs';
@@ -8,6 +18,8 @@ import {
   DocumentListItem,
   DocumentVersionView,
   DocumentsApiService,
+  ParseRetryView,
+  PreparationView,
   SelectionItem,
   SourceSelectionSnapshot,
   UploadEvent,
@@ -46,6 +58,20 @@ const reasonLabels: Record<string, string> = {
 /** Stato in lavorazione (non terminale): il documento non è ancora una fonte utilizzabile. */
 const inProgress = new Set(['Queued', 'Parsing', 'Extracting']);
 
+/** Refresh automatico degli stati in lavorazione: leggero e limitato, mai un trigger di lavoro (solo GET). */
+export interface DocumentsPollConfig {
+  intervalMs: number;
+  maxPolls: number;
+}
+
+export const DOCUMENTS_POLL = new InjectionToken<DocumentsPollConfig>('DOCUMENTS_POLL', {
+  providedIn: 'root',
+  factory: () => ({ intervalMs: 5000, maxPolls: 60 }),
+});
+
+/** Terminali recuperabili dal PM: il retry è offerto solo se la preparazione lo dichiara in allowedActions. */
+const retryCandidates = new Set(['Failed', 'Incomplete']);
+
 interface PendingUpload {
   key: string;
   file: File;
@@ -63,9 +89,10 @@ interface PendingUpload {
   templateUrl: './project-documents.component.html',
   styleUrl: './project-documents.component.scss',
 })
-export class ProjectDocumentsComponent {
+export class ProjectDocumentsComponent implements OnDestroy {
   private readonly api = inject(DocumentsApiService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly pollConfig = inject(DOCUMENTS_POLL);
 
   readonly projectId = input.required<string>();
 
@@ -91,11 +118,25 @@ export class ProjectDocumentsComponent {
   protected readonly actionError = signal('');
   protected readonly busy = signal(false);
 
+  /** Preparazione corrente delle versioni terminali dell'elenco aperto (da GET): fonte di parseJobId e allowedActions. */
+  protected readonly preparations = signal<Record<string, PreparationView>>({});
+  /** Versione per cui un retry è in corso (un solo retry alla volta: il doppio click non invia due richieste). */
+  protected readonly retrying = signal<string | null>(null);
+  /** Nuovo job collegato creato dal retry, per versione: resta visibile dopo il refresh. */
+  protected readonly retryLinks = signal<Record<string, ParseRetryView>>({});
+  protected readonly retryError = signal<{ versionId: string; message: string } | null>(null);
+  /** true se l'aggiornamento automatico si è fermato con documenti ancora in lavorazione. */
+  protected readonly pollStopped = signal(false);
+
   protected newFile: File | null = null;
   protected newName = '';
   protected readonly fileInputKey = signal(0);
 
   private pending = new Map<string, PendingUpload>();
+  /** Idempotency-Key del retry per job: conservata finché l'esito non è certo, riusata nei replay. */
+  private retryKeys = new Map<string, string>();
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollCount = 0;
 
   constructor() {
     effect(() => {
@@ -105,9 +146,18 @@ export class ProjectDocumentsComponent {
         this.reading.set(null);
         this.detail.set(null);
         this.pending.clear();
+        this.retryKeys.clear();
+        this.preparations.set({});
+        this.retryLinks.set({});
+        this.retryError.set(null);
+        this.pollCount = 0;
         void this.reload(id);
       });
     });
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
   }
 
   // ---------------------------------------------------------------- etichette
@@ -180,6 +230,8 @@ export class ProjectDocumentsComponent {
   // ---------------------------------------------------------------- lettura
 
   protected async refresh(): Promise<void> {
+    this.pollCount = 0;
+    this.pollStopped.set(false);
     await this.reload(this.projectId());
     const open = this.expanded();
     if (open) await this.loadDetail(open);
@@ -213,7 +265,61 @@ export class ProjectDocumentsComponent {
       this.loadError.set(documentFailure(e).message);
     } finally {
       this.loading.set(false);
+      this.schedulePoll();
     }
+  }
+
+  // ---------------------------------------------------------------- aggiornamento automatico (solo lettura)
+
+  private hasInProgress(): boolean {
+    return this.documents().some(
+      (d) => !!d.latestVersion && inProgress.has(d.latestVersion.processingStatus),
+    );
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer !== null) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  /** Rilegge gli stati finché qualcosa è Queued/Parsing/Extracting, per un numero limitato di giri. Non invia mai POST. */
+  private schedulePoll(): void {
+    this.stopPolling();
+    if (!this.hasInProgress()) {
+      this.pollStopped.set(false);
+      return;
+    }
+    if (this.pollCount >= this.pollConfig.maxPolls) {
+      this.pollStopped.set(true);
+      return;
+    }
+    this.pollStopped.set(false);
+    this.pollTimer = setTimeout(() => void this.poll(), this.pollConfig.intervalMs);
+  }
+
+  private async poll(): Promise<void> {
+    this.pollTimer = null;
+    this.pollCount++;
+    const projectId = this.projectId();
+    try {
+      const [page, snapshot] = await Promise.all([
+        this.api.list(projectId, null),
+        this.api.getSelection(projectId),
+      ]);
+      if (projectId !== this.projectId()) return;
+      const fresh = new Map(page.items.map((d) => [d.documentId, d]));
+      const known = new Set(this.documents().map((d) => d.documentId));
+      this.documents.update((items) => [
+        ...items.map((d) => fresh.get(d.documentId) ?? d),
+        ...page.items.filter((d) => !known.has(d.documentId)),
+      ]);
+      this.selection.set(snapshot);
+      const open = this.expanded();
+      if (open) await this.loadDetail(open);
+    } catch {
+      // errore transitorio: il prossimo giro (limitato) riprova, nessuna azione con effetti
+    }
+    this.schedulePoll();
   }
 
   private async loadSelection(projectId: string): Promise<void> {
@@ -249,9 +355,99 @@ export class ProjectDocumentsComponent {
     this.detailError.set('');
     try {
       const detail = await this.api.get(this.projectId(), documentId);
-      if (this.expanded() === documentId) this.detail.set(detail);
+      if (this.expanded() !== documentId) return;
+      this.detail.set(detail);
+      await this.loadTerminalPreparations(detail);
     } catch (e) {
       this.detailError.set(documentFailure(e).message);
+    }
+  }
+
+  /** Solo GET: per le versioni terminali recuperabili legge la preparazione corrente (parseJobId, allowedActions). */
+  private async loadTerminalPreparations(detail: DocumentDetailView): Promise<void> {
+    const projectId = this.projectId();
+    const entries = await Promise.all(
+      detail.versions
+        .filter((v) => retryCandidates.has(v.processingStatus))
+        .map(async (v) => {
+          try {
+            const p = await this.api.getPreparation(
+              projectId,
+              detail.documentId,
+              v.version,
+              'latest',
+            );
+            return [v.id, p] as const;
+          } catch {
+            return null;
+          }
+        }),
+    );
+    if (projectId !== this.projectId() || this.expanded() !== detail.documentId) return;
+    const next: Record<string, PreparationView> = {};
+    for (const e of entries) if (e) next[e[0]] = e[1];
+    this.preparations.set(next);
+  }
+
+  // ---------------------------------------------------------------- retry parsing (T117)
+
+  /** Il pulsante compare solo se la preparazione corrente dichiara `retry` tra le azioni ammesse e indica il job. */
+  protected retryJobId(version: DocumentVersionView): string | null {
+    if (!retryCandidates.has(version.processingStatus)) return null;
+    const p = this.preparations()[version.id];
+    return p && p.allowedActions.includes('retry') && p.parseJobId ? p.parseJobId : null;
+  }
+
+  protected retryLink(version: DocumentVersionView): ParseRetryView | null {
+    return this.retryLinks()[version.id] ?? null;
+  }
+
+  protected retryErrorFor(version: DocumentVersionView): string {
+    const e = this.retryError();
+    return e && e.versionId === version.id ? e.message : '';
+  }
+
+  protected async retryParse(version: DocumentVersionView): Promise<void> {
+    const jobId = this.retryJobId(version);
+    if (!jobId || this.retrying() !== null) return;
+    let key = this.retryKeys.get(jobId);
+    if (!key) {
+      key = newIdempotencyKey();
+      this.retryKeys.set(jobId, key);
+    }
+    this.retrying.set(version.id);
+    this.retryError.set(null);
+    this.notice.set('');
+    try {
+      const result = await this.api.retryParse(this.projectId(), jobId, key);
+      this.retryKeys.delete(jobId);
+      this.retryLinks.update((m) => ({ ...m, [version.id]: result }));
+      this.notice.set(
+        `Nuovo tentativo di lettura avviato per la versione ${version.version} (generazione ${result.generation}), ` +
+          `collegato al tentativo precedente. Stato: in coda.`,
+      );
+      this.pollCount = 0;
+      await this.reloadList();
+      this.focusSoon('[data-focus="notice"]');
+    } catch (e) {
+      const failure = documentFailure(e);
+      if (!failure.retrySameKey) this.retryKeys.delete(jobId);
+      const message =
+        failure.kind === 'network' || failure.kind === 'unavailable'
+          ? 'Esito del nuovo tentativo incerto: premi di nuovo «Riprova la lettura», la richiesta viene riconciliata senza creare un secondo tentativo.'
+          : failure.message;
+      this.retryError.set({ versionId: version.id, message });
+      this.focusSoon('[data-focus="retry-error"]');
+      // Il conflitto indica che lo stato è cambiato: si rilegge (solo GET) perché l'azione sparisca se non più ammessa.
+      if (
+        failure.kind === 'job_active' ||
+        failure.kind === 'job_superseded' ||
+        failure.kind === 'conflict'
+      ) {
+        await this.reloadList();
+      }
+    } finally {
+      this.retrying.set(null);
     }
   }
 
@@ -342,6 +538,7 @@ export class ProjectDocumentsComponent {
           : `«${done.version.originalName}» caricato come versione ${done.version.version}. ` +
               `Stato: ${this.processingLabel(done.version.processingStatus).toLowerCase()}.`,
       );
+      this.pollCount = 0;
       await this.reload(this.projectId());
       if (this.expanded()) await this.loadDetail(this.expanded()!);
       this.focusSoon('[data-focus="notice"]');

@@ -135,6 +135,8 @@ export type DocumentFailureKind =
   | 'idempotency_conflict'
   | 'upload_in_progress'
   | 'selection_conflict'
+  | 'job_active'
+  | 'job_superseded'
   | 'conflict'
   | 'too_large'
   | 'unsupported_format'
@@ -187,6 +189,20 @@ export interface PreparationView {
   issuesSummary: IssuesSummary | null;
   issues: PreparationIssueView[];
   allowedActions: string[];
+  /** Job di parsing della preparazione: è il bersaglio dell'azione `retry`. */
+  parseJobId?: string | null;
+}
+
+/** Esito 202 del retry manuale: job e preparazione nuovi, collegati ai precedenti. */
+export interface ParseRetryView {
+  jobId: string;
+  preparationId: string;
+  generation: number;
+  retryOfJobId: string;
+  retryOfPreparationId: string;
+  status: string;
+  requestedAt: string;
+  deadlineAt: string;
 }
 
 export interface BlockView {
@@ -300,6 +316,21 @@ export function documentFailure(e: unknown): DocumentFailure {
               currentRevision:
                 typeof body?.currentRevision === 'number' ? body.currentRevision : null,
             },
+          );
+        case 'job_active':
+        case 'preparation_active':
+          return failure(
+            'job_active',
+            status,
+            code,
+            'Esiste già una preparazione in corso per questa versione: attendi che termini, non serve ritentare.',
+          );
+        case 'job_superseded':
+          return failure(
+            'job_superseded',
+            status,
+            code,
+            'Una preparazione più recente ha già sostituito questo tentativo: aggiorna la vista.',
           );
         default:
           return failure(
@@ -501,6 +532,20 @@ export class DocumentsApiService {
       this.http.get<PassageView>(
         `${this.preparationUrl(projectId, documentId, version, preparation)}/passages/${enc(blockId)}`,
         { params },
+      ),
+    );
+  }
+
+  /**
+   * Retry manuale del parsing (T116/T117): unica porta per ripartire, mai da GET o polling. `idempotencyKey` va conservata dal
+   * chiamante e riusata in caso di esito incerto: il server restituisce lo stesso nuovo job.
+   */
+  retryParse(projectId: string, jobId: string, idempotencyKey: string): Promise<ParseRetryView> {
+    return firstValueFrom(
+      this.http.post<ParseRetryView>(
+        `${this.base(projectId)}/document-jobs/${enc(jobId)}/retry`,
+        null,
+        { headers: { 'Idempotency-Key': idempotencyKey } },
       ),
     );
   }

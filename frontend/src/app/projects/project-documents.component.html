@@ -91,6 +91,11 @@
       </button>
     </div>
 
+    @if (pollStopped()) {
+      <p class="small text-secondary mb-0" role="status" data-testid="docs-poll-stopped">
+        L'aggiornamento automatico si è fermato: alcuni documenti sono ancora in lavorazione, premi Aggiorna per controllare.
+      </p>
+    }
     @if (blockingCount() > 0) {
       <p class="small text-warning-emphasis mb-0" data-testid="docs-blocking">
         {{ blockingCount() }} documento/i incluso/i non ancora pronto/i: finché non sono pronti o
@@ -184,6 +189,26 @@
                       }
                       @if (v.issuesSummary) {
                         <span class="small text-danger" data-testid="docs-issue">{{ issueText(v) }}</span>
+                      }
+                      @if (retryJobId(v)) {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-warning"
+                          data-testid="docs-retry"
+                          [disabled]="retrying() !== null"
+                          [attr.aria-busy]="retrying() === v.id"
+                          (click)="retryParse(v)"
+                        >
+                          {{ retrying() === v.id ? 'Nuovo tentativo in corso…' : 'Riprova la lettura' }}
+                        </button>
+                      }
+                      @if (retryLink(v); as link) {
+                        <span class="small text-secondary" data-testid="docs-retry-link">
+                          Nuovo tentativo (generazione {{ link.generation }}) collegato al precedente, avviato il {{ formatDate(link.requestedAt) }}.
+                        </span>
+                      }
+                      @if (retryErrorFor(v)) {
+                        <span class="small text-danger" role="alert" tabindex="-1" data-focus="retry-error" data-testid="docs-retry-error">{{ retryErrorFor(v) }}</span>
                       }
                       <button
                         type="button"

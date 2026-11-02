@@ -245,4 +245,120 @@ describe('DocumentPassageComponent', () => {
     expect(issue.textContent).toContain('Pagina 2 senza testo');
     expect(issue.textContent).toContain('pagina 2');
   });
+
+  describe('per formato (PDF, DOCX, Markdown, TXT)', () => {
+    const cases = [
+      {
+        format: 'PDF',
+        blocks: [
+          block({ id: 'p-0', ordinal: 0, type: 'Heading', text: 'Capitolato', page: 1, bbox: { values: [72, 700.25, 300, 720], coordinateSystem: 'pdf-points' } }),
+          block({ id: 'p-1', ordinal: 1, text: 'Penale giornaliera', page: 1, bbox: { values: [72, 650, 520, 690], coordinateSystem: 'pdf-points' } }),
+          block({ id: 'p-2', ordinal: 2, text: 'Collaudo finale', page: 2, bbox: { values: [72, 600, 520, 640], coordinateSystem: 'pdf-points' } }),
+        ],
+        expected: [
+          ['Pagina 1', 'area 72, 700.3, 300, 720'],
+          ['Pagina 1', 'area 72, 650, 520, 690'],
+          ['Pagina 2', 'area 72, 600, 520, 640'],
+        ],
+        absent: ['righe', 'Posizione non disponibile'],
+      },
+      {
+        format: 'DOCX',
+        blocks: [
+          block({ id: 'w-0', ordinal: 0, type: 'Heading', text: 'Requisiti', headingPath: ['Requisiti'] }),
+          block({ id: 'w-1', ordinal: 1, text: 'Il sistema deve esportare.', headingPath: ['Requisiti', 'Esportazione'] }),
+        ],
+        expected: [['Requisiti'], ['Requisiti › Esportazione']],
+        absent: ['Pagina', 'area', 'righe'],
+      },
+      {
+        format: 'Markdown',
+        blocks: [
+          block({ id: 'm-0', ordinal: 0, type: 'Heading', text: 'Scope', headingPath: ['Scope'], lines: { start: 1, end: 1 } }),
+          block({ id: 'm-1', ordinal: 1, text: 'Elenco su due righe', headingPath: ['Scope'], lines: { start: 3, end: 4 } }),
+        ],
+        expected: [['Scope', 'riga 1'], ['Scope', 'righe 3-4']],
+        absent: ['Pagina', 'area'],
+      },
+      {
+        format: 'TXT',
+        blocks: [
+          block({ id: 't-0', ordinal: 0, text: 'Prima riga', lines: { start: 1, end: 1 } }),
+          block({ id: 't-1', ordinal: 1, text: 'Senza posizione' }),
+        ],
+        expected: [['riga 1'], ['Posizione non disponibile']],
+        absent: ['Pagina', 'area', '›'],
+      },
+    ];
+
+    for (const c of cases) {
+      it(`${c.format}: blocchi in ordine di lettura con i soli locator disponibili`, async () => {
+        mount();
+        await flush(c.blocks, prep({ blockCount: c.blocks.length }));
+        const items = Array.from(el.querySelectorAll('[data-testid="passage-block"]'));
+        expect(items.length).toBe(c.blocks.length);
+        c.blocks.forEach((b, i) => {
+          expect(items[i].textContent).toContain(b.text);
+          for (const part of c.expected[i]) expect(items[i].textContent).toContain(part);
+        });
+        // nessun locator inventato: un blocco privo di un locator non lo mostra
+        const lastText = items[items.length - 1].textContent!;
+        if (c.format === 'TXT' || c.format === 'DOCX') {
+          for (const part of c.absent) expect(lastText).not.toContain(part);
+        }
+      });
+    }
+
+    it('PDF multipagina: i blocchi di pagine diverse restano nell’ordine ricevuto, senza fusione', async () => {
+      mount();
+      await flush(cases[0].blocks, prep({ blockCount: 3 }));
+      const texts = Array.from(el.querySelectorAll('[data-testid="passage-block"]')).map(
+        (n) => n.textContent!,
+      );
+      expect(texts.length).toBe(3);
+      expect(texts[0]).toContain('Capitolato');
+      expect(texts[0]).toContain('Pagina 1');
+      expect(texts[1]).toContain('Pagina 1');
+      expect(texts[2]).toContain('Pagina 2');
+      expect(texts.filter((t) => t.includes('Pagina 2')).length).toBe(1);
+    });
+
+    for (const c of cases) {
+      it(`${c.format}: il passaggio aperto mostra la posizione disponibile e l’originale`, async () => {
+        mount({ blockId: c.blocks[1].id, start: 0, end: 3 });
+        await flush(c.blocks, prep());
+        const req = http.expectOne((r) => r.url === `${BASE}/passages/${c.blocks[1].id}`);
+        const view: PassageView = {
+          block: c.blocks[1],
+          preparationId: 'g-1',
+          processingStatus: 'Ready',
+          isReady: true,
+          quote: {
+            start: 0,
+            end: 3,
+            before: '',
+            text: c.blocks[1].text.slice(0, 3),
+            after: c.blocks[1].text.slice(3),
+          },
+          original: { originalName: `doc.${c.format.toLowerCase()}`, downloadUrl: '/x' },
+        };
+        req.flush(view);
+        await settle();
+        const open = el.querySelector('[data-testid="passage-open"]')!;
+        for (const part of c.expected[1]) expect(open.textContent).toContain(part);
+        expect(open.querySelector('mark')!.textContent).toBe(c.blocks[1].text.slice(0, 3));
+        expect(el.querySelector('[data-testid="passage-download"]')!.textContent).toContain(
+          `doc.${c.format.toLowerCase()}`,
+        );
+      });
+    }
+
+    it('una tabella non rompe il rendering e mostra tipo e pagina', async () => {
+      mount();
+      await flush([block({ id: 'x-0', type: 'Table', text: 'A | B', page: 4, tableCells: [[{ text: 'A' }]] })]);
+      const text = el.querySelector('[data-testid="passage-block"]')!.textContent!;
+      expect(text).toContain('Table');
+      expect(text).toContain('Pagina 4');
+    });
+  });
 });

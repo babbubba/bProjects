@@ -7,7 +7,7 @@ import {
   DocumentVersionView,
   SourceSelectionView,
 } from './documents-api.service';
-import { ProjectDocumentsComponent } from './project-documents.component';
+import { DOCUMENTS_POLL, ProjectDocumentsComponent } from './project-documents.component';
 
 const P = 'p-1';
 const BASE = `/api/projects/${P}`;
@@ -99,6 +99,7 @@ describe('ProjectDocumentsComponent', () => {
   let fixture: ComponentFixture<ProjectDocumentsComponent>;
   let http: HttpTestingController;
   let el: HTMLElement;
+  const pollCfg = { intervalMs: 600000, maxPolls: 60 };
 
   const settle = async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -128,8 +129,14 @@ describe('ProjectDocumentsComponent', () => {
   beforeEach(async () => {
     TestBed.configureTestingModule({
       imports: [ProjectDocumentsComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: DOCUMENTS_POLL, useValue: pollCfg },
+      ],
     });
+    pollCfg.intervalMs = 600000;
+    pollCfg.maxPolls = 60;
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(ProjectDocumentsComponent);
     fixture.componentRef.setInput('projectId', P);
@@ -511,7 +518,12 @@ describe('ProjectDocumentsComponent', () => {
       ]),
     );
     await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1/versions/1/preparations/latest`)
+      .flush({ allowedActions: ['download'], parseJobId: 'job-1' });
+    await settle();
     expect(q('docs-issue')!.textContent).toContain('non è riuscita');
+    expect(q('docs-retry')).toBeNull();
   });
 
   it('exposes accessible controls: labelled inputs, live region, expandable versions', async () => {
@@ -598,6 +610,246 @@ describe('ProjectDocumentsComponent', () => {
       .flush(detail([version({ processingStatus: 'NotPrepared' })]));
     await settle();
     expect(q('docs-read')).toBeNull();
+  });
+
+
+  describe('retry parsing (T117)', () => {
+    const PREP = `${BASE}/documents/d-1/versions/1/preparations/latest`;
+    const RETRY_URL = `${BASE}/document-jobs/job-1/retry`;
+    const failedItem = () =>
+      item({
+        latestVersion: {
+          id: 'v-1',
+          version: 1,
+          processingStatus: 'Failed',
+          uploadedAt: '2030-01-01T10:00:00Z',
+        },
+      });
+    const failedVersion = () => version({ processingStatus: 'Failed' });
+    const prepView = (actions: string[], over: Record<string, unknown> = {}) => ({
+      id: 'g-1',
+      documentVersionId: 'v-1',
+      documentId: 'd-1',
+      version: 1,
+      generation: 1,
+      processingStatus: 'Failed',
+      isReady: false,
+      contentState: 'NotParsed',
+      blockCount: null,
+      retryOfId: null,
+      requestedAt: '2030-01-01T10:00:00Z',
+      issuesSummary: null,
+      issues: [],
+      allowedActions: actions,
+      parseJobId: 'job-1',
+      ...over,
+    });
+    const retryReply = {
+      jobId: 'job-2',
+      preparationId: 'g-2',
+      generation: 2,
+      retryOfJobId: 'job-1',
+      retryOfPreparationId: 'g-1',
+      status: 'Queued',
+      requestedAt: '2030-01-01T11:00:00Z',
+      deadlineAt: '2030-01-01T12:00:00Z',
+    };
+
+    const openFailed = async (actions: string[], over: Record<string, unknown> = {}) => {
+      await flushLoad([failedItem()]);
+      q('docs-versions')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([failedVersion()]));
+      await settle();
+      http.expectOne(PREP).flush(prepView(actions, over));
+      await settle();
+    };
+    const retryRequests = () => http.match((r) => r.method === 'POST' && r.url === RETRY_URL);
+    const drainGets = () => http.match((r) => r.method === 'GET');
+    /** Dopo un conflitto la vista si rilegge con soli GET: lista, dettaglio, preparazione. */
+    const flushReread = async (actions: string[]) => {
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [failedItem()], nextCursor: null });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([failedVersion()]));
+      await settle();
+      http.expectOne(PREP).flush(prepView(actions));
+      await settle();
+    };
+
+    it('offre il pulsante solo se allowedActions contiene retry', async () => {
+      await openFailed(['download', 'retry']);
+      expect(q('docs-retry')).not.toBeNull();
+    });
+
+    it('non offre il pulsante senza retry in allowedActions', async () => {
+      await openFailed(['download']);
+      expect(q('docs-retry')).toBeNull();
+    });
+
+    it('non offre il pulsante se manca il job di parsing', async () => {
+      await openFailed(['download', 'retry'], { parseJobId: null });
+      expect(q('docs-retry')).toBeNull();
+    });
+
+    it('non legge la preparazione né offre retry per una versione Ready', async () => {
+      await flushLoad();
+      q('docs-versions')!.click();
+      await settle();
+      http
+        .expectOne(`${BASE}/documents/d-1`)
+        .flush(detail([version({ processingStatus: 'Ready' })]));
+      await settle();
+      http.expectNone(PREP);
+      expect(q('docs-retry')).toBeNull();
+    });
+
+    it('invia il retry con Idempotency-Key e mostra il nuovo job collegato con lo stato persistito', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      const [req] = retryRequests();
+      expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+      req.flush(retryReply, { status: 202, statusText: 'Accepted' });
+      await settle();
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [item()], nextCursor: null });
+      await settle();
+      http
+        .expectOne(`${BASE}/documents/d-1`)
+        .flush(detail([version({ processingStatus: 'Queued' })]));
+      await settle();
+      expect(q('docs-notice')!.textContent).toContain('generazione 2');
+      expect(q('docs-retry-link')!.textContent).toContain('collegato al precedente');
+      expect(q('docs-retry')).toBeNull();
+      expect(el.textContent).toContain('In coda');
+    });
+
+    it('il doppio click invia una sola richiesta', async () => {
+      await openFailed(['download', 'retry']);
+      const button = q('docs-retry')!;
+      button.click();
+      button.click();
+      await settle();
+      const reqs = retryRequests();
+      expect(reqs.length).toBe(1);
+      reqs[0].flush(retryReply, { status: 202, statusText: 'Accepted' });
+      await settle();
+      drainGets();
+    });
+
+    it('con la rete persa conserva la stessa Idempotency-Key nel replay', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      const [first] = retryRequests();
+      const key = first.request.headers.get('Idempotency-Key');
+      first.error(new ProgressEvent('error'), { status: 0 });
+      await settle();
+      expect(q('docs-retry-error')!.textContent).toContain('incerto');
+      expect(q('docs-retry')).not.toBeNull();
+
+      q('docs-retry')!.click();
+      await settle();
+      const [second] = retryRequests();
+      expect(second.request.headers.get('Idempotency-Key')).toBe(key);
+      second.flush(retryReply, { status: 202, statusText: 'Accepted' });
+      await settle();
+      drainGets();
+    });
+
+    it('409 job_active è un errore accessibile e la vista viene riletta con soli GET', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      retryRequests()[0].flush({ code: 'job_active' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await flushReread(['download']);
+      expect(q('docs-retry-error')!.textContent).toContain('in corso');
+      expect(q('docs-retry-error')!.getAttribute('role')).toBe('alert');
+      expect(q('docs-retry')).toBeNull();
+      expect(http.match((r) => r.method !== 'GET').length).toBe(0);
+    });
+
+    it('409 job_superseded spiega l’esito senza ritentare', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      retryRequests()[0].flush({ code: 'job_superseded' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await flushReread(['download']);
+      expect(q('docs-retry-error')!.textContent).toContain('più recente');
+      expect(q('docs-retry')).toBeNull();
+      expect(retryRequests().length).toBe(0);
+    });
+
+    it('Aggiorna (refresh) non invia mai un retry', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-refresh')!.click();
+      await settle();
+      expect(http.match((r) => r.method === 'POST').length).toBe(0);
+      http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+      http.match(() => true);
+    });
+  });
+
+  describe('aggiornamento automatico degli stati', () => {
+    const mountWithPoll = (config: { intervalMs: number; maxPolls: number }) => {
+      pollCfg.intervalMs = config.intervalMs;
+      pollCfg.maxPolls = config.maxPolls;
+    };
+    const wait = () => new Promise((r) => setTimeout(r, 40));
+    const pollGet = () => http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+
+    it('rilegge con GET finché in lavorazione e si ferma a Ready', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 5 });
+      await flushLoad([item()]);
+      await wait();
+      pollGet().flush({
+        items: [
+          item({
+            latestVersion: {
+              id: 'v-1',
+              version: 1,
+              processingStatus: 'Ready',
+              uploadedAt: '2030-01-01T10:00:00Z',
+            },
+            availability: 'Ready',
+            reason: null,
+          }),
+        ],
+        nextCursor: null,
+      });
+      http.expectOne(`${BASE}/source-selection`).flush(selection(2), { headers: { ETag: '"2"' } });
+      await settle();
+      expect(q('docs-status')!.textContent).toContain('Pronto');
+      await wait();
+      http.expectNone((r) => r.url === `${BASE}/documents`);
+    });
+
+    it('è limitato: dopo maxPolls si ferma, lo dichiara e non invia altre richieste', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 2 });
+      await flushLoad([item()]);
+      for (let i = 0; i < 2; i++) {
+        await wait();
+        pollGet().flush({ items: [item()], nextCursor: null });
+        http.expectOne(`${BASE}/source-selection`).flush(selection(), { headers: { ETag: '"1"' } });
+        await settle();
+      }
+      await wait();
+      http.expectNone((r) => r.url === `${BASE}/documents`);
+      expect(q('docs-poll-stopped')).not.toBeNull();
+    });
+
+    it('non invia mai richieste diverse da GET', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 3 });
+      await flushLoad([item()]);
+      await wait();
+      expect(http.match((r) => r.method !== 'GET').length).toBe(0);
+      http.match(() => true);
+    });
   });
 
   function component() {

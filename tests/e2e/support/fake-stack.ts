@@ -1,3 +1,4 @@
+import { FakeParsing } from './fake-parsing';
 import type { Page, Request, Route } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { emptyUsage } from './context-usage';
@@ -136,6 +137,8 @@ export class FakeStack {
   /** Sessione valida: refresh/login riescono (il cookie di refresh non e' simulato). */
   session = false;
   private readonly faults = new Map<string, Fault[]>();
+  /** Parsing simulato (I2): null = nessun parser, ogni versione resta «In coda» come in I1. */
+  parsing: FakeParsing | null = null;
   private seq = 0;
 
   constructor() {
@@ -289,9 +292,9 @@ export class FakeStack {
     const latest = d.versions.at(-1)!;
     return {
       documentId: d.id, displayName: d.displayName, createdAt: d.versions[0].uploadedAt, versionCount: d.versions.length,
-      latestVersion: { id: latest.id, version: latest.version, processingStatus: 'Queued', uploadedAt: latest.uploadedAt },
+      latestVersion: { id: latest.id, version: latest.version, processingStatus: this.statusOf(latest), uploadedAt: latest.uploadedAt },
       applicableVersionId: null, included: pref.included, selectionMode: pref.mode,
-      availability: pref.included ? 'Unavailable' : 'Excluded', reason: pref.included ? 'preparation_queued' : 'excluded_by_pm',
+      availability: this.availabilityOf(pref.included, latest), reason: pref.included ? this.reasonOf(latest) : 'excluded_by_pm',
     };
   }
 
@@ -299,10 +302,10 @@ export class FakeStack {
     const pref = this.pref(p, d);
     return {
       id: v.id, documentId: d.id, projectId: p.id, version: v.version, originalName: v.originalName, mediaType: v.mediaType,
-      byteLength: v.bytes.length, sha256: sha256Hex(v.bytes), uploadedBy: 'Pm Uno', uploadedAt: v.uploadedAt, processingStatus: 'Queued',
-      applicationStatus: 'NotApplicable', currentPreparationId: null, currentEvidenceVersionId: null, bundleRevision: 0,
-      candidatePreparations: [], latestJobId: null, included: pref.included, selectionMode: pref.mode, isApplicable: false,
-      previousReadyVersionId: null, issuesSummary: null, allowedActions: ['Download'],
+      byteLength: v.bytes.length, sha256: sha256Hex(v.bytes), uploadedBy: 'Pm Uno', uploadedAt: v.uploadedAt, processingStatus: this.statusOf(v),
+      applicationStatus: 'NotApplicable', currentPreparationId: this.parsing?.latest(v.id)?.id ?? null, currentEvidenceVersionId: null, bundleRevision: 0,
+      candidatePreparations: [], latestJobId: this.parsing?.latest(v.id)?.jobId ?? null, included: pref.included, selectionMode: pref.mode, isApplicable: false,
+      previousReadyVersionId: null, issuesSummary: this.parsing?.issuesSummary(v.id) ?? null, allowedActions: ['Download'],
     };
   }
 
@@ -312,8 +315,22 @@ export class FakeStack {
       documentId: d.id, projectId: p.id, displayName: d.displayName, createdBy: 'Pm Uno', createdAt: d.versions[0].uploadedAt,
       versions: d.versions.map((v) => this.versionView(p, d, v)),
       sourcePreference: { included: pref.included, mode: pref.mode, versionId: pref.versionId },
-      availability: pref.included ? 'Unavailable' : 'Excluded', applicableVersionId: null,
+      availability: this.availabilityOf(pref.included, d.versions.at(-1)!), applicableVersionId: null,
     };
+  }
+
+  private statusOf(v: FakeDocVersion): string {
+    return this.parsing ? this.parsing.status(v.id) : 'Queued';
+  }
+
+  private availabilityOf(included: boolean, latest: FakeDocVersion): string {
+    if (!included) return 'Excluded';
+    return this.statusOf(latest) === 'Ready' ? 'Ready' : 'Unavailable';
+  }
+
+  private reasonOf(latest: FakeDocVersion): string | null {
+    const status = this.statusOf(latest);
+    return status === 'Ready' ? null : status === 'Failed' ? 'preparation_failed' : status === 'Incomplete' ? 'preparation_incomplete' : 'preparation_queued';
   }
 
   private selectionResponse(p: ProjectState, route: Route): Promise<void> {
@@ -321,14 +338,14 @@ export class FakeStack {
       const pref = this.pref(p, d);
       return {
         documentId: d.id, included: pref.included, mode: pref.mode, versionId: pref.versionId, resolvedVersionId: null,
-        preparationId: null, availability: pref.included ? 'Unavailable' : 'Excluded',
+        preparationId: null, availability: this.availabilityOf(pref.included, d.versions.at(-1)!),
       };
     });
     const blockingSources = p.documents
-      .filter((d) => this.pref(p, d).included)
+      .filter((d) => this.pref(p, d).included && this.statusOf(d.versions.at(-1)!) !== 'Ready')
       .map((d) => ({
         documentId: d.id, displayName: d.displayName, versionId: d.versions.at(-1)!.id, version: d.versions.at(-1)!.version,
-        status: 'Queued', allowedActions: ['Exclude'],
+        status: this.statusOf(d.versions.at(-1)!), allowedActions: ['Exclude'],
       }));
     return route.fulfill({
       status: 200, contentType: 'application/json', headers: { etag: `"${p.selection.revision}"` },
@@ -373,6 +390,7 @@ export class FakeStack {
       const d: FakeDocument = target ?? { id: `d-${index}`, displayName: form.fields['displayName']?.trim() || file.name, versions: [] };
       if (!target) p.documents.push(d);
       d.versions.push(version);
+      this.parsing?.onUpload(version);
       p.uploadReceipts.set(call.key!, { fingerprint, versionId: version.id });
       created = { d, v: version };
     };
@@ -556,7 +574,26 @@ export class FakeStack {
       }
     }
     // Archivio documenti (slice 002): le versioni restano 'Queued' perche' non c'e' alcun parser.
+    if (this.parsing) {
+      const parsing = this.parsing;
+      const docs = {
+        findVersion: (docId: string, ver: number) => {
+          const d = p.documents.find((x) => x.id === docId);
+          const v = d?.versions.find((x) => x.version === ver);
+          return d && v ? { docId: d.id, v } : undefined;
+        },
+        findByJob: (jobId: string) => {
+          for (const d of p.documents) for (const v of d.versions) {
+            const gen = parsing.gens.get(v.id)?.find((g) => g.jobId === jobId);
+            if (gen) return { docId: d.id, v, gen };
+          }
+          return undefined;
+        },
+      };
+      if (await parsing.handle(rest, method, request, call.key, docs, { json, problem, faulted }, route)) return;
+    }
     if (rest === '/documents' && method === 'GET') {
+      this.parsing?.tick();
       return void (await json(200, { items: p.documents.map((d) => this.documentListItem(p, d)), nextCursor: null }));
     }
     if (rest === '/documents' && method === 'POST') {

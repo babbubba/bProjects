@@ -220,4 +220,41 @@ describe('DocumentsApiService', () => {
     expect(f.currentRevision).toBe(7);
     expect(documentFailure(new Error('x')).kind).toBe('unknown');
   });
+
+  it('retryParse: POST senza corpo con Idempotency-Key, stessa chiave nel replay (202)', async () => {
+    const reply = {
+      jobId: 'job-2',
+      preparationId: 'g-2',
+      generation: 2,
+      retryOfJobId: 'job-1',
+      retryOfPreparationId: 'g-1',
+      status: 'Queued',
+      requestedAt: '2030-01-01T11:00:00Z',
+      deadlineAt: '2030-01-01T12:00:00Z',
+    };
+    const first = api.retryParse(P, 'job-1', KEY);
+    const r1 = http.expectOne(`${BASE}/document-jobs/job-1/retry`);
+    expect(r1.request.method).toBe('POST');
+    expect(r1.request.headers.get('Idempotency-Key')).toBe(KEY);
+    expect(r1.request.body).toBeNull();
+    r1.flush(reply, { status: 202, statusText: 'Accepted' });
+    expect((await first).jobId).toBe('job-2');
+
+    const again = api.retryParse(P, 'job-1', KEY);
+    const r2 = http.expectOne(`${BASE}/document-jobs/job-1/retry`);
+    expect(r2.request.headers.get('Idempotency-Key')).toBe(KEY);
+    r2.flush(reply, { status: 202, statusText: 'Accepted' });
+    expect((await again).jobId).toBe('job-2');
+  });
+
+  it.each([
+    ['job_active', 'job_active'],
+    ['preparation_active', 'job_active'],
+    ['job_superseded', 'job_superseded'],
+    ['job_not_retryable', 'conflict'],
+  ])('retry: 409 %s è %s e non è ripetibile con la stessa chiave', (code, kind) => {
+    const f = documentFailure(new HttpErrorResponse({ status: 409, error: { code } }));
+    expect(f.kind).toBe(kind);
+    expect(f.retrySameKey).toBe(false);
+  });
 });
