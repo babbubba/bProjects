@@ -41,6 +41,8 @@ public sealed class ApiHarness : IAsyncDisposable
             services.RemoveAll<bProjects.App.AI.DocumentChatWorkflow>();
             services.RemoveAll<bProjects.App.AI.DocumentAnalysisWorkflow>();
             services.RemoveAll<bProjects.App.AI.DocumentSourceDraftWorkflow>();
+            services.RemoveAll<bProjects.App.AI.DocumentRootClassifier>(); // classificazione iniziale (T124): la sonda dipende dai workflow documentali
+            services.RemoveAll<bProjects.App.AI.IDocumentRegimeProbe>();
             services.RemoveAll<IEvidenceExtractionExecutor>(); // l'estrattore reale dipende dal client AI
             services.RemoveAll<bProjects.App.AI.IDocumentUnitExecutor>(); // l'agente di estrazione delle unità dipende dal client AI
             configure?.Invoke(services);

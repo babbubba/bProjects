@@ -103,6 +103,7 @@ public static class AnalysisEndpoints
         ProcessingRunEvents events,
         SourceSelectionService selection,
         SourceSnapshotStore snapshots,
+        DocumentPolicyService documentPolicy,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -215,6 +216,12 @@ public static class AnalysisEndpoints
             if (sources is not null)
             {
                 run.SourceSnapshotId = snapshots.Add(projectId, sources, now).Id;   // manifest fissato alla richiesta, mai al claim
+            }
+
+            if (documentary)
+            {
+                // Ramo documentale: Pending (Extended provvisorio, cap dal t0), nessuna misura né invio nel POST; classificazione nel dispatcher (T124).
+                DocumentRootRegime.Pending(run, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
             }
 
             db.ProcessingRuns.Add(run);

@@ -25,6 +25,12 @@ public static class AiWorkflowRegistration
             sp.GetRequiredService<IServiceScopeFactory>(), DocumentFactory(sp), sp.GetRequiredService<InternalModelClient>(), sp.GetRequiredService<IOptions<DocumentOptions>>()));
         services.AddSingleton(sp => new DocumentChatTurnExecutor(sp.GetRequiredService<DocumentChatWorkflow>(), sp.GetService<ChatTurnEvents>()));
 
+        // Classificazione iniziale dei root documentali (T124): preflight tecnico senza LLM nel dispatcher esistente, prima del primo claim (nessun nuovo scheduler).
+        services.AddSingleton<IDocumentRegimeProbe>(sp => new WorkflowRegimeProbe(
+            sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<DocumentChatWorkflow>(), sp.GetRequiredService<DocumentAnalysisWorkflow>(),
+            sp.GetRequiredService<DocumentSourceDraftWorkflow>()));
+        services.AddSingleton(sp => new DocumentRootClassifier(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<IDocumentRegimeProbe>()));
+
         services.AddSingleton(sp => new AnalysisWorkflow(
             sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<ConversationalAgent>(),

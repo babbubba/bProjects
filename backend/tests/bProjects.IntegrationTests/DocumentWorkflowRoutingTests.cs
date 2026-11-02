@@ -71,6 +71,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ChatTurn' AND \"OwnerId\" = @t AND \"Status\" = 'Committed'", ("t", turn)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
         Assert.Equal([DocumentChatWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ChatTurnId\" = @o", ("o", turn)));
+        await AssertClassifiedBeforeFirstClaim("ChatTurns", "ChatTurn", turn, expectedPayloadMeasured: true);
     }
 
     [Fact]
@@ -89,6 +90,10 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+
+        // T124: il payload dell'analisi non e determinabile prima del claim (selezione evidenze congelata sotto lease): T unavailable => Extended workload_unknown.
+        await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", run, expectedPayloadMeasured: false);
+        Assert.Equal(("Extended", "workload_unknown"), (await Scalar<string>("SELECT \"InitialRegime\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)), await Scalar<string>("SELECT \"ClassificationReason\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))));
     }
 
     [Fact]
@@ -110,6 +115,17 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProcessingRunId\" = @r AND \"AnalysisRevisionId\" = @v", ("r", generation), ("v", revision)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", generation)));
         Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
+        await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", generation, expectedPayloadMeasured: true);
+    }
+
+    /// <summary>T124: il root documentale e stato classificato (record unico, payload misurato se determinabile) PRIMA del primo claim, con la deadline dal t0 originale.</summary>
+    private async Task AssertClassifiedBeforeFirstClaim(string table, string ownerKind, Guid root, bool expectedPayloadMeasured)
+    {
+        Assert.Equal("Classified", await Scalar<string>($"SELECT \"ClassificationStatus\" FROM \"{table}\" WHERE \"Id\" = @r", ("r", root)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"ClassificationRecords\" WHERE \"OwnerKind\" = @k AND \"OwnerId\" = @r", ("k", ownerKind), ("r", root)));
+        Assert.Equal(expectedPayloadMeasured ? "measured" : "unavailable", await Scalar<string>("SELECT \"TokenQuality\" FROM \"ClassificationRecords\" WHERE \"OwnerId\" = @r", ("r", root)));
+        Assert.True(await Scalar<bool>($"SELECT c.\"ObservedAt\" <= x.\"StartedAt\" FROM \"ClassificationRecords\" c JOIN \"{table}\" x ON x.\"Id\" = c.\"OwnerId\" WHERE c.\"OwnerId\" = @r", ("r", root)));
+        Assert.True(await Scalar<bool>($"SELECT x.\"HardDeadlineAt\" = x.\"RequestedAt\" + interval '3600 seconds' AND x.\"EffectiveDeadlineAt\" = CASE x.\"Regime\" WHEN 'Ordinary' THEN x.\"RequestedAt\" + interval '180 seconds' ELSE x.\"HardDeadlineAt\" END FROM \"{table}\" x WHERE x.\"Id\" = @r", ("r", root)));
     }
 
     // ================================================================ grafi 001: ramo senza documenti, definizione congelata, checkpoint

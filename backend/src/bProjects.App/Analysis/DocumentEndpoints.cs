@@ -56,6 +56,7 @@ public static class DocumentEndpoints
         IOptions<AiOptions> ai,
         ProcessingRunEvents events,
         SourceSnapshotStore snapshots,
+        DocumentPolicyService documentPolicy,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -176,6 +177,12 @@ public static class DocumentEndpoints
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };
+            if (documentary)
+            {
+                // Snapshot ereditato con almeno una fonte Ready: Pending (Extended provvisorio, cap dal t0), nessuna misura né invio nel POST (T124).
+                DocumentRootRegime.Pending(run, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
+            }
+
             db.ProcessingRuns.Add(run);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);

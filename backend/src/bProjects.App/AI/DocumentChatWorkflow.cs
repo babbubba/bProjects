@@ -254,23 +254,8 @@ public sealed class DocumentChatWorkflow(
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var turn = await db.ChatTurns.AsNoTracking().SingleAsync(t => t.Id == claim.TurnId, ct);
-        if (turn.SourceSnapshotId is null)
-        {
-            throw new DocumentWorkException(DocumentWorkException.InvalidInput, "Il turno non ha uno snapshot di fonti documentali.");
-        }
-
-        var conversation = await db.Conversations.AsNoTracking().SingleAsync(c => c.Id == turn.ConversationId, ct);
-        var trigger = await db.ConversationMessages.AsNoTracking()
-            .SingleAsync(m => m.Id == turn.TriggerMessageId && m.ConversationId == conversation.Id && m.Role == MessageRole.User, ct);
-        var sources = await DocumentChatSources.LoadAsync(db, claim.TurnId, ct);
-        var history = await PostgresChatHistoryProvider.LoadAdmittedAsync(db, conversation.Id, turn.SourceCutoffSequence, turn.TriggerMessageId, ct, sources.SnapshotHash);
-
-        var instructions = sources.Unavailable > 0 ? Instructions + "\n\n" + ChatSourceNotice.ModelGuard(sources.Unavailable) : Instructions;
-        var messages = BuildMessages(history, sources, trigger.Body);
-        var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
-        var measure = await factory.Preflight.MeasureAsync(
-            new DocumentPayload(AiPhase.Chat, instructions, messages, structured ? AnswerSchema.GetRawText() : null), ct);
+        var (turn, conversation, sources, messages, instructions, structured) = await LoadInputAsync(db, claim.TurnId, ct);
+        var measure = await factory.Preflight.MeasureAsync(PayloadOf(instructions, messages, structured), ct);
         if (measure.Quality == TokenCountQuality.Unavailable)
         {
             throw new RuntimeUnverifiedException("conteggio del payload della chat non disponibile (nessun tokenizer o calibrazione identificata)");
@@ -306,6 +291,39 @@ public sealed class DocumentChatWorkflow(
         }
 
         return plan.Result ?? await ReconcileAsync(db, claim.TurnId, ct);
+    }
+
+    /// <summary>Carica turno, snapshot di fonti e dialogo e compone il payload del solo batch: usato sia dall'esecuzione sia dal preflight di classificazione (T124), così non divergono.</summary>
+    private async Task<(ChatTurn Turn, Conversation Conversation, ChatSnapshotSources Sources, IReadOnlyList<ChatMessage> Messages, string Instructions, bool Structured)> LoadInputAsync(
+        AppDbContext db, Guid turnId, CancellationToken ct)
+    {
+        var turn = await db.ChatTurns.AsNoTracking().SingleAsync(t => t.Id == turnId, ct);
+        if (turn.SourceSnapshotId is null)
+        {
+            throw new DocumentWorkException(DocumentWorkException.InvalidInput, "Il turno non ha uno snapshot di fonti documentali.");
+        }
+
+        var conversation = await db.Conversations.AsNoTracking().SingleAsync(c => c.Id == turn.ConversationId, ct);
+        var trigger = await db.ConversationMessages.AsNoTracking()
+            .SingleAsync(m => m.Id == turn.TriggerMessageId && m.ConversationId == conversation.Id && m.Role == MessageRole.User, ct);
+        var sources = await DocumentChatSources.LoadAsync(db, turnId, ct);
+        var history = await PostgresChatHistoryProvider.LoadAdmittedAsync(db, conversation.Id, turn.SourceCutoffSequence, turn.TriggerMessageId, ct, sources.SnapshotHash);
+
+        var instructions = sources.Unavailable > 0 ? Instructions + "\n\n" + ChatSourceNotice.ModelGuard(sources.Unavailable) : Instructions;
+        var messages = BuildMessages(history, sources, trigger.Body);
+        var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
+        return (turn, conversation, sources, messages, instructions, structured);
+    }
+
+    private static DocumentPayload PayloadOf(string instructions, IReadOnlyList<ChatMessage> messages, bool structured) =>
+        new(AiPhase.Chat, instructions, messages, structured ? AnswerSchema.GetRawText() : null);
+
+    /// <summary>Payload e schema del turno per il preflight di classificazione del regime (T124): stessa composizione dell'invio, nessuna chiamata al modello.</summary>
+    public async Task<RegimePayload> BuildRegimePayloadAsync(Guid turnId, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        var (_, _, _, messages, instructions, structured) = await LoadInputAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), turnId, ct);
+        return new RegimePayload(AiPhase.Chat, PayloadOf(instructions, messages, structured), AnswerSchema.GetRawText(), factory.Preflight);
     }
 
     /// <summary>Ripresa da un checkpoint successivo al commit: l'unica risposta è quella già committata, mai una seconda.</summary>

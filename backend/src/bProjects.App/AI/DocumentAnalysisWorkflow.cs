@@ -322,6 +322,13 @@ public sealed class DocumentAnalysisWorkflow(
             : throw new InvalidOperationException("Il workflow di analisi documentale è terminato senza produrre un risultato.");
     }
 
+    /// <summary>
+    /// Schema e profilo di runtime dell'analisi per il preflight di classificazione del regime (T124). Il payload NON è determinabile prima del claim:
+    /// la selezione delle evidenze (messaggi PM e documenti) si congela sotto lease in <c>FreezeDocumentSelectionAsync</c> e dipende dal completamento
+    /// delle estrazioni dei messaggi PM, quindi il conteggio T è esplicitamente <c>unavailable</c> (regola 6: Extended workload_unknown).
+    /// </summary>
+    public RegimePayload BuildRegimePayload() => new(AiPhase.Analysis, null, WrapperSchema.GetRawText(), factory.Preflight);
+
     private async Task RunGraphAsync(AppDbContext db, AnalysisRunClaim claim, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);

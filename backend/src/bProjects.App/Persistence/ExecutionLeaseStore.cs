@@ -343,6 +343,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                    OR (c."Status" = 'Running' AND c."LeaseUntil" <= clk.t))
               AND c."AttemptCount" < c."MaxAttempts"
               AND {DocumentDeadlineGuard.RootAlive("c", "clk.t")}
+              AND {DocumentDeadlineGuard.NotPending("c")}
               AND NOT EXISTS (
                     SELECT 1 FROM "ChatTurns" p
                     WHERE p."ConversationId" = c."ConversationId"
@@ -367,6 +368,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                    OR (r."Status" = 'Running' AND r."LeaseUntil" <= clk.t))
               AND r."AttemptCount" < r."MaxAttempts"
               AND {DocumentDeadlineGuard.RootAlive("r", "clk.t")}
+              AND {DocumentDeadlineGuard.NotPending("r")}
               -- Gate del registro: un'analisi parte quando le estrazioni dei messaggi PM entro il suo cutoff sono concluse.
               AND NOT (r."Kind" = 'Analysis' AND EXISTS (
                     SELECT 1 FROM "EvidenceExtractionJobs" j
@@ -410,6 +412,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                    OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
               AND t."AttemptCount" < t."MaxAttempts"
               AND {DocumentDeadlineGuard.RootAlive("t", "clk.t")}
+              AND {DocumentDeadlineGuard.NotPending("t")}
             RETURNING t."Id", t."ConversationId", t."TriggerMessageId", t."SourceCutoffSequence",
                       t."FencingToken", t."AttemptCount", t."LeaseUntil", t."DeadlineAt"
             """,
@@ -452,6 +455,7 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                    OR (t."Status" = 'Running' AND t."LeaseUntil" <= clk.t))
               AND t."AttemptCount" < t."MaxAttempts"
               AND {DocumentDeadlineGuard.RootAlive("t", "clk.t")}
+              AND {DocumentDeadlineGuard.NotPending("t")}
             RETURNING t."Id", t."FencingToken", t."AttemptCount"
             """,
             ct,

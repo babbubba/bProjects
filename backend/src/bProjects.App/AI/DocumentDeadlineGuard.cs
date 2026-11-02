@@ -72,6 +72,12 @@ public static class DocumentDeadlineGuard
     public static string Until(string alias) =>
         $"LEAST({alias}.\"DeadlineAt\", COALESCE({alias}.\"EffectiveDeadlineAt\", {alias}.\"DeadlineAt\"))";
 
+    /// <summary>
+    /// Root che può essere preso in carico (T124): un root documentale con classificazione ancora Pending non ammette alcuna inferenza, quindi nessuna query
+    /// di claim lo vede finché il preflight tecnico non lo ha classificato. I root della 001 (ClassificationStatus nullo) e quelli già classificati passano.
+    /// </summary>
+    public static string NotPending(string alias) => $"{alias}.\"ClassificationStatus\" IS DISTINCT FROM 'Pending'";
+
     /// <summary>Root non scaduto: la scadenza corrente è nel futuro del clock indicato.</summary>
     public static string RootAlive(string alias, string now = Clock) => $"{Until(alias)} > {now}";
 

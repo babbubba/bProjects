@@ -40,7 +40,8 @@ public sealed class AiDispatchService(
     IEvidenceExtractionExecutor? extractor = null,
     EvidenceEvents? evidenceEvents = null,
     DispatchWakeup? wakeup = null,
-    IDocumentUnitExecutor? unitExecutor = null) : BackgroundService
+    IDocumentUnitExecutor? unitExecutor = null,
+    DocumentRootClassifier? classifier = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
@@ -182,6 +183,15 @@ public sealed class AiDispatchService(
             return false;
         }
 
+        // Classificazione iniziale dei root documentali (T124): preflight tecnico senza LLM, PRIMA di ogni claim. Finche un root e Pending
+        // nessuna query di claim lo vede, quindi nessuna inferenza. Non e inferenza e non tiene lo slot AI; un root classificato non si riclassifica mai.
+        if (classifier is not null
+            && await classifier.ClassifyNextAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct) is { } classified)
+        {
+            await PublishClassifiedAsync(classified);
+            return true;
+        }
+
         // Aggregazione documentale (T051): lavoro deterministico che pubblica la versione Evidence quando tutte le unità sono Completed. Ha claim e lock
         // propri e non entra nel limite AI globale (non è inferenza), quindi non tiene mai lo slot e non attende le unità; un passo per giro del ciclo.
         using (var aggregationScope = scopes.CreateScope())
@@ -230,6 +240,10 @@ public sealed class AiDispatchService(
 
         return true;
     }
+
+    /// <summary>Notifica lo stato (best-effort, dopo il commit) del root appena classificato: un terminale (Failed) e visibile subito, senza attendere un claim.</summary>
+    private Task PublishClassifiedAsync(ClassificationResult result) =>
+        result.Kind == ClassificationOwnerKind.ChatTurn ? PublishState(result.RootId) : PublishRunState(result.RootId);
 
     private async Task RunTurnAsync(ChatTurnClaim claim, CancellationToken ct)
     {

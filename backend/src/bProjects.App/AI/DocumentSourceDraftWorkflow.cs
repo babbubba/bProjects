@@ -89,6 +89,28 @@ public sealed class DocumentSourceDraftWorkflow(
             : throw new InvalidOperationException("Il workflow di generazione documentale e terminato senza produrre un risultato.");
     }
 
+    /// <summary>
+    /// Payload e schema della generazione per il preflight di classificazione del regime (T124): stessa composizione dell'invio, nessuna chiamata al
+    /// modello. L'input incoerente (revisione non confermata, di un'altra analisi o non 1.1.0) è un errore permanente, come all'esecuzione.
+    /// </summary>
+    public async Task<RegimePayload> BuildRegimePayloadAsync(Guid runId, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        DocumentRunInputV11 input;
+        try
+        {
+            input = await new DocumentRunCompletion(scope.ServiceProvider.GetRequiredService<AppDbContext>()).LoadDocumentInputAsync(runId, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new DocumentWorkException("processing_failed", ex.Message);
+        }
+
+        var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
+        var payload = new DocumentPayload(AiPhase.Document, Instructions, BuildMessages(input), structured ? OutputSchema.GetRawText() : null);
+        return new RegimePayload(AiPhase.Document, payload, OutputSchema.GetRawText(), factory.Preflight);
+    }
+
     private async Task RunGraphAsync(AppDbContext db, DocumentRunClaim claim, CancellationToken ct)
     {
         DocumentRunInputV11 input;

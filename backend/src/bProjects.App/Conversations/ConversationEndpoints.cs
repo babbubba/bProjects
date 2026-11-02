@@ -74,6 +74,7 @@ public static class ConversationEndpoints
         EvidenceEvents evidenceEvents,
         SourceSelectionService selection,
         SourceSnapshotStore snapshots,
+        DocumentPolicyService documentPolicy,
         CancellationToken ct,
         bProjects.App.AI.DispatchWakeup? wakeup = null)
     {
@@ -174,7 +175,15 @@ public static class ConversationEndpoints
         // Fonti fissate alla richiesta anche quando non pronte: il turno conserva il messaggio e dichiara l'indisponibilità senza attenderla.
         if (hasDocuments)
         {
-            turn.SourceSnapshotId = snapshots.Add(projectId, await selection.EvaluateAsync(projectId, ct), now).Id;
+            var evaluation = await selection.EvaluateAsync(projectId, ct);
+            turn.SourceSnapshotId = snapshots.Add(projectId, evaluation, now).Id;
+
+            // Ramo documentale (stessa regola del routing della chat: almeno una fonte inclusa e Ready nello snapshot): il turno nasce Pending, Extended
+            // provvisorio con cap dal t0, senza misure né invii nel POST (T124). Il preflight tecnico lo classifica nel dispatcher prima del primo claim.
+            if (evaluation.Entries.Any(e => e.Included && e.Availability == SourceAvailability.Ready))
+            {
+                DocumentRootRegime.Pending(turn, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
+            }
         }
 
         // Lavoro durevole di estrazione delle evidenze (contracts/ai-workflow.md §10.1): nella stessa transazione, mai dipendente dal modello.

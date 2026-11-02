@@ -483,6 +483,33 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
         }
     }
 
+    /// <summary>
+    /// Token di un testo con il tokenizer VERIFICATO del modello (T124: soglia strutturale dello skeleton). Null se il tokenizer non è verificato o il runtime non
+    /// risponde: un limite superiore calibrato non è una soglia prudenziale per lo skeleton, quindi resta «non determinabile», mai una stima.
+    /// </summary>
+    public async ValueTask<int?> CountVerifiedTextAsync(DocumentRuntimeProfile profile, string text, CancellationToken cancellationToken)
+    {
+        if (runtime is null || meter is null)
+        {
+            return null;
+        }
+
+        var caps = await runtime.GetCountingCapabilitiesAsync(profile.ModelId, cancellationToken);
+        if (!caps.TokenizerVerified)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await meter.CountTokensAsync(profile.ModelId, text, cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Hash del payload completo (istruzioni, messaggi, schema, strumenti, modello e opzioni): stesso input logico, stesso hash.</summary>
     private static string PayloadHash(DocumentRuntimeProfile profile, DocumentPayload payload) =>
         Hash(System.Text.Json.JsonSerializer.Serialize(new
