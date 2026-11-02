@@ -4,7 +4,7 @@ Non è un piano: la fonte dei task è `tasks.md`. Solo stato per riprendere. Nes
 
 ## Stato
 - Branch `feature/002-implementation`. I2 chiuso (vedi `I2.md`). **Milestone corrente: I3.**
-- Completati e spuntati I3: T033–T041. Migrations `20261102012256_DocumentEvidence`, `20261102015659_DocumentWork` (tabelle append-only con trigger 23001; FK checkpoint per owner in SQL raw, non nello snapshot; `WorkManifest.SourceHash` = hash fonti congelate). T040/T041: 27 nuovi test + 275 non-regressione PASS. Prossimo: T042→T043 e T045→T046 in parallelo; poi T044, T118, T047, T119, T048 (migration regime), T118, T047, T119, T048, T049–T055.
+- Completati e spuntati I3: T033–T041. Migrations `20261102012256_DocumentEvidence`, `20261102015659_DocumentWork` (tabelle append-only con trigger 23001; FK checkpoint per owner in SQL raw, non nello snapshot; `WorkManifest.SourceHash` = hash fonti congelate). T040/T041: 27 nuovi test + 275 non-regressione PASS. T042/T043 spuntati (grafo nativo `DocumentBatchWorkflow`/`Executors`, `IDocumentBatchPort` con fake; port di produzione su DocumentWorkStore/AgentFactory = T044/T049; ripresa dopo risposta salvata ma prima del commit rivalida la risposta del checkpoint senza reinferire — confermare in T044; rosso T042 non osservato, mutazione sul lookup di InvokeBatch → rosso). In corso: T045→T046 (agente regime, owner migrations). Prossimo: poi T044, T118, T047, T119, T048 (migration regime), T118, T047, T119, T048, T049–T055.
 - Regola: una sola migration alla volta (un solo agente scrive in Persistence/Migrations).
 - Rosso iniziale NON osservato per T037, T038 (test scritti dopo il codice). Dichiarato.
 - `docs/acceptance-trace/` non tracciato: non toccare.
