@@ -89,26 +89,30 @@ internal static class WorkOwnerGuard
 
         string Deadline(string alias) => !includeDeadline ? ""
             : " AND " + (regimeRootsOnly ? DocumentDeadlineGuard.RegimeRootAlive(alias) : DocumentDeadlineGuard.RootAlive(alias));
+        // Il lock di riga sta in una CTE MATERIALIZED e il clock nel filtro esterno. Con un solo livello PostgreSQL valuta clock_timestamp() mentre
+        // scorre la riga, cioè PRIMA di attendere il lock, e non lo rivaluta se la riga non è cambiata nell'attesa; una sottoquery semplice non
+        // basta, perché il planner vi spinge dentro anche i predicati volatili. La CTE materializzata è una barriera: prima si prende il lock,
+        // poi owner/fence/lease/scadenza si leggono con il clock successivo (T048).
         var sql = writer.OwnerKind switch
         {
             WorkOwnerKind.ProcessingRun => $"""
-                SELECT r."ProjectId", r."MafVersion", r."WorkflowDefinitionVersion" FROM "ProcessingRuns" r
-                WHERE r."Id" = @owner AND r."Status" = 'Running' AND r."LeaseOwner" = @lease AND r."FencingToken" = @fence
+                WITH l AS MATERIALIZED (SELECT x.* FROM "ProcessingRuns" x WHERE x."Id" = @owner FOR UPDATE OF x)
+                SELECT r."ProjectId", r."MafVersion", r."WorkflowDefinitionVersion" FROM l r
+                WHERE r."Status" = 'Running' AND r."LeaseOwner" = @lease AND r."FencingToken" = @fence
                   AND r."LeaseUntil" > clock_timestamp(){Deadline("r")}
-                FOR UPDATE OF r
                 """,
             WorkOwnerKind.ChatTurn => $"""
-                SELECT c."ProjectId", NULL::text, NULL::text FROM "ChatTurns" t JOIN "Conversations" c ON c."Id" = t."ConversationId"
-                WHERE t."Id" = @owner AND t."Status" = 'Running' AND t."LeaseOwner" = @lease AND t."FencingToken" = @fence
+                WITH l AS MATERIALIZED (SELECT x.* FROM "ChatTurns" x WHERE x."Id" = @owner FOR UPDATE OF x)
+                SELECT c."ProjectId", NULL::text, NULL::text FROM l t JOIN "Conversations" c ON c."Id" = t."ConversationId"
+                WHERE t."Status" = 'Running' AND t."LeaseOwner" = @lease AND t."FencingToken" = @fence
                   AND t."LeaseUntil" > clock_timestamp(){Deadline("t")}
-                FOR UPDATE OF t
                 """,
             _ => $"""
-                SELECT j."ProjectId", NULL::text, j."WorkflowDefinitionVersion" FROM "DocumentJobs" j
+                WITH l AS MATERIALIZED (SELECT x.* FROM "DocumentJobs" x WHERE x."Id" = @owner FOR UPDATE OF x)
+                SELECT j."ProjectId", NULL::text, j."WorkflowDefinitionVersion" FROM l j
                 JOIN "DocumentPreparations" p ON p."Id" = j."PreparationId" AND p."ProjectId" = j."ProjectId"
-                WHERE j."Id" = @owner AND j."Status" = 'Running' AND j."LeaseOwner" = @lease AND j."FencingToken" = @fence
+                WHERE j."Status" = 'Running' AND j."LeaseOwner" = @lease AND j."FencingToken" = @fence
                   AND j."LeaseUntil" > clock_timestamp() AND {DocumentDeadlineGuard.ChildAlive("j", "p")}
-                FOR UPDATE OF j
                 """,
         };
 
