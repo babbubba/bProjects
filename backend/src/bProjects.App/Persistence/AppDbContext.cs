@@ -36,6 +36,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AnalysisEvidenceSelection> AnalysisEvidenceSelections => Set<AnalysisEvidenceSelection>();
     public DbSet<AnalysisEvidenceSelectionItem> AnalysisEvidenceSelectionItems => Set<AnalysisEvidenceSelectionItem>();
     public DbSet<AnalysisEvidenceLink> AnalysisEvidenceLinks => Set<AnalysisEvidenceLink>();
+    public DbSet<AnalysisEvidenceRelation> AnalysisEvidenceRelations => Set<AnalysisEvidenceRelation>();
     public DbSet<EvidenceCoverageReport> EvidenceCoverageReports => Set<EvidenceCoverageReport>();
     public DbSet<DocumentPolicy> DocumentPolicies => Set<DocumentPolicy>();
     public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
@@ -1154,6 +1155,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             link.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(l => l.RunId).OnDelete(DeleteBehavior.Restrict);
             link.HasOne<EvidenceItem>().WithMany().HasForeignKey(l => l.EvidenceId).OnDelete(DeleteBehavior.Restrict);
             link.HasOne<Project>().WithMany().HasForeignKey(l => l.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AnalysisEvidenceRelation>(relation =>
+        {
+            relation.HasKey(r => new { r.RunId, r.FromEvidenceId, r.ToEvidenceId, r.Type });
+            relation.Property(r => r.Type).HasConversion<string>().HasMaxLength(16);
+            relation.Property(r => r.Basis).HasConversion<string>().HasMaxLength(16);
+            relation.Property(r => r.Rationale).HasMaxLength(2_000);
+            relation.HasIndex(r => r.ToEvidenceId);
+            relation.HasIndex(r => r.FromEvidenceId);
+            relation.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(r => r.RunId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceItem>().WithMany().HasForeignKey(r => r.FromEvidenceId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceItem>().WithMany().HasForeignKey(r => r.ToEvidenceId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            relation.ToTable(t => t.HasCheckConstraint("CK_AnalysisEvidenceRelations_NotSelf", "\"FromEvidenceId\" <> \"ToEvidenceId\""));
         });
 
         builder.Entity<EvidenceCoverageReport>(report =>

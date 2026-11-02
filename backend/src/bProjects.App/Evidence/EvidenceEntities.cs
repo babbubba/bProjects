@@ -313,6 +313,21 @@ public sealed class AnalysisEvidenceLink
     public Guid ProjectId { get; set; }
 }
 
+/// <summary>
+/// Relazione interpretativa nata durante Analizza documentale (data-model: AnalysisEvidenceRelations): append-only, per run; non modifica le
+/// estrazioni pregresse. Scritta nella stessa transazione della revisione AI, dalle sole patch AddRelation non invalide (Applied o preservate in un conflitto).
+/// </summary>
+public sealed class AnalysisEvidenceRelation
+{
+    public Guid RunId { get; set; }
+    public Guid FromEvidenceId { get; set; }
+    public Guid ToEvidenceId { get; set; }
+    public EvidenceRelationType Type { get; set; }
+    public EvidenceRelationBasis Basis { get; set; }
+    public string? Rationale { get; set; }
+    public Guid ProjectId { get; set; }
+}
+
 /// <summary>Esito versionato della verifica di copertura e provenienza, legato agli input esatti.</summary>
 public sealed class EvidenceCoverageReport
 {

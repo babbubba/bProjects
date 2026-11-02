@@ -2498,6 +2498,47 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("AnalysisEvidenceLinks");
                 });
 
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceRelation", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FromEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Rationale")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("RunId", "FromEvidenceId", "ToEvidenceId", "Type");
+
+                    b.HasIndex("FromEvidenceId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ToEvidenceId");
+
+                    b.ToTable("AnalysisEvidenceRelations", t =>
+                        {
+                            t.HasCheckConstraint("CK_AnalysisEvidenceRelations_NotSelf", "\"FromEvidenceId\" <> \"ToEvidenceId\"");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceSelection", b =>
                 {
                     b.Property<Guid>("RunId")
@@ -3907,6 +3948,33 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Evidence.AnalysisEvidenceSelection", null)
                         .WithMany()
                         .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.AnalysisEvidenceRelation", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceItem", null)
+                        .WithMany()
+                        .HasForeignKey("FromEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.AnalysisEvidenceSelection", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceItem", null)
+                        .WithMany()
+                        .HasForeignKey("ToEvidenceId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

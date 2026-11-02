@@ -2,6 +2,7 @@ using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,9 @@ public enum SelectionOutcome
 }
 
 public sealed record SelectionResult(SelectionOutcome Outcome, EvidenceSelectionView? View = null, IReadOnlyList<long>? MissingSequences = null);
+
+/// <summary>Relazione interpretativa del run da persistere (append-only) insieme alla revisione.</summary>
+public sealed record RunRelation(Guid From, Guid To, EvidenceRelationType Type, EvidenceRelationBasis Basis, string? Rationale);
 
 /// <summary>
 /// Scritture e letture del registro delle evidenze (data-model.md §Registro, contracts/ai-workflow.md §10.5–10.6). Ogni scrittura di un
@@ -594,6 +598,103 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         db.ChangeTracker.Clear();
         return new(SelectionOutcome.Frozen, view);
     }
+
+    /// <summary>
+    /// Congela la selezione del run documentale (002 T059): come <see cref="FreezeSelectionAsync"/> per le versioni correnti dei messaggi PM entro il
+    /// cutoff (vista 001 immutata), e in più le versioni Evidence dei documenti Ready inclusi nello snapshot di fonti del run, scritte come
+    /// righe di selezione Document (preparazione e versione) nella stessa transazione e una sola volta, sotto lease/fencing del run. Con cutoff 0 non ci
+    /// sono messaggi PM e la selezione contiene i soli documenti. I tentativi successivi e il resume la rileggono identica.
+    /// </summary>
+    public async Task<SelectionResult> FreezeDocumentSelectionAsync(AnalysisRunClaim claim, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        if (await LoadSelectionAsync(claim.RunId, ct) is { } existing)
+        {
+            return new(SelectionOutcome.Existing, existing);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var valid = (await db.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM "ProcessingRuns"
+            WHERE "Id" = {claim.RunId} AND "Kind" = 'Analysis' AND "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner}
+              AND "FencingToken" = {claim.FencingToken} AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp()
+            FOR UPDATE
+            """).ToListAsync(ct)).Count == 1;
+        if (!valid)
+        {
+            return new(SelectionOutcome.Rejected);
+        }
+
+        if (await LoadSelectionAsync(claim.RunId, ct) is { } raced)
+        {
+            return new(SelectionOutcome.Existing, raced);
+        }
+
+        var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId, ct);
+        var users = await db.ConversationMessages.AsNoTracking()
+            .Where(m => m.ConversationId == run.ConversationId && m.Role == MessageRole.User && m.Sequence <= run.SourceCutoffSequence)
+            .OrderBy(m => m.Sequence)
+            .Select(m => new { m.Id, m.Sequence })
+            .ToListAsync(ct);
+        var ids = users.Select(u => u.Id).ToList();
+        var states = await db.EvidenceMessageStates.AsNoTracking().Where(s => ids.Contains(s.MessageId)).ToDictionaryAsync(s => s.MessageId, ct);
+        var missing = users.Where(u => !states.ContainsKey(u.Id)).Select(u => u.Sequence).ToList();
+        if (missing.Count > 0)
+        {
+            return new(SelectionOutcome.Missing, MissingSequences: missing);
+        }
+
+        var versionIds = states.Values.Select(s => s.CurrentVersionId).ToList();
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.MessageId!.Value, ct);
+        var items = users.Select(u => versions[u.Id]).Select(v => new SelectionItem(v.MessageId!.Value, v.MessageSequence!.Value, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
+        var view = await BuildViewAsync(items, ct);
+
+        var documents = run.SourceSnapshotId is { } snapshotId
+            ? await db.SourceSnapshotItems.AsNoTracking()
+                .Where(i => i.SnapshotId == snapshotId && i.Included && i.Availability == SourceAvailability.Ready && i.EvidenceVersionId != null && i.PreparationId != null)
+                .OrderBy(i => i.DocumentId).ToListAsync(ct)
+            : [];
+
+        var now = await NowAsync(ct);
+        db.AnalysisEvidenceSelections.Add(new AnalysisEvidenceSelection
+        {
+            RunId = run.Id,
+            ProjectId = run.ProjectId,
+            CreatedAt = now,
+            ViewHash = view.Hash(),
+            View = view.Serialize(),
+        });
+        await db.SaveChangesAsync(ct);
+        db.AnalysisEvidenceSelectionItems.AddRange(items.Select(i => new AnalysisEvidenceSelectionItem
+        {
+            RunId = run.Id,
+            OriginKind = EvidenceOriginKind.Message,
+            MessageId = i.MessageId,
+            MessageSequence = i.Sequence,
+            VersionId = i.VersionId,
+        }));
+        db.AnalysisEvidenceSelectionItems.AddRange(documents.Select(d => new AnalysisEvidenceSelectionItem
+        {
+            RunId = run.Id,
+            OriginKind = EvidenceOriginKind.Document,
+            PreparationId = d.PreparationId,
+            VersionId = d.EvidenceVersionId!.Value,
+        }));
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+        return new(SelectionOutcome.Frozen, view);
+    }
+
+    /// <summary>Accoda (nel contesto corrente, senza salvare) le relazioni interpretative del run: append-only, deduplicate per (da, a, tipo).</summary>
+    public void AppendRunRelations(Guid runId, Guid projectId, IEnumerable<RunRelation> relations) =>
+        db.AnalysisEvidenceRelations.AddRange(relations
+            .GroupBy(r => (r.From, r.To, r.Type))
+            .Select(g => g.First())
+            .Select(r => new AnalysisEvidenceRelation
+            {
+                RunId = runId, FromEvidenceId = r.From, ToEvidenceId = r.To, Type = r.Type, Basis = r.Basis, Rationale = r.Rationale, ProjectId = projectId,
+            }));
 
     /// <summary>Vista deterministica per le versioni date: evidenze, relazioni asserite e versioni dei bersagli non selezionati.</summary>
     public async Task<EvidenceSelectionView> BuildViewAsync(IReadOnlyList<SelectionItem> items, CancellationToken ct)
