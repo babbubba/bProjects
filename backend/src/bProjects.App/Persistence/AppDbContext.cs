@@ -30,6 +30,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<EvidenceRelation> EvidenceRelations => Set<EvidenceRelation>();
     public DbSet<EvidenceMessageState> EvidenceMessageStates => Set<EvidenceMessageState>();
     public DbSet<EvidencePromotion> EvidencePromotions => Set<EvidencePromotion>();
+    public DbSet<EvidenceDocumentState> EvidenceDocumentStates => Set<EvidenceDocumentState>();
+    public DbSet<DocumentPromotion> DocumentPromotions => Set<DocumentPromotion>();
     public DbSet<EvidenceBatch> EvidenceBatches => Set<EvidenceBatch>();
     public DbSet<AnalysisEvidenceSelection> AnalysisEvidenceSelections => Set<AnalysisEvidenceSelection>();
     public DbSet<AnalysisEvidenceSelectionItem> AnalysisEvidenceSelectionItems => Set<AnalysisEvidenceSelectionItem>();
@@ -333,6 +335,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             preparation.Property(p => p.RequestedAt).HasDefaultValueSql("now()");
             preparation.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
             preparation.HasAlternateKey(p => new { p.Id, p.ProjectId });
+            // (Id, versione file): ancora per i puntatori del ledger documentale, che non possono riferire la preparazione di un'altra versione.
+            preparation.HasAlternateKey(p => new { p.Id, p.DocumentVersionId });
             preparation.HasIndex(p => new { p.DocumentVersionId, p.Generation }).IsUnique();
             // Una sola generazione aperta per versione file.
             preparation.HasIndex(p => p.DocumentVersionId).IsUnique().HasFilter("\"Status\" IN ('Queued', 'Parsing', 'Extracting')").HasDatabaseName("UX_DocumentPreparations_OneOpenPerVersion");
@@ -647,6 +651,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<EvidenceExtractionJob>(job =>
         {
             job.HasKey(j => j.Id);
+            job.Property(j => j.OriginKind).HasConversion<string>().HasMaxLength(16);
             job.Property(j => j.Reason).HasConversion<string>().HasMaxLength(16);
             job.Property(j => j.Status).HasConversion<string>().HasMaxLength(16);
             job.Property(j => j.ExtractorConfig).HasColumnType("jsonb");
@@ -656,6 +661,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             job.HasOne<Project>().WithMany().HasForeignKey(j => j.ProjectId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<Conversation>().WithMany().HasForeignKey(j => j.ConversationId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<ConversationMessage>().WithMany().HasForeignKey(j => j.MessageId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(j => new { j.PreparationId, j.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             job.HasOne<EvidenceBatch>().WithMany().HasForeignKey(j => j.BatchId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(j => j.RetryOfJobId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(j => j.ResultVersionId).OnDelete(DeleteBehavior.Restrict);
@@ -663,6 +672,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             // Un solo lavoro aperto per messaggio: doppio invio, rianalisi concorrenti e backfill non lo duplicano.
             job.HasIndex(j => j.MessageId).IsUnique().HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("UX_EvidenceExtractionJobs_OneOpenPerMessage");
             job.HasIndex(j => new { j.RequestedAt, j.Id }).HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("IX_EvidenceExtractionJobs_Open_Fifo");
+            // Un solo aggregatore documentale per preparazione, in qualsiasi stato: il retry crea una nuova generazione di preparazione.
+            job.HasIndex(j => j.PreparationId).IsUnique().HasFilter("\"OriginKind\" = 'Document'").HasDatabaseName("UX_EvidenceExtractionJobs_OnePerPreparation");
             job.HasIndex(j => new { j.ProjectId, j.MessageSequence });
             job.HasIndex(j => j.BatchId);
             job.HasIndex(j => j.ResultVersionId);
@@ -672,6 +683,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             {
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Sequence", "\"MessageSequence\" >= 1");
+                // XOR Message oppure Preparation: nessun messaggio fittizio per il ramo documentale.
+                t.HasCheckConstraint("CK_EvidenceExtractionJobs_Origin",
+                    "(\"OriginKind\" = 'Message' AND \"ConversationId\" IS NOT NULL AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL) " +
+                    "OR (\"OriginKind\" = 'Document' AND \"ConversationId\" IS NULL AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL)");
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultVersionId\" IS NOT NULL");
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
             });
@@ -680,20 +695,32 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<EvidenceExtractionVersion>(version =>
         {
             version.HasKey(v => v.Id);
+            version.Property(v => v.OriginKind).HasConversion<string>().HasMaxLength(16);
+            version.Property(v => v.ManifestHash).HasMaxLength(64);
             version.Property(v => v.SchemaVersion).HasMaxLength(32);
+            // Ancora del puntatore corrente dei documenti (versione e progetto coerenti).
+            version.HasAlternateKey(v => new { v.Id, v.ProjectId });
             version.Property(v => v.PromptVersion).HasMaxLength(64);
             version.Property(v => v.ModelId).HasMaxLength(256);
             version.Property(v => v.Parameters).HasColumnType("jsonb");
             version.Property(v => v.NoEvidenceReason).HasMaxLength(2_000);
             version.HasIndex(v => new { v.MessageId, v.Version }).IsUnique();
+            version.HasIndex(v => new { v.PreparationId, v.Version }).IsUnique();
             version.HasIndex(v => v.JobId).IsUnique();
             version.HasIndex(v => new { v.ProjectId, v.MessageSequence });
             version.HasOne<Project>().WithMany().HasForeignKey(v => v.ProjectId).OnDelete(DeleteBehavior.Restrict);
             version.HasOne<Conversation>().WithMany().HasForeignKey(v => v.ConversationId).OnDelete(DeleteBehavior.Restrict);
             version.HasOne<ConversationMessage>().WithMany().HasForeignKey(v => v.MessageId).OnDelete(DeleteBehavior.Restrict);
             version.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(v => v.JobId).OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(v => new { v.PreparationId, v.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             version.ToTable(t =>
             {
+                t.HasCheckConstraint("CK_EvidenceExtractionVersions_Origin",
+                    "(\"OriginKind\" = 'Message' AND \"ConversationId\" IS NOT NULL AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL AND \"ManifestHash\" IS NULL) " +
+                    "OR (\"OriginKind\" = 'Document' AND \"ConversationId\" IS NULL AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL AND \"ManifestHash\" IS NOT NULL AND \"SchemaVersion\" = 'evidence-1.1.0')");
                 t.HasCheckConstraint("CK_EvidenceExtractionVersions_Version", "\"Version\" >= 1");
                 // Zero evidenze è un esito esplicito e motivato, mai un default.
                 t.HasCheckConstraint("CK_EvidenceExtractionVersions_NoEvidence",
@@ -705,7 +732,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             evidence.ToTable("Evidences");
             evidence.HasKey(e => e.Id);
-            evidence.Property(e => e.Key).HasMaxLength(16);
+            evidence.Property(e => e.OriginKind).HasConversion<string>().HasMaxLength(16);
+            evidence.Property(e => e.Key).HasMaxLength(32);
             evidence.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
             evidence.Property(e => e.Polarity).HasConversion<string>().HasMaxLength(16);
             evidence.Property(e => e.Certainty).HasConversion<string>().HasMaxLength(16);
@@ -713,11 +741,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             evidence.HasIndex(e => new { e.VersionId, e.Ordinal }).IsUnique();
             evidence.HasIndex(e => new { e.VersionId, e.Key }).IsUnique();
             evidence.HasIndex(e => new { e.ProjectId, e.MessageId });
+            evidence.HasIndex(e => new { e.ProjectId, e.PreparationId });
             evidence.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(e => e.VersionId).OnDelete(DeleteBehavior.Restrict);
             evidence.HasOne<Project>().WithMany().HasForeignKey(e => e.ProjectId).OnDelete(DeleteBehavior.Restrict);
             evidence.HasOne<ConversationMessage>().WithMany().HasForeignKey(e => e.MessageId).OnDelete(DeleteBehavior.Restrict);
+            evidence.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(e => new { e.PreparationId, e.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             evidence.ToTable(t =>
             {
+                t.HasCheckConstraint("CK_Evidences_Origin",
+                    "(\"OriginKind\" = 'Message' AND \"MessageId\" IS NOT NULL AND \"PreparationId\" IS NULL) " +
+                    "OR (\"OriginKind\" = 'Document' AND \"MessageId\" IS NULL AND \"PreparationId\" IS NOT NULL)");
                 t.HasCheckConstraint("CK_Evidences_Ordinal", "\"Ordinal\" >= 1");
                 t.HasCheckConstraint("CK_Evidences_Statement_NotBlank", "\"Statement\" ~ '\\S'");
             });
@@ -762,6 +798,63 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             promotion.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.PromotedBy).OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<EvidenceDocumentState>(state =>
+        {
+            state.HasKey(s => s.DocumentVersionId);
+            state.HasIndex(s => s.ProjectId);
+            state.HasOne<DocumentVersion>().WithOne()
+                .HasForeignKey<EvidenceDocumentState>(s => new { s.DocumentVersionId, s.ProjectId })
+                .HasPrincipalKey<DocumentVersion>(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // La preparazione corrente appartiene a questa versione file; la versione Evidence corrente appartiene a questo progetto.
+            state.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(s => new { s.CurrentPreparationId, s.DocumentVersionId })
+                .HasPrincipalKey(p => new { p.Id, p.DocumentVersionId })
+                .OnDelete(DeleteBehavior.Restrict);
+            state.HasOne<EvidenceExtractionVersion>().WithMany()
+                .HasForeignKey(s => new { s.CurrentEvidenceVersionId, s.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            state.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_EvidenceDocumentStates_Revision", "\"Revision\" >= 0");
+                t.HasCheckConstraint("CK_EvidenceDocumentStates_Pointers", "(\"CurrentPreparationId\" IS NULL) = (\"CurrentEvidenceVersionId\" IS NULL)");
+            });
+        });
+
+        builder.Entity<DocumentPromotion>(promotion =>
+        {
+            promotion.HasKey(p => p.Id);
+            promotion.Property(p => p.Reason).HasMaxLength(1_000);
+            promotion.HasIndex(p => new { p.DocumentVersionId, p.PromotedAt });
+            promotion.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(p => new { p.DocumentVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(p => new { p.ToPreparationId, p.DocumentVersionId })
+                .HasPrincipalKey(x => new { x.Id, x.DocumentVersionId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(p => new { p.FromPreparationId, p.DocumentVersionId })
+                .HasPrincipalKey(x => new { x.Id, x.DocumentVersionId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<EvidenceExtractionVersion>().WithMany()
+                .HasForeignKey(p => new { p.ToEvidenceVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<EvidenceExtractionVersion>().WithMany()
+                .HasForeignKey(p => new { p.FromEvidenceVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.PromotedBy).OnDelete(DeleteBehavior.Restrict);
+            promotion.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPromotions_From", "(\"FromPreparationId\" IS NULL) = (\"FromEvidenceVersionId\" IS NULL)");
+                t.HasCheckConstraint("CK_DocumentPromotions_Changes", "\"FromEvidenceVersionId\" IS NULL OR \"FromEvidenceVersionId\" <> \"ToEvidenceVersionId\"");
+            });
+        });
+
         builder.Entity<EvidenceBatch>(batch =>
         {
             batch.HasKey(b => b.Id);
@@ -783,11 +876,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         builder.Entity<AnalysisEvidenceSelectionItem>(item =>
         {
-            item.HasKey(i => new { i.RunId, i.MessageId });
+            // Chiave per versione selezionata: MessageId è nullable nel ramo documentale. L'unicità storica (run, messaggio) resta come indice.
+            item.HasKey(i => new { i.RunId, i.VersionId });
+            item.Property(i => i.OriginKind).HasConversion<string>().HasMaxLength(16);
             item.HasIndex(i => i.VersionId);
+            item.HasIndex(i => new { i.RunId, i.MessageId }).IsUnique();
+            item.HasIndex(i => new { i.RunId, i.PreparationId }).IsUnique();
             item.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(i => i.RunId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne<ConversationMessage>().WithMany().HasForeignKey(i => i.MessageId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<DocumentPreparation>().WithMany().HasForeignKey(i => i.PreparationId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(i => i.VersionId).OnDelete(DeleteBehavior.Restrict);
+            item.ToTable(t => t.HasCheckConstraint("CK_AnalysisEvidenceSelectionItems_Origin",
+                "(\"OriginKind\" = 'Message' AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL) " +
+                "OR (\"OriginKind\" = 'Document' AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL)"));
         });
 
         builder.Entity<AnalysisEvidenceLink>(link =>

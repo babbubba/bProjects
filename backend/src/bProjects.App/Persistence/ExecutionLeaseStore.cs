@@ -341,6 +341,8 @@ public sealed class ExecutionLeaseStore(AppDbContext db, IOptions<ExecutionOptio
                    OR (j."Status" = 'Running' AND j."LeaseUntil" <= clk.t))
               AND j."AttemptCount" < j."MaxAttempts"
               AND j."DeadlineAt" > clk.t
+              -- Solo estrazioni di messaggio: l'aggregatore documentale (OriginKind = Document) ha una claim propria (T051/T118).
+              AND j."OriginKind" = 'Message'
               AND NOT EXISTS (
                     SELECT 1 FROM "EvidenceExtractionJobs" p
                     WHERE p."ConversationId" = j."ConversationId"

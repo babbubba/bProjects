@@ -43,6 +43,9 @@ public sealed record ModelRuntimeSnapshot(
         AvailableModels is { } listed && !string.IsNullOrEmpty(modelId) && !listed.Contains(modelId, StringComparer.Ordinal);
 }
 
+/// <summary>Capacità di conteggio verificate di un modello: tokenizer interrogabile e template applicato esposto dal runtime.</summary>
+public sealed record ModelCountingCapabilities(string ModelId, bool TokenizerVerified, bool TemplateExposed);
+
 /// <summary>Il modello richiesto da una fase non è esposto dal server: nessuna richiesta inviata, nessun modello alternativo usato.</summary>
 public sealed class ModelNotAvailableException(string modelId, AiPhase phase)
     : InvalidOperationException($"Modello {modelId} (fase {phase}) non esposto dal server.")
@@ -84,9 +87,21 @@ public sealed class ModelRuntimeMonitor
     private readonly ILogger _logger;
     private readonly TimeProvider _time;
     private readonly object _gate = new();
-    private ModelRuntimeSnapshot _snapshot;
-    private DateTimeOffset _validUntil = DateTimeOffset.MinValue;
-    private Task<ModelRuntimeSnapshot>? _probe;
+    private readonly Dictionary<string, ModelState> _models = new(StringComparer.Ordinal);
+
+    /// <summary>Stato verificato di un modello: snapshot, validità, sonda in volo e capacità di conteggio (tokenizer/template).</summary>
+    private sealed class ModelState(ModelRuntimeSnapshot snapshot)
+    {
+        public ModelRuntimeSnapshot Snapshot { get; set; } = snapshot;
+
+        public DateTimeOffset ValidUntil { get; set; } = DateTimeOffset.MinValue;
+
+        public Task<ModelRuntimeSnapshot>? Probe { get; set; }
+
+        public Task<ModelCountingCapabilities>? Counting { get; set; }
+
+        public DateTimeOffset CountingValidUntil { get; set; } = DateTimeOffset.MinValue;
+    }
 
     public ModelRuntimeMonitor(InternalModelClient client, AiOptions options, ILogger<ModelRuntimeMonitor> logger, TimeProvider? time = null)
     {
@@ -94,64 +109,117 @@ public sealed class ModelRuntimeMonitor
         _options = options;
         _logger = logger;
         _time = time ?? TimeProvider.System;
-        _snapshot = Empty(ModelRuntimeStatus.Unverified, null);
     }
 
-    /// <summary>Ultimo stato noto, senza I/O (Unverified se mai sondato).</summary>
+    /// <summary>Ultimo stato noto del modello globale, senza I/O (Unverified se mai sondato).</summary>
     public ModelRuntimeSnapshot Current
     {
         get
         {
             lock (_gate)
             {
-                return _snapshot;
+                return StateOf(_options.ModelId).Snapshot;
             }
         }
     }
 
-    /// <summary>Stato verificato: dalla cache finché valido, altrimenti con una sonda condivisa fra i chiamanti. Non lancia per errori del server.</summary>
-    public async Task<ModelRuntimeSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+    private ModelState StateOf(string modelId)
+    {
+        if (!_models.TryGetValue(modelId, out var state))
+        {
+            _models[modelId] = state = new ModelState(Empty(ModelRuntimeStatus.Unverified, null, modelId));
+        }
+
+        return state;
+    }
+
+    /// <summary>Stato verificato del modello globale: dalla cache finché valido, altrimenti con una sonda condivisa fra i chiamanti. Non lancia per errori del server.</summary>
+    public Task<ModelRuntimeSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default) =>
+        GetSnapshotAsync(_options.ModelId, cancellationToken);
+
+    /// <summary>
+    /// Come <see cref="GetSnapshotAsync(CancellationToken)"/> per il modello indicato (override di fase): cache, TTL e sonda in volo
+    /// sono per modello, così un modello non è mai giudicato sulla finestra di un altro.
+    /// </summary>
+    public async Task<ModelRuntimeSnapshot> GetSnapshotAsync(string modelId, CancellationToken cancellationToken = default)
     {
         Task<ModelRuntimeSnapshot> probe;
         lock (_gate)
         {
-            if (_time.GetUtcNow() < _validUntil)
+            var state = StateOf(modelId);
+            if (_time.GetUtcNow() < state.ValidUntil)
             {
-                return _snapshot;
+                return state.Snapshot;
             }
 
-            probe = _probe ??= Task.Run(ProbeAndStoreAsync, CancellationToken.None);
+            probe = state.Probe ??= Task.Run(() => ProbeAndStoreAsync(modelId), CancellationToken.None);
         }
 
         return await probe.WaitAsync(cancellationToken);
     }
 
-    /// <summary>Scarta la validità della cache (es. dopo un guasto di rete): la lettura successiva sonda di nuovo.</summary>
+    /// <summary>
+    /// Capacità di conteggio del modello: tokenizer interrogabile (POST /tokenize con quel modello) e template applicato esposto
+    /// (POST /apply-template). Cache per modello con lo stesso TTL della sonda; un fallimento vale «non verificato», mai un default.
+    /// </summary>
+    public async Task<ModelCountingCapabilities> GetCountingCapabilitiesAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        Task<ModelCountingCapabilities> task;
+        lock (_gate)
+        {
+            var state = StateOf(modelId);
+            if (state.Counting is null || _time.GetUtcNow() >= state.CountingValidUntil)
+            {
+                state.Counting = Task.Run(() => ProbeCountingAsync(modelId), CancellationToken.None);
+                state.CountingValidUntil = _time.GetUtcNow().AddSeconds(Math.Max(1, _options.RuntimeCheckSeconds));
+            }
+
+            task = state.Counting;
+        }
+
+        return await task.WaitAsync(cancellationToken);
+    }
+
+    private async Task<ModelCountingCapabilities> ProbeCountingAsync(string modelId)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(MaxProbeSeconds, Math.Max(1, _options.RequestTimeoutSeconds))));
+        var tokenizer = await TryAsync(c => _client.CountTokensAsync(modelId, "probe", c), timeout.Token);
+        var template = await TryAsync(c => _client.RenderChatTemplateAsync(modelId, [("user", "probe")], false, c), timeout.Token);
+        return new ModelCountingCapabilities(
+            modelId, tokenizer is { Outcome: Outcome.Ok, Value: > 0 }, template is { Outcome: Outcome.Ok, Value.Length: > 0 });
+    }
+
+    /// <summary>Scarta la validità della cache di tutti i modelli (es. dopo un guasto di rete): la lettura successiva sonda di nuovo.</summary>
     public void Invalidate()
     {
         lock (_gate)
         {
-            _validUntil = DateTimeOffset.MinValue;
+            foreach (var state in _models.Values)
+            {
+                state.ValidUntil = DateTimeOffset.MinValue;
+                state.Counting = null;
+            }
         }
     }
 
-    private async Task<ModelRuntimeSnapshot> ProbeAndStoreAsync()
+    private async Task<ModelRuntimeSnapshot> ProbeAndStoreAsync(string modelId)
     {
-        var fresh = await ProbeAsync();
+        var fresh = await ProbeAsync(modelId);
         ModelRuntimeSnapshot previous;
         lock (_gate)
         {
-            previous = _snapshot;
-            _snapshot = fresh;
-            _validUntil = _time.GetUtcNow().AddSeconds(Math.Max(1, _options.RuntimeCheckSeconds));
-            _probe = null;
+            var state = StateOf(modelId);
+            previous = state.Snapshot;
+            state.Snapshot = fresh;
+            state.ValidUntil = _time.GetUtcNow().AddSeconds(Math.Max(1, _options.RuntimeCheckSeconds));
+            state.Probe = null;
         }
 
         LogChange(previous, fresh);
         return fresh;
     }
 
-    private async Task<ModelRuntimeSnapshot> ProbeAsync()
+    private async Task<ModelRuntimeSnapshot> ProbeAsync(string modelId)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(MaxProbeSeconds, Math.Max(1, _options.RequestTimeoutSeconds))));
         var ct = timeout.Token;
@@ -161,25 +229,25 @@ public sealed class ModelRuntimeMonitor
         var models = await TryAsync(c => _client.ListModelsAsync(c), ct);
         if (models.Outcome == Outcome.Unreachable)
         {
-            return Empty(ModelRuntimeStatus.Offline, _time.GetUtcNow());
+            return Empty(ModelRuntimeStatus.Offline, _time.GetUtcNow(), modelId);
         }
 
         var available = models.Outcome == Outcome.Ok ? models.Value!.Select(m => m.Id).ToList() : null;
-        var listed = models.Value?.FirstOrDefault(m => string.Equals(m.Id, _options.ModelId, StringComparison.Ordinal));
+        var listed = models.Value?.FirstOrDefault(m => string.Equals(m.Id, modelId, StringComparison.Ordinal));
         if (listed?.Status is { } state && !string.Equals(state, "loaded", StringComparison.OrdinalIgnoreCase))
         {
-            return Empty(ModelRuntimeStatus.Unverified, _time.GetUtcNow()) with { ModelStatus = state, AvailableModels = available };
+            return Empty(ModelRuntimeStatus.Unverified, _time.GetUtcNow(), modelId) with { ModelStatus = state, AvailableModels = available };
         }
 
-        var propsTask = TryAsync(c => _client.GetServerPropsAsync(c), ct);
-        var slotsTask = TryAsync(c => _client.GetSlotsAsync(c), ct);
+        var propsTask = TryAsync(c => _client.GetServerPropsAsync(modelId, c), ct);
+        var slotsTask = TryAsync(c => _client.GetSlotsAsync(modelId, c), ct);
         var props = await propsTask;
         var slots = await slotsTask;
 
         if (models.Outcome != Outcome.Ok && props.Outcome != Outcome.Ok)
         {
             // Il server risponde ma né l'elenco né /props sono utilizzabili (non autorizzato, endpoint assente...): non verificabile.
-            return Empty(ModelRuntimeStatus.Unverified, _time.GetUtcNow());
+            return Empty(ModelRuntimeStatus.Unverified, _time.GetUtcNow(), modelId);
         }
 
         // Finestra: /props, altrimenti il più piccolo n_ctx degli slot (stima prudente); mai la configurazione né --ctx-size.
@@ -191,7 +259,7 @@ public sealed class ModelRuntimeMonitor
         return new ModelRuntimeSnapshot(
             ModelRuntimeStatus.Online,
             _time.GetUtcNow(),
-            _options.ModelId,
+            modelId,
             _options.ContextWindowTokens,
             window is > 0 ? window : null,
             nPredict is > 0 ? nPredict : null,
@@ -200,8 +268,8 @@ public sealed class ModelRuntimeMonitor
             available);
     }
 
-    private ModelRuntimeSnapshot Empty(ModelRuntimeStatus status, DateTimeOffset? checkedAt) =>
-        new(status, checkedAt, _options.ModelId, _options.ContextWindowTokens);
+    private ModelRuntimeSnapshot Empty(ModelRuntimeStatus status, DateTimeOffset? checkedAt, string modelId) =>
+        new(status, checkedAt, modelId, _options.ContextWindowTokens);
 
     private enum Outcome
     {

@@ -118,8 +118,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             .ToListAsync(ct);
         var ids = messages.Select(m => m.Id).ToList();
         var open = (await db.EvidenceExtractionJobs.AsNoTracking()
-            .Where(j => ids.Contains(j.MessageId) && (j.Status == ExtractionJobStatus.Queued || j.Status == ExtractionJobStatus.Running))
-            .Select(j => j.MessageId).ToListAsync(ct)).ToHashSet();
+            .Where(j => ids.Contains(j.MessageId!.Value) && (j.Status == ExtractionJobStatus.Queued || j.Status == ExtractionJobStatus.Running))
+            .Select(j => j.MessageId!.Value).ToListAsync(ct)).ToHashSet();
         var current = onlyMissing
             ? (await db.EvidenceMessageStates.AsNoTracking().Where(s => ids.Contains(s.MessageId)).Select(s => s.MessageId).ToListAsync(ct)).ToHashSet()
             : [];
@@ -163,8 +163,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             .ToListAsync(ct);
         var sequenceOf = priorUsers.ToDictionary(m => m.Id, m => m.Sequence);
         var priorEvidence = (await db.Evidences.AsNoTracking().Where(e => currentVersions.Contains(e.VersionId)).ToListAsync(ct))
-            .OrderBy(e => sequenceOf[e.MessageId]).ThenBy(e => e.Ordinal)
-            .Select((e, i) => new PriorEvidence($"P{i + 1}", e.Id, e.MessageId, sequenceOf[e.MessageId], e.Kind, e.Polarity, e.Statement))
+            .OrderBy(e => sequenceOf[e.MessageId!.Value]).ThenBy(e => e.Ordinal)
+            .Select((e, i) => new PriorEvidence($"P{i + 1}", e.Id, e.MessageId!.Value, sequenceOf[e.MessageId!.Value], e.Kind, e.Polarity, e.Statement))
             .ToList();
 
         return new ExtractionContext(
@@ -198,7 +198,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             .FromSql($"SELECT * FROM \"EvidenceExtractionJobs\" WHERE \"Id\" = {claim.JobId} FOR UPDATE")
             .AsTracking()
             .ToListAsync(ct)).SingleOrDefault();
-        if (job is null || job.MessageId != context.Target.Id)
+        if (job is null || job.OriginKind != EvidenceOriginKind.Message || job.MessageId != context.Target.Id)
         {
             return new(ExtractionCommitOutcome.Rejected, Reason: "job_missing");
         }
@@ -222,7 +222,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             return new(ExtractionCommitOutcome.Rejected, Reason: "lease_lost");
         }
 
-        await LockMessageAsync(job.MessageId, ct);
+        await LockMessageAsync(job.MessageId!.Value, ct);
         var now = await NowAsync(ct);
         var number = (await db.EvidenceExtractionVersions.Where(v => v.MessageId == job.MessageId).MaxAsync(v => (int?)v.Version, ct) ?? 0) + 1;
         var version = new EvidenceExtractionVersion
@@ -294,7 +294,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         {
             db.EvidenceMessageStates.Add(new EvidenceMessageState
             {
-                MessageId = job.MessageId,
+                MessageId = job.MessageId!.Value,
                 ProjectId = job.ProjectId,
                 CurrentVersionId = version.Id,
                 Revision = 1,
@@ -304,7 +304,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             {
                 Id = Guid.NewGuid(),
                 ProjectId = job.ProjectId,
-                MessageId = job.MessageId,
+                MessageId = job.MessageId!.Value,
                 FromVersionId = null,
                 ToVersionId = version.Id,
                 PromotedBy = null,
@@ -489,8 +489,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         }
 
         var versionIds = states.Values.Select(s => s.CurrentVersionId).ToList();
-        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.MessageId, ct);
-        var items = users.Select(u => versions[u.Id]).Select(v => new SelectionItem(v.MessageId, v.MessageSequence, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.MessageId!.Value, ct);
+        var items = users.Select(u => versions[u.Id]).Select(v => new SelectionItem(v.MessageId!.Value, v.MessageSequence!.Value, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
         var view = await BuildViewAsync(items, ct);
 
         var now = await NowAsync(ct);
@@ -545,7 +545,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
                           join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
                           where versionIds.Contains(e.VersionId)
                           select new { e, v.MessageSequence }).ToListAsync(ct);
-        return [.. rows.Select(r => EvidenceSnapshot.From(r.e, r.MessageSequence)).OrderBy(e => e.MessageSequence).ThenBy(e => e.Ordinal)];
+        return [.. rows.Select(r => EvidenceSnapshot.From(r.e, r.MessageSequence!.Value)).OrderBy(e => e.MessageSequence).ThenBy(e => e.Ordinal)];
     }
 
     /// <summary>Relazioni asserite dalle versioni date, con versione e messaggio del bersaglio.</summary>
@@ -560,7 +560,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
                       join t in db.Evidences.AsNoTracking() on r.ToEvidenceId equals t.Id
                       where versionIds.Contains(r.VersionId)
                       orderby r.Id
-                      select new RelationRecord(r.Id, r.VersionId, r.FromEvidenceId, r.ToEvidenceId, t.VersionId, t.MessageId, r.Type, r.Basis, r.Rationale))
+                      select new RelationRecord(r.Id, r.VersionId, r.FromEvidenceId, r.ToEvidenceId, t.VersionId, t.MessageId!.Value, r.Type, r.Basis, r.Rationale))
             .ToListAsync(ct);
     }
 

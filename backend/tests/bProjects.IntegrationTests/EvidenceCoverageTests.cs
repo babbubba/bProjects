@@ -1095,7 +1095,7 @@ internal static class SeededAnalysisFactory
         var states = await db.EvidenceMessageStates.AsNoTracking().Where(s => s.ProjectId == project).ToDictionaryAsync(s => s.MessageId, Ct);
         var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == project).ToListAsync(Ct);
         var items = messages.Select(m => versions.Single(v => v.Id == states[m.Id].CurrentVersionId))
-            .Select(v => new SelectionItem(v.MessageId, v.MessageSequence, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
+            .Select(v => new SelectionItem(v.MessageId!.Value, v.MessageSequence!.Value, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
         var view = await new EvidenceLedgerStore(db).BuildViewAsync(items, Ct);
         var now = DateTimeOffset.UtcNow;
 

@@ -159,11 +159,11 @@ public static class EvidenceEndpoints
             .Select(m => new { m.Id, m.Sequence, m.CreatedAt })
             .ToListAsync(ct);
         var states = await db.EvidenceMessageStates.AsNoTracking().Where(s => s.ProjectId == projectId).ToDictionaryAsync(s => s.MessageId, ct);
-        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId)
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId && v.OriginKind == EvidenceOriginKind.Message)
             .Select(v => new { v.Id, v.MessageId, v.Version, v.EvidenceCount, v.NoEvidenceReason, v.CreatedAt })
             .ToListAsync(ct);
-        var jobs = (await db.EvidenceExtractionJobs.AsNoTracking().Where(j => j.ProjectId == projectId).ToListAsync(ct))
-            .GroupBy(j => j.MessageId)
+        var jobs = (await db.EvidenceExtractionJobs.AsNoTracking().Where(j => j.ProjectId == projectId && j.OriginKind == EvidenceOriginKind.Message).ToListAsync(ct))
+            .GroupBy(j => j.MessageId!.Value)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(j => j.RequestedAt).ThenByDescending(j => j.Id).First());
 
         var items = new List<MessageEvidenceStatusView>();
@@ -233,7 +233,7 @@ public static class EvidenceEndpoints
         var current = db.EvidenceMessageStates.AsNoTracking().Where(s => s.ProjectId == projectId).Select(s => s.CurrentVersionId);
         var query = from e in db.Evidences.AsNoTracking()
                     join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
-                    where e.ProjectId == projectId && current.Contains(e.VersionId)
+                    where e.ProjectId == projectId && e.OriginKind == EvidenceOriginKind.Message && current.Contains(e.VersionId)
                     select new { e, v };
         if (messageId is { } m) { query = query.Where(x => x.e.MessageId == m); }
         if (k is { } kk) { query = query.Where(x => x.e.Kind == kk); }
@@ -250,7 +250,7 @@ public static class EvidenceEndpoints
     {
         var row = await (from e in db.Evidences.AsNoTracking()
                          join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
-                         where e.Id == evidenceId && e.ProjectId == projectId
+                         where e.Id == evidenceId && e.ProjectId == projectId && e.OriginKind == EvidenceOriginKind.Message
                          select new { e, v }).SingleOrDefaultAsync(ct);
         if (row is null)
         {
@@ -276,7 +276,7 @@ public static class EvidenceEndpoints
             var outgoing = r.FromEvidenceId == evidenceId;
             var other = others[outgoing ? r.ToEvidenceId : r.FromEvidenceId];
             return new EvidenceRelationDetailView(
-                r.Id, r.Type.ToString(), r.Basis.ToString(), r.Rationale, outgoing ? "outgoing" : "incoming", other.Id, other.Statement, other.MessageSequence);
+                r.Id, r.Type.ToString(), r.Basis.ToString(), r.Rationale, outgoing ? "outgoing" : "incoming", other.Id, other.Statement, other.MessageSequence!.Value);
         })]));
     }
 
@@ -306,7 +306,7 @@ public static class EvidenceEndpoints
     {
         var row = await (from v in db.EvidenceExtractionVersions.AsNoTracking()
                          join j in db.EvidenceExtractionJobs.AsNoTracking() on v.JobId equals j.Id
-                         where v.Id == versionId && v.ProjectId == projectId
+                         where v.Id == versionId && v.ProjectId == projectId && v.OriginKind == EvidenceOriginKind.Message
                          select new { v, j.Reason }).SingleOrDefaultAsync(ct);
         if (row is null)
         {
@@ -318,14 +318,14 @@ public static class EvidenceEndpoints
         var relations = await db.EvidenceRelations.AsNoTracking().Where(r => r.VersionId == versionId).OrderBy(r => r.Id).ToListAsync(ct);
         using var parameters = JsonDocument.Parse(row.v.Parameters);
         return Results.Ok(new ExtractionVersionView(
-            Summary(row.v, row.Reason, isCurrent), row.v.MessageId, row.v.MessageSequence, parameters.RootElement.Clone(),
+            Summary(row.v, row.Reason, isCurrent), row.v.MessageId!.Value, row.v.MessageSequence!.Value, parameters.RootElement.Clone(),
             [.. evidences.Select(e => ToView(e, row.v, isCurrent))],
             [.. relations.Select(r => new RelationView(r.Id, r.FromEvidenceId, r.ToEvidenceId, r.Type.ToString(), r.Basis.ToString(), r.Rationale))]));
     }
 
     private static async Task<IResult> Compare(Guid projectId, Guid fromId, Guid toId, AppDbContext db, CancellationToken ct)
     {
-        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId && (v.Id == fromId || v.Id == toId)).ToListAsync(ct);
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId && v.OriginKind == EvidenceOriginKind.Message && (v.Id == fromId || v.Id == toId)).ToListAsync(ct);
         var from = versions.SingleOrDefault(v => v.Id == fromId);
         var to = versions.SingleOrDefault(v => v.Id == toId);
         if (from is null || to is null)
@@ -350,7 +350,7 @@ public static class EvidenceEndpoints
         var currentId = await db.EvidenceMessageStates.AsNoTracking().Where(s => s.MessageId == from.MessageId).Select(s => (Guid?)s.CurrentVersionId).SingleOrDefaultAsync(ct);
         EvidenceView? View(EvidenceSnapshot? s) => s is null ? null : ToView(s, s.VersionId == fromId ? from.Version : to.Version, s.VersionId == currentId);
         return Results.Ok(new VersionDiffView(
-            fromId, toId, from.MessageId,
+            fromId, toId, from.MessageId!.Value,
             new DiffSummaryView(diff.Count(DiffStatus.Added), diff.Count(DiffStatus.Removed), diff.Count(DiffStatus.Unchanged), diff.Count(DiffStatus.Modified), diff.Count(DiffStatus.Ambiguous)),
             [.. diff.Entries.Select(e => new DiffEntryView(
                 e.Status.ToString(), View(e.From), View(e.To), [.. e.Changes.Select(c => new FieldChangeView(c.Field, c.From, c.To))], e.Candidates, e.Overlap))]));
@@ -358,7 +358,7 @@ public static class EvidenceEndpoints
 
     private static async Task<IResult> Job(Guid projectId, Guid jobId, AppDbContext db, CancellationToken ct)
     {
-        var job = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId, ct);
+        var job = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId && j.OriginKind == EvidenceOriginKind.Message, ct);
         return job is null ? Results.NotFound() : Results.Ok(ToView(job));
     }
 
@@ -465,7 +465,7 @@ public static class EvidenceEndpoints
             return replay;
         }
 
-        var failed = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId, ct);
+        var failed = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId && j.OriginKind == EvidenceOriginKind.Message, ct);
         if (failed is null)
         {
             return Results.NotFound();
@@ -476,13 +476,13 @@ public static class EvidenceEndpoints
             return Problem(StatusCodes.Status409Conflict, "Si può ritentare soltanto un lavoro fallito", "job_not_failed", failed.Id);
         }
 
-        if (await OpenJobAsync(db, failed.MessageId, ct) is { } open)
+        if (await OpenJobAsync(db, failed.MessageId!.Value, ct) is { } open)
         {
             return Problem(StatusCodes.Status409Conflict, "Un'estrazione di questo messaggio è già in corso", "extraction_active", open);
         }
 
         var now = await NowAsync(db, ct);
-        var job = EvidenceLedgerStore.NewJob(projectId, conversationId, failed.MessageId, failed.MessageSequence, ExtractionJobReason.Reanalysis, now,
+        var job = EvidenceLedgerStore.NewJob(projectId, conversationId, failed.MessageId!.Value, failed.MessageSequence!.Value, ExtractionJobReason.Reanalysis, now,
             execution.Value, EvidenceLedgerStore.ExtractorConfig(ai.Value, execution.Value), requestedBy, failed.BatchId, failed.Id, key);
         db.EvidenceExtractionJobs.Add(job);
         await db.SaveChangesAsync(ct);
@@ -652,7 +652,7 @@ public static class EvidenceEndpoints
     }
 
     public static ExtractionJobView ToView(EvidenceExtractionJob j) => new(
-        j.Id, j.MessageId, j.MessageSequence, j.Reason.ToString(), j.BatchId, j.RetryOfJobId, j.Status.ToString(), j.RequestedAt, j.StartedAt,
+        j.Id, j.MessageId!.Value, j.MessageSequence!.Value, j.Reason.ToString(), j.BatchId, j.RetryOfJobId, j.Status.ToString(), j.RequestedAt, j.StartedAt,
         j.CompletedAt, j.DeadlineAt, j.AttemptCount, j.MaxAttempts, j.NextAttemptAt, j.ResultVersionId,
         j.ErrorCode is null ? null : new JobError(j.ErrorCode, j.ErrorMessage));
 
@@ -660,7 +660,7 @@ public static class EvidenceEndpoints
         v.Id, v.Version, v.CreatedAt, v.EvidenceCount, v.NoEvidenceReason, v.PromptVersion, v.SchemaVersion, v.ModelId, v.JobId, reason.ToString(), isCurrent);
 
     public static EvidenceView ToView(EvidenceItem e, EvidenceExtractionVersion v, bool isCurrent) =>
-        ToView(EvidenceSnapshot.From(e, v.MessageSequence), v.Version, isCurrent);
+        ToView(EvidenceSnapshot.From(e, v.MessageSequence!.Value), v.Version, isCurrent);
 
     public static EvidenceView ToView(EvidenceSnapshot e, int version, bool isCurrent)
     {

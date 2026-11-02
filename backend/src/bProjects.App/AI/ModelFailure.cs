@@ -22,6 +22,10 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
                 return new(false, mismatch.Code, null, $"La finestra di contesto del runtime del modello ({mismatch.RuntimeTokens} token) è inferiore a quella configurata ({mismatch.ConfiguredTokens} token): nessuna richiesta inviata. Allineare Ai:ContextWindowTokens al ctx-size del runtime.");
             case ModelNotAvailableException missing:
                 return new(false, missing.Code, null, $"Il modello «{missing.ModelId}» configurato per la fase {missing.Phase} non è esposto dal server (GET /v1/models): nessuna richiesta inviata e nessun modello alternativo usato. Caricare il profilo sul server o correggere Ai:ModelId / Ai:Phases:{missing.Phase}:ModelId.");
+            case RuntimeUnverifiedException unverified:
+                return new(unverified.Transient, unverified.Code, null, $"{unverified.Message} Nessuna richiesta documentale inviata: finestra, tokenizer o template del modello non sono dimostrati.");
+            case RuntimeFingerprintMismatchException drift:
+                return new(false, drift.Code, null, "Modello, finestra, tokenizer o template del runtime non coincidono più con quelli congelati: nessuna richiesta inviata.");
             case CompactionFailedException failed:
                 return new(false, failed.Code, null, $"{failed.Message} Gli originali non sono stati modificati.");
             case ClientResultException { Status: 0 }:

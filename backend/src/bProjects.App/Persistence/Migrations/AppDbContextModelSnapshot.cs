@@ -1820,22 +1820,99 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<Guid>("RunId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("MessageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("MessageSequence")
-                        .HasColumnType("bigint");
-
                     b.Property<Guid>("VersionId")
                         .HasColumnType("uuid");
 
-                    b.HasKey("RunId", "MessageId");
+                    b.Property<Guid?>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("MessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("PreparationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RunId", "VersionId");
 
                     b.HasIndex("MessageId");
 
+                    b.HasIndex("PreparationId");
+
                     b.HasIndex("VersionId");
 
-                    b.ToTable("AnalysisEvidenceSelectionItems");
+                    b.HasIndex("RunId", "MessageId")
+                        .IsUnique();
+
+                    b.HasIndex("RunId", "PreparationId")
+                        .IsUnique();
+
+                    b.ToTable("AnalysisEvidenceSelectionItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_AnalysisEvidenceSelectionItems_Origin", "(\"OriginKind\" = 'Message' AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL) OR (\"OriginKind\" = 'Document' AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.DocumentPromotion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FromEvidenceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FromPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PromotedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("ToEvidenceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PromotedBy");
+
+                    b.HasIndex("DocumentVersionId", "ProjectId");
+
+                    b.HasIndex("DocumentVersionId", "PromotedAt");
+
+                    b.HasIndex("FromEvidenceVersionId", "ProjectId");
+
+                    b.HasIndex("FromPreparationId", "DocumentVersionId");
+
+                    b.HasIndex("ToEvidenceVersionId", "ProjectId");
+
+                    b.HasIndex("ToPreparationId", "DocumentVersionId");
+
+                    b.ToTable("DocumentPromotions", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentPromotions_Changes", "\"FromEvidenceVersionId\" IS NULL OR \"FromEvidenceVersionId\" <> \"ToEvidenceVersionId\"");
+
+                            t.HasCheckConstraint("CK_DocumentPromotions_From", "(\"FromPreparationId\" IS NULL) = (\"FromEvidenceVersionId\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("bProjects.App.Evidence.EvidenceBatch", b =>
@@ -1951,6 +2028,45 @@ namespace bProjects.App.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceDocumentState", b =>
+                {
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CurrentEvidenceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CurrentPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DocumentVersionId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("CurrentEvidenceVersionId", "ProjectId");
+
+                    b.HasIndex("CurrentPreparationId", "DocumentVersionId");
+
+                    b.HasIndex("DocumentVersionId", "ProjectId")
+                        .IsUnique();
+
+                    b.ToTable("EvidenceDocumentStates", t =>
+                        {
+                            t.HasCheckConstraint("CK_EvidenceDocumentStates_Pointers", "(\"CurrentPreparationId\" IS NULL) = (\"CurrentEvidenceVersionId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_EvidenceDocumentStates_Revision", "\"Revision\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1966,7 +2082,7 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("ConversationId")
+                    b.Property<Guid?>("ConversationId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("DeadlineAt")
@@ -1997,14 +2113,22 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<int>("MaxAttempts")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("MessageId")
+                    b.Property<Guid?>("MessageId")
                         .HasColumnType("uuid");
 
-                    b.Property<long>("MessageSequence")
+                    b.Property<long?>("MessageSequence")
                         .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OriginKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("PreparationId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
@@ -2048,11 +2172,18 @@ namespace bProjects.App.Persistence.Migrations
                         .HasDatabaseName("UX_EvidenceExtractionJobs_OneOpenPerMessage")
                         .HasFilter("\"Status\" IN ('Queued', 'Running')");
 
+                    b.HasIndex("PreparationId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_EvidenceExtractionJobs_OnePerPreparation")
+                        .HasFilter("\"OriginKind\" = 'Document'");
+
                     b.HasIndex("RequestedBy");
 
                     b.HasIndex("ResultVersionId");
 
                     b.HasIndex("RetryOfJobId");
+
+                    b.HasIndex("PreparationId", "ProjectId");
 
                     b.HasIndex("ProjectId", "MessageSequence");
 
@@ -2072,6 +2203,8 @@ namespace bProjects.App.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_EvidenceExtractionJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
 
+                            t.HasCheckConstraint("CK_EvidenceExtractionJobs_Origin", "(\"OriginKind\" = 'Message' AND \"ConversationId\" IS NOT NULL AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL) OR (\"OriginKind\" = 'Document' AND \"ConversationId\" IS NULL AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL)");
+
                             t.HasCheckConstraint("CK_EvidenceExtractionJobs_Sequence", "\"MessageSequence\" >= 1");
                         });
                 });
@@ -2082,7 +2215,7 @@ namespace bProjects.App.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ConversationId")
+                    b.Property<Guid?>("ConversationId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -2094,10 +2227,14 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("MessageId")
+                    b.Property<string>("ManifestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("MessageId")
                         .HasColumnType("uuid");
 
-                    b.Property<long>("MessageSequence")
+                    b.Property<long?>("MessageSequence")
                         .HasColumnType("bigint");
 
                     b.Property<string>("ModelId")
@@ -2109,9 +2246,17 @@ namespace bProjects.App.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<string>("OriginKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Parameters")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("PreparationId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
@@ -2139,11 +2284,18 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasIndex("MessageId", "Version")
                         .IsUnique();
 
+                    b.HasIndex("PreparationId", "ProjectId");
+
+                    b.HasIndex("PreparationId", "Version")
+                        .IsUnique();
+
                     b.HasIndex("ProjectId", "MessageSequence");
 
                     b.ToTable("EvidenceExtractionVersions", t =>
                         {
                             t.HasCheckConstraint("CK_EvidenceExtractionVersions_NoEvidence", "\"EvidenceCount\" >= 0 AND ((\"EvidenceCount\" = 0) = (\"NoEvidenceReason\" IS NOT NULL)) AND (\"NoEvidenceReason\" IS NULL OR \"NoEvidenceReason\" ~ '\\S')");
+
+                            t.HasCheckConstraint("CK_EvidenceExtractionVersions_Origin", "(\"OriginKind\" = 'Message' AND \"ConversationId\" IS NOT NULL AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL AND \"ManifestHash\" IS NULL) OR (\"OriginKind\" = 'Document' AND \"ConversationId\" IS NULL AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL AND \"ManifestHash\" IS NOT NULL AND \"SchemaVersion\" = 'evidence-1.1.0')");
 
                             t.HasCheckConstraint("CK_EvidenceExtractionVersions_Version", "\"Version\" >= 1");
                         });
@@ -2166,24 +2318,32 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.Property<string>("Key")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<Guid>("MessageId")
+                    b.Property<Guid?>("MessageId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer");
 
+                    b.Property<string>("OriginKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Polarity")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("PreparationId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
@@ -2199,7 +2359,11 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasIndex("MessageId");
 
+                    b.HasIndex("PreparationId", "ProjectId");
+
                     b.HasIndex("ProjectId", "MessageId");
+
+                    b.HasIndex("ProjectId", "PreparationId");
 
                     b.HasIndex("VersionId", "Key")
                         .IsUnique();
@@ -2210,6 +2374,8 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("Evidences", null, t =>
                         {
                             t.HasCheckConstraint("CK_Evidences_Ordinal", "\"Ordinal\" >= 1");
+
+                            t.HasCheckConstraint("CK_Evidences_Origin", "(\"OriginKind\" = 'Message' AND \"MessageId\" IS NOT NULL AND \"PreparationId\" IS NULL) OR (\"OriginKind\" = 'Document' AND \"MessageId\" IS NULL AND \"PreparationId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_Evidences_Statement_NotBlank", "\"Statement\" ~ '\\S'");
                         });
@@ -2964,8 +3130,12 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("MessageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Evidence.AnalysisEvidenceSelection", null)
                         .WithMany()
@@ -2976,6 +3146,47 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
                         .WithMany()
                         .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.Evidence.DocumentPromotion", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser<System.Guid>", null)
+                        .WithMany()
+                        .HasForeignKey("PromotedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentVersionId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("FromEvidenceVersionId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("FromPreparationId", "DocumentVersionId")
+                        .HasPrincipalKey("Id", "DocumentVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ToEvidenceVersionId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("ToPreparationId", "DocumentVersionId")
+                        .HasPrincipalKey("Id", "DocumentVersionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -3026,6 +3237,28 @@ namespace bProjects.App.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("bProjects.App.Evidence.EvidenceDocumentState", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceExtractionVersion", null)
+                        .WithMany()
+                        .HasForeignKey("CurrentEvidenceVersionId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("CurrentPreparationId", "DocumentVersionId")
+                        .HasPrincipalKey("Id", "DocumentVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentVersion", null)
+                        .WithOne()
+                        .HasForeignKey("bProjects.App.Evidence.EvidenceDocumentState", "DocumentVersionId", "ProjectId")
+                        .HasPrincipalKey("bProjects.App.Documents.DocumentVersion", "Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionJob", b =>
                 {
                     b.HasOne("bProjects.App.Evidence.EvidenceBatch", null)
@@ -3036,14 +3269,12 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.Conversation", null)
                         .WithMany()
                         .HasForeignKey("ConversationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("MessageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Projects.Project", null)
                         .WithMany()
@@ -3065,6 +3296,12 @@ namespace bProjects.App.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("RetryOfJobId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("bProjects.App.Evidence.EvidenceExtractionVersion", b =>
@@ -3072,8 +3309,7 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.Conversation", null)
                         .WithMany()
                         .HasForeignKey("ConversationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Evidence.EvidenceExtractionJob", null)
                         .WithMany()
@@ -3084,14 +3320,19 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("MessageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Projects.Project", null)
                         .WithMany()
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("bProjects.App.Evidence.EvidenceItem", b =>
@@ -3099,8 +3340,7 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Conversations.ConversationMessage", null)
                         .WithMany()
                         .HasForeignKey("MessageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("bProjects.App.Projects.Project", null)
                         .WithMany()
@@ -3113,6 +3353,12 @@ namespace bProjects.App.Persistence.Migrations
                         .HasForeignKey("VersionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("bProjects.App.Documents.DocumentPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("PreparationId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("bProjects.App.Evidence.EvidenceMessageState", b =>

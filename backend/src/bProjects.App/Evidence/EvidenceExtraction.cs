@@ -439,7 +439,7 @@ public static class EvidenceExtractionValidator
         return new EvidenceSpan(message.Id, message.Sequence, source.Role, start, end, message.Body[start..end]);
     }
 
-    private static List<(int Start, int End)> ExactMatches(string body, string quote)
+    internal static List<(int Start, int End)> ExactMatches(string body, string quote)
     {
         var result = new List<(int, int)>();
         for (var i = body.IndexOf(quote, StringComparison.Ordinal); i >= 0; i = body.IndexOf(quote, i + 1, StringComparison.Ordinal))
@@ -487,7 +487,7 @@ public static class EvidenceExtractionValidator
         _ => c,
     };
 
-    private static List<(int Start, int End)> NormalizedMatches(string body, string quote)
+    internal static List<(int Start, int End)> NormalizedMatches(string body, string quote)
     {
         var (text, origin) = Normalize(body);
         var (needle, _) = Normalize(quote);

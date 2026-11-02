@@ -19,7 +19,8 @@ public sealed record EvidenceSnapshot(
     EvidenceContent Content)
 {
     public static EvidenceSnapshot From(EvidenceItem item, long sequence) => new(
-        item.Id, item.VersionId, item.MessageId, sequence, item.Ordinal, item.Key, item.Kind, item.Polarity, item.Certainty, item.Statement,
+        item.Id, item.VersionId,
+        item.MessageId ?? throw new InvalidOperationException("Snapshot legacy: l'evidenza non ha un messaggio di origine (ramo documentale: viste 1.1)."), sequence, item.Ordinal, item.Key, item.Kind, item.Polarity, item.Certainty, item.Statement,
         EvidenceJson.Deserialize<EvidenceContent>(item.Content));
 }
 

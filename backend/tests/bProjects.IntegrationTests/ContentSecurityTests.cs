@@ -303,6 +303,10 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"GET {p}/documents/{{documentId:guid}}",
             $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}",
             $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/download",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/blocks",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/passages/{{blockId:guid}}",
+            $"POST {p}/document-jobs/{{jobId:guid}}/retry",
             $"GET {p}/source-selection",
             $"PUT {p}/source-selection",
             // Limiti dei documenti (slice 002, contracts/http-api.md): unico endpoint di amministrazione, ruolo Admin (T005).
@@ -313,7 +317,7 @@ public sealed class ContentSecurityTests : IAsyncLifetime
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(43, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 8 archivio e preferenze documenti + 2 limiti documenti (Admin)
+        Assert.Equal(47, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 12 archivio, preparazione, passaggi, retry e preferenze documenti + 2 limiti documenti (Admin)
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {
@@ -1119,7 +1123,8 @@ public sealed class ContentSecurityTests : IAsyncLifetime
         // Nessuno strumento, funzione, ricerca, retrieval o altro canale di uscita e' offerto al modello.
         Assert.All(_dgx.Calls, AssertNoTools);
         var services = App.Services;
-        Assert.Null(services.GetService<IHttpClientFactory>()); // nessun altro HttpClient configurato nell'app
+        // Unico HttpClient tipizzato ammesso oltre al modello: il parser interno (rete privata, contratto parser).
+        Assert.NotNull(services.GetRequiredService<bProjects.App.Documents.ParserClient>()); // il parser e' l'unico client tipizzato; le uscite verso il modello restano vincolate dalle asserzioni su _dgx.Calls
         var jwt = services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme);
         Assert.True(string.IsNullOrEmpty(jwt.Authority) && string.IsNullOrEmpty(jwt.MetadataAddress)); // nessuna discovery OIDC in uscita
         Assert.Null(jwt.ConfigurationManager);
