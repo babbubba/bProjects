@@ -468,10 +468,10 @@ public sealed class DocumentEvidenceAgentTests
         private static string Hash(string text) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 
-    private sealed record ModelRequest(int Index, string UserText, int UserMessages, IReadOnlyList<string> Keys, int PromptTokens);
+    internal sealed record ModelRequest(int Index, string UserText, int UserMessages, IReadOnlyList<string> Keys, int PromptTokens);
 
     /// <summary>Modello finto a livello HTTP (llama.cpp simulato): tokenizer a parole, finestra fissa, risposte valide per default.</summary>
-    private sealed class FakeUnitModel : HttpMessageHandler
+    internal sealed class FakeUnitModel : HttpMessageHandler
     {
         public const int Window = 4000;
 
