@@ -76,6 +76,9 @@ $sidebar-width: 20rem;
 // Colonna destra del monitor del contesto: sticky rispetto alla finestra (nessun antenato con overflow).
 $usage-width: 22rem;
 $usage-offset: 1rem;
+// Distanza dall'alto della finestra a cui nasce la colonna (intestazione dell'app + margine): a scroll 0 il pannello, con le sezioni di esecuzione e
+// budget per fase, deve comunque stare tutto nel viewport; scorre dentro il proprio max-height.
+$usage-start: 7rem;
 
 .project-usage {
   margin-top: 1rem;
@@ -105,7 +108,7 @@ $usage-offset: 1rem;
     position: sticky;
     top: $usage-offset;
     margin-top: 0;
-    max-height: calc(100vh - 2 * #{$usage-offset});
+    max-height: calc(100vh - #{$usage-start} - #{$usage-offset});
     overflow-y: auto;
   }
 }
