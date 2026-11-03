@@ -151,10 +151,14 @@ test('[DGX reale] documenti -> chat con fonti -> Analizza -> correzione PM -> co
   const texts: string[] = [];
   for (let i = 0; i < count; i++) texts.push(fold(await itemsLoc.nth(i).getByTestId('item-text').inputValue()));
   log('voci', texts);
+  // Sezione di ogni voce: una voce di `excluded` (ambito escluso) e gia un'esclusione, anche senza marcatore negativo nel testo.
+  const sections: string[] = [];
+  for (let i = 0; i < count; i++) sections.push((await itemsLoc.nth(i).locator('xpath=ancestor::section[@data-section][1]').getAttribute('data-section')) ?? '');
+  const isExcluded = (i: number) => sections[i] === 'excluded';
   const has = (...tokens: string[]) => texts.some((t) => tokens.every((k) => t.includes(k)));
   expect(has('24', 'mesi'), 'attesa: visibilita 24 mesi').toBe(true);
   expect(texts.some((t) => t.includes('anonim') && NEGATIVE.test(t)), 'attesa: accesso anonimo NEGATO').toBe(true);
-  expect(texts.some((t) => t.includes('annullat') && NEGATIVE.test(t)), 'attesa: ordini annullati ESCLUSI').toBe(true);
+  expect(texts.some((t, i) => t.includes('annullat') && (NEGATIVE.test(t) || isExcluded(i))), 'attesa: ordini annullati ESCLUSI (marcatore negativo o voce di ambito escluso)').toBe(true);
   expect(has('rapporto', 'mensile'), 'attesa: rapporto mensile').toBe(true);
   expect(has('quinto', 'lavorativo'), 'attesa: quinto giorno lavorativo').toBe(true);
   expect(has('operatore', 'lettura'), 'attesa: Operatore sola lettura').toBe(true);

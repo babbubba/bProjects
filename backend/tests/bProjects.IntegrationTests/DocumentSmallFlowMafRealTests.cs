@@ -165,7 +165,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
                 new("Operatore: sola lettura (cella di tabella)", ["operatore", "lettura"], ["operatore"]),
             ],
             Violations: c => c.Items.Where(i => !i.InConflict && i.Has("anonim") && !i.NegativeText).Select(i => "accesso anonimo non negato: " + i.Short)
-                .Concat(c.Items.Where(i => !i.InConflict && i.Has("annullat") && !i.NegativeText).Select(i => "ordini annullati non esclusi: " + i.Short)),
+                .Concat(c.Items.Where(i => !i.InConflict && i.Has("annullat") && !i.NegativeText && i.Section != "excluded").Select(i => "ordini annullati non esclusi: " + i.Short)),
             Correction: new("PM: la visibilita vale anche per gli ordini in garanzia", c => AppendToItem(c, ["24", "mesi"], " Il PM precisa che la visibilita vale anche per gli ordini in garanzia.")),
             DraftTokens: ["24", "garanzia", "anonim", "annullat"],
             ExpectConflict: false));
@@ -776,7 +776,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
     }
 
     private static bool Matches(Item item, Exp e) =>
-        item.Classification == e.Class && e.Text.All(item.Has) && e.Quote.All(item.QuotesHave) && (!e.Negative || item.NegativeText);
+        item.Classification == e.Class && e.Text.All(item.Has) && e.Quote.All(item.QuotesHave) && (!e.Negative || item.NegativeText || item.Section == "excluded");
 
     private static string? AppendToItem(JsonNode root, string[] tokens, string suffix)
     {
