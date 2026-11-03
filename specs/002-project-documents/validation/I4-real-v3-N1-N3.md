@@ -208,3 +208,10 @@ Qwen3.6-35B-Smart W=131072 reasoning OFF out 16384, margine 1024, parser Docling
 Qwen3.6-35B-Smart W=131072 reasoning OFF, parser Docling reale, PostgreSQL reale; una ripetizione per test; gold, asserzioni e validatori invariati.
 - **N1 PASS** (1m48s). **N2 PASS** (1m35s). **N3 PASS** (1m26s): nessuna analisi scartata per chiavi duplicate.
 - Gate N1–N3 soddisfatto. T125/T127/T128/T129 spuntati (regressione non-DGX verde: 2674 totali, 0 falliti). T126 e T067 restano aperti; browser reale non rieseguito in questa esecuzione.
+
+## Ottava esecuzione N4/N5 (2026-11-03, dopo 7d2e766)
+Stesso ambiente della settima. Gold, asserzioni e validatori invariati.
+- **N4 PASS** (1m00s, prompt senza la nuova regola).
+- **N5 FAIL** (1m00s): analisi v1 scartata per chiave `i2` duplicata fra `scopeIncluded[0]` e `conflicts[0].alternatives[0]`. Correzione: nel prompt v3 le alternative di un conflitto vivono solo in `conflicts[].alternatives`, non anche nelle sezioni di `items`.
+- Dopo la correzione: **N5 PASS** (1m35s). **N3**: 1° run FAIL (58 PASS / 2 FAIL, «termine di pagamento affermato fuori dal conflitto» 30 e 60 giorni), 2° run PASS (1m35s): esito **instabile** (1 PASS su 2 con il prompt nuovo; 2 PASS su 2 con il precedente nelle esecuzioni 7ª). N1, N2 e N4 NON rieseguiti con il prompt modificato (NOT VERIFIED).
+- Test di contratto del prompt e del routing/alias: 91 test, 0 falliti.
