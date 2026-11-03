@@ -203,3 +203,8 @@ Qwen3.6-35B-Smart W=131072 reasoning OFF out 16384, margine 1024, parser Docling
 - Regola E2E `tests/e2e/document-small-flow-real.spec.ts` (e gemello `DocumentSmallFlowMafRealTests.cs`), attesa «ordini annullati ESCLUSI».
   - Prima: richiedeva un marcatore negativo nel testo; una voce di `scopeExcluded` come «Ordini annullati» dava un falso negativo.
   - Dopo: vale anche una voce della sezione `excluded` (ambito escluso). Gold, criteri di accettazione e validatori invariati; il controllo «nessuna inversione» resta per le voci fuori da `excluded`.
+
+## Settima esecuzione (2026-11-03, HEAD 3e3dc8c, prompt v3 con unicità globale delle chiavi)
+Qwen3.6-35B-Smart W=131072 reasoning OFF, parser Docling reale, PostgreSQL reale; una ripetizione per test; gold, asserzioni e validatori invariati.
+- **N1 PASS** (1m48s). **N2 PASS** (1m35s). **N3 PASS** (1m26s): nessuna analisi scartata per chiavi duplicate.
+- Gate N1–N3 soddisfatto. T125/T127/T128/T129 spuntati (regressione non-DGX verde: 2674 totali, 0 falliti). T126 e T067 restano aperti; browser reale non rieseguito in questa esecuzione.
