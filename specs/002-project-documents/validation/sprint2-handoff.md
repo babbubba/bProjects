@@ -217,3 +217,6 @@ Resta alla parte B: prompt `document-analysis-v3.md` e messaggio con alias (mai 
 ## T125 parte B (2026-11-03) - integrazione nel percorso reale, NON verificato dal coordinatore, NON committato, T125 NON spuntato
 
 Avanzamento (aggiornato man mano): scritti `AI/DocumentAnalysisAliasPlan.cs` (messaggio a soli alias, Validate/Assemble/Commit v3 con ricomposizione e `canonicalHash`, manifest con `RunIndependentHash`), routing {v2,v3} in `AnalysisWorkflow`, freeze v3 in `SourceSnapshotStore` (nuove richieste), preflight T124 con schema del DTO v3 (`WorkflowRegimeProbe` -> `BuildRegimePayload(definition)`), prompt v3 allineato al messaggio. Build verde; test in corso di esecuzione.
+
+### T125 parte B verificata dal coordinatore (2026-11-03)
+Regressione non-DGX completa (PG 15432 utente postgres, parser reale 58300, MafReal escluso, senza BPROJECTS_TEST_DGX_*): 2414 totali, 2411 PASS, 0 FAIL, 3 ignorati (symlink Windows, V7_replay_dump, CompactionFlow che richiede DGX). Tentativi precedenti invalidi per errori d'ambiente miei (utente PG vuoto → 28P01; parser fermo dopo riavvio Docker). T125 NON ancora spuntato: manca la verifica DGX N1–N3 (Qwen3.6-35B-Smart, W=131072, reasoning OFF, output 16384). Scostamenti §7 segnalati: range/quote/part errati → integrity_conflict (non source_snapshot_invalid), import output nel retry (§5.3/§7.5) non implementato.
