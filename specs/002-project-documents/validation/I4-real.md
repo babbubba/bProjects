@@ -61,3 +61,48 @@ Il contratto `{results, analysis, evidenceMap}` richiede al modello di riprodurr
 - La campagna usa un solo modello/runtime; i risultati non sono generalizzabili a Qwen3.6-35B-Smart o altri.
 - Warm-up del router fuori dal prodotto: in produzione, a modello scaricato, la prima richiesta documentale fallisce `runtime_unverified` senza retry (T124).
 - `recoveryMs` null (T102), Analizza non e mai Ordinary (T124), `hasSourceChanges` non esposto: invariati.
+
+---
+
+## Campagna comparativa a W=131072 (2026-11-03) — T067 resta aperto
+
+Dettaglio e misure: `I4-real-131k-faseA.md`, `I4-real-131k-faseB.md`, `I4-real-131k-faseC.md`. Nessun contratto, schema, validatore, prompt, gold o asserzione è stato modificato; il DGX è stato usato in modo serializzato (una inferenza alla volta). Lo storico dei FAIL precedenti sopra resta valido.
+
+### Tabella comparativa (una esecuzione per cella; n=1)
+
+| Modello/profilo | W effettiva | Reasoning | Budget reasoning | Input/Output analisi (N1/N2/N3) | N1 | N2 | N3 | Tempo analisi | Memoria | Errori |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Qwen3.6-35B (baseline storica) | 32768 | OFF | – | – | – | – | – | – | unavailable | 1/25 analisi valide: id/hash copiati male, loop, campi omessi |
+| Qwen3.6-35B-Smart (A) | 131072 verificata | OFF, out 16384 | – | 6287/7317, 6332/8887, 5267/6442 | PASS | FAIL | FAIL | 107–155 s | unavailable | N2: id di fonte al posto di id di evidenza (25+16 riferimenti); N3: 14 id item non UUID (etichette) |
+| Qwen3.6-35B-Smart (B) | 131072 verificata | ON, out 32768 | 12288 (applicato, provato) | 6268/13968, 6284/18393, 5245/17271 | PASS | FAIL | FAIL | 236–320 s | unavailable | N2: `overview` nullo (strutturale); N3: UUID di fonte troncato a 35 caratteri |
+| Qwen3.8-Flash-Next-Smart (C1) | 131072 verificata | OFF, out 16384 | – | N3: 6013/6159 | FAIL | FAIL | FAIL | N3: 275 s | unavailable | N1/N2: quote di tabella non verbatim già in estrazione (analisi non raggiunta, NOT VERIFIED); N3: 9/9 `evidenceIds` con hash della voce |
+| Qwen3.8-Flash-Next-Smart (C2) | 131072 verificata | ON, out 32768 | 12288 (applicato, provato) | N3: 6011/18325 | FAIL | FAIL | FAIL | N3: 768 s | unavailable | N1/N2 come C1; N3: 4 violazioni (evidenceIds vuoto/disordinato, itemId pendente, fonti Message con campi documentali) |
+
+Server: llama.cpp b10703, router mode, 1 slot, `n_ctx` 131072 da `/props?model=` e `/slots?model=` (nessuna riduzione osservata, nessun offload dichiarato: `--n-gpu-layers all`). Client MAF: `enable_thinking` e `max_completion_tokens` come da cella, temperatura 0.1, margine di sicurezza 1024; parametrizzazione solo via env nel test (`BPROJECTS_TEST_CTX_WINDOW`, `_ANALYSIS_MAX_OUTPUT`, `_ANALYSIS_THINKING`, `_SAFETY_MARGIN`), asserzioni invariate.
+
+### Comparabilità e limiti
+- Stessi corpus, prompt, schema, validatori e decoder client; cambiano profilo/W/reasoning/output. Il profilo Smart impone però parametri di campionamento del server (es. `presence-penalty 1.5` per Qwen3.6-Smart, 0 per Qwen3.8): non è un confronto "a un solo fattore" tra famiglie, e l'effetto di `presence-penalty` sulla copia di UUID è un'ipotesi NON provata.
+- n=1 per cella; il codec rifiuta alla prima violazione, quindi conflitti, tabella R-01..R-05 e citazioni di N2/N3 sono NOT VERIFIED nei casi falliti.
+- Unavailable: memoria/KV cache (niente nvidia-smi, `/metrics` 501), tempo di caricamento del modello, `models.ini` (SSH non disponibile), conteggio esatto dei token di reasoning (stimato per differenza), varianza.
+- Nessun errore di contesto, `finish=length`, loop o `runtime_unverified` nelle prove a 131K: il limite di W non spiega più i fallimenti; il budget di reasoning è applicato ma non risulta causale (al tetto in N2/N3 di B, non in N1).
+
+### Errori strutturali vs semantici
+- **Strutturali/id/riferimenti (dominanti)**: id di fonte al posto di evidenza, hash della voce al posto dell'UUID, etichette al posto degli UUID di item, UUID troncato, campo nullo. Il tipo di errore **cambia a ogni run e a ogni configurazione** (A→B→C) senza ridursi.
+- **Semantici**: osservati solo in C (quote di tabella non verbatim in estrazione); per il resto non valutabili.
+
+### Ripetizione
+Nessun profilo ha superato N1–N3: le 3 ripetizioni di N1 non sono state eseguite (gate non soddisfatto). N4/N5 e browser reale a 131K non eseguiti.
+
+### Gate e conclusione
+Gate non soddisfatto in nessuna configurazione. **Conclusione: B**, con cautela. A 131K l'analisi passa da 1/25 (W=32768) a 1/3 per cella (Smart), ma con campioni non confrontabili in numerosità: il miglioramento non è statisticamente stabilito. Il dato robusto è un altro: eliminati contesto, output e loop, restano errori di copia di identificativi che si spostano tra run. Qwen3.8-Flash-Next-Smart è peggiore (0/3, più lento, errori già in estrazione). Serve il contratto con alias brevi e ricostruzione server-side.
+
+Profilo da preferire per i prossimi test: `Qwen3.6-35B-Smart`, W=131072, reasoning OFF (stesso esito di B a 1/2–1/3 del tempo). Non è un'adozione di produzione.
+
+### Rischi residui
+Warm-up del router (sotto), memoria non misurata, campioni piccoli, parametri di campionamento del profilo non isolati, DGX a modello scaricato.
+
+### Proposta separata: readiness del runtime (non implementata, nessun fallback)
+Oggi, a modello scaricato, il preflight dà `runtime_unverified` senza retry (T124). Disegno proposto come task specifico: nel preflight distinguere con codici diversi (a) modello non caricato/caricamento in corso → readiness con warm-up bounded (poche sonde con backoff, tetto fisso, idempotente, dentro la deadline originale dal `RequestedAt`, mai oltre il suo hard cap); (b) runtime irraggiungibile (timeout/connessione) → stessa readiness bounded; (c) runtime incompatibile o finestra insufficiente → Failed immediato; (d) tokenizer/configurazione non verificabili → unavailable, mai classificato valido per Ordinary. Esaurita la readiness il root fallisce con il codice del caso, senza inferenza su runtime ignoto.
+
+### Proposta separata: contratto alternativo (non implementato, serve decisione)
+Alias brevi per Evidence e Source assegnati dal server nel prompt; id canonici UUID/hash generati dal server; `sources` ed `evidenceMap` ricostruiti deterministicamente dal server dagli alias; relazioni semantiche dichiarate esplicitamente dall'LLM; validazione e coverage invariati. Nessuna ADR; richiede modifica di T059/T120/T121 e relativi test.
