@@ -165,7 +165,7 @@ public static class ReconciliationReferences
             {
                 v.Add($"{path}.sourceIds: {sourceId} fuori snapshot.");
             }
-            else if (!evidenceIds.Contains(owner))
+            else if (!evidenceIds.Any(owner.Contains))
             {
                 v.Add($"{path}.sourceIds: {sourceId} non appartiene alle evidenze citate.");
             }
@@ -178,13 +178,14 @@ public static class ReconciliationReferences
         {
             Evidence = snapshot.Evidence.ToDictionary(e => e.EvidenceId);
             EntryIds = snapshot.Evidence.Select(e => ReconciliationIds.EntryId(snapshot.SourceHash, e.EvidenceId, e.ContentHash)).ToHashSet(StringComparer.Ordinal);
-            Sources = snapshot.Evidence.SelectMany(e => e.Sources).ToDictionary(s => s.SourceId);
-            SourceOwners = snapshot.Evidence.SelectMany(e => e.Sources.Select(s => (s.SourceId, e.EvidenceId))).ToDictionary(t => t.SourceId, t => t.EvidenceId);
+            // Due evidenze possono citare lo stesso passaggio (stesso sourceId): la fonte e unica, i proprietari sono un insieme.
+            Sources = snapshot.Evidence.SelectMany(e => e.Sources).GroupBy(s => s.SourceId).ToDictionary(g => g.Key, g => g.First());
+            SourceOwners = snapshot.Evidence.SelectMany(e => e.Sources.Select(s => (s.SourceId, e.EvidenceId))).GroupBy(t => t.SourceId).ToDictionary(g => g.Key, g => g.Select(t => t.EvidenceId).ToHashSet());
         }
 
         public Dictionary<Guid, SnapshotEvidence> Evidence { get; }
         public HashSet<string> EntryIds { get; }
         public Dictionary<Guid, PersistedSource> Sources { get; }
-        public Dictionary<Guid, Guid> SourceOwners { get; }
+        public Dictionary<Guid, HashSet<Guid>> SourceOwners { get; }
     }
 }

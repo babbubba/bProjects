@@ -61,6 +61,23 @@ public sealed class ReconciliationCoreValidationTests
     }
 
     [Fact]
+    public void Two_evidences_citing_the_same_source_are_valid_input_and_never_crash_the_reference_index()
+    {
+        // T067 (prova reale, N2): due righe di una stessa tabella Markdown producono due evidenze che citano lo STESSO passaggio, quindi lo stesso
+        // sourceId. L'indice dei riferimenti faceva ToDictionary sul sourceId: ArgumentException, classificata model_error, mai work_output_invalid.
+        var first = Snapshot.Evidence[0];
+        var second = Snapshot.Evidence[1] with { Sources = [.. Snapshot.Evidence[1].Sources, first.Sources[0]] };
+        var shared = new ReconciliationSnapshot(ReconciliationFixtures.Project, ReconciliationFixtures.SourceHash, [first, second], []);
+
+        var result = Validate(ReconciliationFixtures.Valid(), shared);
+
+        Assert.Equal(ReconciliationOutcome.Complete, result.Outcome);
+        Assert.Empty(result.Violations);
+        Assert.Empty(ReconciliationReferences.CheckPatch(ReconciliationFixtures.AddSupport(second.EvidenceId, first.Sources[0].SourceId), shared));    // la fonte condivisa appartiene a entrambe le evidenze
+        Assert.Contains(ReconciliationReferences.CheckPatch(ReconciliationFixtures.AddSupport(Outsider, first.Sources[0].SourceId), shared), m => m.Contains("fuori snapshot", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Invented_endpoint_quote_or_source_is_a_permanent_error_never_a_committed_output()
     {
         var valid = ReconciliationFixtures.Valid();
