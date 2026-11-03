@@ -290,7 +290,12 @@ public static class AnalysisAliasComposer
         {
             if (!keys.TryAdd(item.Key, path))
             {
-                _errors.Add($"{path}.key: chiave locale {item.Key} duplicata (già usata in {keys[item.Key]}).");
+                // Mai deduplicato: il rifiuto nomina chiave e posizioni, perché la correzione (una sola sezione; le alternative solo nel conflitto) spetta al modello.
+                var first = keys[item.Key];
+                var hint = first.StartsWith("conflicts[", StringComparison.Ordinal) || path.StartsWith("conflicts[", StringComparison.Ordinal)
+                    ? "le alternative di un conflitto vanno solo in conflicts[].alternatives, non anche come item di una sezione"
+                    : "ogni elemento compare una sola volta, in una sola sezione";
+                _errors.Add($"{path}.key: chiave locale {item.Key} duplicata: già usata in {first} e ripetuta in {path} ({hint}).");
             }
 
             return new ItemRecord(item.Key, path, item, CanonicalId("item", _root, _sourceHash, item.Key), EvidenceList(item.Evidence, $"{path}.evidence"));

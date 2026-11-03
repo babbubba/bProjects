@@ -875,6 +875,33 @@ public sealed class AnalysisAliasComposerTests
     // ---------------------------------------------------------------- rifiuti
 
     [Fact]
+    public void A_local_key_repeated_in_two_sections_or_as_an_alternative_and_an_item_is_rejected_naming_the_key_and_both_places()
+    {
+        var dto = AliasFixtures.ValidDto();
+        var i2 = dto.Items.Requirements[0];
+
+        // N2: lo stesso item in scopeIncluded e in requirements. Nessuna deduplica silenziosa: rifiuto con chiave e sezioni.
+        var twice = Rejected(dto with { Items = dto.Items with { ScopeIncluded = [i2] } }, "i2");
+        var message = Assert.Single(twice.Violations, v => v.Contains("i2", StringComparison.Ordinal));
+        Assert.Contains("items.scopeIncluded[0]", message, StringComparison.Ordinal);
+        Assert.Contains("items.requirements[0]", message, StringComparison.Ordinal);
+        Assert.Contains("una sola sezione", message, StringComparison.Ordinal);
+
+        // N3: le alternative di un conflitto ripetute anche come item di una sezione.
+        var alternatives = new[] { i2 with { Key = "i7", Evidence = ["E3"] }, i2 with { Key = "i8", Evidence = ["E5"] } };
+        var inItems = dto with
+        {
+            Items = dto.Items with { Requirements = [.. dto.Items.Requirements, .. alternatives] },
+            Conflicts = [new() { Key = "c1", Description = "d", Alternatives = alternatives }],
+        };
+        var repeated = Rejected(inItems, "i7");
+        Assert.Contains(repeated.Violations, v => v.Contains("conflicts[0].alternatives[0]", StringComparison.Ordinal) && v.Contains("items.requirements[", StringComparison.Ordinal)
+            && v.Contains("solo in conflicts", StringComparison.Ordinal));
+        Assert.Contains(repeated.Violations, v => v.Contains("i8", StringComparison.Ordinal));
+        Assert.Null(repeated.Output);      // mai deduplicato: nessun canonico
+    }
+
+    [Fact]
     public void Unknown_out_of_snapshot_and_repeated_aliases_are_rejected_with_the_alias_and_the_path()
     {
         var dto = AliasFixtures.ValidDto();

@@ -112,6 +112,9 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.Contains(Statement1, request.AllText);
         Assert.Contains("Il cliente A deve poter emettere almeno 10 ordini al giorno.", request.AllText);
         Assert.Equal(DocumentAnalysisWorkflow.InstructionsV3.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));
+        // N1 reale: `certezza=Declared` nell'intestazione di ogni voce e stato copiato come classificazione: il messaggio non la espone piu.
+        Assert.DoesNotContain("certezza", request.AllText, StringComparison.OrdinalIgnoreCase);
+        Assert.Matches(@"<<<VOCE \[E1\] origine=\w+ tipo=\w+ polarita=\w+>>>", request.AllText);
         Assert.False(AnyUuid.IsMatch(everything), "UUID nel prompt: " + AnyUuid.Match(everything).Value);
         Assert.False(AnyHash.IsMatch(everything), "hash nel prompt");
         Assert.DoesNotContain(input.BatchKey, everything);

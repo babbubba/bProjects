@@ -115,7 +115,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan
         foreach (var entry in catalog.Data.Evidence)
         {
             var entryStart = text.Length;
-            text.Append($"<<<VOCE [{entry.Alias}] origine={entry.Origin} tipo={entry.Kind} polarita={entry.Polarity} certezza={entry.Certainty}>>>\n")
+            text.Append($"<<<VOCE [{entry.Alias}] origine={entry.Origin} tipo={entry.Kind} polarita={entry.Polarity}>>>\n")
                 .Append(byId[entry.EvidenceId].Statement).Append('\n');
             foreach (var link in entry.Sources)
             {
