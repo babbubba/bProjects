@@ -215,3 +215,10 @@ Stesso ambiente della settima. Gold, asserzioni e validatori invariati.
 - **N5 FAIL** (1m00s): analisi v1 scartata per chiave `i2` duplicata fra `scopeIncluded[0]` e `conflicts[0].alternatives[0]`. Correzione: nel prompt v3 le alternative di un conflitto vivono solo in `conflicts[].alternatives`, non anche nelle sezioni di `items`.
 - Dopo la correzione: **N5 PASS** (1m35s). **N3**: 1° run FAIL (58 PASS / 2 FAIL, «termine di pagamento affermato fuori dal conflitto» 30 e 60 giorni), 2° run PASS (1m35s): esito **instabile** (1 PASS su 2 con il prompt nuovo; 2 PASS su 2 con il precedente nelle esecuzioni 7ª). N1, N2 e N4 NON rieseguiti con il prompt modificato (NOT VERIFIED).
 - Test di contratto del prompt e del routing/alias: 91 test, 0 falliti.
+
+## Nona esecuzione N1–N5 (2026-11-04, HEAD e37bb50, prompt con regola sulle alternative dei conflitti)
+Ambiente come sopra; una ripetizione per test; gold, asserzioni e validatori invariati.
+- N1 PASS (1m53s) · N3 PASS (1m25s) · N5 PASS (1m33s).
+- **N2 FAIL** (18 PASS / 1 FAIL) e **N4 FAIL** (15 PASS / 1 FAIL): analisi `coverage_incomplete`, `evidence_not_mapped` (una evidenza non mappata su alcun item). Difetto di completezza del modello, diverso dalle chiavi duplicate.
+- Tabella cumulativa per test (prompt precedente → nuovo): N1 PASS→PASS; N2 PASS→FAIL; N3 PASS→PASS/FAIL/PASS; N4 PASS→FAIL; N5 FAIL→PASS. Il prompt da solo non rende stabile l'esito: la variabilità è del modello (analisi non determinista). Non è provato che la nuova regola causi i FAIL di N2/N4, né il contrario.
+- Gate N1–N5 NON soddisfatto in questa esecuzione; T067 e T126 restano aperti. Opzione da decidere dall'autore: retry guidato unico dell'analisi (chiavi duplicate, evidenze non mappate), nuovo contratto in ai-workflow.md.
