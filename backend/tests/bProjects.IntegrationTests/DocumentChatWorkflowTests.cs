@@ -421,11 +421,17 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
         return await client.SendAsync(request, Ct);
     }
 
-    private static async Task<Guid> PostAsync(HttpClient client, Guid project, string text)
+    /// <summary>
+    /// Turno documentale di questi test: storico v2 (T058). Le NUOVE richieste congelano la v3 con alias (T128, coperta da DocumentChatAliasWorkflowTests);
+    /// qui il turno viene riportato alla definizione v2 senza versioni congelate, cosi' le asserzioni sul contratto UUID restano invariate.
+    /// </summary>
+    private async Task<Guid> PostAsync(HttpClient client, Guid project, string text)
     {
         var response = await client.PostAsJsonAsync($"/api/projects/{project}/messages", new { clientMessageId = Guid.NewGuid(), text }, Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (await Json(response)).GetProperty("chatTurnId").GetGuid();
+        var turn = (await Json(response)).GetProperty("chatTurnId").GetGuid();
+        await Execute("UPDATE \"ChatTurns\" SET \"PromptVersion\" = NULL, \"AgentConfig\" = NULL WHERE \"Id\" = @t", ("t", turn));
+        return turn;
     }
 
     /// <summary>Documento con una evidenza (se <paramref name="statement"/> è dato il documento è Ready, altrimenti resta in preparazione).</summary>

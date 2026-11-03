@@ -12,7 +12,7 @@ namespace bProjects.App.Documents;
 /// Snapshot di selezione fissati al comando (002 T057; data-model «SourceSnapshot / Item», contracts/http-api.md §Selezione). Unico punto che
 /// scrive snapshot: chat e Analizza ne creano uno sotto il lock di progetto, la generazione ne eredita uno dalla revisione, mai quello corrente.
 /// Definizioni e versioni di prompt/schema documentali sono persistite sul root alla richiesta: le NUOVE richieste di Analizza (T125, AI §7.8) e di
-/// Genera (T127, AI §7.11) congelano la v3 con alias; un run già congelato con la v2 (storica) resta v2 e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
+/// Genera (T127, AI §7.11) e di Chat documentale (T128, AI §8) congelano la v3 con alias; un run già congelato con la v2 (storica) resta v2 e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
 /// </summary>
 public sealed class SourceSnapshotStore(AppDbContext db)
 {
@@ -21,6 +21,28 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV3;
     public const string AnalysisSchemaVersion = "1.1.0";
     public const string DocumentPromptVersion = DocumentSourceDraftWorkflow.PromptVersionV3;
+
+    public const string ChatDefinition = DocumentChatWorkflow.DefinitionVersionV3;
+    public const string ChatPromptVersion = DocumentChatWorkflow.PromptVersionV3;
+
+    /// <summary>Versioni congelate di un nuovo turno di chat documentale v3 (T128): prompt, schema AI, catalogo, algoritmo e validazione (in <c>ChatTurn.AgentConfig</c>).</summary>
+    public static string ChatPromptVersions() =>
+        JsonSerializer.Serialize(new
+        {
+            chatDefinition = ChatDefinition, chat = ChatPromptVersion, chatAiSchema = DocumentChatWorkflow.SchemaVersionV3, chatCatalog = ChatAliasCatalog.Version,
+            algorithm = DocumentChatWorkflow.AlgorithmVersionV3, validation = DocumentChatWorkflow.ValidationVersionV3,
+        });
+
+    /// <summary>
+    /// Congela sul turno la definizione della chat documentale v3 (<c>PromptVersion</c> e <c>AgentConfig</c>, colonne esistenti: nessuna migrazione): solo per le NUOVE richieste con
+    /// almeno una fonte Ready e inclusa. I turni storici restano senza versioni (v2) e non vengono mai convertiti.
+    /// </summary>
+    public static void FreezeChat(bProjects.App.Conversations.ChatTurn turn)
+    {
+        ArgumentNullException.ThrowIfNull(turn);
+        turn.PromptVersion = ChatPromptVersion;
+        turn.AgentConfig = ChatPromptVersions();
+    }
 
     /// <summary>Ramo documentale solo se almeno una fonte è Ready nello snapshot: senza, il run resta sul grafo e sul prompt 001.</summary>
     public static bool HasReadySource(SourceEvaluation? evaluation) =>

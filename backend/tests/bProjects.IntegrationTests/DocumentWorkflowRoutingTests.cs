@@ -31,6 +31,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     private const string Statement = "Il cliente A puo emettere al massimo 5 ordini al giorno.";
 
     private readonly RoutingModel _model;
+    private Func<Req, string>? _chatOverride;   // risposta del modello per il grafo chat v3 (T128): default = cita il primo alias
 
     public DocumentWorkflowRoutingTests() => _model = new RoutingModel(Reply);
 
@@ -66,12 +67,70 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         await DrainAsync();
 
         Assert.Equal("Completed", await Scalar<string>("SELECT \"Status\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
-        Assert.Equal([Graph.DocChat], _model.Graphs);                                                  // un solo invio, del grafo documentale
-        Assert.Contains($"[fonte:{doc.SourceId}]", await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"ChatTurnId\" = @t", ("t", turn)));
+        Assert.Equal([Graph.DocChatV3], _model.Graphs);                                                // un solo invio, del grafo documentale con alias (T128)
+        var body = await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"ChatTurnId\" = @t", ("t", turn));
+        Assert.Contains($"[fonte:{doc.SourceId}]", body);                                              // il modello cita F1: la risposta pubblica e' solo canonica
+        Assert.DoesNotMatch(@"\[fonte:F\d", body);
+        Assert.DoesNotMatch("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", string.Concat(_model.Texts));   // il modello non ha mai visto un UUID di fonte
         Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ChatTurn' AND \"OwnerId\" = @t AND \"Status\" = 'Committed'", ("t", turn)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+        Assert.Equal([DocumentChatWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ChatTurnId\" = @o", ("o", turn)));
+        await AssertClassifiedBeforeFirstClaim("ChatTurns", "ChatTurn", turn, expectedPayloadMeasured: true);
+    }
+
+    [Fact]
+    public async Task A_chat_turn_requested_before_the_alias_contract_and_frozen_with_v2_still_runs_the_v2_graph_with_its_own_prompt_and_decoder()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var doc = await NewReadyDocument(client, project, "regole", Statement);
+        var turn = await PostChat(client, project, "Quanti ordini al giorno puo emettere il cliente A?");
+        await Execute("UPDATE \"ChatTurns\" SET \"PromptVersion\" = NULL, \"AgentConfig\" = NULL WHERE \"Id\" = @t", ("t", turn));
+
+        await DrainAsync();
+
+        Assert.Equal("Completed", await Scalar<string>("SELECT \"Status\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
+        Assert.Equal([Graph.DocChat], _model.Graphs);                                                  // prompt e messaggio con UUID della v2, mai l'alias
+        Assert.Contains($"[fonte:{doc.SourceId}]", await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"ChatTurnId\" = @t", ("t", turn)));
         Assert.Equal([DocumentChatWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ChatTurnId\" = @o", ("o", turn)));
         await AssertClassifiedBeforeFirstClaim("ChatTurns", "ChatTurn", turn, expectedPayloadMeasured: true);
+    }
+
+    [Fact]
+    public async Task A_v3_chat_turn_whose_model_writes_a_raw_uuid_or_an_unknown_alias_fails_permanently_with_work_output_invalid_and_no_answer()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var doc = await NewReadyDocument(client, project, "regole", Statement);
+        _chatOverride = _ => JsonSerializer.Serialize(new { mode = "documented", answer = $"Massimo 5 [fonte:{doc.SourceId}] e [fonte:F7]." });
+        var turn = await PostChat(client, project, "Quanti ordini al giorno puo emettere il cliente A?");
+
+        await DrainAsync();
+
+        Assert.Equal(("Failed", "work_output_invalid"), (
+            await Scalar<string>("SELECT \"Status\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)), await Scalar<string>("SELECT \"ErrorCode\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn))));
+        Assert.Equal([Graph.DocChatV3], _model.Graphs);                                                // un solo invio: nessun retry ne' riparazione
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"ConversationMessages\" WHERE \"Role\" = 'Assistant'"));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ChatTurn' AND \"OwnerId\" = @t", ("t", turn)));
+    }
+
+    [Theory]
+    [InlineData("document-chat-v9", null)]
+    [InlineData("document-chat-v3", """{"chatDefinition":"project-chat-documents-v3","chat":"document-chat-v3"}""")]   // v3 senza schema, catalogo, algoritmo e validazione congelati
+    public async Task An_unknown_or_incompatible_chat_definition_fails_explicitly_and_never_reaches_the_model(string prompt, string? config)
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var turn = await PostChat(client, project, "Quanti ordini al giorno puo emettere il cliente A?");
+        await Execute("UPDATE \"ChatTurns\" SET \"PromptVersion\" = @p, \"AgentConfig\" = @c::jsonb WHERE \"Id\" = @t", ("p", prompt), ("c", (object?)config ?? DBNull.Value), ("t", turn));
+
+        await DrainAsync();
+
+        Assert.Equal(("Failed", "workflow_incompatible"), (
+            await Scalar<string>("SELECT \"Status\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)), await Scalar<string>("SELECT \"ErrorCode\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn))));
+        Assert.Empty(_model.Graphs);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"ConversationMessages\" WHERE \"Role\" = 'Assistant'"));
     }
 
     [Fact]
@@ -676,7 +735,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
+    internal enum Graph { DocChat, DocChatV3, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -686,6 +745,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     {
         var s = Norm(system);
         return s.Contains(Norm(DocumentChatWorkflow.Instructions)) ? Graph.DocChat
+            : s.Contains(Norm(DocumentChatWorkflow.InstructionsV3)) ? Graph.DocChatV3
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
@@ -700,6 +760,8 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     private string Reply(Req request) => request.Graph switch
     {
         Graph.DocChat => JsonSerializer.Serialize(new { mode = "documented", answer = $"Massimo 5 ordini al giorno [fonte:{Regex.Match(request.Text, "fonte:([0-9a-f-]{36})").Groups[1].Value}]." }),
+        Graph.DocChatV3 => _chatOverride?.Invoke(request)
+            ?? JsonSerializer.Serialize(new { mode = "documented", answer = $"Massimo 5 ordini al giorno [fonte:{Regex.Match(request.Text, "fonte:(F[0-9]+) ").Groups[1].Value}]." }),   // alias, mai UUID
         Graph.Chat001 => "Quali utenti userebbero il portale?",
         Graph.DocAnalysis => DocumentAnalysisReply(request.Text),
         Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // il modello vede solo alias e produce il DTO semantico

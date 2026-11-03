@@ -146,7 +146,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
 
         Assert.True(await dispatcher.RunOnceAsync(Ct));                                       // passo 2: claim ed esecuzione
         Assert.Equal("Completed", await Scalar<string>("SELECT \"Status\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
-        Assert.Equal([Graph.DocChat], _model.Graphs.Skip(extractCalls));
+        Assert.Equal([Graph.DocChatV3], _model.Graphs.Skip(extractCalls));   // chat con alias (T128): le nuove richieste congelano la v3
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)));
         await AssertStartedAfterClassification("ChatTurns", turn);
         var answer = await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"ChatTurnId\" = @t AND \"Role\" = 'Assistant'", ("t", turn));
@@ -253,7 +253,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
 
         // --- Nessun falso Completed: un solo workflow per root, una sola chiamata, nessuna chiamata del grafo 001.
         Assert.DoesNotContain(_model.Graphs, g => g is Graph.Chat001 or Graph.Analysis001 or Graph.Draft001);
-        Assert.Equal([Graph.DocChat, Graph.DocAnalysisV3, Graph.DocDraftV3], _model.Graphs.Where(g => g != Graph.Extract));
+        Assert.Equal([Graph.DocChatV3, Graph.DocAnalysisV3, Graph.DocDraftV3], _model.Graphs.Where(g => g != Graph.Extract));
     }
 
     // ================================================================ 2. attesa oltre la deadline ordinaria: mai un invio, mai Completed
@@ -349,7 +349,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         await DrainAsync();
 
         // Chat: citazione di una fonte inesistente => turno Failed, nessuna risposta dell'assistente.
-        _model.Rewrite = (graph, _, reply) => graph == Graph.DocChat ? reply.Replace("[fonte:", $"[fonte:{Guid.NewGuid()}][fonte:") : reply;
+        _model.Rewrite = (graph, _, reply) => graph == Graph.DocChatV3 ? reply.Replace("[fonte:", $"[fonte:{Guid.NewGuid()}][fonte:") : reply;   // UUID grezzo al posto dell'alias: rifiutato
         var turn = await PostChat(client, project, "Qual e il termine di pagamento?");
         await DrainAsync();
         Assert.True("Failed" == await Scalar<string>("SELECT \"Status\" FROM \"ChatTurns\" WHERE \"Id\" = @t", ("t", turn)), Describe(await Row("ChatTurns", turn)) + " graphs=" + string.Join(",", _model.Graphs));
@@ -839,7 +839,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { Extract, DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
+    internal enum Graph { Extract, DocChat, DocChatV3, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -848,6 +848,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         var s = Norm(system);
         return s.Contains(Norm(DocumentEvidenceAgent.Instructions)) ? Graph.Extract
             : s.Contains(Norm(DocumentChatWorkflow.Instructions)) ? Graph.DocChat
+            : s.Contains(Norm(DocumentChatWorkflow.InstructionsV3)) ? Graph.DocChatV3
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
@@ -872,7 +873,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         var reply = request.Graph switch
         {
             Graph.Extract => ExtractionReply(request.Text),
-            Graph.DocChat => ChatReply(request.Text),
+            Graph.DocChat or Graph.DocChatV3 => ChatReply(request.Text),   // v3: il messaggio espone alias F<n> e il modello cita [fonte:F<n>]
             Graph.Chat001 => "Quali utenti userebbero il portale?",
             Graph.DocAnalysis => DocumentAnalysisReply(request.Text),
             Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO semantico nella risposta
@@ -904,7 +905,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
     /// <summary>Cita le fonti il cui testo risponde alla domanda (contiene una parola chiave del messaggio PM); se nessuna, la prima fonte disponibile.</summary>
     private static string ChatReply(string text)
     {
-        var blocks = Regex.Matches(text, @"<<<FONTE fonte:([0-9a-f-]{36}) ruolo=\w+>>>\n(.*?)\n<<<FINE FONTE>>>", RegexOptions.Singleline)
+        var blocks = Regex.Matches(text, @"<<<FONTE fonte:([0-9a-f-]{36}|F[0-9]+) ruolo=\w+>>>\n(.*?)\n<<<FINE FONTE>>>", RegexOptions.Singleline)
             .Select(m => (Id: m.Groups[1].Value, Quote: m.Groups[2].Value)).ToList();
         var question = text[(text.LastIndexOf("Messaggio del project manager:", StringComparison.Ordinal) + 1)..];
         var keywords = Regex.Matches(question.ToLowerInvariant(), @"\p{L}{6,}").Select(m => m.Value).ToList();

@@ -183,6 +183,7 @@ public static class ConversationEndpoints
             if (evaluation.Entries.Any(e => e.Included && e.Availability == SourceAvailability.Ready))
             {
                 DocumentRootRegime.Pending(turn, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
+                SourceSnapshotStore.FreezeChat(turn);   // T128: le NUOVE richieste documentali congelano la v3 con alias; i turni storici restano v2
             }
         }
 

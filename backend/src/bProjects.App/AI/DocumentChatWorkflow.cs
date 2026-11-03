@@ -28,6 +28,8 @@ public sealed record DocumentChatAnswer(string Mode, string Answer, IReadOnlyLis
 /// (UUID minuscolo, formato «D») e tutte le fonti citate devono appartenere allo snapshot del turno; <c>no_document_use</c> non ne ha.
 /// Un marcatore malformato invalida l'intera risposta. Gli errori sono permanenti (work_output_invalid) e non riportano mai il testo del modello.
 /// </summary>
+public sealed record DocumentChatAliasResult(DocumentChatAnswer Answer, string AiOutputHash);
+
 public static partial class DocumentChatContract
 {
     public const string ModeDocumented = "documented";
@@ -38,11 +40,80 @@ public static partial class DocumentChatContract
     [GeneratedRegex(@"\[fonte:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]")]
     private static partial Regex Marker();
 
+    // Marcatore con alias (v3, AI §8): formato esatto e case-sensitive `[fonte:F<n>]`, n intero positivo senza zeri iniziali, ASCII. Nessuna normalizzazione.
+    [GeneratedRegex(@"\[fonte:(F[1-9][0-9]*)\]", RegexOptions.CultureInvariant)]
+    private static partial Regex AliasMarker();
+
     public static DocumentChatAnswer Validate(string responseText, IReadOnlySet<Guid> allowedSourceIds)
     {
         ArgumentNullException.ThrowIfNull(responseText);
         ArgumentNullException.ThrowIfNull(allowedSourceIds);
 
+        var (mode, answer) = ParseClosed(responseText);
+        var matches = Marker().Matches(answer);
+        var opened = CountOccurrences(answer, "[fonte:");
+        if (opened != matches.Count)
+        {
+            throw Invalid("marcatore di fonte malformato");
+        }
+
+        var ids = new List<Guid>();
+        foreach (Match match in matches)
+        {
+            var id = Guid.ParseExact(match.Groups[1].Value, "D");
+            if (!allowedSourceIds.Contains(id))
+            {
+                throw Invalid("citata una fonte che non appartiene alla selezione congelata del turno");
+            }
+
+            if (!ids.Contains(id))
+            {
+                ids.Add(id);
+            }
+        }
+
+        if (mode == ModeDocumented && ids.Count == 0)
+        {
+            throw Invalid("una risposta documented deve citare almeno una fonte");
+        }
+
+        if (mode == ModeNoDocumentUse && ids.Count > 0)
+        {
+            throw Invalid("una risposta no_document_use non può citare fonti");
+        }
+
+        return new DocumentChatAnswer(mode, answer, ids);
+    }
+
+    /// <summary>
+    /// Risposta della chat v3 (AI §8): oggetto chiuso {mode,answer} con marcatori <c>[fonte:F&lt;n&gt;]</c>. Ogni marcatore deve avere il formato esatto e risolversi nel
+    /// catalogo congelato del turno; alias sconosciuti, UUID al posto dell'alias e marcatori malformati invalidano l'intera risposta (mai correzione per somiglianza,
+    /// mai sostituzione, mai fonti aggiunte). Il server traduce SOLO i marcatori in <c>[fonte:UUID]</c> e applica <see cref="Validate"/> sul testo canonico: il
+    /// risultato è identico a una risposta v2 valida, quindi l'unico formato persistito e restituito è quello canonico pubblico.
+    /// </summary>
+    public static DocumentChatAliasResult ValidateAlias(string responseText, ChatAliasCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(responseText);
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        var (mode, answer) = ParseClosed(responseText);
+        var matches = AliasMarker().Matches(answer);
+        if (CountOccurrences(answer, "[fonte:") != matches.Count)
+        {
+            throw Invalid("marcatore di fonte malformato: atteso esattamente [fonte:F<n>]");
+        }
+
+        var canonical = AliasMarker().Replace(answer, match =>
+            catalog.Source(match.Groups[1].Value) is { } source
+                ? $"[fonte:{source.SourceId:D}]"
+                : throw Invalid("alias di fonte sconosciuto nel catalogo congelato del turno"));
+        var validated = Validate(JsonSerializer.Serialize(new { mode, answer = canonical }), catalog.SourceIds);
+        return new DocumentChatAliasResult(validated, CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new { mode, answer })));
+    }
+
+    /// <summary>Oggetto JSON chiuso {mode,answer}: nessuna proprietà extra o duplicata, nessun recinto, nessuna riparazione; mode ammesso e answer non vuota.</summary>
+    private static (string Mode, string Answer) ParseClosed(string responseText)
+    {
         JsonDocument document;
         try
         {
@@ -87,39 +158,7 @@ public static partial class DocumentChatContract
                 throw Invalid("answer assente o vuota");
             }
 
-            var matches = Marker().Matches(answer);
-            var opened = CountOccurrences(answer, "[fonte:");
-            if (opened != matches.Count)
-            {
-                throw Invalid("marcatore di fonte malformato");
-            }
-
-            var ids = new List<Guid>();
-            foreach (Match match in matches)
-            {
-                var id = Guid.ParseExact(match.Groups[1].Value, "D");
-                if (!allowedSourceIds.Contains(id))
-                {
-                    throw Invalid("citata una fonte che non appartiene alla selezione congelata del turno");
-                }
-
-                if (!ids.Contains(id))
-                {
-                    ids.Add(id);
-                }
-            }
-
-            if (mode == ModeDocumented && ids.Count == 0)
-            {
-                throw Invalid("una risposta documented deve citare almeno una fonte");
-            }
-
-            if (mode == ModeNoDocumentUse && ids.Count > 0)
-            {
-                throw Invalid("una risposta no_document_use non può citare fonti");
-            }
-
-            return new DocumentChatAnswer(mode, answer, ids);
+            return (mode, answer);
         }
     }
 
@@ -139,12 +178,12 @@ public static partial class DocumentChatContract
 }
 
 /// <summary>Evidenza documentale dello snapshot del turno, con le sue fonti persistite (testo letterale incluso).</summary>
-internal sealed record ChatEvidence(
+public sealed record ChatEvidence(
     Guid EvidenceId, Guid EvidenceVersionId, int Ordinal, EvidenceKind Kind, EvidencePolarity Polarity, EvidenceCertainty Certainty, string Statement,
     IReadOnlyList<PersistedSource> Sources);
 
 /// <summary>Contenuto documentale congelato del turno: hash della selezione, fonti non disponibili e evidenze delle sole fonti Ready incluse.</summary>
-internal sealed record ChatSnapshotSources(string SnapshotHash, int Unavailable, IReadOnlyList<ChatEvidence> Evidence)
+public sealed record ChatSnapshotSources(string SnapshotHash, int Unavailable, IReadOnlyList<ChatEvidence> Evidence)
 {
     public HashSet<Guid> SourceIds { get; } = [.. Evidence.SelectMany(e => e.Sources).Select(s => s.SourceId)];
 }
@@ -219,6 +258,9 @@ internal sealed class ChatCallReservation(AppDbContext db, CheckpointWriter writ
 /// dichiarate al modello e nella risposta senza attenderle. Il testo candidato è inoltrato come delta provvisorio solo dopo la validazione e prima
 /// del commit; il commit rifiuta citazioni fuori snapshot nella stessa transazione. Payload oltre la capacità della fase → document_limit_exceeded
 /// (la scansione multi-unità è US2/T084). Registrazione, selezione della definizione congelata e instradamento sono di T123.
+/// Dalla T128 (AI §8) i NUOVI turni congelano la definizione <c>project-chat-documents-v3</c>: il modello vede le fonti con alias <c>F&lt;n&gt;</c> del catalogo
+/// (<see cref="ChatAliasCatalog"/>) e cita <c>[fonte:F&lt;n&gt;]</c>; il server risolve, rifiuta ciò che non è nel catalogo e persiste/restituisce solo il
+/// formato canonico <c>[fonte:UUID]</c>. I turni storici (senza versioni congelate) restano v2 con il proprio prompt e decoder; mai conversioni.
 /// </summary>
 public sealed class DocumentChatWorkflow(
     IServiceScopeFactory scopes, AgentFactory factory, InternalModelClient client, IOptions<DocumentOptions> documents)
@@ -232,6 +274,65 @@ public sealed class DocumentChatWorkflow(
     public const string AlgorithmVersion = "chat-single-v1";
     public const string BatchStage = "chat";
 
+    // v3 (T128, contracts/ai-workflow.md §8): chat con alias `F<n>`; v2 sopra resta storica e immutata. La versione di un turno è quella congelata alla richiesta
+    // (ChatTurn.PromptVersion + AgentConfig, SourceSnapshotStore): mai un downgrade da v3 a v2 né il contrario.
+    public const string DefinitionVersionV3 = "project-chat-documents-v3";
+    public const string PromptVersionV3 = "document-chat-v3";
+    public const string AlgorithmVersionV3 = "chat-single-v2";
+    public const string SchemaNameV3 = "document_chat_alias";
+    public const string SchemaVersionV3 = "document-chat-alias-1";
+    public const string ValidationVersionV3 = "document-chat-validation-v2";
+
+    private static readonly Lazy<string> PromptV3 = new(() => ConversationalAgent.LoadPrompt("document-chat-v3.md"));
+
+    public static string InstructionsV3 => PromptV3.Value;
+
+    /// <summary>
+    /// Contratto di chat di un turno, deciso dalle versioni congelate alla richiesta (mai dalla selezione o dal codice corrente): senza versioni (turni storici) è la v2
+    /// UUID; con le versioni di <see cref="SourceSnapshotStore.ChatPromptVersions"/> esattamente uguali è la v3 con alias; qualunque altra combinazione è
+    /// null (workflow_incompatible), mai un downgrade né una reinterpretazione.
+    /// </summary>
+    public static int? ContractOf(ChatTurn turn)
+    {
+        ArgumentNullException.ThrowIfNull(turn);
+        if (turn.PromptVersion is null && turn.AgentConfig is null)
+        {
+            return 2;
+        }
+
+        if (turn.PromptVersion != PromptVersionV3 || turn.AgentConfig is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var frozen = JsonDocument.Parse(turn.AgentConfig);
+            using var expected = JsonDocument.Parse(SourceSnapshotStore.ChatPromptVersions());
+            return frozen.RootElement.ValueKind == JsonValueKind.Object
+                && frozen.RootElement.EnumerateObject().Count() == expected.RootElement.EnumerateObject().Count()
+                && expected.RootElement.EnumerateObject().All(e =>
+                    frozen.RootElement.TryGetProperty(e.Name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() == e.Value.GetString())
+                ? 3
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Messaggio v3: stessa composizione di <see cref="BuildMessages"/> ma le fonti sono esposte solo con l'alias <c>F&lt;n&gt;</c> del catalogo e la citazione letterale:
+    /// nessun UUID, hash, gruppo o id di evidenza. Una fonte condivisa da più evidenze riappare con lo stesso alias, le parti restano nell'ordine persistito.
+    /// </summary>
+    public static IReadOnlyList<ChatMessage> BuildAliasMessages(IReadOnlyList<ConversationMessage> history, ChatSnapshotSources sources, ChatAliasCatalog catalog, string question)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return Compose(history, sources, question, source =>
+            $"fonte:{catalog.AliasOf(source.SourceId) ?? throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Fonte dello snapshot senza alias nel catalogo.")}");
+    }
+
     private static readonly Lazy<string> Prompt = new(() => ConversationalAgent.LoadPrompt("document-chat-v2.md"));
 
     private static readonly JsonElement AnswerSchema = JsonDocument.Parse(
@@ -240,21 +341,21 @@ public sealed class DocumentChatWorkflow(
          "properties":{"mode":{"type":"string","enum":["documented","no_document_use"]},"answer":{"type":"string","minLength":1}}}
         """).RootElement.Clone();
 
-    /// <summary>Istruzioni della chat documentale (AI/Prompts/document-chat-v2.md, risorsa incorporata).</summary>
+    /// <summary>Istruzioni della chat documentale v2 (AI/Prompts/document-chat-v2.md, risorsa incorporata; storico, immutato).</summary>
     public static string Instructions => Prompt.Value;
 
     /// <summary>Sessione del workflow MAF del turno: stabile sul turno, quindi un nuovo tentativo riprende dallo stesso checkpoint nativo.</summary>
     public static string SessionId(Guid turnId) => $"chat-{turnId:N}";
 
     /// <summary>Versione di configurazione della sessione: cambia con selezione (hash snapshot), prompt, modello e limiti e invalida gli snapshot di sessione.</summary>
-    public static string ChatConfigVersionFor(string snapshotHash, string configHash) =>
-        "document-chat-v2:" + Sha($"{snapshotHash}|{configHash}")[..32];
+    public static string ChatConfigVersionFor(string snapshotHash, string configHash, bool aliasContract = false) =>
+        (aliasContract ? "document-chat-v3:" : "document-chat-v2:") + Sha($"{snapshotHash}|{configHash}")[..32];
 
     public async Task<ChatTurnCommitResult> ExecuteAsync(ChatTurnClaim claim, Func<string, CancellationToken, ValueTask>? onDelta, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var (turn, conversation, sources, messages, instructions, structured) = await LoadInputAsync(db, claim.TurnId, ct);
+        var (turn, conversation, sources, messages, instructions, structured, catalog) = await LoadInputAsync(db, claim.TurnId, ct);
         var measure = await factory.Preflight.MeasureAsync(PayloadOf(instructions, messages, structured), ct);
         if (measure.Quality == TokenCountQuality.Unavailable)
         {
@@ -268,12 +369,12 @@ public sealed class DocumentChatWorkflow(
                 $"Le fonti selezionate e il dialogo ({measure.Tokens} token) superano la capacità della chat documentale piccola ({measure.InputBudgetTokens} token): la scansione di più unità non è ancora disponibile.");
         }
 
-        var definition = DefinitionVersion;
+        var definition = catalog is null ? DefinitionVersion : DefinitionVersionV3;
         var writer = CheckpointWriter.ForChatTurn(claim.TurnId, claim.LeaseOwner, claim.FencingToken, definition);
         var store = new DocumentWorkStore(db, writer);
         var committer = scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>();
         var plan = new DocumentChatPlan(
-            claim, turn, conversation, sources, messages, instructions, measure, structured, factory, client, AnswerSchema, committer, onDelta, ct);
+            claim, turn, conversation, sources, messages, instructions, measure, structured, factory, client, AnswerSchema, committer, onDelta, ct, catalog);
         var port = new DocumentBatchPort(store, db, writer, factory, plan, new ChatCallReservation(db, writer, documents.Value.MaxAiCallsPerRun));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(db, writer));
         try
@@ -293,8 +394,12 @@ public sealed class DocumentChatWorkflow(
         return plan.Result ?? await ReconcileAsync(db, claim.TurnId, ct);
     }
 
-    /// <summary>Carica turno, snapshot di fonti e dialogo e compone il payload del solo batch: usato sia dall'esecuzione sia dal preflight di classificazione (T124), così non divergono.</summary>
-    private async Task<(ChatTurn Turn, Conversation Conversation, ChatSnapshotSources Sources, IReadOnlyList<ChatMessage> Messages, string Instructions, bool Structured)> LoadInputAsync(
+    /// <summary>
+    /// Carica turno, snapshot di fonti e dialogo e compone il payload del solo batch: usato sia dall'esecuzione sia dal preflight di classificazione (T124), così non divergono.
+    /// Il contratto è quello congelato sul turno (<see cref="ContractOf"/>): per la v3 (catalogo valorizzato) messaggio con alias e prompt v3, per la v2 messaggio UUID
+    /// e prompt v2; un turno con definizione o versioni non supportate è <c>workflow_incompatible</c> prima di ogni misura o invio.
+    /// </summary>
+    private async Task<(ChatTurn Turn, Conversation Conversation, ChatSnapshotSources Sources, IReadOnlyList<ChatMessage> Messages, string Instructions, bool Structured, ChatAliasCatalog? Catalog)> LoadInputAsync(
         AppDbContext db, Guid turnId, CancellationToken ct)
     {
         var turn = await db.ChatTurns.AsNoTracking().SingleAsync(t => t.Id == turnId, ct);
@@ -303,16 +408,24 @@ public sealed class DocumentChatWorkflow(
             throw new DocumentWorkException(DocumentWorkException.InvalidInput, "Il turno non ha uno snapshot di fonti documentali.");
         }
 
+        if (ContractOf(turn) is not { } contract)
+        {
+            // Nessuna migrazione implicita né reinterpretazione di un'altra definizione: errore esplicito e permanente (T123 instrada le definizioni supportate).
+            throw new DocumentWorkException("workflow_incompatible", "La definizione della chat documentale congelata sul turno non è compatibile con quelle supportate.");
+        }
+
         var conversation = await db.Conversations.AsNoTracking().SingleAsync(c => c.Id == turn.ConversationId, ct);
         var trigger = await db.ConversationMessages.AsNoTracking()
             .SingleAsync(m => m.Id == turn.TriggerMessageId && m.ConversationId == conversation.Id && m.Role == MessageRole.User, ct);
         var sources = await DocumentChatSources.LoadAsync(db, turnId, ct);
         var history = await PostgresChatHistoryProvider.LoadAdmittedAsync(db, conversation.Id, turn.SourceCutoffSequence, turn.TriggerMessageId, ct, sources.SnapshotHash);
 
-        var instructions = sources.Unavailable > 0 ? Instructions + "\n\n" + ChatSourceNotice.ModelGuard(sources.Unavailable) : Instructions;
-        var messages = BuildMessages(history, sources, trigger.Body);
+        var catalog = contract == 3 ? ChatAliasCatalog.Build(sources) : null;
+        var baseInstructions = contract == 3 ? InstructionsV3 : Instructions;
+        var instructions = sources.Unavailable > 0 ? baseInstructions + "\n\n" + ChatSourceNotice.ModelGuard(sources.Unavailable) : baseInstructions;
+        var messages = catalog is null ? BuildMessages(history, sources, trigger.Body) : BuildAliasMessages(history, sources, catalog, trigger.Body);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
-        return (turn, conversation, sources, messages, instructions, structured);
+        return (turn, conversation, sources, messages, instructions, structured, catalog);
     }
 
     private static DocumentPayload PayloadOf(string instructions, IReadOnlyList<ChatMessage> messages, bool structured) =>
@@ -322,7 +435,7 @@ public sealed class DocumentChatWorkflow(
     public async Task<RegimePayload> BuildRegimePayloadAsync(Guid turnId, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
-        var (_, _, _, messages, instructions, structured) = await LoadInputAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), turnId, ct);
+        var (_, _, _, messages, instructions, structured, _) = await LoadInputAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), turnId, ct);
         return new RegimePayload(AiPhase.Chat, PayloadOf(instructions, messages, structured), AnswerSchema.GetRawText(), factory.Preflight);
     }
 
@@ -339,7 +452,11 @@ public sealed class DocumentChatWorkflow(
     /// Input del solo batch: il dialogo operativo come messaggi normali (FIFO, già filtrato dal cutoff e dalla selezione) e, nell'ultimo messaggio utente, le
     /// evidenze congelate con le fonti e la domanda. A capo sempre «\n»: il payload, quindi il suo hash, non dipende dal sistema operativo.
     /// </summary>
-    internal static IReadOnlyList<ChatMessage> BuildMessages(IReadOnlyList<ConversationMessage> history, ChatSnapshotSources sources, string question)
+    internal static IReadOnlyList<ChatMessage> BuildMessages(IReadOnlyList<ConversationMessage> history, ChatSnapshotSources sources, string question) =>
+        Compose(history, sources, question, source => $"fonte:{source.SourceId:D}");
+
+    /// <summary>Composizione comune v2/v3: cambia solo l'etichetta della fonte (UUID o alias); testo, ordine e confini del blocco documentale restano identici.</summary>
+    private static IReadOnlyList<ChatMessage> Compose(IReadOnlyList<ConversationMessage> history, ChatSnapshotSources sources, string question, Func<PersistedSource, string> label)
     {
         var text = new StringBuilder();
         text.Append("Evidenze documentali congelate per questo turno (").Append(sources.Evidence.Count).Append("):\n");
@@ -354,7 +471,7 @@ public sealed class DocumentChatWorkflow(
                 .Append(evidence.Statement).Append('\n');
             foreach (var source in evidence.Sources)
             {
-                text.Append($"<<<FONTE fonte:{source.SourceId:D} ruolo={source.Role}>>>\n").Append(source.Quote).Append("\n<<<FINE FONTE>>>\n");
+                text.Append($"<<<FONTE {label(source)} ruolo={source.Role}>>>\n").Append(source.Quote).Append("\n<<<FINE FONTE>>>\n");
             }
 
             text.Append("<<<FINE EVIDENZA>>>\n");
@@ -408,12 +525,23 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
     private readonly CancellationToken _ct;
     private readonly string _manifestIdentity;
     private readonly string _configHash;
+    private readonly ChatAliasCatalog? _catalog;
+    private readonly string _definition;
+    private readonly string _algorithm;
+    private readonly string _schemaVersion;
+    private readonly string _validationVersion;
+    private readonly string _promptVersion;
 
     public DocumentChatPlan(
         ChatTurnClaim claim, ChatTurn turn, Conversation conversation, ChatSnapshotSources sources, IReadOnlyList<ChatMessage> messages,
         string instructions, PayloadPreflight measure, bool structured, AgentFactory factory, InternalModelClient client, JsonElement schema,
-        IChatTurnCommitter committer, Func<string, CancellationToken, ValueTask>? onDelta, CancellationToken ct)
+        IChatTurnCommitter committer, Func<string, CancellationToken, ValueTask>? onDelta, CancellationToken ct, ChatAliasCatalog? catalog = null)
     {
+        // Versioni del contratto del turno: v3 (alias, catalogo valorizzato) o v2 storico. Mai miste.
+        _catalog = catalog;
+        (_definition, _algorithm, _schemaVersion, _validationVersion, _promptVersion) = catalog is null
+            ? (DocumentChatWorkflow.DefinitionVersion, DocumentChatWorkflow.AlgorithmVersion, DocumentChatContract.SchemaVersion, DocumentChatContract.ValidationVersion, DocumentChatWorkflow.PromptVersion)
+            : (DocumentChatWorkflow.DefinitionVersionV3, DocumentChatWorkflow.AlgorithmVersionV3, DocumentChatWorkflow.SchemaVersionV3, DocumentChatWorkflow.ValidationVersionV3, DocumentChatWorkflow.PromptVersionV3);
         _claim = claim;
         _turn = turn;
         _conversation = conversation;
@@ -427,34 +555,46 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
         _ct = ct;
 
         var settings = factory.Options.ForPhase(AiPhase.Chat);
-        _configHash = DocumentChatWorkflow.Sha(JsonSerializer.Serialize(new
-        {
-            prompt = DocumentChatWorkflow.PromptVersion, instructions = DocumentChatWorkflow.Sha(instructions), schema = DocumentChatContract.SchemaVersion, structured,
-            model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = measure.InputBudgetTokens,
-        }));
+        _configHash = DocumentChatWorkflow.Sha(catalog is null
+            ? JsonSerializer.Serialize(new
+            {
+                prompt = DocumentChatWorkflow.PromptVersion, instructions = DocumentChatWorkflow.Sha(instructions), schema = DocumentChatContract.SchemaVersion, structured,
+                model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = measure.InputBudgetTokens,
+            })
+            : JsonSerializer.Serialize(new
+            {
+                prompt = _promptVersion, instructions = DocumentChatWorkflow.Sha(instructions), schema = _schemaVersion, catalog = ChatAliasCatalog.Version,
+                validation = _validationVersion, structured, model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking,
+                inputBudget = measure.InputBudgetTokens,
+            }));
         _agent = new BatchAgentSpec(
             ConversationalAgent.AgentName, DocumentChatWorkflow.AgentId, instructions,
-            structured ? client.CreateChatOptions(schema, "document_chat", temperature: 0.2f, phase: AiPhase.Chat) : client.CreateChatOptions(temperature: 0.2f, phase: AiPhase.Chat),
+            structured ? client.CreateChatOptions(schema, catalog is null ? "document_chat" : DocumentChatWorkflow.SchemaNameV3, temperature: 0.2f, phase: AiPhase.Chat) : client.CreateChatOptions(temperature: 0.2f, phase: AiPhase.Chat),
             AiPhase.Chat, measure.Profile.Fingerprint);
 
         var sourceHash = DocumentChatWorkflow.Sha(
             $"chat-source|{sources.SnapshotHash}|{turn.SourceCutoffSequence}|{turn.TriggerMessageId:N}|{string.Join(',', sources.Evidence.Select(e => e.EvidenceVersionId.ToString("N")).Distinct())}");
         var policyHash = turn.PolicyHash is { } p && Regex.IsMatch(p, "^[0-9a-f]{64}$") ? p : DocumentChatWorkflow.Sha("document-chat-policy-v1");
         var graph = new JsonArray(DocumentBatchWorkflow.Stages.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray());
-        var planJson = new JsonObject
+        var plan = new JsonObject
         {
-            ["algorithm"] = DocumentChatWorkflow.AlgorithmVersion,
+            ["algorithm"] = _algorithm,
             ["batches"] = new JsonArray(JsonNode.Parse(InputIdsJson())!),
-            ["definition"] = DocumentChatWorkflow.DefinitionVersion,
+            ["definition"] = _definition,
             ["graph"] = graph,
             ["regime"] = turn.Regime?.ToString() ?? "Unclassified",
-        }.ToJsonString();
-        Manifest = new WorkManifestInput(
-            _configHash, sourceHash, measure.Profile.Fingerprint, DocumentChatWorkflow.DefinitionVersion, DocumentChatWorkflow.AlgorithmVersion, policyHash, planJson);
+        };
+        if (catalog is not null)
+        {
+            plan["catalog"] = catalog.CatalogHash;   // il catalogo congelato entra nell'identità del manifesto: un altro catalogo non riusa mai gli stessi batch
+        }
+
+        var planJson = plan.ToJsonString();
+        Manifest = new WorkManifestInput(_configHash, sourceHash, measure.Profile.Fingerprint, _definition, _algorithm, policyHash, planJson);
         _manifestIdentity = CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new
         {
-            configHash = _configHash, source = sourceHash, runtime = measure.Profile.Fingerprint, definition = DocumentChatWorkflow.DefinitionVersion,
-            algorithm = DocumentChatWorkflow.AlgorithmVersion, policy = policyHash, plan = JsonDocument.Parse(planJson).RootElement,
+            configHash = _configHash, source = sourceHash, runtime = measure.Profile.Fingerprint, definition = _definition,
+            algorithm = _algorithm, policy = policyHash, plan = JsonDocument.Parse(planJson).RootElement,
         }));
     }
 
@@ -463,7 +603,7 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
 
     public WorkManifestInput Manifest { get; }
 
-    public WorkLookupExpectation Expectation => new(DocumentChatContract.SchemaVersion, DocumentChatContract.ValidationVersion);
+    public WorkLookupExpectation Expectation => new(_schemaVersion, _validationVersion);
 
     public BatchAgentSpec Agent => _agent;
 
@@ -480,29 +620,49 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
 
         var inputHash = _measure.PayloadHash;
         var batchId = DocumentChatWorkflow.Sha(
-            $"batch|ChatTurn|{_claim.TurnId:N}|{_manifestIdentity}|{DocumentChatWorkflow.DefinitionVersion}|{DocumentChatWorkflow.BatchStage}|{ordinal}|{inputHash}");
+            $"batch|ChatTurn|{_claim.TurnId:N}|{_manifestIdentity}|{_definition}|{DocumentChatWorkflow.BatchStage}|{ordinal}|{inputHash}");
         var provenance = _measure.Quality == TokenCountQuality.Measured ? "measured" : "calibrated_upper_bound";
         return new(new DerivedBatchInput(
             batchId, DocumentChatWorkflow.BatchStage, null, null, null, ordinal, [], InputIdsJson(), _measure.Tokens, provenance, inputHash,
-            DocumentChatContract.SchemaVersion, DocumentChatWorkflow.PromptVersion));
+            _schemaVersion, _promptVersion));
     }
 
     public ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) => new(_messages);
 
     public ValidatedBatch Validate(BatchRef batch, string responseText)
     {
-        var answer = DocumentChatContract.Validate(responseText, _sources.SourceIds);
-        var payload = JsonSerializer.Serialize(new
+        string payload;
+        DocumentChatAnswer answer;
+        if (_catalog is null)
         {
-            schemaVersion = DocumentChatContract.SchemaVersion, mode = answer.Mode, answer = answer.Answer, sourceIds = answer.SourceIds.Select(id => id.ToString("D")).ToArray(),
-        });
+            answer = DocumentChatContract.Validate(responseText, _sources.SourceIds);
+            payload = JsonSerializer.Serialize(new
+            {
+                schemaVersion = DocumentChatContract.SchemaVersion, mode = answer.Mode, answer = answer.Answer, sourceIds = answer.SourceIds.Select(id => id.ToString("D")).ToArray(),
+            });
+        }
+        else
+        {
+            // v3: risoluzione degli alias PRIMA del WorkOutput; si rende durevole solo il canonico (testo con UUID e fonti) con gli hash di catalogo e di DTO.
+            var resolved = DocumentChatContract.ValidateAlias(responseText, _catalog);
+            answer = resolved.Answer;
+            payload = JsonSerializer.Serialize(new
+            {
+                schemaVersion = _schemaVersion, catalogHash = _catalog.CatalogHash, aiOutputHash = resolved.AiOutputHash, canonicalHash = CanonicalHashOf(answer),
+                mode = answer.Mode, answer = answer.Answer, sourceIds = answer.SourceIds.Select(id => id.ToString("D")).ToArray(),
+            });
+        }
+
         var covered = JsonSerializer.Serialize(_sources.Evidence.Select(e => e.EvidenceId.ToString("D")));
         var maps = JsonSerializer.Serialize(new { citations = answer.SourceIds.Select(id => id.ToString("D")).ToArray() });
         var output = new WorkOutputInput(
             batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, maps, null,
-            DocumentChatContract.SchemaVersion, DocumentChatContract.ValidationVersion, null);
+            _schemaVersion, _validationVersion, null);
         return new ValidatedBatch(output);
     }
+
+    private static string CanonicalHashOf(DocumentChatAnswer answer) =>
+        CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new { mode = answer.Mode, answer = answer.Answer, sourceIds = answer.SourceIds.Select(id => id.ToString("D")).ToArray() }));
 
     private async ValueTask<DocumentChatAnswer> DecodeAsync(IBatchOutputs outputs, CancellationToken ct)
     {
@@ -516,7 +676,48 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
             throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "L'output committato cita fonti fuori dallo snapshot del turno.");
         }
 
-        return new DocumentChatAnswer(root.GetProperty("mode").GetString()!, root.GetProperty("answer").GetString()!, ids);
+        var answer = new DocumentChatAnswer(root.GetProperty("mode").GetString()!, root.GetProperty("answer").GetString()!, ids);
+        if (_catalog is not null)
+        {
+            VerifyAliasOutput(root, answer);
+        }
+
+        return answer;
+    }
+
+    /// <summary>
+    /// Replay del WorkOutput v3 (nessuna inferenza): versione dello schema, catalogo ricostruito dallo snapshot e verificato contro <c>catalogHash</c>
+    /// (<c>checkpoint_incompatible</c>), hash del canonico (<c>integrity_conflict</c>) e validazione esistente sul testo canonico (<c>work_output_invalid</c>).
+    /// </summary>
+    private void VerifyAliasOutput(JsonElement root, DocumentChatAnswer answer)
+    {
+        string schema, catalogHash, canonicalHash;
+        try
+        {
+            (schema, catalogHash, canonicalHash) = (root.GetProperty("schemaVersion").GetString()!, root.GetProperty("catalogHash").GetString()!, root.GetProperty("canonicalHash").GetString()!);
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+        {
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Il payload del WorkOutput della chat non è nel formato con alias.");
+        }
+
+        if (schema != _schemaVersion)
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il WorkOutput non è del contratto con alias.");
+        }
+
+        if (catalogHash != _catalog!.CatalogHash)
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il catalogo alias ricostruito dallo snapshot ha un hash diverso da quello committato.");
+        }
+
+        if (canonicalHash != CanonicalHashOf(answer))
+        {
+            throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "La risposta canonica committata ha un hash diverso da canonicalHash.");
+        }
+
+        // Validazione esistente sul canonico (fonti dello snapshot, mode/citazioni coerenti): mai una seconda risoluzione degli alias.
+        _ = DocumentChatContract.Validate(JsonSerializer.Serialize(new { mode = answer.Mode, answer = answer.Answer }), _catalog.SourceIds);
     }
 
     /// <summary>Assemble: l'unico output Committed è la risposta; il testo candidato è inoltrato come delta provvisorio (validato, non ancora committato).</summary>
@@ -537,7 +738,7 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
         var session = await agent.CreateSessionAsync(ct);
         var reply = new ConversationalReply(
             text, agent, session, new RestoredChatSession(session, false, "document_chat"), _conversation, _turn,
-            DocumentChatWorkflow.ChatConfigVersionFor(_sources.SnapshotHash, _configHash), _sources.SnapshotHash, answer);
+            DocumentChatWorkflow.ChatConfigVersionFor(_sources.SnapshotHash, _configHash, aliasContract: _catalog is not null), _sources.SnapshotHash, answer);
 
         var result = await _committer.CommitAsync(_claim, reply, ct);
         if (result is { Outcome: ChatTurnCommitOutcome.Rejected, Reason: "lease_lost" })
