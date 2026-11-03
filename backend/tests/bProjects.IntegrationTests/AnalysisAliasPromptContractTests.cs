@@ -1,4 +1,5 @@
 using bProjects.App.AI;
+using bProjects.App.Analysis;
 
 namespace bProjects.IntegrationTests;
 
@@ -62,5 +63,77 @@ public sealed class AnalysisAliasPromptContractTests
         Assert.Contains("`knownRelationChecks` deve essere `[]`", Prompt, StringComparison.Ordinal);
         Assert.Contains("non inventare alias `R<n>`", Prompt, StringComparison.Ordinal);
         Assert.Contains("\"knownRelationChecks\":[]", Prompt, StringComparison.Ordinal);
+    }
+
+    // ---- Classificazione per sezione (N2: item Documented in assumptions, rifiutato correttamente dal validatore) ----
+
+    private static readonly Guid SourceId = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
+
+    private static DocumentAnalysisItem Item(DocumentAnalysisClassification c, int n) =>
+        new() { Id = Guid.Parse($"00000000-0000-0000-0000-{n:D12}"), Text = "x", Classification = c, EvidenceRefs = [SourceId] };
+
+    private static IReadOnlyList<string> CheckAssumptions(DocumentAnalysisClassification c) =>
+        DocumentAnalysisContentRules.Check(
+            new DocumentAnalysisContent
+            {
+                SchemaVersion = DocumentAnalysisContent.SchemaVersionValue,
+                AnalysisId = Guid.Parse("00000000-0000-0000-0000-0000000000b1"),
+                ProjectId = Guid.Parse("00000000-0000-0000-0000-0000000000b2"),
+                SourceCutoffSequence = 0,
+                ValidationState = AnalysisContentState.Unvalidated,
+                Sources =
+                [
+                    new DocumentAnalysisSource
+                    {
+                        Id = SourceId, Kind = DocumentAnalysisSourceKind.DocumentPassage, MessageId = null, MessageRole = null, RevisionId = null,
+                        DocumentId = Guid.NewGuid(), DocumentVersionId = Guid.NewGuid(), PreparationId = Guid.NewGuid(), ArtifactId = Guid.NewGuid(), BlockId = Guid.NewGuid(),
+                        Start = 0, End = 1, Quote = "q",
+                    },
+                ],
+                Goals = [],
+                ContextAndScope = new DocumentAnalysisContextAndScope { Overview = [], Included = [], Excluded = [] },
+                Requirements = [Item(c == DocumentAnalysisClassification.Declared ? DocumentAnalysisClassification.Documented : c, 1)],
+                OperationalFlows = [],
+                Constraints = [],
+                Dependencies = [],
+                Assumptions = [Item(c, 2)],
+                OpenQuestions = [],
+                Conflicts = [],
+            },
+            new DocumentAnalysisFacts(Guid.Parse("00000000-0000-0000-0000-0000000000b2"), Guid.Parse("00000000-0000-0000-0000-0000000000b1"), 0, 0, 1));
+
+    [Fact]
+    public void The_validator_admits_only_Assumed_in_assumptions_as_declared_by_the_prompt_table()
+    {
+        Assert.Empty(CheckAssumptions(DocumentAnalysisClassification.Assumed));
+        Assert.Contains(CheckAssumptions(DocumentAnalysisClassification.Documented), v => v.StartsWith("assumptions[0].classification", StringComparison.Ordinal));
+        Assert.Contains(CheckAssumptions(DocumentAnalysisClassification.Inferred), v => v.StartsWith("assumptions[0].classification", StringComparison.Ordinal));
+        Assert.Contains(CheckAssumptions(DocumentAnalysisClassification.Declared), v => v.StartsWith("assumptions[0].classification", StringComparison.Ordinal));
+        // Le altre sezioni (qui requirements) ammettono Documented, Inferred e Assumed con una fonte documentale.
+        Assert.DoesNotContain(CheckAssumptions(DocumentAnalysisClassification.Assumed), v => v.StartsWith("requirements", StringComparison.Ordinal));
+
+        Assert.Contains("| `assumptions` | SOLO `Assumed` (mai `Documented`, `Declared`, `Inferred`) |", Prompt, StringComparison.Ordinal);
+        Assert.Contains("| tutte le altre nove sezioni | `Declared`, `Documented`, `Inferred`, `Assumed`, nei limiti della tabella sull'origine |", Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_prompt_defines_the_four_classifications_and_keeps_a_documented_fact_with_a_condition_out_of_assumptions()
+    {
+        Assert.Contains("`Documented` = requisito o fatto sostenuto dai documenti", Prompt, StringComparison.Ordinal);
+        Assert.Contains("`Declared` = informazione dichiarata dal project manager", Prompt, StringComparison.Ordinal);
+        Assert.Contains("`Assumed` = ipotesi non confermata, introdotta come assunzione", Prompt, StringComparison.Ordinal);
+        Assert.Contains("`Inferred` = deduzione che richiede validazione secondo le regole di dominio", Prompt, StringComparison.Ordinal);
+        Assert.Contains("NON si sposta in `assumptions` solo perché contiene un dubbio, una condizione o un limite", Prompt, StringComparison.Ordinal);
+        Assert.Contains("resta nella sezione sostantiva", Prompt, StringComparison.Ordinal);
+        Assert.Contains("va in `openQuestions`", Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_assumptions_example_uses_only_placeholders_that_cannot_be_copied_as_real_content()
+    {
+        Assert.Contains("da NON copiare", Prompt, StringComparison.Ordinal);
+        Assert.Contains("<X>", Prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Linee guida", Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotMatch(@"i2\d", Prompt);
     }
 }
