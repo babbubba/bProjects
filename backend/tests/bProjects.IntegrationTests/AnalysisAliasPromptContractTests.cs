@@ -47,6 +47,24 @@ public sealed class AnalysisAliasPromptContractTests
     }
 
     [Fact]
+    public void The_prompt_states_global_uniqueness_of_local_keys_up_front_with_an_example_and_repeats_it_in_the_final_reminder()
+    {
+        // Sesta esecuzione reale: 4 analisi su 7 scartate per la stessa chiave in piu sezioni (goals+requirements, scopeIncluded+requirements, constraints+conflicts).
+        const string rule = "ogni chiave locale è usata UNA SOLA volta in tutto il documento JSON, in qualsiasi sezione";
+        var first = Prompt.IndexOf(rule, StringComparison.Ordinal);
+        var last = Prompt.LastIndexOf(rule, StringComparison.Ordinal);
+        Assert.True(first >= 0, "regola assente");
+        Assert.True(first < Prompt.IndexOf("# Input", StringComparison.Ordinal), "la regola deve aprire il prompt, prima di # Input");
+        Assert.True(last > Prompt.IndexOf("# Output", StringComparison.Ordinal), "promemoria finale assente");
+        Assert.NotEqual(first, last);
+        Assert.Contains("una voce appartiene a una sola sezione", Prompt, StringComparison.Ordinal);
+        Assert.Contains("anche le alternative dei conflitti usano chiavi nuove", Prompt, StringComparison.Ordinal);
+        Assert.Contains("numera le chiavi progressivamente a livello globale", Prompt, StringComparison.Ordinal);
+        Assert.Contains("CORRETTO:", Prompt, StringComparison.Ordinal);
+        Assert.Contains("ERRATO:", Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_prompt_keeps_the_v3_contract_properties_and_the_label_rules()
     {
         Assert.Contains("ESATTAMENTE queste otto proprietà", Prompt, StringComparison.Ordinal);
