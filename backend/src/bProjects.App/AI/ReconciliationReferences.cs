@@ -10,7 +10,7 @@ namespace bProjects.App.AI;
 public sealed record SnapshotEvidence(Guid EvidenceId, Guid EvidenceVersionId, string ContentHash, IReadOnlyList<PersistedSource> Sources);
 
 /// <summary>Relazione nota fra evidenze dello snapshot.</summary>
-public sealed record SnapshotRelation(Guid RelationId, Guid FromEvidenceId, Guid ToEvidenceId, EvidenceRelationType Type);
+public sealed record SnapshotRelation(Guid RelationId, Guid FromEvidenceId, Guid ToEvidenceId, EvidenceRelationType Type, EvidenceRelationBasis Basis = EvidenceRelationBasis.Inferred);
 
 /// <summary>Fatti immutabili dello snapshot del progetto (nessun accesso al database): tutto ciò che non è qui è fuori progetto o fuori snapshot.</summary>
 public sealed record ReconciliationSnapshot(Guid ProjectId, string SourceHash, IReadOnlyList<SnapshotEvidence> Evidence, IReadOnlyList<SnapshotRelation> Relations)

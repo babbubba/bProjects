@@ -23,6 +23,9 @@ public sealed class DocumentWorkException(string code, string message) : Excepti
     public const string InvalidInput = "invalid_work_input";
     public const string CallLimitExceeded = "document_limit_exceeded";
 
+    /// <summary>Fonte originale non verificabile alla costruzione del catalogo alias (range, citazione, campi di provenienza): permanente (AI §7.9).</summary>
+    public const string SourceSnapshotInvalid = "source_snapshot_invalid";
+
     /// <summary>Unità irriducibile fuori budget: la preparazione resta incompleta in modo esplicito (AI §3, §6).</summary>
     public const string DocumentIncomplete = "document_incomplete";
 

@@ -87,7 +87,7 @@ public static class DocumentAnalysisSources
         var relations = await db.EvidenceRelations.AsNoTracking().Where(r => versionIds.Contains(r.VersionId)).OrderBy(r => r.Id).ToListAsync(ct);
         var known = evidence.Select(e => e.EvidenceId).ToHashSet();
         var snapshotRelations = relations.Where(r => known.Contains(r.FromEvidenceId) && known.Contains(r.ToEvidenceId))
-            .Select(r => new SnapshotRelation(r.Id, r.FromEvidenceId, r.ToEvidenceId, r.Type)).ToList();
+            .Select(r => new SnapshotRelation(r.Id, r.FromEvidenceId, r.ToEvidenceId, r.Type, r.Basis)).ToList();
 
         var messages = await db.ConversationMessages.AsNoTracking()
             .Where(m => m.ConversationId == run.ConversationId && m.Sequence <= run.SourceCutoffSequence).OrderBy(m => m.Sequence).ToListAsync(ct);
