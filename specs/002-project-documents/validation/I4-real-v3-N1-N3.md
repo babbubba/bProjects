@@ -47,3 +47,45 @@ Le modifiche toccano contratto, prompt o compositore: servono approvazione e una
 
 ## 6. Note
 Nessun commit, push, modifica di `tasks.md`, `docs/acceptance-trace/` o `project-events.service.spec.ts`. Configurazione del server invariata.
+
+---
+
+# Seconda prova (dopo correzioni)
+
+Esecuzione 2026-11-03 sul commit `8971fb4` (prompt v3 con tabella origine-classificazione, motivo `noFindings` obbligatorio, chiavi uniche; messaggio senza `certezza=`). Stesso metodo, ambiente e filtri della prima prova (sezione 1): Qwen3.6-35B-Smart, W=131072 e slot idle verificati via `/slots?model=` prima di ogni test, reasoning OFF, output massimo Analysis 16384, margine 1024, una inferenza alla volta, UNA ripetizione per test, PG 15432, parser 58300. Nessuna modifica a codice, prompt, compositore, validatori, gold o asserzioni; nessun log diagnostico aggiunto. Report grezzi solo locali (`%TEMP%\bprojects-t067`, `%TEMP%\bprojects-diag`, non versionati).
+
+**Esito: N1 PASS, N2 PASS, N3 FAIL (analisi PASS, falliscono 2 verifiche a valle). Gate N1-N3 NON soddisfatto.** T125/T067 non spuntati. N4/N5 non eseguiti.
+
+## Risultati per test e per stadio
+| Stadio | N1 PDF+DOCX | N2 MD+TXT | N3 conflitto + tabella PDF |
+| --- | --- | --- | --- |
+| Token analisi input / output | 2732 / 852 | 2781 / 723 | 2556 / 577 |
+| Durata analisi (chiamata) / test | 15,6 s / 2 m 09,9 s | 12,3 s / 2 m 07,2 s | 10,0 s / 2 m 02,9 s |
+| Finish (tutte le chiamate) | stop, 0 `length` | stop, 0 `length` | stop, 0 `length` |
+| DTO semantico (codec strict) | OK | OK | OK |
+| Ricostruzione alias -> canonico | OK (0 chiavi duplicate) | OK (0 duplicate) | OK (0 duplicate) |
+| Validazione di dominio | OK (run Completed, revisione 1.1.0; 0 violazioni: l'app le conserva solo in caso di rifiuto) | OK (idem) | OK (idem) |
+| Copertura | PASS: ogni evidenza (9) rappresentata | PASS (9) | PASS (7) |
+| Citazioni analisi (server-side) | PASS 100% (9 fonti) | PASS 100% | PASS 100% (7 fonti) |
+| Semantica vs gold del test | PASS 7/7 attese (24 mesi, anonimo negato, SSO, rapporto, annullati esclusi, quinto giorno, Operatore sola lettura), 0 conflitti spuri | PASS (esclusioni, date, consenso, vietato carta, eccezione anagrafici, 45 non 30, injection ignorata, 0 voci Declared spurie) | PASS 7/7 attese (30, 60, R-01..R-05 con R-05 escluso) |
+| Conflitti / alternative | 0 / 0 (nessuno atteso) | 0 / 0 (nessuno atteso) | 1 conflitto Open, 2 alternative (60 e 30 giorni), resolution null: PASS |
+| Classificazioni (Declared/Documented) | tutte Documented (nessun messaggio PM sul contenuto) | tutte Documented | tutte Documented |
+| Correzione PM + conferma | PASS | PASS | correzione accettata (PUT 200, PmEdit 1.1.0), conferma OK; **FAIL verifica «attribuzione»** (vedi sotto) |
+| Bozza | PASS (6 call, marcatori 10/10 validi) | PASS | **FAIL: `work_output_invalid`, 2 violazioni** (vedi sotto) |
+| Esito test | **PASS** (53/0) | **PASS** (53/0) | **FAIL** (49/2) |
+
+Le tre cause della prima prova risultano eliminate in 3/3: nessuna classificazione `Declared` su evidenze Document, `noFindings` A/B valorizzato (validazione di dominio superata), nessuna chiave locale duplicata. Il fail-fast della prima prova nascondeva gli stadi successivi: in questa prova N3 li raggiunge e si ferma piu a valle.
+
+## Errori di N3 (post-analisi, non toccano il contratto v3 dell'analisi)
+1. **Verifica «attribuzione: la voce corretta cita una fonte PmRevision aggiunta dal server» - classe: test/harness (aspettativa), non modello ne server.** La correzione di N3 risolve un conflitto (`ResolveConflictInFavourOf60`): il server ha aggiunto correttamente la fonte `PmRevision` (`c4378fdf...`) e l'ha collegata a `conflicts[0].resolution.evidenceRefs`, come da db-final (1 PmRevision source, conflitto Resolved con alternativa 60 giorni selezionata, revisione AI intatta). L'asserzione pero cerca la fonte PmRevision solo in `Items` (voci e alternative), che non include `resolution.evidenceRefs`; in N1 la correzione modifica il testo di una voce e passa. Questa verifica non era mai stata raggiunta prima (fail-fast). Non corretto (asserzioni intoccabili): serve decisione.
+2. **Bozza: `work_output_invalid` (2 violazioni: `itemIds` blocks[2] cita un id non appartenente alla revisione confermata; `fonti` blocks[2] cita la fonte PmRevision che non sostiene nessuno dei suoi item) - classe: semantico/istruzione del modello nella fase Document (contratto bozza v2, non toccato da T125).** Il blocco 3 della bozza mette tra gli `itemIds` l'id del conflitto (`8729b802...`, non e un item: sono item le alternative) e tra le `sourceIds` la fonte PmRevision della risoluzione. Il messaggio della bozza espone `conflicts[].id` accanto agli item e la fonte della risoluzione, che il validatore non ammette come sostegno di item. Una sola esecuzione: non e una stima di varianza. Il validatore ha rifiutato correttamente (nessuna bozza con riferimenti inventati). Non verificato: se il fallimento si ripete (n=1), ne' se con corretta attribuzione 1 il resto della bozza sarebbe passato (la bozza N3 non e stata valutata semanticamente: DraftTokens «60», «tema scuro» NOT VERIFIED).
+
+## Confronto
+| Test | Prima prova (v3 iniziale) | Seconda prova |
+| --- | --- | --- |
+| N1 | FAIL (Declared su Document + noFindings, 27 viol.): 2148 / 1717 / 29 s | **PASS**: 2732 / 852 / 16 s |
+| N2 | FAIL (chiave duplicata) | **PASS**: 2781 / 723 / 12 s |
+| N3 | FAIL (chiavi duplicate) | analisi **PASS** (2556 / 577 / 10 s), test FAIL a valle (1 aspettativa di test + 1 errore di bozza) |
+
+## Gate e correzioni proposte (NON applicate, nessuna terza prova)
+Gate N1-N3: **no** (N3 FAIL). Proposte, da approvare: (a) aspettativa di N3: verificare la fonte PmRevision anche in `conflicts[].resolution.evidenceRefs` (nessun allentamento: la fonte deve comunque essere PmRevision e aggiunta dal server) oppure usare per N3 una correzione su una voce; (b) bozza: nel messaggio della fase Document distinguere in modo esplicito gli id citabili (item e alternative) dall'id del conflitto e dalle fonti di risoluzione (non citabili come sostegno), oppure esporre il conflitto senza `id` proprio; poi rieseguire solo N3 (e, a gate chiuso, decidere su N4/N5). Nessun segnale che l'analisi v3 richieda altre modifiche.

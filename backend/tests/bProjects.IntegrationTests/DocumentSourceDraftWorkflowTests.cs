@@ -91,6 +91,100 @@ internal static class DraftFixtures
 }
 
 /// <summary>
+/// Sprint 2 (N3 reale): conflitto RISOLTO dal PM con fonte PmRevision collegata alla sola risoluzione. Il modello vede solo gli id citabili
+/// (item e alternative); id del conflitto ed evidenceRefs della risoluzione non sono esposti come citabili. Il validatore resta invariato.
+/// </summary>
+public sealed class DocumentDraftResolvedConflictTests
+{
+    private static readonly Guid PmRev = Guid.Parse("a1000000-0000-4000-8000-000000000003");
+
+    private static DocumentAnalysisContent Resolved()
+    {
+        var open = DraftFixtures.Content(Guid.Parse("c0000000-0000-4000-8000-000000000001"), Guid.Parse("c0000000-0000-4000-8000-000000000002"), Guid.NewGuid());
+        var pmSource = new DocumentAnalysisSource
+        {
+            Id = PmRev, Kind = DocumentAnalysisSourceKind.PmRevision, MessageId = null, MessageRole = null, RevisionId = Guid.NewGuid(), DocumentId = null,
+            DocumentVersionId = null, PreparationId = null, ArtifactId = null, BlockId = null, Start = null, End = null, Quote = null,
+        };
+        var conflict = open.Conflicts[0] with
+        {
+            Status = AnalysisConflictStatus.Resolved,
+            Resolution = new AnalysisConflictResolution { SelectedAlternativeIds = [DraftFixtures.Alt1], Reason = "Scelta del PM", EvidenceRefs = [PmRev] },
+        };
+        return open with { Sources = [.. open.Sources, pmSource], Conflicts = [conflict] };
+    }
+
+    private static string MessageText() => DocumentSourceDraftWorkflow.BuildMessages(new DocumentRunInputV11(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 2, Resolved())).Single().Text;
+
+    [Fact]
+    public void The_draft_message_does_not_expose_the_conflict_id_nor_the_resolution_sources_as_citable()
+    {
+        var text = MessageText();
+        var json = JsonNode.Parse(text[(text.IndexOf("{\"schemaVersion\"", StringComparison.Ordinal))..text.LastIndexOf('}', text.IndexOf("Rispondi ora", StringComparison.Ordinal))] + "}")!;
+
+        Assert.DoesNotContain(DraftFixtures.ConflictId.ToString("D"), text);
+        var conflict = json["conflicts"]![0]!.AsObject();
+        Assert.False(conflict.ContainsKey("id"));
+        Assert.False(conflict["resolution"]!.AsObject().ContainsKey("evidenceRefs"));
+        Assert.Contains(DraftFixtures.Alt1.ToString("D"), text); // le alternative restano citabili
+        Assert.Contains(DraftFixtures.Alt1.ToString("D"), conflict["resolution"]!["selectedAlternativeIds"]!.ToJsonString());
+    }
+
+    [Fact]
+    public void The_instructions_state_which_ids_are_citable_and_which_are_not()
+    {
+        Assert.Contains("mai l'id di un conflitto", DocumentSourceDraftWorkflow.Instructions);
+        Assert.Contains("fonti della risoluzione", DocumentSourceDraftWorkflow.Instructions);
+    }
+
+    [Fact]
+    public void The_unchanged_validator_rejects_a_conflict_id_as_item_and_a_resolution_only_source()
+    {
+        var package = DocumentDraftPackage.From(Resolved());
+        Assert.DoesNotContain(DraftFixtures.ConflictId, package.ItemSources.Keys);
+
+        var bad = new JsonObject
+        {
+            ["sectionKey"] = "documento",
+            ["blocks"] = new JsonArray(
+                DraftFixtures.Block([DraftFixtures.Goal], $"- Obiettivo [fonte:{DraftFixtures.Msg:D}]", [DraftFixtures.Msg]),
+                DraftFixtures.Block([DraftFixtures.Req], $"- Requisito [fonte:{DraftFixtures.Pass:D}]", [DraftFixtures.Pass]),
+                DraftFixtures.Block([DraftFixtures.Assump], "- Ipotesi", []),
+                DraftFixtures.Block([DraftFixtures.Question], "- Da definire", []),
+                DraftFixtures.Block([DraftFixtures.ConflictId, DraftFixtures.Alt1, DraftFixtures.Alt2],
+                    $"Conflitto risolto [fonte:{DraftFixtures.Msg:D}] [fonte:{DraftFixtures.Pass:D}] [fonte:{PmRev:D}]", [DraftFixtures.Msg, DraftFixtures.Pass, PmRev])),
+        };
+
+        var result = DocumentDraftValidator.ValidateBlocks(bad.ToJsonString(), package);
+
+        Assert.False(result.Accepted);
+        Assert.Contains(result.Violations, v => v.Contains("non appartiene alla revisione confermata") && v.Contains(DraftFixtures.ConflictId.ToString("D")));
+        Assert.Contains(result.Violations, v => v.Contains("non sostiene nessuno dei suoi item") && v.Contains(PmRev.ToString("D")));
+    }
+
+    [Fact]
+    public void A_complete_draft_of_a_resolved_conflict_with_a_pm_revision_source_is_accepted_citing_only_alternatives_and_their_sources()
+    {
+        var package = DocumentDraftPackage.From(Resolved());
+        var good = new JsonObject
+        {
+            ["sectionKey"] = "documento",
+            ["blocks"] = new JsonArray(
+                DraftFixtures.Block([DraftFixtures.Goal], $"- Obiettivo [fonte:{DraftFixtures.Msg:D}]", [DraftFixtures.Msg]),
+                DraftFixtures.Block([DraftFixtures.Req], $"- Requisito [fonte:{DraftFixtures.Pass:D}]", [DraftFixtures.Pass]),
+                DraftFixtures.Block([DraftFixtures.Assump], "- Ipotesi", []),
+                DraftFixtures.Block([DraftFixtures.Question], "- Da definire", []),
+                DraftFixtures.Block([DraftFixtures.Alt1, DraftFixtures.Alt2],
+                    $"Conflitto risolto dal PM: scelta l'alternativa 1 [fonte:{DraftFixtures.Msg:D}]. Alternativa 2 [fonte:{DraftFixtures.Pass:D}].", [DraftFixtures.Msg, DraftFixtures.Pass])),
+        };
+
+        var result = DocumentDraftValidator.ValidateBlocks(good.ToJsonString(), package);
+
+        Assert.True(result.Accepted, string.Join(" | ", result.Violations));
+    }
+}
+
+/// <summary>
 /// T061 (DET) — contratto chiuso dell'output della generazione documentale piccola e validazione contro il pacchetto fidato della revisione
 /// confermata 1.1: item del pacchetto tutti rappresentati, marcatori <c>[fonte:UUID]</c> atomici coerenti con sourceIds e con le fonti degli item,
 /// Markdown senza HTML/immagini/schemi pericolosi, nessuna riparazione.

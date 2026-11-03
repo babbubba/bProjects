@@ -164,16 +164,33 @@ public sealed class DocumentSourceDraftWorkflow(
     }
 
     /// <summary>Messaggio unico del batch: dati del server e intero JSON della revisione confermata 1.1.0. A capo sempre «\n».</summary>
-    internal static IReadOnlyList<ChatMessage> BuildMessages(DocumentRunInputV11 input)
+    public static IReadOnlyList<ChatMessage> BuildMessages(DocumentRunInputV11 input)
     {
         var text = new StringBuilder()
             .Append("Dati affidabili del server per questa generazione:\n")
             .Append($"- analysisId: {input.AnalysisId:D}\n- projectId: {input.ProjectId:D}\n- revisionId: {input.RevisionId:D} (versione {input.Version})\n")
             .Append("Analisi confermata dal project manager, JSON AnalysisContent 1.1.0 completo:\n")
-            .Append(JsonSerializer.Serialize(input.Content, PromptJson)).Append('\n')
+            .Append(ModelView(input.Content)).Append('\n')
             .Append("Rispondi ora con l'unico oggetto JSON {\"sectionKey\":...,\"blocks\":[...]}.")
             .ToString();
         return [new ChatMessage(ChatRole.User, text)];
+    }
+
+    /// <summary>
+    /// Vista dell'analisi per il modello: come il JSON confermato ma senza gli id che il validatore non ammette come citabili, cioe l'<c>id</c> del
+    /// conflitto (non e un item: sono item le sue alternative) e le <c>evidenceRefs</c> della risoluzione (fonti che non sostengono alcun item).
+    /// Le <c>selectedAlternativeIds</c> e il motivo restano: l'alternativa scelta e un item citabile.
+    /// </summary>
+    private static string ModelView(DocumentAnalysisContent content)
+    {
+        var root = JsonSerializer.SerializeToNode(content, PromptJson)!.AsObject();
+        foreach (var conflict in root["conflicts"]!.AsArray().OfType<JsonObject>())
+        {
+            conflict.Remove("id");
+            (conflict["resolution"] as JsonObject)?.Remove("evidenceRefs");
+        }
+
+        return root.ToJsonString(PromptJson);
     }
 
     private async Task<DocumentRunResult> ReadAsync(Guid runId, CancellationToken ct)

@@ -515,7 +515,12 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
                 newRevision != revision && body.GetProperty("origin").GetString() == "PmEdit" && body.GetProperty("schemaVersion").GetString() == "1.1.0"
                 && await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"Id\" = @r AND \"Origin\" = 'Ai'", ("r", revision)) == 1);
             var editedContent = new Content(JsonNode.Parse(body.GetProperty("content").GetRawText())!, await MessageBodies(analysis.Content));
-            v.Check("attribuzione: la voce corretta cita una fonte PmRevision aggiunta dal server", editedContent.Items.Any(i => i.Refs.Any(r => editedContent.Sources.TryGetValue(r, out var s) && s.Kind == "PmRevision")));
+            // La fonte PmRevision e aggiunta dal server dove la correzione agisce: in una voce/alternativa modificata (N1) oppure, se il PM risolve un
+            // conflitto (N3), in conflicts[].resolution.evidenceRefs. Non e un allentamento: una PmRevision resta obbligatoria, ma e cercata anche dove il
+            // server attribuisce la risoluzione.
+            v.Check("attribuzione: la correzione cita una fonte PmRevision aggiunta dal server (voce/alternativa o risoluzione del conflitto)",
+                editedContent.Items.Any(i => i.Refs.Any(r => editedContent.Sources.TryGetValue(r, out var s) && s.Kind == "PmRevision"))
+                || editedContent.Conflicts.Any(c => c.ResolutionRefs.Any(r => editedContent.Sources.TryGetValue(r, out var s) && s.Kind == "PmRevision")));
             v.Check("le fonti documentali restano identiche dopo la correzione", JsonSerializer.Serialize(editedContent.Sources.Values.Where(s => s.Kind == "DocumentPassage").Select(s => s.Raw.ToJsonString()).Order(StringComparer.Ordinal))
                 == JsonSerializer.Serialize(content.Sources.Values.Where(s => s.Kind == "DocumentPassage").Select(s => s.Raw.ToJsonString()).Order(StringComparer.Ordinal)));
             revision = newRevision;
@@ -870,8 +875,9 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         public bool NegativeText => NegativeMarker.IsMatch(Fold(Text));
     }
 
-    private sealed class Conflict(string status, IReadOnlyList<Item> alternatives, bool hasResolution)
+    private sealed class Conflict(string status, IReadOnlyList<Item> alternatives, bool hasResolution, IReadOnlyList<Guid> resolutionRefs)
     {
+        public IReadOnlyList<Guid> ResolutionRefs { get; } = resolutionRefs;
         public string Status { get; } = status;
         public IReadOnlyList<Item> Alternatives { get; } = alternatives;
         public bool HasResolution { get; } = hasResolution;
@@ -904,7 +910,8 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
             {
                 var alternatives = c!["alternatives"]!.AsArray().Select(n => Make("conflict", true, n!)).ToList();
                 items.AddRange(alternatives);
-                conflicts.Add(new Conflict(c["status"]!.GetValue<string>(), alternatives, c["resolution"] is not null));
+                conflicts.Add(new Conflict(c["status"]!.GetValue<string>(), alternatives, c["resolution"] is not null,
+                    [.. (c["resolution"]?["evidenceRefs"]?.AsArray() ?? []).Select(r => Guid.Parse(r!.GetValue<string>()))]));
             }
 
             Items = items;
