@@ -52,11 +52,22 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
     private static AiOptions RealOptions()
     {
         var options = TestEnvironment.RequireProductionLikeOptions();
-        options.ContextWindowTokens = 32768;
-        options.Phases.Analysis.MaxOutputTokens = 16384;
-        options.Phases.Analysis.EnableThinking = false;
+        // Parametrizzazione (campagna diagnostica T067, solo configurazione client; default = baseline W=32768): finestra, output massimo
+        // e ragionamento dell'analisi, margine di sicurezza. Nessuna asserzione dipende da questi valori.
+        options.ContextWindowTokens = EnvInt("BPROJECTS_TEST_CTX_WINDOW") ?? 32768;
+        options.Phases.Analysis.MaxOutputTokens = EnvInt("BPROJECTS_TEST_ANALYSIS_MAX_OUTPUT") ?? 16384;
+        options.Phases.Analysis.EnableThinking = EnvInt("BPROJECTS_TEST_ANALYSIS_THINKING") == 1;
+        if (EnvInt("BPROJECTS_TEST_SAFETY_MARGIN") is { } margin)
+        {
+            options.SafetyMarginTokens = margin;
+        }
+
+        MafDiagnostics.RecordConfig(options);
         return options;
     }
+
+    private static int? EnvInt(string name) =>
+        int.TryParse(Environment.GetEnvironmentVariable(name), out var value) ? value : null;
 
     protected override void ConfigureServices(IServiceCollection services)
     {
