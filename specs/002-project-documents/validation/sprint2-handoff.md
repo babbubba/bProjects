@@ -319,3 +319,10 @@ Analizza mai Ordinary (T124); `recoveryMs` null (T102); `http-api.md` non rialli
 
 ### Prompt di ripresa
 In `specs/002-project-documents/validation/resume-prompt.md`.
+
+## SESSIONE SU NUOVO PC (2026-11-03) — esiti, leggere per primo
+- Ambiente ricostruito (PG `bprojects-002-test-pg2` 15432; parser `bprojects-t055-parser` 58300; stack Compose demo su http://localhost:8080 con `infra/.env` ignorato). Guida: `demo-guida.md`.
+- T129 rivisto (WIP corretto rispetto a §9): `DocumentDraftAliasWorkflowTests` 53/53. Regressione non-DGX completa: backend 2673 = 2648 PASS / 0 FAIL / 25 SKIP (env); Vitest 361/361 (3 run a macchina scarica; 1 run sotto carico aveva 6 FAIL di timer in `context-usage.store.spec.ts`: scheduling); build Angular OK; Playwright fake-stack desktop 94 PASS / 13 SKIP / 0 FAIL (mobile non eseguito).
+- DGX N1 PASS, N2 PASS, N3 FAIL 2/2 (chiavi duplicate nell'analisi): dettagli in `I4-real-v3-N1-N3.md` (sesta esecuzione). Gate NON soddisfatto: T125/T127/T128/T129 restano non spuntati, T126/T067 non avviati.
+- Config demo: `AI_DOCUMENT_REQUEST_TIMEOUT_SECONDS=120` (altrimenti il retry T129 non parte entro la deadline Ordinary 180 s). Retry T129 provato su stack reale.
+- Decisione attesa dall'autore: come ridurre le chiavi duplicate dell'analisi (prompt/contratto) e la regola E2E «ordini annullati ESCLUSI».
