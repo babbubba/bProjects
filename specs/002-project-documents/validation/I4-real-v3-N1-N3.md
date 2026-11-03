@@ -121,3 +121,29 @@ Esecuzione 2026-11-03 sul commit `68b47d8` (messaggio di bozza senza id del conf
 
 ## Correzioni proposte (NON applicate)
 (a) Bozza: rendere gli id citabili non copiati dal modello, con alias locali anche nella fase Document (come per l'analisi) e mappatura server-side a UUID, oppure riparare/rifiutare con un nuovo tentativo guidato dal solo elenco di id validi; e la correzione robusta, perche il modello non copia affidabilmente gli UUID. (b) Regola del test: restringere `Violations` alle sole voci che affermano un singolo termine (es. escludere voci che nominano entrambi i valori 30 e 60 / `Questions`), oppure istruire il prompt a non generare voci duplicate sul termine di pagamento: decisione dell'autore. Poi rieseguire solo N3.
+
+---
+
+# Quarta esecuzione N3 (dopo T127)
+
+Esecuzione 2026-11-03 sul commit `7b09f02` (alias brevi nella fase bozza con ricostruzione server-side, `document-draft-v3`). Solo N3, UNA ripetizione, configurazione identica alla sezione 1: Qwen3.6-35B-Smart (`BPROJECTS_TEST_DGX_MODEL` solo nel processo di test), W=131072 e slot idle verificati con `/props?model=` e `/slots?model=` (`n_ctx 131072`, `is_processing=false`), reasoning OFF, output Analysis 16384, margine 1024, PG 15432 (`Database=postgres`), parser 58300. Filtro verificato con `--list-tests` (1 test). Warm-up riuscito al primo tentativo (nessun `HttpIOException`). Nessuna modifica a codice, prompt, test, gold. Report grezzo solo locale (`%TEMP%\bprojects-t067\N3-110057.txt`).
+
+**Esito: N3 FAIL (22 PASS / 1 FAIL), durata 1 m 33 s. Il fallimento e nello stadio ANALISI (run `Failed work_output_invalid`), quindi la bozza T127 NON e stata raggiunta ne valutata. Gate N1-N3 NON soddisfatto.** Nessuna ripetizione. T127/T125/T067 non spuntati; N4/N5 non eseguiti.
+
+## Per stadio
+| Stadio | Esito |
+| --- | --- |
+| Fasi precedenti (upload, Ready, estrazione, chat con fonti e citazioni esatte, classificazione Ordinary 6,8 s) | PASS (7 evidenze) |
+| Analisi: token in/out, durata, finish | 2556 / 691, 12,6 s, stop (6 chiamate totali, 0 `length`) |
+| DTO, ricostruzione alias | **FAIL: `work_output_invalid`, 1 violazione: `knownRelationChecks[0].relation: alias R1 sconosciuto o fuori snapshot`** |
+| Validazione di dominio, copertura, citazioni, semantica, conflitto 60/30, R-05 | NOT VERIFIED (analisi scartata dalla ricostruzione) |
+| Correzione PM e attribuzione, conferma | NOT VERIFIED (non raggiunti) |
+| Bozza (DTO con alias, ricostruzione, validazione, citazioni item/alternative, semantica 60 vs 30, R-05 esclusa), Markdown con citazioni | NOT VERIFIED (nessuna chiamata Document eseguita) |
+| «nessuna inversione/errore» | NOT VERIFIED (nessuna regola violata: non valutata) |
+
+## Classificazione dell'errore
+1. **Analisi: `knownRelationChecks` con alias `R1` non presente nello snapshot - classe: errore del modello (istruzione/allucinazione di alias), non runtime, contesto, output, parser ne T127.** Il modello ha emesso un verdetto per una relazione `R1` che il messaggio non conteneva; il ricostruttore ha rifiutato correttamente (nessun dato inventato accettato). Ipotesi NON verificata (n=1, prompt/risposta non ispezionati): lo snapshot N3 non ha relazioni note e il modello ha copiato l'esempio `R1` del prompt `document-analysis-v3.md` (riga sui `knownRelationChecks`) invece di `[]`. Regressione rispetto a Seconda/Terza prova, dove la stessa analisi passava (3/3 e 1/1 con 0 violazioni): varianza del modello a reasoning OFF su un contratto invariato da T125, non effetto di T127 (la fase analisi non e toccata da T127).
+- Nessun errore di runtime, contesto, output, preflight, parser, DTO strict.
+
+## Conclusione e proposta (NON applicata)
+T127 resta non verificato su DGX: serve un run in cui l'analisi passi per arrivare alla bozza. Proposta: rendere la ricostruzione tollerante ai `knownRelationChecks` su alias inesistente quando lo snapshot non ha relazioni note (scartare il verdetto, mai inventare), oppure togliere l'esempio `R1` dal prompt quando non ci sono relazioni note; poi rieseguire solo N3. Decisione dell'autore.

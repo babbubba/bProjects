@@ -114,6 +114,9 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.Equal(DocumentAnalysisWorkflow.InstructionsV3.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));
         // N1 reale: `certezza=Declared` nell'intestazione di ogni voce e stato copiato come classificazione: il messaggio non la espone piu.
         Assert.DoesNotContain("certezza", request.AllText, StringComparison.OrdinalIgnoreCase);
+        // N3 quarta esecuzione: senza relazioni note il messaggio dichiara l'assenza (niente alias R da copiare).
+        Assert.Contains("Relazioni note: nessuna → knownRelationChecks deve essere [].", request.AllText);
+        Assert.DoesNotMatch(@"\[R\d+\]", request.AllText);
         Assert.Matches(@"<<<VOCE \[E1\] origine=\w+ tipo=\w+ polarita=\w+>>>", request.AllText);
         Assert.False(AnyUuid.IsMatch(everything), "UUID nel prompt: " + AnyUuid.Match(everything).Value);
         Assert.False(AnyHash.IsMatch(everything), "hash nel prompt");

@@ -52,4 +52,15 @@ public sealed class AnalysisAliasPromptContractTests
         Assert.Contains("`\"alias-1\"`", Prompt, StringComparison.Ordinal);
         Assert.Contains("mai le etichette `S<n>`", Prompt, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void The_prompt_has_no_copyable_concrete_known_relation_alias_and_declares_that_without_known_relations_the_checks_are_empty()
+    {
+        // N3 quarta esecuzione: il modello ha copiato l'esempio `R1` pur senza relazioni note.
+        Assert.DoesNotMatch(@"R\d+", Prompt);
+        Assert.Contains("`Relazioni note: nessuna`", Prompt, StringComparison.Ordinal);
+        Assert.Contains("`knownRelationChecks` deve essere `[]`", Prompt, StringComparison.Ordinal);
+        Assert.Contains("non inventare alias `R<n>`", Prompt, StringComparison.Ordinal);
+        Assert.Contains("\"knownRelationChecks\":[]", Prompt, StringComparison.Ordinal);
+    }
 }

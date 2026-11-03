@@ -129,7 +129,12 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan
             }
         }
 
-        if (catalog.Data.Relations.Count > 0)
+        if (catalog.Data.Relations.Count == 0)
+        {
+            // Assenza dichiarata: un'assenza silenziosa ha indotto il modello a copiare un alias R d'esempio (N3, quarta esecuzione).
+            text.Append("\nRelazioni note: nessuna → knownRelationChecks deve essere [].\n");
+        }
+        else
         {
             text.Append("\nRelazioni note fra evidenze:\n");
             foreach (var relation in catalog.Data.Relations)
