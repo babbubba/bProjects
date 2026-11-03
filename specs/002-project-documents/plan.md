@@ -104,6 +104,8 @@ Al POST chat/Analizza congelare manifest documentale e versioni Evidence documen
 
 Evoluzione `AnalysisContent 1.1.0`: DocumentPassage fra le fonti, Documented fra classificazioni, campi documentali condizionali e cutoff ≥0. DTO/validator separati/version-dispatch; 1.0.0 rimane identico in storage e letture, edit di vecchie revisioni rimane 1.0.0. Nuove analisi con documenti sono 1.1.0; senza documenti restano sul ramo 001. Vecchi checkpoint ripresi solo con la propria topologia/config/versione; nessun resume su grafi nuovi.
 
+**Nota T125 (2026-11-03)**: lo scambio con il modello per l'analisi documentale non prevede più che questi restituisca `sources`, `evidenceMap`, UUID, hash o `visitedEntryIds` (formato v2, storico/frozen per i run già richiesti): il modello cita evidenze con alias brevi (E/S/R) e chiavi locali, il server risolve contro il catalogo dello snapshot congelato, genera id canonici stabili e compone lo stesso AnalysisContent 1.1.0 canonico ([AI §7](contracts/ai-workflow.md)). Definition `project-analysis-documents-v3` per le nuove richieste; schema, validatori, patch e completezza invariati. La readiness bounded del runtime (T126) è un raccordo del preflight T124 dentro la deadline originale, non una nuova policy.
+
 ### Documenti oltre contesto
 
 Contratto normativo in [ai-workflow](contracts/ai-workflow.md). Tre livelli di copertura distinti:

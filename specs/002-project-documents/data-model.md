@@ -64,6 +64,8 @@ WorkManifest iniziale immutabile congela fonti, policy, algoritmo e topologia fi
 
 AnalysisRevision/Draft esistenti restano autorità del risultato finale. SchemaVersion già presente: 1.0.0 o 1.1.0 con decoder dedicato. Pubblicazione di una revisione completa o bozza completa e Completed è atomica; nessun output intermedio diventa anteprima riuscita. Fonti di edit PM restano PmRevision e non cambiano gli originali.
 
+**Nota T125 (2026-11-03)**: per le analisi documentali v3 il payload del WorkOutput contiene, oltre al canonico validato, il DTO AI con alias (`aiOutputHash`), il catalogo immutabile alias→(EvidenceId, SourceId, Document/Version/Preparation, Artifact/Block, range, citazione, CitationGroupId/part, provenienza, relazioni note) con `catalogHash` e il `canonicalHash` composto; `SchemaVersion` del WorkOutput `document-analysis-alias-1`. Gli id di item e conflitto sono UUID deterministici (`canon-ids-1`) da (root, sourceHash, chiave locale), non casuali né del modello. Nessuna nuova tabella o colonna; WorkOutput e run v2 storici restano con la propria definizione e non sono riscritti. Vedi [AI §7](contracts/ai-workflow.md).
+
 ## Migrazioni e compatibilità
 
 1. Creare tabelle documentali e snapshot con FK composite progetto, indici univoci/partial per lavori aperti, lease/deadline/attempt coerenti; nessun dato 001 modificato.

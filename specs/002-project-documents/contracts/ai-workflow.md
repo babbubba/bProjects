@@ -2,6 +2,8 @@
 
 Consolidamento F1–F7 secondo D1/D2 approvate dal committente. MAF .NET 1.26.0 fissato; nessuna modifica retroattiva a contratti/risultati della 001. Questo documento descrive un disegno da verificare, non prove runtime superate. Policy temporale normativa in [plan §Regimi](../plan.md#regimi-deadline-e-profili-operativi-f1f7).
 
+> **Aggiornamento 2026-11-03 (T125)**: per l'**analisi documentale** lo scambio con il modello descritto in §1 (`evidenceKeys`) e nel «percorso singola chiamata» di §4.5 (`{results,analysis,evidenceMap}` riprodotto dal modello) è la definizione **v2, storica e frozen** (valida per i run già richiesti con `project-analysis-documents-v2`). Le nuove richieste usano la v3 con alias brevi e composizione server-side di [§7](#7-contratto-di-analisi-documentale-v3-con-alias-t125-2026-11-03); il contratto canonico persistito (AnalysisContent 1.1.0, reconcile-1, patch/completezza) resta quello di §§1–6.
+
 ## 1. AnalysisContent 1.1.0 e compatibilità
 
 Root, sezioni, array e item mantengono la struttura 1.0.0, salvo i delta seguenti. Tutti i campi dichiarati sono obbligatori; proprietà extra, duplicate, enum numerici e null non ammessi sono rifiutati. Decoder/validator separati selezionati dalla versione esatta, non un decoder permissivo.
@@ -142,7 +144,7 @@ Generazione dai soli item integrali confermati: se tutto entra nel budget, una c
 
 Raccordo minimo W1: riusare marcatori atomici `[fonte:<UUID>]` della 001, uno per sourceId, nell'ordine delle parti richieste; sourceIds di ogni blocco deve coincidere con i marcatori presenti. Il renderer ricostruisce i gruppi da (itemId,EvidenceId,citationGroupId,part) nella mappa persistita del run, non deduce un unico gruppo dalla sequenza globale dei sourceId. Due gruppi possono condividere lo stesso header/sourceId. Edit PM non modifica tale mappa storica: fonti rimosse non sostengono il testo nuovo, riferimenti rimasti aprono sempre i passaggi atomici; un nuovo enunciato PM segue PmRevision. Fixture di resa/edit rimane da verificare, W1 non dichiarato superato.
 
-Percorso singola chiamata: solo se input integrale dell'intero snapshot e output minimo entrano secondo Plan, il planner può collocare visite A/B/Cross e confronti in **un batch unico** di schema `{results:ReconcileResult[],analysis:AnalysisContent1.1,evidenceMap}` strict, con results esattamente A/B/Cross in quest'ordine e evidenceMap item→EvidenceId. Nessun catalogo gerarchico necessario; tutti gli originali sono nell'input. Validare le stesse obbligazioni/patch/mappa di §4.5; nessuna fiducia in una dichiarazione `complete` AI. Se l'output valido richiede altro lavoro, promozione prima del passo successivo; se troncato/invalido, fallimento. Il numero previsto di chiamate è uno, non una garanzia di conclusione o durata. Per i risultati non gerarchici descriptor=null e level=0.
+Percorso singola chiamata (formato di scambio v2 storico/frozen; per le nuove richieste il modello restituisce il DTO con alias di §7 e il server compone lo stesso `{results,analysis,evidenceMap}` canonico): solo se input integrale dell'intero snapshot e output minimo entrano secondo Plan, il planner può collocare visite A/B/Cross e confronti in **un batch unico** di schema `{results:ReconcileResult[],analysis:AnalysisContent1.1,evidenceMap}` strict, con results esattamente A/B/Cross in quest'ordine e evidenceMap item→EvidenceId. Nessun catalogo gerarchico necessario; tutti gli originali sono nell'input. Validare le stesse obbligazioni/patch/mappa di §4.5; nessuna fiducia in una dichiarazione `complete` AI. Se l'output valido richiede altro lavoro, promozione prima del passo successivo; se troncato/invalido, fallimento. Il numero previsto di chiamate è uno, non una garanzia di conclusione o durata. Per i risultati non gerarchici descriptor=null e level=0.
 
 ## 5. Topologia fissa, dati dinamici e checkpoint (F2)
 
@@ -200,3 +202,117 @@ Policy D1 in Plan §Regimi, correzione finale B1: classificazione iniziale tecni
 Payload intero con istruzioni/schema/framing entro finestra reale per modello/fase, output totale reasoning incluso e margine. Stime calibrate e unavailable espliciti; niente char/4 o finestra teorica. Runtime non verificabile blocca il nuovo ramo documentale. MaxAiCalls contabilizzato persistentemente per root, retry inclusi, prima dell'invio; raggiunto il limite termina con errore, non con parti ignorate.
 
 Errori 001 riusati ove pertinenti; aggiuntivi: sources_not_ready, source_snapshot_invalid, document_incomplete, document_limit_exceeded, parser_failed, runtime_unverified, tokenizer_mismatch, coverage_incomplete. Retry automatico solo transitorio, schema/citazione invalida permanente; parser timeout transitorio solo se resta budget padre e attempt. Coverage-2 distingue errori deterministici (range/locator/hash/ID mancanti, fuori snapshot, item senza frammento, relazioni note non trattate), rischi semantici stimati (numeri/polarità/qualificatori/condizioni alterati) e valutazioni PM. Un rischio non è una diagnosi semantica certa. Hash comprende snapshot, parse, estrazioni, batch derivati, revisione e draft; report non cambia gli originali.
+
+## 7. Contratto di analisi documentale v3 con alias (T125, 2026-11-03)
+
+Disegno da verificare, non prova runtime superata. **Sostituisce, per le nuove richieste, il solo formato di scambio con il modello del «percorso singola chiamata» di §4.5** (`{results,analysis,evidenceMap}` con id/hash/Source riprodotti dal modello): quel formato è la definizione **v2** (`project-analysis-documents-v2`, prompt `document-analysis-v2`, schema `document-analysis-1`), ora **storica e frozen**: resta eseguibile e immutato per i run già richiesti con v2 e non è reinterpretato. Restano invariati AnalysisContent 1.1.0 (§1), reconcile-1/`global-reconcile-v1` (§4.1), invarianti di patch/completezza (§4.4–4.5), grafo fisso, checkpoint e fencing (§5), regimi (§6), generazione e chat v2. Il contratto **canonico** (`SingleCallOutput`, AnalysisContent 1.1.0, mappa item→evidenze, relazioni di run) è quello di prima: cambia chi lo produce.
+
+### 7.1 Motivo
+
+La campagna reale su Qwen3.6-35B ([I4-real.md](../validation/I4-real.md) e le fasi [A](../validation/I4-real-131k-faseA.md), [B](../validation/I4-real-131k-faseB.md), [C](../validation/I4-real-131k-faseC.md)) ha dato 1 analisi valida su 25 a W=32768 e 1 su 3 per cella a W=131072 (N1 PASS, N2/N3 FAIL in A e B; 0/3 con Qwen3.8-Flash-Next-Smart). I fallimenti dominanti sono strutturali, non di capacità: id di fonte al posto di id di evidenza, hash di voce al posto di UUID, etichette (`req-1`) al posto degli UUID di item, UUID troncato o con una cifra errata, campi nulli o omessi, loop di ripetizione di hash. Il tipo di errore cambia a ogni run e a ogni configurazione e non si riduce con W, reasoning o prompt: il contratto v2 chiede 60+ identificativi copiati alla lettera e UUID inventati. Decisione vincolante: il modello fa interpretazione semantica; il server fa identità, hash, provenienza, mapping e integrità referenziale. Il server non prende decisioni semantiche: compone solo ciò che il modello ha dichiarato in modo esplicito.
+
+### 7.2 Confine modello / server
+
+| Struttura canonica | Campi semantici (dal modello, con alias) | Derivati dal server (mai nell'output AI) |
+| --- | --- | --- |
+| Item di analysis (goals, scope, requirements, flows, constraints, dependencies, assumptions, openQuestions) | sezione di appartenenza, `text`, `classification`, evidenze di supporto (alias `E`), chiave locale | `id` canonico, `evidenceRefs` (sourceId di tutte le fonti delle evidenze citate, nell'ordine gruppo/part), voce di `evidenceMap`, validazione `Declared`/`Documented` sulle fonti |
+| Conflitti e alternative | `description`, almeno 2 alternative (item propri con evidenze), chiave locale | `id` conflitto e alternative, `status:"Open"`, `resolution:null` (solo PM, §1) |
+| `analysis.sources` | nessuno | solo le fonti **originali** (record persistiti) delle evidenze citate: quote, range, blocco, documento, versione, preparazione, artefatto; `messageRole` dal dialogo dello snapshot |
+| Metadati di `analysis` | nessuno | `schemaVersion`, `analysisId`, `projectId`, `sourceCutoffSequence`, `validationState:"Unvalidated"` |
+| `results[A/B/Cross]` | visita per vista (alias `E` esaminati), `noFindingsReason` per vista | `batchId`, `inputHash`, `level:0`, `descriptor:null`, `visitedNodeIds:[]`, `visitedEntryIds` (da alias dichiarati), `originBatchIds` |
+| Candidate / Disposition | coppia `E`/`E` (o relazione nota `R`), tipo, `basis`, `rationale`, esito `Compared`/`Open`, `reason` | `candidateId`, endpoint con `contentHash`, `kind` (Relation; Conflict solo con Contradicts/AlternativeTo), `parentCandidateId:null`, `childCandidateIds:[]`, `comparisonOutputHashes` |
+| ItemProposal | (gli item di analysis) | derivati 1:1 dagli item (`localKey` = chiave locale, `evidenceIds`, `sourceIds`), collocati nel result Cross |
+| Patch | operazione (`AddSupport`, `AddRelation`, `ProposeAlternative`), bersaglio (item per chiave o relazione nota per alias), evidenze, valore semantico (tipo, basis, rationale, testo, classificazione, reason) | `patchId`, `baseHash`, `expectedHash`, `sourceIds`, `originBatchIds` |
+| Metadati tecnici, id run/batch/progetto, UUID, SHA-256, elenco completo `visitedEntryIds` | nessuno | tutto |
+
+Un'evidenza è «a supporto» di un'affermazione solo se il modello la cita esplicitamente: il server non assegna mai evidenze per somiglianza lessicale, ordine o prossimità. Una evidenza non citata da alcun item è copertura incompleta (§4.5), non un'assegnazione automatica.
+
+### 7.3 Catalogo alias (immutabile, server-side)
+
+Il catalogo è funzione pura (algoritmo `alias-catalog-1`) dello snapshot congelato al POST (T057) e della versione del contratto; si costruisce al claim da `DocumentAnalysisSources.LoadAsync` e non ha identità fuori dal run.
+- **`E<n>`** evidenze, `n` da 1 secondo l'ordine di lettura già usato dal server (messaggi PM per sequenza e ordinale, poi documenti nell'ordine dello snapshot e per ordinale; spareggio EvidenceId). **`S<n>`** fonti, una per **SourceId distinto** (due evidenze con lo stesso passaggio condividono lo stesso `S`), numerate al primo incontro scorrendo le evidenze e i loro `(citationGroupId, part)`. **`R<n>`** relazioni note dello snapshot, per `(from, to, type)`. Pattern esatto `^[ESR][1-9][0-9]*$`, case-sensitive, nessuna normalizzazione.
+- Chiavi locali scelte dal modello: `i<n>` item e alternative (univoche fra tutti gli item), `c<n>` conflitti, `f<n>` finding, `p<n>` patch; pattern `^[icfp][1-9][0-9]*$`, univoche per tipo.
+- Ogni voce registra: alias; `EvidenceId`, `EvidenceVersionId`, `ContentHash`, `entryId`; origine Message|Document con `DocumentId/VersionId/PreparationId`; per ogni fonte `SourceId`, `ArtifactId/BlockId`, range UTF-16, citazione letterale, `CitationGroupId`, `part`, `role`, provenienza (Message|DocumentPassage), `MessageId/sequence`; relazioni note (id, from, to, type, basis); id del run, `sourceHash`, versioni di contratto. `catalogHash` = SHA-256 del JSON canonico RFC 8785 del catalogo, congelato nel WorkManifest e nel payload del WorkOutput. Nessuna nuova tabella né migrazione: il mapping completo è nel payload JSONB del WorkOutput.
+- Il prompt mostra per ogni evidenza `[E3] tipo, polarità, certezza, origine`, enunciato, fonti `[S5] ruolo "citazione letterale"` e relazioni note `[R1] E3 DependsOn E7`; **mai** UUID, hash, `entryId`, `batchId`, `inputHash`, id di progetto/analisi/run, offset, blocchi o metadati tecnici; nemmeno cutoff e conteggi. Gli `S` sono etichette di lettura: l'output AI non li cita (YAGNI).
+
+### 7.4 DTO di output AI (`document-analysis-alias-1`)
+
+Distinto dal canonico persistito. Strict: tutte le proprietà obbligatorie, extra/duplicate/enum numerici/numeri fra virgolette rifiutati, `null` solo dove dichiarato. Schema indicativo:
+
+```
+AiAnalysisOutput = {
+  contract: "alias-1",
+  visited:  { A: E[], B: E[] },        // alias esaminati per vista (A: soggetto/oggetto/ambito; B: azione/strumento/canale/qualificatori)
+  noFindings: { A: string|null, B: string|null, Cross: string|null },
+  items: { goals, scopeOverview, scopeIncluded, scopeExcluded, requirements, flows,
+           constraints, dependencies, assumptions, openQuestions: AiItem[] },
+  conflicts: [ { key: "c1", description: string, alternatives: AiItem[] /* almeno 2 */ } ],
+  findings:  [ { key: "f1", view: "A"|"B"|"Cross", left: E, right: E, type: RelationType,
+                 basis: "Declared"|"Inferred", rationale: string, outcome: "Compared"|"Open", reason: string|null } ],
+  knownRelationChecks: [ { relation: R, verdict: "Confirmed"|"NoRelation"|"OpenForPM", rationale: string } ],
+  patches: [ { key: "p1", op: "AddSupport"|"AddRelation"|"ProposeAlternative",
+               target: { item: i|null, relation: R|null }, evidence: E[], value: PatchValueAi } ]
+}
+AiItem = { key: "i1", text: string, classification: "Declared"|"Documented"|"Inferred"|"Assumed", evidence: E[] }
+PatchValueAi = AddSupport {} | AddRelation { from: E, to: E, type, basis, rationale: string|null }
+             | ProposeAlternative { text, classification, reason }
+```
+
+`RelationType` e `basis` sono gli enum di §2.1. Hanno significato semantico, e quindi restano al modello: item (sezione, classificazione, evidenze), conflitti e alternative, finding (relazioni, conflitti, alias candidati fra evidenze) con esito `Compared`/`Open`, verdetti sulle relazioni note, patch, visita per vista e motivo di assenza di finding. **Non** si lasciano vuote le strutture di riconciliazione: la v2 imponeva `candidates/dispositions/itemProposals/patches` vuoti (prompt riga 13), il che rende impossibile completare uno snapshot con relazioni note (`known_relation_unresolved` in `ReconciliationCompletion`; dedotto dal codice, non provato con il modello reale). Sono derivabili dal server solo i campi della colonna destra di §7.2.
+
+### 7.5 Id canonici stabili
+
+`uuid = UUIDv8(SHA-256(JCS(["canon-ids-1", kind, rootId, sourceHash, localKey]))[0..16])`, con `kind ∈ {item, conflict}` (le alternative sono item), lowercase con trattini; stessa tecnica del precedente `pm-source` di `DocumentAnalysisSources.PmSources` con bit di versione e variante. Nessun `Guid.NewGuid()` e nessun id dal modello. `rootId` = ProcessingRun dell'analisi; `sourceHash` = quello dello snapshot. L'id non dipende dal testo: nello stesso run la chiave locale identifica l'item, e un output diverso sotto la stessa chiave di batch è già `integrity_conflict` (§4.1). EvidenceId e SourceId restano gli id persistiti nel ledger (nessuna derivazione). Collisione fra due id canonici, o con un id già presente nella revisione: `integrity_conflict`.
+- **Replay e recovery**: il WorkOutput Committed contiene il DTO AI canonico (`aiOutputHash`), il catalogo (`catalogHash`) e il canonico composto (`canonicalHash`); ogni lettura o commit ricompone dal DTO e dal catalogo e verifica `canonicalHash`, senza reinferire. Stessi input, stessi id.
+- **Retry PM (nuovo root, RetryOfId)**: il DTO non contiene dati di run, quindi un output compatibile (§5.3) è importabile con `DerivedFromOutputHash` e ricomposto sul nuovo `rootId`: cambiano solo gli id di run, mai fonti né evidenze.
+- `AnalysisRevision.Id` resta generato al commit atomico come oggi; non fa parte del contratto con il modello.
+
+### 7.6 Risoluzione e rifiuto
+
+Decodifica strict del DTO, poi risoluzione di ogni alias contro il catalogo congelato. Rifiuto permanente (nessun WorkOutput, nessuna riparazione AI, nessuna normalizzazione o ricerca fuzzy):
+- alias sconosciuto, fuori snapshot, di un namespace sbagliato (es. `S` dove serve `E`), o con formato non canonico (`e3`, `E03`, `E 3`);
+- duplicati vietati: chiave locale ripetuta, alias ripetuto in una lista, finding o patch con identità canonica duplicata (stesso `candidateId`/`patchId`), alias ripetuti in `visited`;
+- item o alternativa senza evidenze dove le regole 1.1 le richiedono; `Declared` senza fonte PM e `Documented` senza DocumentPassage (regole esistenti di AnalysisContent 1.1, applicate al canonico composto); conflitto con meno di due alternative; patch con chiavi locali inesistenti; endpoint di un finding coincidenti.
+
+Una evidenza non citata, una visita mancante, una relazione nota senza verdetto o patch Stale/incompatibili non rappresentate come conflitto non invalidano l'output: producono `ValidIncomplete` (WorkOutput Committed, mai Completed) come in §4.5.
+
+### 7.7 Composizione e validazione server
+
+Il compositore è deterministico e non decide semanticamente: (1) decodifica e valida il DTO; (2) risolve gli alias; (3) genera gli id di §7.5; (4) ricostruisce `analysis.sources` solo dalle fonti originali del catalogo (nessun Source dal modello) e gli `evidenceRefs`; (5) costruisce `evidenceMap` dalle associazioni esplicite item→evidenze; (6) conserva citazioni, range, gruppi multi-blocco e provenienza come nel ledger; (7) compone `SingleCallOutput` e lo valida **con i validatori esistenti** (`ReconciliationValidator.ValidateSingleCall`, `DocumentAnalysisContentRules`, `DocumentAnalysisValidator`, completezza T121) sul canonico, senza allentarli.
+
+Mapping A/B/Cross, rispettando gli invarianti di T120/T121:
+- `results` esattamente `A,B,Cross`; `visitedEntryIds` di A e B dagli alias dichiarati in `visited` (alias mancanti: gap `entry_not_visited`, mai riempiti dal server); Cross = intersezione di A e B.
+- Finding → `ReconcileCandidate` più `CandidateDisposition` nel result della vista dichiarata: `Compared` oppure `Open` (con `reason` obbligatorio); `comparisonOutputHashes = [aiOutputHash]`, hash del DTO e non dell'OutputHash del WorkOutput che lo contiene (dipendenza circolare).
+- `knownRelationChecks`: `Confirmed`/`NoRelation` → candidato sulla coppia della relazione nota con disposition `Compared` (reason `no_relation` per `NoRelation`); `OpenForPM` → `Open`; senza verdetto resta `known_relation_unresolved`. Il `basis` è quello della relazione persistita (da esporre in `SnapshotRelation` se oggi non è portato).
+- Item → `ItemProposal` nel result Cross. **Prima** si calcola la base (`DocumentAnalysisBase.Compute`) e **poi** le patch (`baseHash`, `expectedHash`, `patchId`, `sourceIds`), tutte validate contro la stessa base; le `AddRelation` accettate alimentano le relazioni di run append-only come oggi. Le patch incompatibili restano `PreservedAsConflict` solo se rappresentate in `analysis.conflicts` (regola esistente).
+- Vietati: Completed incompleto, completezza dichiarata dal modello, risoluzione di conflitti, scelta per data o autorevolezza.
+
+### 7.8 Versioni e compatibilità storica
+
+| Elemento | v2 (storico, frozen) | v3 |
+| --- | --- | --- |
+| Definition workflow | `project-analysis-documents-v2` | `project-analysis-documents-v3` |
+| Prompt | `document-analysis-v2` (testo allo stato del commit 9c7ac3b, non più modificabile) | `document-analysis-v3` (`Prompts/document-analysis-v3.md`) |
+| Schema output AI / WorkOutput | `document-analysis-1` | `document-analysis-alias-1` |
+| Algoritmo / validazione | `analysis-single-v1` / `document-analysis-validation-v1` | `analysis-single-v2` / `document-analysis-validation-v2` |
+| Catalogo alias / id canonici | n/a | `alias-catalog-1` / `canon-ids-1` |
+| AnalysisContent, reconcile, generazione, chat | 1.1.0 / `reconcile-1` / `project-document-documents-v2` / `project-chat-documents-v2` | invariati |
+
+Freeze (T057): `SourceSnapshotStore` (`AnalysisDefinition`, `AnalysisPromptVersion`, `AnalysisPromptVersions()`) scrive v3 per le **nuove** richieste di Analizza con fonti documentali; `PromptVersions` congela anche schema AI, catalogo e id canonici, e il manifest ne include gli hash (configHash). Routing (T123): `AnalysisWorkflow.ExecuteAsync` instrada le definizioni {v2, v3} a `DocumentAnalysisWorkflow`, che sceglie l'implementazione dalla `WorkflowDefinitionVersion` congelata sul run; definizione o versione ignota → `workflow_incompatible`, mai downgrade o reinterpretazione. Il preflight di classificazione T124 (`WorkflowRegimeProbe`/`BuildRegimePayload`) misura lo **schema del DTO v3** per i root v3, non il wrapper v2. Un run v2 già richiesto, con WorkOutput o checkpoint, prosegue con il codice v2 e le proprie versioni; un run v3 non usa mai il decoder v2. Run 001, chat, generazione e revisioni 1.0/1.1 esistenti restano invariati. Il DTO v3 non entra in alcun record: la revisione persistita è AnalysisContent 1.1.0 composto.
+
+### 7.9 Matrice errori e codici
+
+| Condizione | Esito | Codice |
+| --- | --- | --- |
+| Output troncato (`finish=length`), JSON non decodificabile, extra/null/enum/pattern errati | permanente, nessun WorkOutput | `work_output_invalid` |
+| Alias sconosciuto/fuori snapshot/namespace sbagliato/formato non canonico, duplicati vietati, regole 1.1 sul canonico | permanente | `work_output_invalid` (violazione con alias e percorso) |
+| Evidenza non citata, visita mancante, relazione nota senza verdetto, patch Stale/Invalid necessaria | WorkOutput Committed riutilizzabile, nessuna revisione | `coverage_incomplete` |
+| Id canonico in collisione, stesso `patchId` con payload diverso, `canonicalHash` ricomposto diverso | permanente | `integrity_conflict` |
+| `catalogHash` ricostruito diverso dal congelato, WorkOutput o checkpoint non compatibile | permanente, nessuna reinferenza | `checkpoint_incompatible` |
+| Fonte originale non verificabile alla costruzione del catalogo (hash artefatto, range, quote) | permanente | `source_snapshot_invalid` |
+| Definizione, prompt, schema o versione ignoti o non supportati | permanente | `workflow_incompatible` |
+| Runtime, finestra o tokenizer non verificabili; payload oltre budget | come oggi | `runtime_unverified` / `document_limit_exceeded` |
+
+### 7.10 Prova e punti aperti
+
+Test, perimetro e gate sono in tasks T125. Prima verifica reale: N1–N3 su Qwen3.6-35B-Smart, W=131072, reasoning OFF, output 16384, registrando **separatamente** validità del DTO, ricostruzione, validazione canonica, copertura, citazioni, semantica, conflitti, token, durata e `finish`. Il contratto non garantisce qualità semantica: un conflitto gold perso o una citazione semanticamente errata restano FAIL anche con struttura valida. Decisioni aperte, non risolte qui: (a) `visited` è un'attestazione del modello su alias (breve, basso rischio di copia) e non è derivata dalla mappatura item→evidenze, per non fabbricare un'attestazione; (b) chat e generazione citano ancora `[fonte:<UUID>]` (1 UUID corrotto su 23 turni di chat, intercettato dal validatore): estendere gli alias a quei grafi è fuori da T125; (c) l'effetto di `presence-penalty` del profilo Smart sulla copia di identificativi non è isolato; (d) token alias nei testi degli item sono rischio semantico (coverage-2), non errore.
