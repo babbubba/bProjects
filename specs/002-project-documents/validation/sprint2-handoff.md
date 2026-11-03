@@ -286,3 +286,36 @@ Stato: implementato e provato con test mirati (nessuna regressione completa, nes
 - **Risultati**: ChatAlias* (4 classi DET) 78/78; DocumentChatAliasWorkflowTests 27/27; DocumentChatWorkflowTests+ContractTests 35/35; DocumentWorkflowRoutingTests+DocumentSourceSnapshotTests+DocumentSmallFlowTests 51/51; ChatRecovery+ChatTurnCompletion+ChatTurnDispatch+ContentSecurity+DocumentRootClassification(x3) 164/164; DocumentArchiveApiTests+DocumentAnalysisAliasWorkflowTests+DocumentDraftAliasWorkflowTests 91/91. Regressione completa NON eseguita.
 - **Decisioni**: marcatori ripetuti dello stesso alias consentiti (come il contratto canonico v2); nessun alias per Evidence; `AgentConfig` riusato come contenitore delle versioni congelate (semantica «configurazione risolta» ma nessuna migrazione, nessun lettore esistente); modello JSON schema invariato nella forma (`{mode,answer}`), solo nome/versione nuovi.
 - **Lacune**: nessuna prova DGX (N3 chat da rieseguire); il catalogo non riverifica quote/range contro l'artefatto del documento (lo fa solo `PersistedSourceRules`, come la v2); il tamper test dei WorkOutput sospende il trigger append-only solo nel test; frontend non toccato; T128 e AI §8 («non implementato») non aggiornati nei documenti.
+
+## T129 Retry guidato unico della bozza (2026-11-03) - IN CORSO, NON verificato dal coordinatore, NON committato, T129 NON spuntato
+- Implementazione scritta (compila): `DraftValidation.UnrepresentedItemIds/OnlyUnrepresentedItems` (tipizzato, validatore non allentato), `DraftComposition.OmittedItemIds`, `DraftOmissionException`, `IGuidedRetryPlan`, retry in `DocumentBatchPort.PersistAsync` (`GuidedRetryOnceAsync`), marcatore del retry = `DerivedBatch` stadio `draft_retry` ordinale 1 (nessuna migrazione) via `DocumentWorkStore.TryClaimGuidedRetryAsync`, `BatchSender` estratto da InvokeBatch. Solo v3 (alias); v2 invariato.
+- Test: da scrivere/eseguire (`DocumentDraftRetryTests.cs`).
+- Rosso osservato (test scritti prima, eseguiti su sorgente HEAD con la produzione messa da parte): 11/53 rossi in DocumentDraftAliasWorkflowTests (retry riuscito, omissioni multiple, secondo fallimento, budget esatto, restart, fence, replay, nessun merge).
+
+## HANDOFF DI TRASFERIMENTO SU ALTRO PC (2026-11-03) — LEGGERE PER PRIMO
+
+Sessione interrotta per crash ricorrenti del PC. Tutto il lavoro è committato in locale su `feature/002-implementation` (ultimo commit: WIP T129). Nessuna PR/merge. `origin/feature/002-implementation` era a 37675a8: i commit successivi (d8b0f24, c7d6c38, WIP T129 e questo handoff) vanno pushati (serve autorizzazione esplicita dell'autore secondo CLAUDE.md; per `gh` rimuovere GITHUB_TOKEN/GH_TOKEN e verificare l'account `babbubba`). Mai includere `frontend/src/app/projects/project-events.service.spec.ts` (rumore Prettier) né `docs/acceptance-trace/`. Nessun `Co-Authored-By`.
+
+### Stato dei task
+- **Chiusi e verificati**: T051–T066, T120/T121/T123, T124, T064, T065, T066.
+- **Implementati, NON spuntati** (mancano regressione non-DGX completa sullo stato corrente e gate DGX N1–N3): **T125** (analisi v3 con alias), **T127** (bozza con alias), **T128** (chat con alias, c7d6c38).
+- **T129** (retry guidato unico della bozza per item omessi): **WIP NON VERIFICATO** (agente interrotto dal crash). Modifiche in `AI/DocumentBatchExecutors.cs`, `AI/DocumentBatchPort.cs`, `AI/DocumentSourceDraftWorkflow.cs`, `AI/DocumentWorkStore.cs`, `AI/DraftAliasContracts.cs`, `Analysis/DocumentDraftValidator.cs`, test `DocumentDraftRetryTests.cs` (nuovo) e `DocumentDraftAliasWorkflowTests.cs`. La soluzione compila (0 errori, 0 avvisi); i test T129 NON sono stati rieseguiti dal coordinatore e il codice non è stato rivisto. Specifica: tasks.md T129 e contracts/ai-workflow.md §9.
+- **T126** (readiness bounded runtime/modello scaricato): non avviato. **T067**: aperto (dipende da T125–T129 e T126).
+- Ordine concordato: T129, regressione non-DGX completa, verifica DGX N1–N3, T126, T067 (N1–N5 e browser reale).
+
+### Esiti reali DGX principali (validation/I4-real*.md, I4-real-131k-fase{A,B,C}.md, I4-real-v3-N1-N3.md)
+Qwen3.6-35B-Smart W=131072 reasoning OFF out 16384 (n=1 per cella): la copia di UUID/hash nell'analisi è eliminata dal v3; la 5ª esecuzione N1–N3 è FAIL in stadi diversi (N1 regola test «divieto» e bozza con item I24 omesso; N2 `i21` in `assumptions` classificato Documented; N3 chat con UUID di fonte corrotto). Corretti dopo: regole di test (37675a8), prompt assumptions (d8b0f24), alias chat T128 (c7d6c38); in corso T129. Queste correzioni NON sono ancora verificate su DGX. Qwen3.8-Flash-Next-Smart è peggiore: non riprovarlo senza motivo.
+
+### Ambiente da ricostruire sul nuovo PC
+- PostgreSQL di test (`postgres:18`): sull'ambiente originale container `bprojects-002-test-pg2` su 127.0.0.1:15432, con solo POSTGRES_PASSWORD (nessun POSTGRES_USER, quindi `Username=postgres;Database=postgres`): `BPROJECTS_TEST_POSTGRES="Host=127.0.0.1;Port=<porta>;Username=postgres;Password=<pw>;Database=postgres"`.
+- Parser Docling reale (container `bprojects-t055-parser`, 127.0.0.1:58300 verso 8000): `BPROJECTS_TEST_PARSER_ENDPOINT=http://127.0.0.1:58300`, `BPROJECTS_TEST_PARSER_SECRET=<PARSER_INTERNAL_SECRET del container>`.
+- DGX: `http://192.168.253.18:8080/v1/` (llama.cpp b10703, router mode; profili `Qwen3.6-35B-Smart` W=131072 e `Qwen3.6-35B` W=32768); variabili `BPROJECTS_TEST_DGX_ENDPOINT/_MODEL/_API_KEY` (la API key non è nel repo: chiederla all'autore). Il test reale parametrizza W/output/reasoning/margine con `BPROJECTS_TEST_CTX_WINDOW`, `_ANALYSIS_MAX_OUTPUT`, `_ANALYSIS_THINKING`, `_SAFETY_MARGIN`.
+- Per i test non-DGX: `unset BPROJECTS_TEST_DGX_*` e filtri per classe esatta (`--filter-class`, `--filter-method`, `--filter-not-trait "Category=MafReal"`): i filtri `*N1_*` lanciano anche EvidenceExtractorMafTests. Inferenze DGX serializzate.
+- Crash `0xC0000005` intermittenti dell'host di test (e del PC): non attribuiti a modifiche nostre; nessuna diagnosi fatta (Event Viewer, WER, dump da raccogliere se si ripresentano).
+- Line ending: repo misto LF/CRLF per file; preservare il formato di HEAD dei file toccati.
+
+### Limiti e punti aperti noti
+Analizza mai Ordinary (T124); `recoveryMs` null (T102); `http-api.md` non riallineato; `hasSourceChanges` non esposto; §7.10(b) e §6 del contratto AI non emendati (vedi §8/§9); import dell'output nel retry (§5.3/§7.5) non implementato; il catalogo chat/bozza non riverifica quote e range contro l'artefatto; T128 usa `ChatTurn.AgentConfig` come contenitore delle versioni congelate (senza migrazione); Playwright e browser reale non eseguiti con i nuovi contratti.
+
+### Prompt di ripresa
+In `specs/002-project-documents/validation/resume-prompt.md`.

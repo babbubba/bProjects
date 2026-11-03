@@ -197,11 +197,12 @@ public sealed class DocumentSourceDraftWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentDraftAliasPlan(claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes);
-        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
+        var counter = new BatchInvocationCounter();
+        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun), counter);
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try
         {
-            await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, new BatchInvocationCounter()), checkpoints, SessionId(claim.RunId), null, ct);
+            await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, counter), checkpoints, SessionId(claim.RunId), null, ct);
         }
         catch (Exception ex) when (Find<LeaseLostException>(ex) is not null)
         {
@@ -554,8 +555,9 @@ internal sealed class DocumentDraftPlan : IDocumentBatchPlan
 /// espone soli alias, validazione e composizione canonica sul server PRIMA del WorkOutput, payload <c>{aiOutputHash, catalogHash, canonicalHash}</c> con il DTO,
 /// ricomposizione dal DTO committato a ogni lettura e a ogni commit (mai una reinferenza) con verifica degli hash. Il catalogo è funzione pura della revisione
 /// confermata congelata: l'hash è nel manifesto e il catalogo si ricostruisce, non si persiste. Deterministico nel replay: nessun Guid né orologio nell'identità dei batch.
+/// Solo questo piano (v3) ammette il retry guidato unico per item obbligatori omessi (T129, AI §9); il piano v2, congelato, non ne ha.
 /// </summary>
-internal sealed class DocumentDraftAliasPlan : IDocumentBatchPlan
+internal sealed class DocumentDraftAliasPlan : IDocumentBatchPlan, IGuidedRetryPlan
 {
     private readonly DocumentRunClaim _claim;
     private readonly DocumentRunInputV11 _input;
@@ -640,19 +642,59 @@ internal sealed class DocumentDraftAliasPlan : IDocumentBatchPlan
 
     public ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) => new(_messages);
 
-    private static void Require(DraftComposition composition)
+    /// <summary>
+    /// Marcatore del retry consumato (T129): batch d'appoggio (stadio <c>draft_retry</c>, ordinale 1, fuori dal cursore del grafo) la cui identità dipende solo da run,
+    /// manifesto e batch originale, quindi uguale a ogni replay; non ha mai un WorkOutput. Porta solo conteggio e hash del primo output (diagnostica non sensibile).
+    /// </summary>
+    public DerivedBatchInput GuidedRetryMarker(BatchRef batch, DraftOmissionException omission)
+    {
+        var id = DocumentSourceDraftWorkflow.Sha($"guided-retry|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{DocumentSourceDraftWorkflow.DefinitionVersionV3}|{batch.BatchId}");
+        var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, omittedItems = omission.MissingItemAliases.Count, firstOutputHash = omission.OutputHash });
+        return new DerivedBatchInput(
+            id, GuidedRetryStage, null, null, null, 1, [], inputs, null, "calibrated_upper_bound", DocumentSourceDraftWorkflow.Sha($"guided-retry-input|{batch.InputHash}"),
+            DocumentSourceDraftWorkflow.SchemaVersionV3, DocumentSourceDraftWorkflow.PromptVersionV3);
+    }
+
+    public const string GuidedRetryStage = "draft_retry";
+
+    /// <summary>
+    /// Messaggio del secondo invio: lo stesso messaggio del primo (snapshot confermato, versioni, alias I/F e fonti canoniche) più l'elenco preciso degli alias
+    /// mancanti e l'istruzione di rigenerare la bozza COMPLETA. Nessun testo né blocco del primo output: nessun merge, il server non scrive testo di item.
+    /// </summary>
+    public IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, DraftOmissionException omission)
+    {
+        var missing = string.Join("\n", omission.MissingItemAliases.Select(a => $"- [{a}] (sezione={_catalog.Item(a)!.Section})"));
+        var text = new StringBuilder(string.Concat(_messages.Select(m => m.Text)))
+            .Append("\n\nCORREZIONE (unico nuovo tentativo): la tua risposta precedente è stata scartata perché non rappresenta questi elementi obbligatori:\n")
+            .Append(missing)
+            .Append("\nProduci di nuovo la bozza COMPLETA: ogni elemento dell'analisi confermata, sia quelli già rappresentati nella risposta precedente sia quelli elencati sopra, ")
+            .Append("in almeno un blocco ciascuno e con le proprie fonti. Non limitarti agli elementi mancanti e non ometterne nessuno. ")
+            .Append("Rispondi con l'unico oggetto JSON `document-draft-alias-1`.");
+        return [new ChatMessage(ChatRole.User, text.ToString())];
+    }
+
+    private void Require(DraftComposition composition)
     {
         if (composition.Accepted)
         {
             return;
         }
 
-        throw new DocumentWorkException(
-            composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid,
-            $"Output della generazione documentale non valido ({composition.Violations.Count} violazioni): " + string.Join(" | ", composition.Violations.Take(5)));
+        var message = $"Output della generazione documentale non valido ({composition.Violations.Count} violazioni): " + string.Join(" | ", composition.Violations.Take(5));
+        if (composition.OmittedItemIds is { Count: > 0 } omitted)
+        {
+            // Retry guidato (T129): unico caso tipizzato dal validatore, mai ricavato da stringhe; ogni altra violazione resta permanente.
+            var aliases = omitted.Select(_catalog.AliasOfItem).OfType<string>().ToList();
+            if (aliases.Count == omitted.Count)
+            {
+                throw new DraftOmissionException(message, aliases, composition.AiOutputHash);
+            }
+        }
+
+        throw new DocumentWorkException(composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid, message);
     }
 
-    /// <summary>Compone e valida PRIMA del WorkOutput: un rifiuto è errore permanente (nessun output durevole, nessuna riparazione).</summary>
+    /// <summary>Compone e valida PRIMA del WorkOutput: un rifiuto è errore permanente (nessun output durevole, nessuna riparazione); l'unica eccezione è <see cref="DraftOmissionException"/> (T129).</summary>
     public ValidatedBatch Validate(BatchRef batch, string responseText)
     {
         var composition = DraftAliasComposer.Compose(responseText, _catalog, _package);

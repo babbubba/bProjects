@@ -15,7 +15,7 @@ namespace bProjects.App.AI;
 /// mai un aggiornamento), <see cref="WorkOutputInvalid"/> (payload mancante, corrotto o fuori progetto), <see cref="CheckpointIncompatible"/>
 /// (hash, schema, validazione o runtime di un altro contesto: non si reinferisce per sovrascrivere), <see cref="InvalidInput"/>.
 /// </summary>
-public sealed class DocumentWorkException(string code, string message) : Exception(message)
+public class DocumentWorkException(string code, string message) : Exception(message)
 {
     public const string IntegrityConflict = "integrity_conflict";
     public const string WorkOutputInvalid = "work_output_invalid";
@@ -338,6 +338,18 @@ public sealed partial class DocumentWorkStore(AppDbContext db, CheckpointWriter 
     }
 
     /// <summary>
+    /// Consuma, una sola volta per owner, l'autorizzazione al retry guidato della bozza (T129, AI §9): pubblica il batch-marcatore sotto il lock fenced dell'owner
+    /// (Running, owner, fence, lease e deadline validi). Vero solo per chi ha inserito la riga; falso se esiste già (retry già consumato: restart, recovery o altro
+    /// worker non ne autorizzano un secondo). Il marcatore non è un output e non è riusabile come tale: porta solo conteggi/hash non sensibili in <c>InputIdsJson</c>.
+    /// </summary>
+    public Task<bool> TryClaimGuidedRetryAsync(DerivedBatchInput marker, CancellationToken ct) =>
+        InTransactionAsync(async owner =>
+        {
+            await RequireManifestAsync(ct);
+            return await InsertBatchRowAsync(owner, marker, ct) == 1;
+        }, ct);
+
+    /// <summary>
     /// Chiude un'unità di estrazione (DocumentJob ExtractUnit) sotto il fence corrente: job Completed con l'hash del risultato, rilascio del lease,
     /// porzioni Completed con risultato e, se l'unità non ha prodotto evidenze, la motivazione; le chiamate del tentativo si scrivono nella stessa
     /// transazione. NON pubblica Evidence né rende Ready la preparazione: l'unico proprietario del commit aggregato è l'aggregatore (T051).
@@ -402,47 +414,13 @@ public sealed partial class DocumentWorkStore(AppDbContext db, CheckpointWriter 
 
     // ------------------------------------------------------------------ interni
 
+
     private async Task<IReadOnlyList<DerivedBatch>> InsertBatchesAsync(OwnerLock owner, IReadOnlyList<DerivedBatchInput> batches, CancellationToken ct)
     {
         var result = new List<DerivedBatch>(batches.Count);
         foreach (var batch in batches)
         {
-            RequireHash(batch.InputHash, "inputHash del batch");
-            foreach (var parent in batch.ParentOutputHashes)
-            {
-                RequireHash(parent, "hash genitore");
-            }
-
-            var parents = JsonSerializer.Serialize(batch.ParentOutputHashes);
-            int inserted;
-            await using (var insert = Command(
-                """
-                INSERT INTO "DerivedBatches" ("Id","ProjectId","OwnerKind","OwnerId","BatchId","Stage","View","Pass","Level","Ordinal","ParentOutputHashes","InputIdsJson",
-                    "MeasuredTokens","TokenProvenance","InputHash","SchemaVersion","PromptVersion","CreatedAt")
-                VALUES (@id,@project,@kind,@owner,@batch,@stage,@view,@pass,@level,@ordinal,@parents,@inputs,@tokens,@provenance,@input,@schema,@prompt,clock_timestamp())
-                ON CONFLICT ("OwnerKind","OwnerId","BatchId") DO NOTHING
-                """))
-            {
-                insert.Parameters.AddWithValue("id", Guid.NewGuid());
-                insert.Parameters.AddWithValue("project", owner.ProjectId);
-                insert.Parameters.AddWithValue("kind", writer.OwnerKind.ToString());
-                insert.Parameters.AddWithValue("owner", writer.OwnerId);
-                insert.Parameters.AddWithValue("batch", batch.BatchId);
-                insert.Parameters.AddWithValue("stage", batch.Stage);
-                insert.Parameters.Add(new NpgsqlParameter("view", NpgsqlDbType.Varchar) { Value = (object?)batch.View ?? DBNull.Value });
-                insert.Parameters.Add(new NpgsqlParameter("pass", NpgsqlDbType.Integer) { Value = (object?)batch.Pass ?? DBNull.Value });
-                insert.Parameters.Add(new NpgsqlParameter("level", NpgsqlDbType.Integer) { Value = (object?)batch.Level ?? DBNull.Value });
-                insert.Parameters.AddWithValue("ordinal", batch.Ordinal);
-                Json(insert, "parents", parents);
-                Json(insert, "inputs", batch.InputIdsJson);
-                insert.Parameters.Add(new NpgsqlParameter("tokens", NpgsqlDbType.Integer) { Value = (object?)batch.MeasuredTokens ?? DBNull.Value });
-                insert.Parameters.AddWithValue("provenance", batch.TokenProvenance);
-                insert.Parameters.AddWithValue("input", batch.InputHash);
-                insert.Parameters.AddWithValue("schema", batch.SchemaVersion);
-                insert.Parameters.AddWithValue("prompt", batch.PromptVersion);
-                inserted = await insert.ExecuteNonQueryAsync(ct);
-            }
-
+            var inserted = await InsertBatchRowAsync(owner, batch, ct);
             var stored = await db.Set<DerivedBatch>().AsNoTracking()
                 .SingleAsync(b => b.OwnerKind == writer.OwnerKind && b.OwnerId == writer.OwnerId && b.BatchId == batch.BatchId, ct);
             if (inserted == 0 && !SameBatch(stored, batch))
@@ -454,6 +432,46 @@ public sealed partial class DocumentWorkStore(AppDbContext db, CheckpointWriter 
         }
 
         return result;
+    }
+
+    private async Task<int> InsertBatchRowAsync(OwnerLock owner, DerivedBatchInput batch, CancellationToken ct)
+    {
+        RequireHash(batch.InputHash, "inputHash del batch");
+        foreach (var parent in batch.ParentOutputHashes)
+        {
+            RequireHash(parent, "hash genitore");
+        }
+
+        var parents = JsonSerializer.Serialize(batch.ParentOutputHashes);
+        int inserted;
+        await using (var insert = Command(
+            """
+            INSERT INTO "DerivedBatches" ("Id","ProjectId","OwnerKind","OwnerId","BatchId","Stage","View","Pass","Level","Ordinal","ParentOutputHashes","InputIdsJson",
+                "MeasuredTokens","TokenProvenance","InputHash","SchemaVersion","PromptVersion","CreatedAt")
+            VALUES (@id,@project,@kind,@owner,@batch,@stage,@view,@pass,@level,@ordinal,@parents,@inputs,@tokens,@provenance,@input,@schema,@prompt,clock_timestamp())
+            ON CONFLICT ("OwnerKind","OwnerId","BatchId") DO NOTHING
+            """))
+        {
+            insert.Parameters.AddWithValue("id", Guid.NewGuid());
+            insert.Parameters.AddWithValue("project", owner.ProjectId);
+            insert.Parameters.AddWithValue("kind", writer.OwnerKind.ToString());
+            insert.Parameters.AddWithValue("owner", writer.OwnerId);
+            insert.Parameters.AddWithValue("batch", batch.BatchId);
+            insert.Parameters.AddWithValue("stage", batch.Stage);
+            insert.Parameters.Add(new NpgsqlParameter("view", NpgsqlDbType.Varchar) { Value = (object?)batch.View ?? DBNull.Value });
+            insert.Parameters.Add(new NpgsqlParameter("pass", NpgsqlDbType.Integer) { Value = (object?)batch.Pass ?? DBNull.Value });
+            insert.Parameters.Add(new NpgsqlParameter("level", NpgsqlDbType.Integer) { Value = (object?)batch.Level ?? DBNull.Value });
+            insert.Parameters.AddWithValue("ordinal", batch.Ordinal);
+            Json(insert, "parents", parents);
+            Json(insert, "inputs", batch.InputIdsJson);
+            insert.Parameters.Add(new NpgsqlParameter("tokens", NpgsqlDbType.Integer) { Value = (object?)batch.MeasuredTokens ?? DBNull.Value });
+            insert.Parameters.AddWithValue("provenance", batch.TokenProvenance);
+            insert.Parameters.AddWithValue("input", batch.InputHash);
+            insert.Parameters.AddWithValue("schema", batch.SchemaVersion);
+            insert.Parameters.AddWithValue("prompt", batch.PromptVersion);
+            inserted = await insert.ExecuteNonQueryAsync(ct);
+        }
+        return inserted;
     }
 
     private static bool SameBatch(DerivedBatch stored, DerivedBatchInput batch) =>

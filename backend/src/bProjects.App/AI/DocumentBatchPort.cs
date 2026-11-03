@@ -60,6 +60,31 @@ public interface IDocumentBatchPlan
 }
 
 /// <summary>
+/// Validazione fallita SOLO perché item obbligatori non sono rappresentati (T129, AI §9): violazione tipizzata, riconosciuta dal validatore e non da stringhe.
+/// È un <see cref="DocumentWorkException"/> <c>work_output_invalid</c> a tutti gli effetti (permanente); il port la intercetta per il solo retry guidato.
+/// <see cref="OutputHash"/> è l'hash del primo output (diagnostica non sensibile: mai il testo).
+/// </summary>
+public sealed class DraftOmissionException(string message, IReadOnlyList<string> missingItemAliases, string? outputHash)
+    : DocumentWorkException(WorkOutputInvalid, message)
+{
+    public IReadOnlyList<string> MissingItemAliases { get; } = missingItemAliases;
+
+    public string? OutputHash { get; } = outputHash;
+}
+
+/// <summary>
+/// Capacità opzionale di un piano: un solo retry guidato di rigenerazione completa dopo un <see cref="DraftOmissionException"/> (T129). Il piano compone il
+/// marcatore del tentativo consumato (<see cref="DerivedBatchInput"/>, mai un output) e il messaggio del secondo invio; il port orchestra budget, deadline,
+/// fencing e persistenza del marcatore. Nessun merge del primo output: la risposta del retry è validata per intero come la prima.
+/// </summary>
+public interface IGuidedRetryPlan
+{
+    DerivedBatchInput GuidedRetryMarker(BatchRef batch, DraftOmissionException omission);
+
+    IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, DraftOmissionException omission);
+}
+
+/// <summary>
 /// Seam della riserva del contatore chiamate del root PRIMA della rete (AI §5.2 punto 5). Può rifiutare lanciando (lease/fence/deadline,
 /// limite di chiamate): nessuna sessione è creata prima.
 /// </summary>
@@ -127,7 +152,8 @@ public sealed class RootCallCounterReservation(AppDbContext db, CheckpointWriter
 /// perso riceve <see cref="LeaseLostException"/> da riserva, commit e checkpoint e non scrive nulla.
 /// </summary>
 public sealed class DocumentBatchPort(
-    DocumentWorkStore store, AppDbContext db, CheckpointWriter writer, AgentFactory factory, IDocumentBatchPlan plan, IBatchCallReservation calls)
+    DocumentWorkStore store, AppDbContext db, CheckpointWriter writer, AgentFactory factory, IDocumentBatchPlan plan, IBatchCallReservation calls,
+    BatchInvocationCounter? counter = null)
     : IDocumentBatchPort, IBatchOutputs
 {
     public async ValueTask<int> LoadAsync(CancellationToken ct)
@@ -175,13 +201,61 @@ public sealed class DocumentBatchPort(
 
     public async ValueTask PersistAsync(BatchRef batch, string responseText, CancellationToken ct)
     {
-        var validated = plan.Validate(batch, responseText);
+        ValidatedBatch validated;
+        try
+        {
+            validated = plan.Validate(batch, responseText);
+        }
+        catch (DraftOmissionException omission) when (plan is IGuidedRetryPlan retryPlan)
+        {
+            validated = await GuidedRetryOnceAsync(batch, retryPlan, omission, ct);
+        }
+
         if (validated.Output.BatchId != batch.BatchId || validated.Output.InputHash != batch.InputHash)
         {
             throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "L'output validato non appartiene al batch richiesto.");
         }
 
         await store.CommitOutputAsync(validated.Output, validated.Children, ct);
+    }
+
+    /// <summary>
+    /// Retry guidato unico (T129, AI §9). Ordine: (1) autorità e residuo della deadline originale (nessun retry se non basta il timeout pieno di una chiamata);
+    /// (2) consumo del marcatore sotto il lock fenced (già presente = retry già consumato: nessun secondo, anche dopo restart/recovery/altro worker);
+    /// (3) riserva normale del contatore chiamate (limite raggiunto = nessun retry); (4) invio nella stessa via di InvokeBatch; (5) validazione completa della
+    /// risposta con le regole di sempre: un nuovo fallimento, di qualunque tipo, è definitivo. Ogni rinuncia rilancia il motivo ORIGINALE (work_output_invalid).
+    /// </summary>
+    private async ValueTask<ValidatedBatch> GuidedRetryOnceAsync(BatchRef batch, IGuidedRetryPlan retryPlan, DraftOmissionException omission, CancellationToken ct)
+    {
+        var authority = await DocumentDeadlineGuard.EvaluateAsync(db, writer.OwnerKind, writer.OwnerId, writer.LeaseOwner, writer.FencingToken, lockRow: false, ct);
+        if (!authority.Allowed && authority.Denial != DeadlineDenial.DeadlineExceeded)
+        {
+            throw new CheckpointFencedException(writer.OwnerId);   // nessuna autorità (fence, lease, stato): decide il chiamante, come per ogni scrittura
+        }
+
+        var seconds = factory.Options.ForPhase(plan.Agent.Phase).RequestTimeoutSeconds;
+        if (!authority.Allowed || authority.Remaining < (seconds > 0 ? TimeSpan.FromSeconds(seconds) : TimeSpan.FromSeconds(1)))
+        {
+            throw omission;
+        }
+
+        if (!await store.TryClaimGuidedRetryAsync(retryPlan.GuidedRetryMarker(batch, omission), ct))
+        {
+            throw omission;
+        }
+
+        try
+        {
+            await calls.ReserveAsync(batch, ct);
+        }
+        catch (DocumentWorkException ex) when (ex.Code == DocumentWorkException.CallLimitExceeded)
+        {
+            throw omission;
+        }
+
+        counter?.Increment();
+        var text = await BatchSender.SendAsync(this, batch, retryPlan.ComposeGuidedRetry(batch, omission), ct);
+        return plan.Validate(batch, text);
     }
 
     public ValueTask<bool> HasMoreAsync(int nextCursor, CancellationToken ct) => new(plan.HasBatch(nextCursor));

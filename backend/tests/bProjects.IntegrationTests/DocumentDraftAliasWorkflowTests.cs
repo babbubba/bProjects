@@ -22,7 +22,7 @@ namespace bProjects.IntegrationTests;
 /// validatore invariato PRIMA del WorkOutput e ricompone a ogni lettura/commit. I run già congelati restano v2 (contracts/ai-workflow.md §7.11). Nessun DGX.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
-public sealed class DocumentDraftAliasWorkflowTests : IAsyncLifetime
+public sealed partial class DocumentDraftAliasWorkflowTests : IAsyncLifetime
 {
     private static readonly Regex AnyUuid = new("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-", RegexOptions.Compiled);
     private static readonly Regex AnyHash = new("[0-9a-f]{64}", RegexOptions.Compiled);
@@ -173,7 +173,6 @@ public sealed class DocumentDraftAliasWorkflowTests : IAsyncLifetime
     [InlineData("unknown_source_alias")]
     [InlineData("marker_with_uuid")]
     [InlineData("uuid_instead_of_alias")]
-    [InlineData("item_not_represented")]
     [InlineData("hostile_html")]
     [InlineData("v2_closed_output")]
     [InlineData("truncated_json")]
@@ -202,9 +201,6 @@ public sealed class DocumentDraftAliasWorkflowTests : IAsyncLifetime
                     break;
                 case "uuid_instead_of_alias":
                     output.BlockOf(0)["items"] = new JsonArray(DraftFixtures.Goal.ToString("D"));
-                    break;
-                case "item_not_represented":
-                    output["blocks"]!.AsArray()[4] = DraftAliasFixtures.Block(["I5"], "Alternativa 1 [fonte:F1]", ["F1"]);
                     break;
                 case "hostile_html":
                     output.BlockOf(2)["markdown"] = "- Ipotesi <script>alert(1)</script>";
@@ -467,7 +463,7 @@ public sealed class DocumentDraftAliasWorkflowTests : IAsyncLifetime
             ("p", text), ("h", CanonicalJson.Sha256Hex(text)), ("r", run));
     }
 
-    private (InternalModelClient Client, DocumentSourceDraftWorkflow Workflow) Build(DocumentChatWorkflowTests.FakeChatModel model)
+    private (InternalModelClient Client, DocumentSourceDraftWorkflow Workflow) Build(DocumentChatWorkflowTests.FakeChatModel model, DocumentOptions? documents = null)
     {
         var options = new AiOptions
         {
@@ -477,12 +473,12 @@ public sealed class DocumentDraftAliasWorkflowTests : IAsyncLifetime
         var client = new InternalModelClient(options, model);
         var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
         var factory = new AgentFactory(options, client.ChatClient, (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
-        return (client, new DocumentSourceDraftWorkflow(App.Services.GetRequiredService<IServiceScopeFactory>(), factory, client, Options.Create(new DocumentOptions())));
+        return (client, new DocumentSourceDraftWorkflow(App.Services.GetRequiredService<IServiceScopeFactory>(), factory, client, Options.Create(documents ?? new DocumentOptions())));
     }
 
-    private async Task<DocumentRunResult> RunAsync(DocumentRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model)
+    private async Task<DocumentRunResult> RunAsync(DocumentRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model, DocumentOptions? documents = null)
     {
-        var (client, workflow) = Build(model);
+        var (client, workflow) = Build(model, documents);
         using (client)
         {
             return await workflow.ExecuteAsync(claim, Ct);

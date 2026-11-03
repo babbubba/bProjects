@@ -41,7 +41,15 @@ public sealed record DocumentDraftPackage(IReadOnlyDictionary<Guid, IReadOnlyLis
     }
 }
 
-public sealed record DraftValidation(bool Accepted, IReadOnlyList<string> Violations, DraftOutput? Output, string? Markdown);
+/// <summary>
+/// Esito della validazione della bozza. <see cref="UnrepresentedItemIds"/> sono gli item del pacchetto che nessun blocco rappresenta (violazione tipizzata, mai
+/// ricavata da stringhe); <see cref="OnlyUnrepresentedItems"/> è vero se QUESTA è l'unica famiglia di violazioni (T129, AI §9: unico caso ammesso al retry guidato).
+/// </summary>
+public sealed record DraftValidation(
+    bool Accepted, IReadOnlyList<string> Violations, DraftOutput? Output, string? Markdown, IReadOnlyList<Guid>? UnrepresentedItemIds = null)
+{
+    public bool OnlyUnrepresentedItems => !Accepted && UnrepresentedItemIds is { Count: > 0 } missing && Violations.Count == missing.Count;
+}
 
 /// <summary>
 /// Validazione deterministica del Markdown prodotto dal DocumentAgent (contracts/ai-workflow.md §6): formato essenziale,
@@ -240,10 +248,12 @@ public static partial class DocumentDraftValidator
             }
         }
 
+        var unrepresented = new List<Guid>();
         foreach (var (id, refs) in package.ItemSources)
         {
             if (!represented.Contains(id))
             {
+                unrepresented.Add(id);
                 violations.Add($"itemIds: l'item {id} della revisione confermata non è rappresentato in nessun blocco.");
             }
             else if (refs.Count > 0 && !cited.Contains(id))
@@ -253,11 +263,12 @@ public static partial class DocumentDraftValidator
         }
 
         return violations.Count > 0
-            ? Rejected(violations)
+            ? Rejected(violations, unrepresented)
             : new(true, [], output, string.Join("\n\n", output.Blocks.Select(b => b.Markdown.Trim())));
     }
 
-    private static DraftValidation Rejected(IEnumerable<string> violations) => new(false, [.. violations.Distinct(StringComparer.Ordinal)], null, null);
+    private static DraftValidation Rejected(IEnumerable<string> violations, IReadOnlyList<Guid>? unrepresented = null) =>
+        new(false, [.. violations.Distinct(StringComparer.Ordinal)], null, null, unrepresented);
 
     private static DraftOutput? Decode(string? text, List<string> violations)
     {

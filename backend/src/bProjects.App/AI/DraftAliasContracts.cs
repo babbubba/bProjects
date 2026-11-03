@@ -141,7 +141,8 @@ public static class DraftAliasContracts
 
 /// <summary>Esito della composizione: accettata (con la validazione canonica e i tre hash) oppure rifiutata con codice e violazioni; mai un output parziale.</summary>
 public sealed record DraftComposition(
-    bool Accepted, string? ErrorCode, IReadOnlyList<string> Violations, DraftValidation? Validation, string? AiOutputHash, string CatalogHash, string? CanonicalHash);
+    bool Accepted, string? ErrorCode, IReadOnlyList<string> Violations, DraftValidation? Validation, string? AiOutputHash, string CatalogHash, string? CanonicalHash,
+    IReadOnlyList<Guid>? OmittedItemIds = null);
 
 public static partial class DraftAliasComposer
 {
@@ -200,7 +201,8 @@ public static partial class DraftAliasComposer
         var validation = DocumentDraftValidator.ValidateBlocks(canonical, package);
         if (!validation.Accepted)
         {
-            return Reject(catalog, aiHash, DocumentWorkException.WorkOutputInvalid, validation.Violations);
+            // T129: solo se l'UNICA violazione è «item obbligatori non rappresentati» (tipizzata dal validatore) l'esito porta gli item omessi.
+            return Reject(catalog, aiHash, DocumentWorkException.WorkOutputInvalid, validation.Violations, validation.OnlyUnrepresentedItems ? validation.UnrepresentedItemIds : null);
         }
 
         var canonicalHash = CanonicalJson.Sha256Hex(canonical);
@@ -212,8 +214,8 @@ public static partial class DraftAliasComposer
         return new DraftComposition(true, null, [], validation, aiHash, catalog.CatalogHash, canonicalHash);
     }
 
-    private static DraftComposition Reject(DraftAliasCatalog catalog, string? aiHash, string code, IEnumerable<string> violations) =>
-        new(false, code, [.. violations.Distinct(StringComparer.Ordinal)], null, aiHash, catalog.CatalogHash, null);
+    private static DraftComposition Reject(DraftAliasCatalog catalog, string? aiHash, string code, IEnumerable<string> violations, IReadOnlyList<Guid>? omitted = null) =>
+        new(false, code, [.. violations.Distinct(StringComparer.Ordinal)], null, aiHash, catalog.CatalogHash, null, omitted);
 
     private static string FirstLine(string text) => text.Split('\n', 2)[0].Trim();
 

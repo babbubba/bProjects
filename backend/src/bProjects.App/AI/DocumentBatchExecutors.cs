@@ -148,6 +148,19 @@ internal sealed class InvokeBatchExecutor(IDocumentBatchPort port, BatchInvocati
         await port.ReserveCallAsync(batch, cancellationToken);
         counter.Increment();
         var input = await port.ComposeAsync(batch, cancellationToken);
+        var text = await BatchSender.SendAsync(port, batch, input, cancellationToken);
+        await context.SendMessageAsync(message with { Kind = BatchKind.Responded, Text = text }, cancellationToken: cancellationToken);
+    }
+}
+
+/// <summary>
+/// Invio effettivo di UN batch al modello (timeout residuo T119, sessione nuova, controllo del troncamento): usato da InvokeBatch e, per il solo retry guidato
+/// della bozza (T129), dal port. La riserva del contatore chiamate è del chiamante e precede sempre questo invio.
+/// </summary>
+internal static class BatchSender
+{
+    public static async Task<string> SendAsync(IDocumentBatchPort port, BatchRef batch, IReadOnlyList<ChatMessage> input, CancellationToken cancellationToken)
+    {
         var timeout = await port.CallTimeoutAsync(batch, cancellationToken);
         using var call = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (timeout is { } limit)
@@ -172,7 +185,7 @@ internal sealed class InvokeBatchExecutor(IDocumentBatchPort port, BatchInvocati
             throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Output del modello troncato dal limite di lunghezza: nessun output committato.");
         }
 
-        await context.SendMessageAsync(message with { Kind = BatchKind.Responded, Text = response.Text }, cancellationToken: cancellationToken);
+        return response.Text;
     }
 }
 
