@@ -277,6 +277,41 @@ public sealed class DocumentAnalysisWorkflow(
 
     public static string Instructions => Prompt.Value;
 
+    // v3 (T125, contracts/ai-workflow.md §7.8): contratto con alias; v2 sopra resta storico e immutato. La versione di un run è quella della
+    // definizione congelata alla richiesta: mai un downgrade da v3 a v2 né il contrario.
+    public const string DefinitionVersionV3 = "project-analysis-documents-v3";
+    public const string PromptVersionV3 = "document-analysis-v3";
+    public const string AlgorithmVersionV3 = AnalysisAliasComposer.AlgorithmVersion;
+    public const string SchemaNameV3 = "document_analysis_alias";
+    public const string SchemaVersionV3 = AnalysisAliasContracts.SchemaVersion;
+    public const string ValidationVersionV3 = AnalysisAliasComposer.ValidationVersion;
+
+    private static readonly Lazy<string> PromptV3 = new(() => ConversationalAgent.LoadPrompt("document-analysis-v3.md"));
+
+    public static string InstructionsV3 => PromptV3.Value;
+
+    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen) o v3 (alias); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
+    internal static int? ContractOf(ProcessingRun run)
+    {
+        if (run.MafVersion != Conversation.CurrentMafVersion)
+        {
+            return null;
+        }
+
+        if (run.WorkflowDefinitionVersion == DefinitionVersion && run.PromptVersionMatches("analysis", PromptVersion))
+        {
+            return 2;
+        }
+
+        // v3: ogni versione congelata deve coincidere con quella supportata (prompt, schema AI, catalogo, id canonici, algoritmo, validazione).
+        return run.WorkflowDefinitionVersion == DefinitionVersionV3 && run.PromptVersionMatches("analysis", PromptVersionV3)
+            && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV3) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
+            && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV3)
+            && run.PromptVersionMatches("validation", ValidationVersionV3)
+            ? 3
+            : null;
+    }
+
     public static string SessionId(Guid runId) => $"analysis-{runId:N}";
 
     public async Task<AnalysisRunResult> ExecuteAsync(AnalysisRunClaim claim, CancellationToken ct)
@@ -289,9 +324,9 @@ public sealed class DocumentAnalysisWorkflow(
             return new(run.Status, run.ResultRevisionId, run.ErrorCode); // replay: un risultato terminale non si rielabora
         }
 
-        if (run.WorkflowDefinitionVersion != DefinitionVersion || run.MafVersion != Conversation.CurrentMafVersion || !run.PromptVersionMatches("analysis", PromptVersion))
+        if (ContractOf(run) is not { } contract)
         {
-            // Nessuna migrazione implicita di un altro grafo: errore esplicito e permanente (T123 instrada le definizioni supportate).
+            // Nessuna migrazione implicita né downgrade (v3 → v2) di un altro grafo: errore esplicito e permanente (T123 instrada le definizioni supportate).
             await FailAsync(claim, "workflow_incompatible", "La definizione del workflow del run non è compatibile con quella documentale corrente.", ct);
             return await ReadAsync(claim.RunId, ct);
         }
@@ -309,7 +344,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await RunGraphAsync(db, claim, ct);
+            await (contract == 3 ? RunAliasGraphAsync(db, claim, ct) : RunGraphAsync(db, claim, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -328,6 +363,15 @@ public sealed class DocumentAnalysisWorkflow(
     /// delle estrazioni dei messaggi PM, quindi il conteggio T è esplicitamente <c>unavailable</c> (regola 6: Extended workload_unknown).
     /// </summary>
     public RegimePayload BuildRegimePayload() => new(AiPhase.Analysis, null, WrapperSchema.GetRawText(), factory.Preflight);
+
+    /// <summary>
+    /// Come <see cref="BuildRegimePayload()"/> ma per la definizione congelata sul root: per v3 lo schema misurato è quello del DTO con alias
+    /// (<c>document-analysis-alias-1</c>), non l'involucro v2. Una definizione diversa da v3 resta sulla misura v2 (l'esito incompatibile è del claim).
+    /// </summary>
+    public RegimePayload BuildRegimePayload(string? definitionVersion) =>
+        definitionVersion == DefinitionVersionV3
+            ? new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight)
+            : BuildRegimePayload();
 
     private async Task RunGraphAsync(AppDbContext db, AnalysisRunClaim claim, CancellationToken ct)
     {
@@ -354,6 +398,54 @@ public sealed class DocumentAnalysisWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisPlan(claim, input, messages, instructions, measure, structured, factory, client, WrapperSchema, scopes);
+        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
+        var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
+        try
+        {
+            await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, new BatchInvocationCounter()), checkpoints, SessionId(claim.RunId), null, ct);
+        }
+        catch (Exception ex) when (Find<LeaseLostException>(ex) is not null)
+        {
+            // Il dominio prevale sul checkpoint: se il commit atomico ha già completato il run, la scrittura del checkpoint finale è stata rifiutata.
+            if (!plan.Committed)
+            {
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Grafo v3 (alias): stesso grafo fisso T043 e stesso port T044 della v2, con messaggio a soli alias, schema del DTO <c>document-analysis-alias-1</c>
+    /// e piano che compone il canonico sul server. Il catalogo si costruisce dallo snapshot congelato del run (mai dalla selezione corrente); una fonte
+    /// non verificabile è <c>source_snapshot_invalid</c> prima di ogni chiamata.
+    /// </summary>
+    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, CancellationToken ct)
+    {
+        var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
+        var catalog = AnalysisAliasCatalog.Build(input);
+        var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
+        var instructions = InstructionsV3;
+        var schema = AnalysisAliasContracts.JsonSchema();
+        var messages = DocumentAnalysisAliasPlan.BuildMessages(input, catalog);
+        var measure = await factory.Preflight.MeasureAsync(
+            new DocumentPayload(AiPhase.Analysis, instructions, messages, structured ? schema.GetRawText() : null), ct);
+        if (measure.Quality == TokenCountQuality.Unavailable)
+        {
+            throw new RuntimeUnverifiedException("conteggio del payload dell'analisi non disponibile (nessun tokenizer o calibrazione identificata)");
+        }
+
+        if (!measure.Fits)
+        {
+            throw new DocumentWorkException(
+                DocumentWorkException.CallLimitExceeded,
+                $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
+        }
+
+        using var scope = scopes.CreateScope();
+        var planDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
+        var store = new DocumentWorkStore(planDb, writer);
+        var plan = new DocumentAnalysisAliasPlan(claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes);
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try
