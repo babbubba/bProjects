@@ -214,6 +214,10 @@ public sealed class DocumentAnalysisWorkflowTests : ArchiveTestBase
         Assert.Contains($"fonte:{input.Evidence[0].Sources[0].SourceId}", request.AllText);
         Assert.Contains(input.BatchKey, request.AllText);
         Assert.Contains(input.InputHash, request.AllText);
+        // T067: il server fornisce l'elenco gia ordinato (con il conteggio) degli entryId da copiare: il modello reale non sa ordinare/ricopiare hash sparsi.
+        var entryIds = input.Evidence.Select(e => ReconciliationIds.EntryId(input.Snapshot.SourceHash, e.EvidenceId, e.ContentHash)).Order(StringComparer.Ordinal).ToList();
+        Assert.Contains($"visitedEntryIds ({entryIds.Count} elementi, gia in ordine alfabetico", request.AllText);
+        Assert.Contains("[" + string.Join(",", entryIds.Select(id => "\"" + id + "\"")) + "]", request.AllText);
         Assert.DoesNotContain("evidenceKeys", request.System + request.AllText);
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
 
@@ -267,6 +271,7 @@ public sealed class DocumentAnalysisWorkflowTests : ArchiveTestBase
     [InlineData("extra_property")]
     [InlineData("truncated_json")]
     [InlineData("wrong_cutoff")]
+    [InlineData("source_ids_as_evidence_ids")]
     public async Task An_invalid_output_fails_the_run_permanently_with_no_revision_no_reusable_output_and_no_second_call(string kind)
     {
         using var client = await App.LoginAsync();
@@ -281,6 +286,8 @@ public sealed class DocumentAnalysisWorkflowTests : ArchiveTestBase
                 "truncated_json" => Respond(input)[..40],
                 "extra_property" => Mutate(Respond(input), n => n["extra"] = 1),
                 "wrong_cutoff" => Respond(input, o => o with { Analysis = o.Analysis with { SourceCutoffSequence = 7 } }),
+                // T067 (prova reale, N2): il modello ha scritto nella mappa gli id delle FONTI al posto degli id delle EVIDENZE; deve essere work_output_invalid, mai model_error.
+                "source_ids_as_evidence_ids" => Respond(input, o => o with { EvidenceMap = [.. o.EvidenceMap.Select(m => m with { EvidenceIds = [.. input.Evidence.Where(e => m.EvidenceIds.Contains(e.EvidenceId)).SelectMany(e => e.Sources.Select(x => x.SourceId))] })] }),
                 _ => Respond(input, o => o with { Analysis = o.Analysis with { Sources = [.. o.Analysis.Sources.Select(s => s with { Id = Guid.NewGuid() })] } }),
             },
         };

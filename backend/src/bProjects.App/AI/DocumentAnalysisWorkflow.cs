@@ -376,6 +376,10 @@ public sealed class DocumentAnalysisWorkflow(
         var text = new StringBuilder();
         text.Append("Dati affidabili del server:\n")
             .Append($"analysisId: {input.AnalysisId:D}\nprojectId: {input.ProjectId:D}\nsourceCutoffSequence: {input.Cutoff}\nbatchId: {input.BatchKey}\ninputHash: {input.InputHash}\n");
+        // T067 (prova reale): il modello non sa ordinare e ricopiare in modo affidabile N hash da 64 caratteri sparsi nelle voci (ha omesso voci e poi ripetuto
+        // l'ultimo hash fino a esaurire max_tokens). Il server fornisce l'elenco gia ordinato, con il numero di elementi, da copiare identico: stessa regola del contratto.
+        var visited = input.Evidence.Select(e => ReconciliationIds.EntryId(input.Snapshot.SourceHash, e.EvidenceId, e.ContentHash)).Order(StringComparer.Ordinal).ToList();
+        text.Append($"visitedEntryIds ({visited.Count} elementi, gia in ordine alfabetico: copiali identici e per intero in ciascuno dei tre results, senza ripetizioni): [{string.Join(",", visited.Select(id => "\"" + id + "\""))}]\n");
         if (input.Unavailable > 0)
         {
             text.Append($"Fonti documentali non disponibili o non pronte, escluse da questa analisi: {input.Unavailable}.\n");
