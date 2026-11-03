@@ -60,28 +60,60 @@ public interface IDocumentBatchPlan
 }
 
 /// <summary>
-/// Validazione fallita SOLO perché item obbligatori non sono rappresentati (T129, AI §9): violazione tipizzata, riconosciuta dal validatore e non da stringhe.
-/// È un <see cref="DocumentWorkException"/> <c>work_output_invalid</c> a tutti gli effetti (permanente); il port la intercetta per il solo retry guidato.
-/// <see cref="OutputHash"/> è l'hash del primo output (diagnostica non sensibile: mai il testo).
+/// Validazione fallita per una sola delle classi che ammettono il retry guidato unico (T129 bozza, T130 analisi; AI §9/§10): violazione tipizzata,
+/// riconosciuta dal validatore e non da stringhe. È un <see cref="DocumentWorkException"/> permanente a tutti gli effetti (codice originale); il port la
+/// intercetta per il solo retry guidato. <see cref="OutputHash"/> è l'hash del primo output (diagnostica non sensibile: mai il testo).
 /// </summary>
-public sealed class DraftOmissionException(string message, IReadOnlyList<string> missingItemAliases, string? outputHash)
-    : DocumentWorkException(WorkOutputInvalid, message)
+public abstract class GuidedRetryTrigger(string code, string message, string? outputHash) : DocumentWorkException(code, message)
 {
-    public IReadOnlyList<string> MissingItemAliases { get; } = missingItemAliases;
-
     public string? OutputHash { get; } = outputHash;
 }
 
 /// <summary>
-/// Capacità opzionale di un piano: un solo retry guidato di rigenerazione completa dopo un <see cref="DraftOmissionException"/> (T129). Il piano compone il
+/// Validazione della bozza fallita SOLO perché item obbligatori non sono rappresentati (T129, AI §9): <c>work_output_invalid</c> permanente.
+/// </summary>
+public sealed class DraftOmissionException(string message, IReadOnlyList<string> missingItemAliases, string? outputHash)
+    : GuidedRetryTrigger(WorkOutputInvalid, message, outputHash)
+{
+    public IReadOnlyList<string> MissingItemAliases { get; } = missingItemAliases;
+}
+
+/// <summary>Classe di errore dell'analisi che ammette il retry guidato (T130, AI §10).</summary>
+public enum AnalysisRetryKind
+{
+    /// <summary>Chiavi locali duplicate: <c>work_output_invalid</c>.</summary>
+    DuplicateKeys,
+
+    /// <summary>Evidenze non mappate su alcun item come unico gap: <c>coverage_incomplete</c>.</summary>
+    UnmappedEvidence,
+}
+
+/// <summary>Analisi rifiutata SOLO per chiavi locali duplicate o evidenze non mappate (T130, AI §10); <see cref="Items"/> sono le chiavi o gli alias <c>E&lt;n&gt;</c>.</summary>
+public sealed class AnalysisRetryException(string code, string message, AnalysisRetryKind kind, IReadOnlyList<string> items, string? outputHash)
+    : GuidedRetryTrigger(code, message, outputHash)
+{
+    public AnalysisRetryKind Kind { get; } = kind;
+
+    public IReadOnlyList<string> Items { get; } = items;
+}
+
+/// <summary>
+/// Capacità opzionale di un piano: un solo retry guidato di rigenerazione completa dopo un <see cref="GuidedRetryTrigger"/> (T129, T130). Il piano compone il
 /// marcatore del tentativo consumato (<see cref="DerivedBatchInput"/>, mai un output) e il messaggio del secondo invio; il port orchestra budget, deadline,
-/// fencing e persistenza del marcatore. Nessun merge del primo output: la risposta del retry è validata per intero come la prima.
+/// fencing e persistenza del marcatore. Nessun merge del primo output: la risposta del retry è validata per intero come la prima, ma con
+/// <see cref="ValidateFinal"/>, che non lancia più un trigger di retry.
 /// </summary>
 public interface IGuidedRetryPlan
 {
-    DerivedBatchInput GuidedRetryMarker(BatchRef batch, DraftOmissionException omission);
+    DerivedBatchInput GuidedRetryMarker(BatchRef batch, GuidedRetryTrigger trigger);
 
-    IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, DraftOmissionException omission);
+    IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, GuidedRetryTrigger trigger);
+
+    /// <summary>
+    /// Validazione definitiva di una risposta: come <see cref="IDocumentBatchPlan.Validate"/> ma senza ulteriore retry. Usata per la risposta del retry e quando il retry
+    /// non è ammesso (deadline, budget, già consumato): vale il motivo originale, e un output valido ma incompleto resta persistito e riutilizzabile come prima di T130.
+    /// </summary>
+    ValidatedBatch ValidateFinal(BatchRef batch, string responseText);
 }
 
 /// <summary>
@@ -206,9 +238,9 @@ public sealed class DocumentBatchPort(
         {
             validated = plan.Validate(batch, responseText);
         }
-        catch (DraftOmissionException omission) when (plan is IGuidedRetryPlan retryPlan)
+        catch (GuidedRetryTrigger trigger) when (plan is IGuidedRetryPlan retryPlan)
         {
-            validated = await GuidedRetryOnceAsync(batch, retryPlan, omission, ct);
+            validated = await GuidedRetryOnceAsync(batch, retryPlan, trigger, responseText, ct);
         }
 
         if (validated.Output.BatchId != batch.BatchId || validated.Output.InputHash != batch.InputHash)
@@ -220,12 +252,12 @@ public sealed class DocumentBatchPort(
     }
 
     /// <summary>
-    /// Retry guidato unico (T129, AI §9). Ordine: (1) autorità e residuo della deadline originale (nessun retry se non basta il timeout pieno di una chiamata);
+    /// Retry guidato unico (T129 bozza, T130 analisi; AI §9/§10). Ordine: (1) autorità e residuo della deadline originale (nessun retry se non basta il timeout pieno di una chiamata);
     /// (2) consumo del marcatore sotto il lock fenced (già presente = retry già consumato: nessun secondo, anche dopo restart/recovery/altro worker);
     /// (3) riserva normale del contatore chiamate (limite raggiunto = nessun retry); (4) invio nella stessa via di InvokeBatch; (5) validazione completa della
-    /// risposta con le regole di sempre: un nuovo fallimento, di qualunque tipo, è definitivo. Ogni rinuncia rilancia il motivo ORIGINALE (work_output_invalid).
+    /// risposta con le regole di sempre: un nuovo fallimento, di qualunque tipo, è definitivo. Ogni rinuncia riapplica la validazione definitiva alla prima risposta: vale il motivo ORIGINALE.
     /// </summary>
-    private async ValueTask<ValidatedBatch> GuidedRetryOnceAsync(BatchRef batch, IGuidedRetryPlan retryPlan, DraftOmissionException omission, CancellationToken ct)
+    private async ValueTask<ValidatedBatch> GuidedRetryOnceAsync(BatchRef batch, IGuidedRetryPlan retryPlan, GuidedRetryTrigger trigger, string firstResponse, CancellationToken ct)
     {
         var authority = await DocumentDeadlineGuard.EvaluateAsync(db, writer.OwnerKind, writer.OwnerId, writer.LeaseOwner, writer.FencingToken, lockRow: false, ct);
         if (!authority.Allowed && authority.Denial != DeadlineDenial.DeadlineExceeded)
@@ -236,12 +268,12 @@ public sealed class DocumentBatchPort(
         var seconds = factory.Options.ForPhase(plan.Agent.Phase).RequestTimeoutSeconds;
         if (!authority.Allowed || authority.Remaining < (seconds > 0 ? TimeSpan.FromSeconds(seconds) : TimeSpan.FromSeconds(1)))
         {
-            throw omission;
+            return retryPlan.ValidateFinal(batch, firstResponse);
         }
 
-        if (!await store.TryClaimGuidedRetryAsync(retryPlan.GuidedRetryMarker(batch, omission), ct))
+        if (!await store.TryClaimGuidedRetryAsync(retryPlan.GuidedRetryMarker(batch, trigger), ct))
         {
-            throw omission;
+            return retryPlan.ValidateFinal(batch, firstResponse);
         }
 
         try
@@ -250,12 +282,12 @@ public sealed class DocumentBatchPort(
         }
         catch (DocumentWorkException ex) when (ex.Code == DocumentWorkException.CallLimitExceeded)
         {
-            throw omission;
+            return retryPlan.ValidateFinal(batch, firstResponse);
         }
 
         counter?.Increment();
-        var text = await BatchSender.SendAsync(this, batch, retryPlan.ComposeGuidedRetry(batch, omission), ct);
-        return plan.Validate(batch, text);
+        var text = await BatchSender.SendAsync(this, batch, retryPlan.ComposeGuidedRetry(batch, trigger), ct);
+        return retryPlan.ValidateFinal(batch, text);
     }
 
     public ValueTask<bool> HasMoreAsync(int nextCursor, CancellationToken ct) => new(plan.HasBatch(nextCursor));

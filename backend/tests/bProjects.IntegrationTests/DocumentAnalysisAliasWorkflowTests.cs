@@ -55,7 +55,7 @@ internal static class AliasModelReplies
 /// persiste il WorkOutput {aiOutputHash, catalogHash, canonicalHash} e ricompone a ogni lettura/commit (contracts/ai-workflow.md §7).
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
-public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
+public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 {
     private const string Statement1 = "Il cliente A puo emettere al massimo 5 ordini al giorno.";
     private const string Statement2 = "Il cliente A puo emettere al massimo 8 ordini al giorno.";
@@ -293,7 +293,7 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 
         Assert.Equal(ProcessingRunStatus.Failed, result.Status);
         Assert.Equal(DocumentWorkException.WorkOutputInvalid, result.ErrorCode);
-        Assert.Single(model.Requests);
+        Assert.Equal(kind == "duplicate_local_key" ? 2 : 1, model.Requests.Count);    // T130: le chiavi duplicate hanno l'unico retry guidato (AI §10), il secondo output identico fallisce
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"Status\" = 'Committed'"));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\""));
@@ -318,7 +318,7 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 
         Assert.Equal(ProcessingRunStatus.Failed, result.Status);
         Assert.Equal(DocumentWorkException.CoverageIncomplete, result.ErrorCode);
-        Assert.Single(model.Requests);
+        Assert.Equal(2, model.Requests.Count);      // T130: unico retry guidato (AI §10); il secondo output, ancora incompleto, resta riutilizzabile e non genera revisione
         Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", run)));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\""));
@@ -762,9 +762,11 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         return await DocumentAnalysisSources.LoadAsync(db, run, Ct);
     }
 
-    private async Task<AnalysisRunResult> RunAsync(Guid run, DocumentChatWorkflowTests.FakeChatModel model)
+    private async Task<AnalysisRunResult> RunAsync(Guid run, DocumentChatWorkflowTests.FakeChatModel model, DocumentOptions? documents = null) =>
+        await RunClaimAsync(await ClaimAsync(run), model, documents);
+
+    private async Task<AnalysisRunResult> RunClaimAsync(AnalysisRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model, DocumentOptions? documents = null)
     {
-        var claim = await ClaimAsync(run);
         var options = new AiOptions
         {
             Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = DocumentChatWorkflowTests.FakeChatModel.Window,
@@ -773,7 +775,7 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         using var client = new InternalModelClient(options, model);
         var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
         var factory = new AgentFactory(options, client.ChatClient, (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
-        var workflow = new DocumentAnalysisWorkflow(App.Services.GetRequiredService<IServiceScopeFactory>(), factory, client, Options.Create(new DocumentOptions()));
+        var workflow = new DocumentAnalysisWorkflow(App.Services.GetRequiredService<IServiceScopeFactory>(), factory, client, Options.Create(documents ?? new DocumentOptions()));
         return await workflow.ExecuteAsync(claim, Ct);
     }
 }

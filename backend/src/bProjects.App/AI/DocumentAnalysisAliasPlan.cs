@@ -15,8 +15,9 @@ namespace bProjects.App.AI;
 /// verifica del <c>canonicalHash</c>. Il manifesto congela l'hash del catalogo senza id del run (<see cref="AnalysisAliasCatalog.RunIndependentHash"/>):
 /// un root di retry sugli stessi fonti ha un manifesto con lo stesso contenuto e il DTO è importabile, mentre il <c>catalogHash</c> con l'id del run
 /// resta nel WorkOutput del singolo root. Deterministico nel replay: nessun Guid né orologio nell'identità dei batch.
+/// Solo questo piano (v3) ammette il retry guidato unico per chiavi locali duplicate o evidenze non mappate (T130, AI §10); il piano v2, congelato, non ne ha.
 /// </summary>
-internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan
+internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRetryPlan
 {
     private readonly AnalysisRunClaim _claim;
     private readonly DocumentAnalysisInput _input;
@@ -171,13 +172,111 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan
 
     public ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) => new(_messages);
 
+    public const string GuidedRetryStage = "analysis_retry";
+
+    /// <summary>
+    /// Marcatore del retry consumato (T130): batch d'appoggio (stadio <c>analysis_retry</c>, ordinale 1, fuori dal cursore del grafo) la cui identità dipende solo da run,
+    /// manifesto e batch originale, quindi uguale a ogni replay; non ha mai un WorkOutput. Porta solo classe, conteggio e hash del primo output (diagnostica non sensibile).
+    /// </summary>
+    public DerivedBatchInput GuidedRetryMarker(BatchRef batch, GuidedRetryTrigger trigger)
+    {
+        var retry = (AnalysisRetryException)trigger;
+        var id = DocumentAnalysisWorkflow.Sha($"guided-retry|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{DocumentAnalysisWorkflow.DefinitionVersionV3}|{batch.BatchId}");
+        var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, kind = retry.Kind.ToString(), items = retry.Items.Count, firstOutputHash = retry.OutputHash });
+        return new DerivedBatchInput(
+            id, GuidedRetryStage, null, null, null, 1, [], inputs, null, "calibrated_upper_bound", DocumentAnalysisWorkflow.Sha($"guided-retry-input|{batch.InputHash}"),
+            DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.PromptVersionV3);
+    }
+
+    /// <summary>
+    /// Messaggio del secondo invio: lo stesso messaggio del primo (dialogo, evidenze e fonti con alias, relazioni note) più l'elenco preciso delle chiavi duplicate o
+    /// degli alias <c>E&lt;n&gt;</c> non mappati e l'istruzione di produrre l'analisi COMPLETA. Nessun testo né item del primo output: nessun merge, il server non scrive semantica.
+    /// </summary>
+    public IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, GuidedRetryTrigger trigger)
+    {
+        var retry = (AnalysisRetryException)trigger;
+        var text = new StringBuilder(string.Concat(_messages.Select(m => m.Text)));
+        if (retry.Kind == AnalysisRetryKind.DuplicateKeys)
+        {
+            text.Append("\n\nCORREZIONE (unico nuovo tentativo): la tua risposta precedente è stata scartata perché ripete queste chiavi locali, che devono essere tutte distinte nell'intera analisi:\n")
+                .Append(string.Join("\n", retry.Items.Select(k => $"- {k}")))
+                .Append("\nProduci di nuovo l'analisi COMPLETA, tutti gli elementi e tutti i campi, con chiavi tutte distinte: ogni elemento compare una sola volta, in una sola sezione, ")
+                .Append("e le alternative di un conflitto vanno solo in conflicts[].alternatives, non anche come elementi di una sezione. ");
+        }
+        else
+        {
+            text.Append("\n\nCORREZIONE (unico nuovo tentativo): la tua risposta precedente è stata scartata perché queste evidenze non sono citate da nessun elemento:\n")
+                .Append(string.Join("\n", retry.Items.Select(a => $"- [{a}]")))
+                .Append("\nProduci di nuovo l'analisi COMPLETA, tutti gli elementi e tutti i campi: ogni evidenza dell'elenco delle evidenze congelate deve essere citata da almeno un elemento ")
+                .Append("(o alternativa di un conflitto), sia quelle già citate nella risposta precedente sia quelle elencate sopra. Non limitarti alle evidenze mancanti. ");
+        }
+
+        text.Append("Rispondi con l'unico oggetto JSON `alias-1`.");
+        var message = new ChatMessage(ChatRole.User, text.ToString());
+        if (_messages.Count > 0 && _messages[0].AdditionalProperties is { } properties)
+        {
+            message.AdditionalProperties = new AdditionalPropertiesDictionary(properties);   // gli span documentali del primo messaggio sono un prefisso del secondo
+        }
+
+        return [message];
+    }
+
+    /// <summary>
+    /// Segnala un trigger di retry SOLO se l'unica causa del rifiuto sono chiavi locali duplicate (rifiuto Invalid con segnale tipizzato del compositore) oppure
+    /// <c>evidence_not_mapped</c> è l'unico gap di un output valido ma incompleto; ogni altro caso resta alla validazione ordinaria.
+    /// </summary>
+    private void ThrowIfRetryable(AliasComposition composition)
+    {
+        if (!composition.IsReusableWorkOutput)
+        {
+            if (composition.DuplicateKeys is { Count: > 0 } keys)
+            {
+                throw new AnalysisRetryException(
+                    composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid, InvalidMessage(composition), AnalysisRetryKind.DuplicateKeys, keys, composition.AiOutputHash);
+            }
+
+            return;
+        }
+
+        var gaps = composition.Validation?.Completion?.Gaps;
+        if (composition.Outcome != ReconciliationOutcome.ValidIncomplete || gaps is not { Count: > 0 } || gaps.Any(g => g.Code != "evidence_not_mapped"))
+        {
+            return;
+        }
+
+        var mapped = composition.Output!.EvidenceMap.SelectMany(e => e.EvidenceIds).ToHashSet();
+        var aliases = _catalog.Data.Evidence.Where(e => !mapped.Contains(e.EvidenceId)).Select(e => e.Alias).ToList();
+        if (aliases.Count == gaps.Count)
+        {
+            throw new AnalysisRetryException(
+                DocumentWorkException.CoverageIncomplete, IncompleteMessage(gaps), AnalysisRetryKind.UnmappedEvidence, aliases, composition.AiOutputHash);
+        }
+    }
+
+    private static string InvalidMessage(AliasComposition composition) =>
+        $"Output dell'analisi documentale non valido ({composition.Violations.Count} violazioni): " + string.Join(" | ", composition.Violations.Take(5));
+
+    private static string IncompleteMessage(IReadOnlyList<CompletionGap> gaps) =>
+        $"Il batch è valido ma le obbligazioni di riconciliazione non sono complete ({gaps.Count}): " + string.Join(" | ", gaps.Take(5).Select(g => g.Code + ": " + g.Detail));
+
+    /// <summary>Validazione ordinaria del primo output: ammette il solo trigger del retry guidato unico (T130).</summary>
+    public ValidatedBatch Validate(BatchRef batch, string responseText) => ValidateCore(batch, responseText, allowRetry: true);
+
+    /// <summary>Validazione definitiva (risposta del retry o retry non ammesso): nessun ulteriore trigger; un output valido ma incompleto resta persistito come sempre.</summary>
+    public ValidatedBatch ValidateFinal(BatchRef batch, string responseText) => ValidateCore(batch, responseText, allowRetry: false);
+
     /// <summary>
     /// Compone e valida PRIMA del WorkOutput: un rifiuto è errore permanente (codice di §7.9, nessun output, nessuna riparazione); ValidIncomplete o
     /// Complete → output Committed riutilizzabile con l'esito calcolato dal server. La completezza non dipende mai da una dichiarazione del modello.
     /// </summary>
-    public ValidatedBatch Validate(BatchRef batch, string responseText)
+    private ValidatedBatch ValidateCore(BatchRef batch, string responseText, bool allowRetry)
     {
         var composition = AnalysisAliasComposer.Compose(responseText, _catalog, _input);
+        if (allowRetry)
+        {
+            ThrowIfRetryable(composition);
+        }
+
         Require(composition);
 
         var dto = AnalysisAliasContracts.Decode(responseText);

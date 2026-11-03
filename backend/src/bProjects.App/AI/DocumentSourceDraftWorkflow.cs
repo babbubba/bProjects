@@ -646,8 +646,9 @@ internal sealed class DocumentDraftAliasPlan : IDocumentBatchPlan, IGuidedRetryP
     /// Marcatore del retry consumato (T129): batch d'appoggio (stadio <c>draft_retry</c>, ordinale 1, fuori dal cursore del grafo) la cui identità dipende solo da run,
     /// manifesto e batch originale, quindi uguale a ogni replay; non ha mai un WorkOutput. Porta solo conteggio e hash del primo output (diagnostica non sensibile).
     /// </summary>
-    public DerivedBatchInput GuidedRetryMarker(BatchRef batch, DraftOmissionException omission)
+    public DerivedBatchInput GuidedRetryMarker(BatchRef batch, GuidedRetryTrigger trigger)
     {
+        var omission = (DraftOmissionException)trigger;
         var id = DocumentSourceDraftWorkflow.Sha($"guided-retry|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{DocumentSourceDraftWorkflow.DefinitionVersionV3}|{batch.BatchId}");
         var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, omittedItems = omission.MissingItemAliases.Count, firstOutputHash = omission.OutputHash });
         return new DerivedBatchInput(
@@ -661,8 +662,9 @@ internal sealed class DocumentDraftAliasPlan : IDocumentBatchPlan, IGuidedRetryP
     /// Messaggio del secondo invio: lo stesso messaggio del primo (snapshot confermato, versioni, alias I/F e fonti canoniche) più l'elenco preciso degli alias
     /// mancanti e l'istruzione di rigenerare la bozza COMPLETA. Nessun testo né blocco del primo output: nessun merge, il server non scrive testo di item.
     /// </summary>
-    public IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, DraftOmissionException omission)
+    public IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, GuidedRetryTrigger trigger)
     {
+        var omission = (DraftOmissionException)trigger;
         var missing = string.Join("\n", omission.MissingItemAliases.Select(a => $"- [{a}] (sezione={_catalog.Item(a)!.Section})"));
         var text = new StringBuilder(string.Concat(_messages.Select(m => m.Text)))
             .Append("\n\nCORREZIONE (unico nuovo tentativo): la tua risposta precedente è stata scartata perché non rappresenta questi elementi obbligatori:\n")
@@ -693,6 +695,9 @@ internal sealed class DocumentDraftAliasPlan : IDocumentBatchPlan, IGuidedRetryP
 
         throw new DocumentWorkException(composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid, message);
     }
+
+    /// <summary>Validazione definitiva del port (T130): per la bozza coincide con <see cref="Validate"/> (il trigger di omissione è già il motivo originale).</summary>
+    public ValidatedBatch ValidateFinal(BatchRef batch, string responseText) => Validate(batch, responseText);
 
     /// <summary>Compone e valida PRIMA del WorkOutput: un rifiuto è errore permanente (nessun output durevole, nessuna riparazione); l'unica eccezione è <see cref="DraftOmissionException"/> (T129).</summary>
     public ValidatedBatch Validate(BatchRef batch, string responseText)

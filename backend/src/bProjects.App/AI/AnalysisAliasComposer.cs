@@ -15,10 +15,11 @@ namespace bProjects.App.AI;
 /// <summary>
 /// Esito della composizione. <see cref="Output"/> è valorizzato solo se l'esito è riutilizzabile (Complete o ValidIncomplete); un rifiuto porta le
 /// violazioni (alias e percorso) e il codice permanente. <see cref="Validation"/> è l'esito dei validatori di dominio sul canonico composto.
+/// <see cref="DuplicateKeys"/> (T130) è valorizzato solo se l'UNICA causa del rifiuto sono chiavi locali duplicate: segnale tipizzato per il retry guidato.
 /// </summary>
 public sealed record AliasComposition(
     ReconciliationOutcome Outcome, string? ErrorCode, IReadOnlyList<string> Violations, SingleCallOutput? Output, ReconciliationValidation? Validation,
-    string? AiOutputHash, string CatalogHash, string? CanonicalHash)
+    string? AiOutputHash, string CatalogHash, string? CanonicalHash, IReadOnlyList<string>? DuplicateKeys = null)
 {
     public bool IsReusableWorkOutput => Outcome != ReconciliationOutcome.Invalid;
 }
@@ -88,14 +89,16 @@ public static class AnalysisAliasComposer
         }
     }
 
-    private static AliasComposition Reject(AnalysisAliasCatalog catalog, string? aiHash, string code, IReadOnlyList<string> violations, ReconciliationValidation? validation = null) =>
-        new(ReconciliationOutcome.Invalid, code, [.. violations.Distinct(StringComparer.Ordinal)], null, validation, aiHash, catalog.CatalogHash, null);
+    private static AliasComposition Reject(
+        AnalysisAliasCatalog catalog, string? aiHash, string code, IReadOnlyList<string> violations, ReconciliationValidation? validation = null, IReadOnlyList<string>? duplicateKeys = null) =>
+        new(ReconciliationOutcome.Invalid, code, [.. violations.Distinct(StringComparer.Ordinal)], null, validation, aiHash, catalog.CatalogHash, null, duplicateKeys);
 
     private sealed record ItemRecord(string Key, string Path, AiItem Dto, Guid Id, List<AliasEvidenceEntry> Evidence);
 
     private sealed class Builder(AiAnalysisOutput dto, AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string batchKey, string inputHash)
     {
         private readonly List<string> _errors = [];
+        private readonly List<string> _duplicateKeys = [];
         private readonly string _sourceHash = catalog.Data.SourceHash;
         private readonly Guid _root = catalog.Data.RunId;
 
@@ -119,7 +122,7 @@ public static class AnalysisAliasComposer
                 var conflict = dto.Conflicts[c];
                 if (!conflictKeys.Add(conflict.Key))
                 {
-                    _errors.Add($"conflicts[{c}].key: chiave locale {conflict.Key} duplicata.");
+                    DuplicateKey(conflict.Key, $"conflicts[{c}].key: chiave locale {conflict.Key} duplicata.");
                 }
 
                 conflicts.Add((conflict, CanonicalId("conflict", _root, _sourceHash, conflict.Key),
@@ -141,7 +144,8 @@ public static class AnalysisAliasComposer
 
             if (_errors.Count > 0)
             {
-                return Reject(catalog, aiHash, DocumentWorkException.WorkOutputInvalid, _errors);
+                // T130: chiavi duplicate come UNICA causa (ogni altro errore ne annulla il segnale) = candidato al retry guidato.
+                return Reject(catalog, aiHash, DocumentWorkException.WorkOutputInvalid, _errors, duplicateKeys: _errors.Count == _duplicateKeys.Count ? [.. _duplicateKeys.Distinct(StringComparer.Ordinal)] : null);
             }
 
             // Fonti di analysis: solo le originali delle evidenze citate dagli item, in ordine di lettura (alias S).
@@ -237,6 +241,12 @@ public static class AnalysisAliasComposer
             return new AliasComposition(validation.Outcome, null, [], output, validation, aiHash, catalog.CatalogHash, canonicalHash);
         }
 
+        private void DuplicateKey(string key, string error)
+        {
+            _errors.Add(error);
+            _duplicateKeys.Add(key);
+        }
+
         private List<string> Visited(IReadOnlyList<string> aliases, string path)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -295,7 +305,7 @@ public static class AnalysisAliasComposer
                 var hint = first.StartsWith("conflicts[", StringComparison.Ordinal) || path.StartsWith("conflicts[", StringComparison.Ordinal)
                     ? "le alternative di un conflitto vanno solo in conflicts[].alternatives, non anche come item di una sezione"
                     : "ogni elemento compare una sola volta, in una sola sezione";
-                _errors.Add($"{path}.key: chiave locale {item.Key} duplicata: già usata in {first} e ripetuta in {path} ({hint}).");
+                DuplicateKey(item.Key, $"{path}.key: chiave locale {item.Key} duplicata: già usata in {first} e ripetuta in {path} ({hint}).");
             }
 
             return new ItemRecord(item.Key, path, item, CanonicalId("item", _root, _sourceHash, item.Key), EvidenceList(item.Evidence, $"{path}.evidence"));
@@ -369,7 +379,7 @@ public static class AnalysisAliasComposer
                 var path = $"findings[{i}]";
                 if (!keys.Add(f.Key))
                 {
-                    _errors.Add($"{path}.key: chiave locale {f.Key} duplicata.");
+                    DuplicateKey(f.Key, $"{path}.key: chiave locale {f.Key} duplicata.");
                 }
 
                 var left = Evidence(f.Left, $"{path}.left");
@@ -437,7 +447,7 @@ public static class AnalysisAliasComposer
                 var path = $"patches[{i}]";
                 if (!keys.Add(p.Key))
                 {
-                    _errors.Add($"{path}.key: chiave locale {p.Key} duplicata.");
+                    DuplicateKey(p.Key, $"{path}.key: chiave locale {p.Key} duplicata.");
                 }
 
                 var evidence = EvidenceList(p.Evidence, $"{path}.evidence");
