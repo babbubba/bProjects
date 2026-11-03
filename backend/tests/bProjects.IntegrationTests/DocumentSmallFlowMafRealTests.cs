@@ -226,7 +226,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
                 new("R-04 storico fatture PDF", ["fatture"], ["r-04"]),
                 new("R-05 tema scuro ESCLUSO dal rilascio 1", ["tema scuro", "rilascio"], ["r-05"], Negative: true),
             ],
-            Violations: c => c.Items.Where(i => !i.InConflict && (i.Has("30 giorni") || i.Has("60 giorni")) && i.Has("pagamento")).Select(i => "termine di pagamento affermato fuori dal conflitto: " + i.Short),
+            Violations: c => c.Items.Where(i => !i.InConflict && AnalysisVerificationRules.AssertsPaymentTerm(i.Text)).Select(i => "termine di pagamento affermato fuori dal conflitto: " + i.Short),
             Correction: new("PM risolve il conflitto scegliendo la scheda B (60 giorni)", ResolveConflictInFavourOf60),
             DraftTokens: ["60", "tema scuro"],
             ExpectConflict: true,
@@ -847,7 +847,6 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
 
     // ================================================================ dati
 
-    private static readonly Regex NegativeMarker = new(@"\b(non|nessun\w*|senza|vietat\w*|vieta\w*|esclus\w*|escluder\w*|esclud\w*|mai|tranne)\b", RegexOptions.Compiled);
 
     private sealed record Source(Guid Id, string Kind, string? Quote, Guid? DocumentId, Guid? BlockId, int? Start, int? End, JsonNode Raw)
     {
@@ -872,7 +871,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
 
         public bool QuotesHave(string token) => Quotes.Any(q => Fold(q).Contains(token, StringComparison.Ordinal));
 
-        public bool NegativeText => NegativeMarker.IsMatch(Fold(Text));
+        public bool NegativeText => AnalysisVerificationRules.IsNegative(Text);
     }
 
     private sealed class Conflict(string status, IReadOnlyList<Item> alternatives, bool hasResolution, IReadOnlyList<Guid> resolutionRefs)
