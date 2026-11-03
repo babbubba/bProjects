@@ -222,3 +222,9 @@ Ambiente come sopra; una ripetizione per test; gold, asserzioni e validatori inv
 - **N2 FAIL** (18 PASS / 1 FAIL) e **N4 FAIL** (15 PASS / 1 FAIL): analisi `coverage_incomplete`, `evidence_not_mapped` (una evidenza non mappata su alcun item). Difetto di completezza del modello, diverso dalle chiavi duplicate.
 - Tabella cumulativa per test (prompt precedente → nuovo): N1 PASS→PASS; N2 PASS→FAIL; N3 PASS→PASS/FAIL/PASS; N4 PASS→FAIL; N5 FAIL→PASS. Il prompt da solo non rende stabile l'esito: la variabilità è del modello (analisi non determinista). Non è provato che la nuova regola causi i FAIL di N2/N4, né il contrario.
 - Gate N1–N5 NON soddisfatto in questa esecuzione; T067 e T126 restano aperti. Opzione da decidere dall'autore: retry guidato unico dell'analisi (chiavi duplicate, evidenze non mappate), nuovo contratto in ai-workflow.md.
+
+## Decima esecuzione N1–N5 (2026-11-04, HEAD 1e8bfa0, con retry guidato dell'analisi T130)
+Ambiente come sopra; una ripetizione per test; gold, asserzioni e validatori invariati.
+- N1 PASS (1m53s) · N2 PASS (1m34s) · N3 PASS (1m31s) · N5 PASS (1m31s).
+- **N4 FAIL** (15 PASS / 1 FAIL, 48s): `work_output_invalid`, `analysis.contextAndScope.included[1].evidenceRefs: Documented richiede almeno una fonte DocumentPassage`. È un errore diverso dalle due classi coperte dal retry (chiavi duplicate, evidenza non mappata), quindi per contratto (AI §10) non genera retry.
+- Gate N1–N5 NON soddisfatto (4/5). T130, T126 e T067 non spuntati. Il browser reale non è stato rieseguito.
