@@ -147,3 +147,45 @@ Esecuzione 2026-11-03 sul commit `7b09f02` (alias brevi nella fase bozza con ric
 
 ## Conclusione e proposta (NON applicata)
 T127 resta non verificato su DGX: serve un run in cui l'analisi passi per arrivare alla bozza. Proposta: rendere la ricostruzione tollerante ai `knownRelationChecks` su alias inesistente quando lo snapshot non ha relazioni note (scartare il verdetto, mai inventare), oppure togliere l'esempio `R1` dal prompt quando non ci sono relazioni note; poi rieseguire solo N3. Decisione dell'autore.
+
+---
+
+# Quinta esecuzione N1–N3 (dopo fix relazioni note e T127)
+
+Esecuzione 2026-11-03 sul commit `e932ee1` (prompt v3 senza alias R concreti e dichiarazione esplicita di assenza di relazioni note) con T127 (bozza con alias, `document-draft-v3`). Ordine N1, N2, N3, UNA inferenza alla volta, UNA ripetizione ciascuno, configurazione della sezione 1: Qwen3.6-35B-Smart (`BPROJECTS_TEST_DGX_MODEL` solo nel processo di test), W=131072 e slot idle verificati con `/props?model=` e `/slots?model=` prima di ogni test, reasoning OFF, output Analysis 16384, margine 1024, PG 15432 (`Database=postgres`), parser 58300. Filtri verificati con `--list-tests` (1 test ciascuno). Nessun tentativo caduto nel warm-up. Nessuna modifica a codice, prompt, test, gold, asserzioni. Report grezzi solo locali (`%TEMP%\bprojects-t067`, `%TEMP%\bprojects-diag`).
+
+**Esito: N1 FAIL (43/2), N2 FAIL (18/1), N3 FAIL (7/1). Gate N1-N3 NON soddisfatto.** T125/T127/T067 non spuntati; N4/N5 non eseguiti; nessuna ripetizione.
+
+## Per test e per stadio
+| Stadio | N1 PDF+DOCX | N2 MD+TXT | N3 conflitto + tabella |
+| --- | --- | --- | --- |
+| Fasi precedenti (upload, Ready, estrazione) | PASS (9 evidenze) | PASS (11) | PASS (7) |
+| Chat con fonti/citazioni | PASS (citazioni esatte) | PASS | **FAIL** (`work_output_invalid`: marcatore di fonte malformato) |
+| Analisi: token in/out, durata, finish | 2903 / 1209, 21,1 s, stop | 3060 / 935, 16,3 s, stop | NOT VERIFIED (non raggiunta) |
+| DTO / ricostruzione alias | OK (`knownRelationChecks: []`, 0 alias sconosciuti) | OK (`knownRelationChecks: []`) | NOT VERIFIED |
+| Dominio | OK (rev. 1.1.0, 28 voci, 10 fonti, 0 conflitti) | **KO: 1 violazione** (`assumptions[0].classification`: gli elementi di assumptions sono Assumed) | NOT VERIFIED |
+| Copertura / citazioni analisi | PASS (tutte le evidenze, citazioni 100%) | NOT VERIFIED | NOT VERIFIED |
+| Semantica vs gold annotati | PASS 7/7 (24 mesi, anonimo negato, SSO, rapporto, annullati esclusi, quinto giorno, Operatore sola lettura); 0 conflitti spuri; **FAIL regola «anonimo non negato»** (vedi sotto) | NOT VERIFIED (lettura mia, non del test: esclusioni, date, 45 giorni, divieti presenti) | NOT VERIFIED |
+| Correzione PM, attribuzione, conferma | PASS (PmEdit 1.1.0, fonte PmRevision aggiunta dal server, PmConfirmed, canGenerate) | NOT VERIFIED | NOT VERIFIED |
+| Bozza (T127): DTO alias, ricostruzione | OK (6 call totali; Document 2717 / 1097, 18,9 s, stop; alias I/F ricostruiti) | NOT VERIFIED | NOT VERIFIED |
+| Bozza: validazione | **KO `work_output_invalid`, 1 violazione**: item `049f7ed4...` non rappresentato in nessun blocco | NOT VERIFIED | NOT VERIFIED |
+| Bozza: citazioni solo item/alternative, semantica, Markdown con citazioni | NOT VERIFIED (bozza scartata) | NOT VERIFIED | NOT VERIFIED |
+| Chiamate / `length` | 6 / 0 | 5 / 0 | 4 / 0 |
+| Durata test | 2 m 07,8 s | 1 m 48,3 s | 1 m 12,2 s |
+
+## Classificazione degli errori
+1. **N1 bozza: omissione di un item (classe: errore del modello, fase Document T127).** Dai dati locali: l'item omesso e `I24` («Non e ammesso l'accesso anonimo ai dati degli ordini», constraint Documented, fonte F3); il modello ha riassunto il divieto in altri blocchi ma non ha elencato `I24` in alcun `items`. Il validatore ha rifiutato correttamente. Il problema UUID della terza prova non compare piu: gli alias I/F funzionano (0 id sconosciuti). Resta un'analisi molto ridondante (28 voci per 9 evidenze, stessi contenuti riformulati in piu sezioni), che moltiplica gli item da rappresentare.
+2. **N1 analisi: regola del test «accesso anonimo non negato» (classe: test, regola troppo stretta; non errore del modello).** Viola la voce «Divieto di accesso anonimo ai dati degli ordini.» (non `InConflict`, contiene «anonim»): la regola `NegativeMarker` riconosce `non|nessun*|senza|vietat*|vieta*|esclus*|escluder*|esclud*|mai|tranne` ma non «divieto», quindi una negazione corretta e contata come non negata. La voce gemella «Non e ammesso l'accesso anonimo...» passa. Non corretto (asserzioni intoccabili): serve decisione dell'autore.
+3. **N2 analisi: classificazione incoerente con la sezione (classe: errore del modello, semantico/istruzione).** `i21` in `assumptions`: «Esiste un riferimento alle Linee guida, ma il collegamento fornito non e attivo o valido», `classification=Documented` (evidenza E11). La regola impone Assumed nella sezione assumptions; e anche un fatto del documento messo nella sezione sbagliata. Il resto dell'analisi (20 voci, 0 conflitti, `knownRelationChecks: []`, `noFindings` valorizzato) appare coerente (lettura mia, NOT VERIFIED dal test per fail-fast).
+4. **N3 chat: UUID di fonte malformato (classe: errore di copia di id del modello, fase Chat, UUID reali nel contratto chat, non toccata da T125/T127).** Il modello ha scritto `[fonte:b9a595a8-89c1-9f29-bfc5c8b6fd80]` al posto di `b9a595a8-89c1-5908-9f29-bfc5c8b6fd80` (gruppo `5908` perso, UUID a 4 gruppi); il resto della risposta (60 vs 30 giorni, R-05 escluso) e semanticamente corretto. Il test si ferma prima di analisi, conflitto, correzione, conferma, bozza: tutto NOT VERIFIED. Nessuna HttpIOException; non e un caso di warm-up. Non rilanciato (regola: nessuna ripetizione).
+- **Regola «termine di pagamento affermato fuori dal conflitto» (N3):** NON valutata in questa esecuzione (analisi non raggiunta). Testo invariato: viola ogni voce non `InConflict` che contiene «30 giorni» o «60 giorni» e «pagamento» (riga `Violations` di N3 nel test); nella terza prova colpiva una domanda aperta e una nota di discrepanza che nominano entrambi i valori senza affermarne uno. Decisione dell'autore ancora aperta.
+- Nessun errore di runtime, contesto, output (0 `length`), preflight, parser, DTO strict, ricostruzione. Il fix «alias R concreti» e verificato per i casi raggiunti: `knownRelationChecks: []` in N1 e N2 (l'errore `R1` della quarta esecuzione non si ripresenta).
+
+## Confronto e proposte (NON applicate)
+| Test | Seconda | Terza/Quarta | Quinta |
+| --- | --- | --- | --- |
+| N1 | PASS | n/a | FAIL (regola test «Divieto» + bozza omette I24) |
+| N2 | PASS | n/a | FAIL (assumption classificata Documented) |
+| N3 | FAIL (bozza/attribuzione) | FAIL (UUID bozza; poi R1 in analisi) | FAIL (UUID di fonte nella chat) |
+
+Con n=1 per test lo stesso contratto passa e fallisce tra esecuzioni (N1/N2 PASS nella seconda, FAIL nella quinta): la varianza a reasoning OFF e alta e l'esito dipende da errori diversi ogni volta. Proposte: (a) regola N1: aggiungere «divieto» al `NegativeMarker`; (b) validatore/ricostruttore: correggere o derivare lato server la classificazione di una voce in `assumptions` (Assumed); (c) bozza: riparazione server-side degli item omessi (aggiungerli a un blocco con le loro fonti) o un solo tentativo guidato con l'elenco degli item mancanti; (d) chat: alias brevi per le fonti anche nella chat (come analisi e bozza) o riparazione dei marcatori quasi corretti con corrispondenza univoca. Servono approvazione e nuova verifica senza allentare test o gold.
