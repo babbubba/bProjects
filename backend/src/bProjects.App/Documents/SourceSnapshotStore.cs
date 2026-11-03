@@ -11,16 +11,16 @@ namespace bProjects.App.Documents;
 /// <summary>
 /// Snapshot di selezione fissati al comando (002 T057; data-model «SourceSnapshot / Item», contracts/http-api.md §Selezione). Unico punto che
 /// scrive snapshot: chat e Analizza ne creano uno sotto il lock di progetto, la generazione ne eredita uno dalla revisione, mai quello corrente.
-/// Definizioni e versioni di prompt/schema documentali sono persistite sul root alla richiesta: le NUOVE richieste di Analizza congelano la v3 con
-/// alias (T125, AI §7.8); un run già congelato con la v2 (storica) resta v2 e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
+/// Definizioni e versioni di prompt/schema documentali sono persistite sul root alla richiesta: le NUOVE richieste di Analizza (T125, AI §7.8) e di
+/// Genera (T127, AI §7.11) congelano la v3 con alias; un run già congelato con la v2 (storica) resta v2 e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
 /// </summary>
 public sealed class SourceSnapshotStore(AppDbContext db)
 {
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV3;
-    public const string DocumentDefinition = "project-document-documents-v2";
+    public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV3;
     public const string AnalysisSchemaVersion = "1.1.0";
-    public const string DocumentPromptVersion = "document-documents-v2";
+    public const string DocumentPromptVersion = DocumentSourceDraftWorkflow.PromptVersionV3;
 
     /// <summary>Ramo documentale solo se almeno una fonte è Ready nello snapshot: senza, il run resta sul grafo e sul prompt 001.</summary>
     public static bool HasReadySource(SourceEvaluation? evaluation) =>
@@ -90,6 +90,11 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             algorithm = DocumentAnalysisWorkflow.AlgorithmVersionV3, validation = DocumentAnalysisWorkflow.ValidationVersionV3,
         });
 
+    /// <summary>Versioni congelate di una nuova richiesta di Genera v3 (T127): prompt, schema del canonico 1.1.0, schema AI della bozza, catalogo, algoritmo e validazione.</summary>
     public static string DocumentPromptVersions() =>
-        JsonSerializer.Serialize(new { document = DocumentPromptVersion, analysisSchema = AnalysisSchemaVersion });
+        JsonSerializer.Serialize(new
+        {
+            document = DocumentPromptVersion, analysisSchema = AnalysisSchemaVersion, draftAiSchema = DocumentSourceDraftWorkflow.SchemaVersionV3,
+            draftCatalog = DraftAliasCatalog.Version, algorithm = DocumentSourceDraftWorkflow.AlgorithmVersionV3, validation = DocumentSourceDraftWorkflow.ValidationVersionV3,
+        });
 }

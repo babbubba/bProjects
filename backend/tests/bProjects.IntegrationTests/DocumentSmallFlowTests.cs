@@ -253,7 +253,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
 
         // --- Nessun falso Completed: un solo workflow per root, una sola chiamata, nessuna chiamata del grafo 001.
         Assert.DoesNotContain(_model.Graphs, g => g is Graph.Chat001 or Graph.Analysis001 or Graph.Draft001);
-        Assert.Equal([Graph.DocChat, Graph.DocAnalysisV3, Graph.DocDraft], _model.Graphs.Where(g => g != Graph.Extract));
+        Assert.Equal([Graph.DocChat, Graph.DocAnalysisV3, Graph.DocDraftV3], _model.Graphs.Where(g => g != Graph.Extract));
     }
 
     // ================================================================ 2. attesa oltre la deadline ordinaria: mai un invio, mai Completed
@@ -383,7 +383,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         var goodRow = await Row("ProcessingRuns", good);
         Assert.Equal("Completed", goodRow["Status"]?.ToString());
         var revision = await ConfirmAsync(client, project, good);
-        _model.Rewrite = (graph, _, reply) => graph == Graph.DocDraft ? reply.Replace("[fonte:", $"[fonte:{Guid.NewGuid()}][fonte:") : reply;
+        _model.Rewrite = (graph, _, reply) => graph == Graph.DocDraftV3 ? reply.Replace("[fonte:", $"[fonte:{Guid.NewGuid()}][fonte:") : reply;
         var badDraft = await StartGeneration(client, project, good, revision);
         await DrainAsync();
         var badRow = await Row("ProcessingRuns", badDraft);
@@ -392,7 +392,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         Assert.Equal(404, (int)(await client.GetAsync($"/api/projects/{project}/draft", Ct)).StatusCode);
 
         // Bozza che omette un item della revisione confermata => Failed.
-        _model.Rewrite = (graph, _, reply) => graph == Graph.DocDraft ? Mutate(reply, n => n["blocks"]![0]!["itemIds"]!.AsArray().RemoveAt(0)) : reply;
+        _model.Rewrite = (graph, _, reply) => graph == Graph.DocDraftV3 ? Mutate(reply, n => n["blocks"]![0]!["items"]!.AsArray().RemoveAt(0)) : reply;
         var omitted = await StartGeneration(client, project, good, revision);
         await DrainAsync();
         var omittedRow = await Row("ProcessingRuns", omitted);
@@ -839,7 +839,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { Extract, DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, Draft001, Other }
+    internal enum Graph { Extract, DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -851,6 +851,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
+            : s.Contains(Norm(DocumentSourceDraftWorkflow.InstructionsV3)) ? Graph.DocDraftV3
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001
             : s.Contains(Norm(DocumentAgent.Instructions)) ? Graph.Draft001
             : s.Contains(Norm(ConversationalAgent.Instructions)) ? Graph.Chat001
@@ -877,6 +878,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
             Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO semantico nella risposta
             Graph.Analysis001 => LegacyAnalysisReply(request.Text),
             Graph.DocDraft => DocumentDraftReply(request.Text),
+            Graph.DocDraftV3 => DraftAliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO con alias nella risposta
             Graph.Draft001 => $"# Documento\n\n- Obiettivo [fonte:{Regex.Match(request.Text, "\"sources\"\\s*:\\s*\\[\\s*\\{\\s*\"id\"\\s*:\\s*\"([0-9a-f-]{36})\"").Groups[1].Value}]",
             _ => throw new InvalidOperationException("Richiesta al modello di un grafo non riconosciuto."),
         };

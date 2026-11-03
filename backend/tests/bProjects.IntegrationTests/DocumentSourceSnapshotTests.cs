@@ -23,7 +23,8 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
 {
     // T125: le NUOVE richieste di Analizza congelano la v3 con alias; la v2 resta storica (run già richiesti).
     private const string AnalysisDocumentsV3 = "project-analysis-documents-v3";
-    private const string DocumentDocumentsV2 = "project-document-documents-v2";
+    // T127: le NUOVE richieste di Genera congelano la v3 con alias; la v2 resta storica (run già richiesti).
+    private const string DocumentDocumentsV3 = "project-document-documents-v3";
 
     protected override void Tune(DocumentOptions options)
     {
@@ -337,7 +338,7 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         var runId = (await Json(response)).GetProperty("id").GetGuid();
         Assert.Equal(analysisSnapshot, await SnapshotOf("ProcessingRuns", runId));   // ereditato, non ricalcolato
         Assert.Equal(1, await Count("SELECT count(*) FROM \"SourceSnapshots\""));      // nessuno snapshot corrente creato dalla generazione
-        Assert.Equal(DocumentDocumentsV2, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
+        Assert.Equal(DocumentDocumentsV3, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
         Assert.Equal(revisionBefore, await Scalar<string>("SELECT md5(to_jsonb(r)::text) FROM \"AnalysisRevisions\" r WHERE \"Id\" = @i", ("i", revision)));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"Drafts\""));
     }

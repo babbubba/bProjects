@@ -134,11 +134,56 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(generation);
         Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
-        Assert.Equal([Graph.DocAnalysisV3, Graph.DocDraft], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV3, Graph.DocDraftV3], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProcessingRunId\" = @r AND \"AnalysisRevisionId\" = @v", ("r", generation), ("v", revision)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", generation)));
-        Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
+        Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
         await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", generation, expectedPayloadMeasured: true);
+    }
+
+    [Fact]
+    public async Task A_generation_run_requested_before_the_alias_draft_and_frozen_with_v2_still_completes_with_the_v2_prompt_and_decoder()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var analysis = await StartAnalysis(client, project);
+        await DrainAsync();
+        var revision = await ConfirmAsync(client, project, analysis);
+        var generation = await StartGeneration(client, project, analysis, revision);
+        await Execute(
+            "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-document-documents-v2', \"PromptVersions\" = '{\"document\":\"document-documents-v2\",\"analysisSchema\":\"1.1.0\"}'::jsonb WHERE \"Id\" = @r",
+            ("r", generation));
+
+        await DrainAsync();
+
+        var row = await RunRow(generation);
+        Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
+        Assert.Equal([Graph.DocAnalysisV3, Graph.DocDraft], _model.Graphs);   // il run v2 usa il prompt e il messaggio con UUID della v2, mai l'alias
+        Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProcessingRunId\" = @r", ("r", generation)));
+    }
+
+    [Fact]
+    public async Task The_regime_probe_payload_of_a_generation_root_follows_its_frozen_definition()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var analysis = await StartAnalysis(client, project);
+        await DrainAsync();
+        var revision = await ConfirmAsync(client, project, analysis);
+        var generation = await StartGeneration(client, project, analysis, revision);
+        var draft = App.Services.GetRequiredService<DocumentSourceDraftWorkflow>();
+
+        var v3 = await draft.BuildRegimePayloadAsync(generation, Ct);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-document-documents-v2' WHERE \"Id\" = @r", ("r", generation));
+        var v2 = await draft.BuildRegimePayloadAsync(generation, Ct);
+
+        Assert.Equal(DraftAliasContracts.JsonSchema().GetRawText(), v3.SchemaJson);
+        Assert.Equal(DocumentSourceDraftWorkflow.InstructionsV3, v3.Payload!.Instructions);
+        Assert.Equal(DocumentSourceDraftWorkflow.Instructions, v2.Payload!.Instructions);
+        Assert.NotEqual(v2.SchemaJson, v3.SchemaJson);
     }
 
     // ================================================================ T064: attribuzione document_sources nella composizione della chiamata realmente inviata
@@ -425,6 +470,10 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     [Theory]
     [InlineData("project-document-documents-v9", """{"document":"document-documents-v2","analysisSchema":"1.1.0"}""")]
+    [InlineData("project-document-documents-v3", """{"document":"document-documents-v2","analysisSchema":"1.1.0"}""")]   // v3 con prompt v2: mai un downgrade
+    [InlineData("project-document-documents-v3", """{"document":"document-draft-v3","analysisSchema":"1.1.0"}""")]       // v3 senza schema, catalogo, algoritmo e validazione congelati
+    [InlineData("project-document-documents-v2", """{"document":"document-draft-v3","analysisSchema":"1.1.0","draftAiSchema":"document-draft-alias-1","draftCatalog":"draft-alias-catalog-1","algorithm":"draft-single-v2","validation":"document-draft-validation-v2"}""")]   // v2 con prompt v3: mai un upgrade
+    [InlineData("project-document-documents-v4", """{"document":"document-draft-v3","analysisSchema":"1.1.0","draftAiSchema":"document-draft-alias-1","draftCatalog":"draft-alias-catalog-1","algorithm":"draft-single-v2","validation":"document-draft-validation-v2"}""")]   // definizione futura ignota
     [InlineData("project-document-documents-v2", """{"document":"document-documents-v1","analysisSchema":"1.1.0"}""")]
     [InlineData("project-analysis-documents-v2", """{"document":"document-documents-v2"}""")]
     public async Task An_unknown_or_incompatible_generation_definition_fails_explicitly_and_never_reaches_the_model(string definition, string prompts)
@@ -627,7 +676,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, Draft001, Other }
+    internal enum Graph { DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -640,6 +689,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
+            : s.Contains(Norm(DocumentSourceDraftWorkflow.InstructionsV3)) ? Graph.DocDraftV3
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001
             : s.Contains(Norm(DocumentAgent.Instructions)) ? Graph.Draft001
             : s.Contains(Norm(ConversationalAgent.Instructions)) ? Graph.Chat001
@@ -655,6 +705,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // il modello vede solo alias e produce il DTO semantico
         Graph.Analysis001 => LegacyAnalysisReply(request.Text),
         Graph.DocDraft => DocumentDraftReply(request.Text),
+        Graph.DocDraftV3 => DraftAliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO con alias nella risposta
         Graph.Draft001 => $"# Documento\n\n- Obiettivo [fonte:{Regex.Match(request.Text, "\"sources\"\\s*:\\s*\\[\\s*\\{\\s*\"id\"\\s*:\\s*\"([0-9a-f-]{36})\"").Groups[1].Value}]",
         _ => throw new InvalidOperationException("Richiesta al modello di un grafo non riconosciuto."),
     };

@@ -64,9 +64,9 @@ public sealed class DocumentWorkflow(IServiceScopeFactory scopes, DocumentAgent 
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Document, ct);
-        if (documentary is not null && run.WorkflowDefinitionVersion == DocumentSourceDraftWorkflow.DefinitionVersion)
+        if (documentary is not null && run.WorkflowDefinitionVersion is DocumentSourceDraftWorkflow.DefinitionVersion or DocumentSourceDraftWorkflow.DefinitionVersionV3)
         {
-            // Definizione documentale congelata alla richiesta (T057/T123): grafo 2 con guard e resume propri, mai il guard 001 che la rifiuterebbe.
+            // Definizione documentale {v2, v3} congelata alla richiesta (T057/T123/T127; ContractOf rifiuta le versioni ignote): grafo 2 con guard e resume propri, mai il guard 001 che la rifiuterebbe.
             return await documentary.ExecuteAsync(claim, ct);
         }
 

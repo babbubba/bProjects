@@ -89,3 +89,35 @@ Le tre cause della prima prova risultano eliminate in 3/3: nessuna classificazio
 
 ## Gate e correzioni proposte (NON applicate, nessuna terza prova)
 Gate N1-N3: **no** (N3 FAIL). Proposte, da approvare: (a) aspettativa di N3: verificare la fonte PmRevision anche in `conflicts[].resolution.evidenceRefs` (nessun allentamento: la fonte deve comunque essere PmRevision e aggiunta dal server) oppure usare per N3 una correzione su una voce; (b) bozza: nel messaggio della fase Document distinguere in modo esplicito gli id citabili (item e alternative) dall'id del conflitto e dalle fonti di risoluzione (non citabili come sostegno), oppure esporre il conflitto senza `id` proprio; poi rieseguire solo N3 (e, a gate chiuso, decidere su N4/N5). Nessun segnale che l'analisi v3 richieda altre modifiche.
+
+---
+
+# Terza esecuzione N3 (dopo fix bozza/attribuzione)
+
+Esecuzione 2026-11-03 sul commit `68b47d8` (messaggio di bozza senza id del conflitto, attribuzione PM che ammette `conflicts[].resolution.evidenceRefs`). Solo N3, UNA ripetizione, stessa configurazione della sezione 1 (Qwen3.6-35B-Smart, W=131072 e slot idle verificati con `/props?model=` e `/slots?model=`, reasoning OFF, output Analysis 16384, margine 1024, PG 15432 con `Database=postgres` come DB amministrativo, parser 58300). Filtro verificato con `--list-tests` (1 test). Nessuna modifica a codice, prompt, test, gold. Un tentativo precedente e fallito in 19 s nel warm-up `Require()` (`HttpIOException: response ended prematurely`, router DGX che risvegliava il modello): il test non era iniziato, nessuna fase eseguita, quindi non conta come ripetizione e il run e stato rilanciato una sola volta con modello gia `loaded`.
+
+**Esito: N3 FAIL (50 PASS / 3 FAIL). Analisi, correzione PM, attribuzione e conferma PASS; falliscono 2 verifiche semantiche di analisi (violazioni del test) e la bozza (`work_output_invalid`). Gate N1-N3 NON soddisfatto.** Nessuna terza ripetizione. T125/T067 non spuntati; N4/N5 non eseguiti.
+
+## Per stadio
+| Stadio | Esito |
+| --- | --- |
+| Analisi: token in/out, durata, finish | 2556 / 845, 14,4 s, stop (0 `length`; 7 chiamate totali) |
+| DTO, ricostruzione alias, dominio | OK (revisione 1.1.0), 0 chiavi duplicate |
+| Copertura / citazioni | PASS (7/7 evidenze rappresentate; 100% citazioni corrette) |
+| Semantica attese annotate | PASS 7/7 (30, 60, R-01..R-04, R-05 ESCLUSO) |
+| Conflitto | PASS: 1 conflitto Open, 2 alternative (30 e 60 giorni), resolution null |
+| Classificazioni | tutte Documented/Inferred coerenti (1 Inferred su domanda aperta) |
+| «nessuna inversione/errore» | **FAIL 2 violazioni** (vedi sotto) |
+| Correzione PM (risolve per 60) | PASS (PUT 200, PmEdit 1.1.0, revisione AI intatta) |
+| Attribuzione PmRevision | **PASS** (il fix dell'asserzione funziona) |
+| Conferma | PASS (PmConfirmed, canGenerate) |
+| Bozza | **FAIL `work_output_invalid`** (2 violazioni); call Document 5908 / 3167, 55,4 s, stop |
+| Citazioni bozza solo item/alternative, semantica (60 vs 30, R-05 esclusa), Markdown | NOT VERIFIED (bozza scartata dal validatore) |
+
+## Classificazione degli errori
+1. **Bozza: UUID di item corrotto nel blocco 1 (classe: errore di copia di id del modello, fase Document, contratto bozza v2 che usa UUID reali, non alias).** Il modello ha emesso `358a2730-2dfc-8941-828d-e02f67856759` al posto di `358a2730-2dfc-8941-828d-230af10cf0a5` (item «Storico fatture in PDF»): ha mescolato il prefisso del vero id con l'ultimo gruppo del vicino `f9acc383-32b8-8df4-842d-e02f67856759`. Le due violazioni sono la stessa causa (id inesistente citato; id reale non rappresentato). Il problema precedente (id del conflitto / fonte della risoluzione nei blocchi) NON si ripresenta: il fix del messaggio e efficace, ma resta la classe «copia di UUID» gia eliminata nell'analisi dagli alias e ancora presente nella fase Document.
+2. **«termine di pagamento affermato fuori dal conflitto» (2 voci) - classe: strettezza della regola del test / ridondanza del modello, non errore di valore.** Le voci sono la domanda aperta «Qual e il termine di pagamento effettivo (30 o 60 giorni)?» e la nota «Esistono discrepanze ... (30 vs 60 giorni)»: nessuna afferma un termine, ma citano entrambi i numeri fuori dal conflitto, e la regola `Violations` del test le conta (testo con «60 giorni» + «pagamento», non `InConflict`). Il modello ha anche duplicato lo stesso contenuto in piu sezioni (19 voci per 7 evidenze: goal, scope e requisiti riformulati e ripetuti), il che e rumore ma non viola il contratto. Non corretto (test e gold intoccabili): serve decisione se una domanda aperta/discrepanza che nomina entrambi i valori sia ammessa.
+- Nessun errore di runtime, contesto, output, preflight, parser, DTO, ricostruzione, dominio, citazioni.
+
+## Correzioni proposte (NON applicate)
+(a) Bozza: rendere gli id citabili non copiati dal modello, con alias locali anche nella fase Document (come per l'analisi) e mappatura server-side a UUID, oppure riparare/rifiutare con un nuovo tentativo guidato dal solo elenco di id validi; e la correzione robusta, perche il modello non copia affidabilmente gli UUID. (b) Regola del test: restringere `Violations` alle sole voci che affermano un singolo termine (es. escludere voci che nominano entrambi i valori 30 e 60 / `Questions`), oppure istruire il prompt a non generare voci duplicate sul termine di pagamento: decisione dell'autore. Poi rieseguire solo N3.
