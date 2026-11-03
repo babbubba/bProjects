@@ -1,7 +1,13 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { ContextUsageStore } from './context-usage.store';
-import { InferenceMetrics, InferencePhase, TokenSource, TokenValue } from './project-api.service';
-import { formatCount, formatToken, hasValue } from './token-format';
+import {
+  ExecutionView,
+  InferenceMetrics,
+  InferencePhase,
+  TokenSource,
+  TokenValue,
+} from './project-api.service';
+import { formatCount, formatDuration, formatToken, hasValue } from './token-format';
 
 interface Figure {
   id: 'ctx' | 'max' | 'gen';
@@ -26,6 +32,14 @@ const provenance: Record<TokenSource, string> = {
   unavailable: 'non disponibile',
 };
 
+interface Timing {
+  id: 'elapsed' | 'queue' | 'preflight' | 'processing' | 'backoff' | 'recovery';
+  label: string;
+  /** Durata formattata; «indisponibile» se l'intervallo non è stato osservato (mai zero). */
+  text: string;
+  available: boolean;
+}
+
 /**
  * Riga discreta di metriche di inferenza: CTX (capacità contestuale reale dello slot), Max output (massimo richiesto
  * per la chiamata) e Generati (token effettivi, ragionamento incluso; il suo contenuto non è mai mostrato).
@@ -44,6 +58,28 @@ export class InferenceMetricsComponent {
   readonly running = input(false);
   /** Fase della richiesta, per leggere il limite di output noto dal monitor del contesto. */
   readonly phase = input<InferencePhase>('chat');
+  /** Regime e tempi del root (002); assente o null = record 001 o senza telemetria: nessun tempo mostrato. */
+  readonly execution = input<ExecutionView | null | undefined>(null);
+
+  /** Tempi per fase, uno per intervallo esclusivo del server: coda, preflight, calcolo, backoff e recupero. */
+  protected readonly timings = computed<Timing[] | null>(() => {
+    const e = this.execution();
+    if (!e) return null;
+    const row = (id: Timing['id'], label: string, ms: number | null): Timing => ({
+      id,
+      label,
+      text: formatDuration(ms),
+      available: ms !== null && ms !== undefined,
+    });
+    return [
+      row('elapsed', 'Totale trascorso', e.elapsedMs),
+      row('queue', 'Coda', e.queueMs),
+      row('preflight', 'Preflight', e.preflightMs),
+      row('processing', 'Calcolo', e.processingMs),
+      row('backoff', 'Backoff', e.backoffMs),
+      row('recovery', 'Recupero', e.recoveryMs),
+    ];
+  });
 
   protected readonly view = computed<MetricsView>(() => {
     const metrics = this.metrics();

@@ -36,6 +36,35 @@ export interface InferenceMetrics {
   };
 }
 
+/**
+ * Vista `execution` di un root AI (contratto HTTP 002): solo misure e metadati. Un tempo `null` è «indisponibile»
+ * (intervallo non osservato), mai zero; nessun campo certifica il rispetto di una durata prevista.
+ */
+export interface ExecutionView {
+  initialRegime: 'Ordinary' | 'Extended' | null;
+  regime: 'Ordinary' | 'Extended' | null;
+  classificationStatus: 'Pending' | 'Classified' | 'Rejected' | null;
+  classificationVersion: string | null;
+  classificationRecordHash: string | null;
+  reason: string | null;
+  requestedAt: string;
+  ordinaryDeadlineAt: string | null;
+  hardDeadlineAt: string | null;
+  effectiveDeadlineAt: string | null;
+  promotedAt: string | null;
+  promotionReason: string | null;
+  promotionReceiptHash: string | null;
+  elapsedMs: number;
+  queueMs: number | null;
+  processingMs: number | null;
+  preflightMs: number | null;
+  backoffMs: number | null;
+  recoveryMs: number | null;
+  stage: string | null;
+  completedUnits: number | null;
+  plannedUnits: number | null;
+}
+
 export type ContextUsageKind = 'chat' | 'analysis' | 'document';
 
 export interface ContextCompositionItem {
@@ -74,6 +103,8 @@ export interface ContextUsage {
     safetyMarginTokens: number;
     remainingTokens: TokenValue;
     staleReason: null | 'newer_messages';
+    /** 002: regime, ricevuta e tempi del root; assente o null nei record 001 e senza telemetria. */
+    execution?: ExecutionView | null;
   };
   composition: null | {
     promptTokens: TokenValue;
@@ -159,6 +190,7 @@ export interface ChatTurnView {
   /** 002: selezione fonti fissata alla richiesta; assente nei record 001. */
   sourceSnapshotId?: string | null;
   hasSourceChanges?: boolean;
+  execution?: ExecutionView | null;
 }
 
 export type ProcessingRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed';
@@ -185,6 +217,7 @@ export interface ProcessingRunView {
   metrics?: InferenceMetrics | null;
   sourceSnapshotId?: string | null;
   hasSourceChanges?: boolean;
+  execution?: ExecutionView | null;
 }
 
 export interface AnalyzeResult {

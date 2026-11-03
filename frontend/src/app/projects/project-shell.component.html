@@ -147,7 +147,9 @@
             </button>
           </nav>
         </header>
-        <app-context-usage-panel class="project-usage" [projectId]="project.id" />
+        @defer (on immediate) {
+          <app-context-usage-panel class="project-usage" [projectId]="project.id" />
+        }
         <div class="project-body" [hidden]="section() !== 'work'">
           <app-chat [projectId]="project.id" />
           <app-analysis-preview

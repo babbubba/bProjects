@@ -20,6 +20,14 @@
             Contesto in esaurimento (oltre il {{ warningPercent }}%).
           </p>
         }
+        @if (execution(); as x) {
+          @if (x.background) {
+            <p class="small text-secondary mb-2" data-testid="execution-extended-note">
+              L'elaborazione richiede più tempo e prosegue in background; puoi continuare a usare
+              l'applicazione.
+            </p>
+          }
+        }
         @if (s.stale) {
           <p class="small text-secondary mb-2" data-testid="usage-stale">
             La misura si riferisce all'ultima inferenza completata: ci sono messaggi più recenti non
@@ -99,9 +107,94 @@
       @if (summary(); as s) {
         <section class="usage-section" aria-label="Ultima richiesta AI">
           <h3 class="h6">Ultima richiesta AI</h3>
-          <app-inference-metrics [metrics]="s.metrics" />
+          <app-inference-metrics [metrics]="s.metrics" [execution]="s.execution" />
+        </section>
+
+        <section
+          class="usage-section"
+          aria-label="Esecuzione della richiesta"
+          data-testid="usage-execution"
+        >
+          <h3 class="h6">Esecuzione</h3>
+          @if (execution(); as x) {
+            <p class="small mb-1" data-testid="execution-regime">
+              Regime: {{ x.regime }}
+              @if (x.provisional) {
+                <span class="text-secondary">(provvisorio)</span>
+              }
+              @if (x.receipt) {
+                · ricevuta
+                <code
+                  data-testid="execution-receipt"
+                  [attr.title]="'Ricevuta tecnica ' + x.receiptFull"
+                  >{{ x.receipt }}</code
+                >
+              }
+            </p>
+            @if (x.reason) {
+              <p class="small mb-1" data-testid="execution-reason">{{ x.reason }}</p>
+            }
+            @if (x.change; as c) {
+              <p class="small mb-1" data-testid="execution-regime-change">
+                {{ c.text }}
+                @if (c.at) {
+                  ({{ c.at }})
+                }
+                @if (c.reason) {
+                  : {{ c.reason }}
+                }
+                @if (c.receipt) {
+                  · ricevuta
+                  <code
+                    data-testid="execution-promotion-receipt"
+                    [attr.title]="'Ricevuta tecnica ' + c.receiptFull"
+                    >{{ c.receipt }}</code
+                  >
+                }
+              </p>
+            }
+            <p class="small mb-1" data-testid="execution-deadline">
+              @if (x.deadline) {
+                Limite massimo: {{ x.deadline }}. È un tetto di tempo per il comando, non è una
+                durata prevista.
+              } @else {
+                Limite massimo: non disponibile.
+              }
+            </p>
+            <p class="small mb-0" data-testid="execution-units">{{ x.units }}</p>
+          } @else {
+            <p class="small text-secondary mb-0" data-testid="execution-none">
+              Dati di esecuzione non disponibili per questa richiesta.
+            </p>
+          }
         </section>
       }
+
+      <section class="usage-section" aria-label="Budget per fase">
+        <h3 class="h6">Budget per fase</h3>
+        <table class="table table-sm usage-table" data-testid="phase-budgets">
+          <caption class="small text-secondary" data-testid="phase-budgets-caption">
+            Limiti configurati, non consumi: il budget di input e l'output massimo richiesto per
+            ciascuna fase.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Fase</th>
+              <th scope="col" class="text-end">Budget input</th>
+              <th scope="col" class="text-end">Output massimo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (b of phaseBudgets(); track b.id) {
+              <tr [attr.data-phase]="b.id">
+                <th scope="row">{{ b.label }}</th>
+                <td class="text-end">{{ b.input }}</td>
+                <td class="text-end">{{ b.output }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
 
       <section class="usage-section" aria-label="Composizione del contesto">
         <h3 class="h6">
@@ -119,9 +212,11 @@
         <div id="context-usage-composition" [hidden]="!compositionOpen()" data-testid="composition">
           @if (composition(); as c) {
             <table class="table table-sm usage-table">
-              <caption class="small text-secondary">
+              <caption class="small text-secondary" data-testid="composition-caption">
                 Prompt dell'ultima richiesta, per voce. «Misurato» viene dal tokenizer del server,
-                «stima» è dichiarata e la quota non attribuita è il resto fino al totale.
+                «stima» è dichiarata e la quota non attribuita è il resto fino al totale. «Fonti
+                documentali» è il testo delle fonti inviato al modello in questa richiesta, non le
+                fonti salvate nel progetto.
               </caption>
               <thead>
                 <tr>

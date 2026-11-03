@@ -1,4 +1,4 @@
-import { Injectable, InjectionToken, inject, signal } from '@angular/core';
+import { Injectable, InjectionToken, OnDestroy, inject, signal } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
 import { ContextUsage, ProjectApiService } from './project-api.service';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
@@ -9,17 +9,34 @@ export const CONTEXT_USAGE_DEBOUNCE_MS = new InjectionToken<number>('CONTEXT_USA
   factory: () => 250,
 });
 
+/** Intervallo (ms) del polling GET di riconciliazione quando lo stream eventi è perso o la sessione è assente. */
+export const CONTEXT_USAGE_POLL_MS = new InjectionToken<number>('CONTEXT_USAGE_POLL_MS', {
+  providedIn: 'root',
+  factory: () => 2000,
+});
+
+/** Eventi che cambiano ciò che il monitor mostra: il GET resta la fonte, l'evento fa solo rileggerlo. */
+const REFRESH_EVENTS = new Set([
+  'chat.state',
+  'processing.state',
+  'document.state',
+  'execution.regime-changed',
+]);
+
 /**
- * Stato del monitor del contesto del progetto aperto, condiviso da pannello e chat.
+ * Stato del contesto del progetto aperto, condiviso da pannello e chat.
  * Riusa lo stream SSE già aperto (ref-count di ProjectEventsService): chat.state, processing.state e la
  * riconnessione fanno solo rifare il GET context-usage. Le risposte di un progetto precedente sono scartate.
+ * Senza stream (primo tentativo fallito, caduta, logout) sonda ogni CONTEXT_USAGE_POLL_MS con soli GET, mai POST,
+ * finché lo stream non torna; al ritorno della sessione riapre lo stream. Gli eventi persi si riconciliano così.
  */
 @Injectable({ providedIn: 'root' })
-export class ContextUsageStore {
+export class ContextUsageStore implements OnDestroy {
   private readonly api = inject(ProjectApiService);
   private readonly events = inject(ProjectEventsService);
   private readonly auth = inject(AuthService);
   private readonly debounceMs = inject(CONTEXT_USAGE_DEBOUNCE_MS);
+  private readonly pollMs = inject(CONTEXT_USAGE_POLL_MS);
 
   readonly usage = signal<ContextUsage | null>(null);
   /** Vero dopo un GET fallito: nessun valore precedente viene mostrato come attuale. */
@@ -30,26 +47,24 @@ export class ContextUsageStore {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inFlight: number | null = null;
   private again = false;
+  private closeStream: () => void = () => undefined;
+  private streamOpen = false;
+  private poller: ReturnType<typeof setInterval> | null = null;
 
   /** Inizia a seguire il progetto (azzera lo stato precedente); restituisce la funzione di chiusura. */
   watch(projectId: string): () => void {
+    this.disconnect();
     this.stop();
     const gen = ++this.generation;
     this.projectId = projectId;
     this.usage.set(null);
     this.failed.set(false);
-    let close: () => void = () => undefined;
-    if (this.auth.isAuthenticated()) {
-      close = this.events.open(projectId, {
-        onConnected: () => this.refresh(),
-        onEvent: (e) => this.onEvent(e),
-        onDisconnected: () => undefined,
-      });
-    }
+    if (this.auth.isAuthenticated()) this.connect(projectId);
+    else this.startPolling(); // senza sessione: nessuno stream, il ritorno della sessione lo apre
     this.refresh();
     return () => {
-      close();
       if (gen === this.generation) {
+        this.disconnect();
         this.stop();
         this.generation++;
         this.projectId = null;
@@ -67,10 +82,62 @@ export class ContextUsageStore {
   }
 
   private onEvent(event: ProjectStreamEvent): void {
-    if (event.name === 'chat.state' || event.name === 'processing.state') this.refresh();
+    if (REFRESH_EVENTS.has(event.name)) this.refresh();
+  }
+
+  private connect(projectId: string): void {
+    const gen = this.generation;
+    const current = () => gen === this.generation; // callback tardive di un progetto precedente: ignorate
+    this.streamOpen = true;
+    this.closeStream = this.events.open(projectId, {
+      onConnected: () => {
+        if (!current()) return;
+        this.stopPolling();
+        this.refresh();
+      },
+      onEvent: (e) => current() && this.onEvent(e),
+      onDisconnected: () => current() && this.startPolling(),
+      onUnavailable: () => current() && this.startPolling(),
+      onTerminated: () => {
+        if (!current()) return;
+        this.streamOpen = false;
+        this.startPolling();
+      },
+    });
+  }
+
+  private disconnect(): void {
+    this.closeStream();
+    this.closeStream = () => undefined;
+    this.streamOpen = false;
+  }
+
+  /** Un tick ogni pollMs: con sessione riapre lo stream se terminato e rilegge con GET; senza sessione non fa nulla. */
+  private startPolling(): void {
+    if (this.poller !== null) return;
+    this.poller = setInterval(() => {
+      const projectId = this.projectId;
+      if (projectId === null || !this.auth.isAuthenticated()) return;
+      if (!this.streamOpen) {
+        this.closeStream();
+        this.connect(projectId);
+      }
+      this.refresh();
+    }, this.pollMs);
+  }
+
+  private stopPolling(): void {
+    if (this.poller !== null) clearInterval(this.poller);
+    this.poller = null;
+  }
+
+  ngOnDestroy(): void {
+    this.disconnect();
+    this.stop();
   }
 
   private stop(): void {
+    this.stopPolling();
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.inFlight = null;

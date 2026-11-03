@@ -5,11 +5,12 @@ import {
   calculated,
   contextUsage,
   estimated,
+  execution,
   metrics,
   unavailable,
 } from './context-usage.fixtures';
 import { ContextUsageStore } from './context-usage.store';
-import { InferenceMetrics, InferencePhase } from './project-api.service';
+import { ExecutionView, InferenceMetrics, InferencePhase } from './project-api.service';
 import { InferenceMetricsComponent } from './inference-metrics.component';
 
 describe('InferenceMetricsComponent', () => {
@@ -21,6 +22,7 @@ describe('InferenceMetricsComponent', () => {
       metrics?: InferenceMetrics | null;
       running?: boolean;
       phase?: InferencePhase;
+      execution?: ExecutionView | null;
     } = {},
   ) {
     for (const [key, value] of Object.entries(inputs)) fixture.componentRef.setInput(key, value);
@@ -188,5 +190,60 @@ describe('InferenceMetricsComponent', () => {
 
     expect(el.innerHTML).not.toContain('PENSIERO-SEGRETO');
     expect(el.textContent).not.toMatch(/ragionamento attivo|reasoning/i);
+  });
+  describe('tempi per fase (T065)', () => {
+    const timing = (id: string) =>
+      el
+        .querySelector<HTMLElement>(`[data-testid=timing-${id}]`)
+        ?.textContent?.replace(/\s+/g, ' ')
+        .trim();
+
+    it('mostra coda, preflight, calcolo, backoff e totale dalle sole misure del server', () => {
+      render({ metrics: metrics(), execution: execution() });
+
+      expect(timing('queue')).toBe('Coda 1,2 s');
+      expect(timing('preflight')).toBe('Preflight 300 ms');
+      expect(timing('processing')).toBe('Calcolo 6,5 s');
+      expect(timing('backoff')).toBe('Backoff 0 ms');
+      expect(timing('elapsed')).toBe('Totale trascorso 9,0 s');
+    });
+
+    it('un intervallo null è «indisponibile» e non zero; il recupero senza produttore resta indisponibile', () => {
+      render({
+        metrics: metrics(),
+        execution: execution({
+          queueMs: null,
+          processingMs: null,
+          backoffMs: null,
+          recoveryMs: null,
+        }),
+      });
+
+      expect(timing('queue')).toBe('Coda indisponibile');
+      expect(timing('processing')).toBe('Calcolo indisponibile');
+      expect(timing('backoff')).toBe('Backoff indisponibile');
+      expect(timing('recovery')).toBe('Recupero indisponibile');
+      expect(el.querySelector('[data-testid=timing-queue]')!.getAttribute('data-available')).toBe(
+        'false',
+      );
+      expect(el.textContent).not.toMatch(/Coda 0|Calcolo 0|Backoff 0|Recupero 0/);
+    });
+
+    it('senza execution (record 001) non mostra alcun tempo e la riga delle metriche è invariata', () => {
+      render({ metrics: metrics(), execution: null });
+
+      expect(el.querySelector('[data-testid=execution-timing]')).toBeNull();
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 · Generati 1.347 token');
+    });
+
+    it('è un elenco con etichetta accessibile e non usa barre di avanzamento o percentuali', () => {
+      render({ metrics: metrics(), execution: execution() });
+
+      const list = el.querySelector('[data-testid=execution-timing]')!;
+      expect(list.getAttribute('aria-label')).toBe('Tempi della richiesta AI');
+      expect(list.querySelectorAll('dt').length).toBe(list.querySelectorAll('dd').length);
+      expect(el.querySelector('[role=progressbar], progress')).toBeNull();
+      expect(list.textContent).not.toContain('%');
+    });
   });
 });

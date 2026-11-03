@@ -43,3 +43,17 @@ export function hasValue(
 ): token is TokenValue & { value: number } {
   return !!token && token.source !== 'unavailable' && token.value !== null;
 }
+
+const secondsFormat = new Intl.NumberFormat('it-IT', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+/** Durata misurata: null o non finita è «indisponibile» (mai zero); 0 reale resta «0 ms». */
+export function formatDuration(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return 'indisponibile';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${secondsFormat.format(ms / 1000)} s`;
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)} min ${total % 60} s`;
+}

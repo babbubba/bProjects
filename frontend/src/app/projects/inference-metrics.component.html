@@ -36,3 +36,18 @@
     }
   </div>
 }
+@if (timings(); as t) {
+  <dl
+    class="execution-timing small text-secondary"
+    aria-label="Tempi della richiesta AI"
+    data-testid="execution-timing"
+  >
+    @for (x of t; track x.id) {
+      <div class="timing" [attr.data-testid]="'timing-' + x.id" [attr.data-available]="x.available">
+        <dt>{{ x.label }}</dt>
+        &ngsp;
+        <dd>{{ x.text }}</dd>
+      </div>
+    }
+  </dl>
+}
