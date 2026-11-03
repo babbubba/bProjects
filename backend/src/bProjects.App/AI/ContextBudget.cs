@@ -296,7 +296,7 @@ public enum TokenCountQuality
 public sealed record PayloadCalibration(string Id, int PerMessageFramingTokens, int FixedOverheadTokens, double? MinCharsPerToken = null);
 
 /// <summary>Finestra, tokenizer o template del modello non verificabili (o conteggio non disponibile): nessuna chiamata documentale inviata.</summary>
-public sealed class RuntimeUnverifiedException(string reason, bool transient = false)
+public sealed class RuntimeUnverifiedException(string reason, bool transient = false, string? cause = null)
     : InvalidOperationException($"Runtime del modello non verificato: {reason}.")
 {
     public const string ErrorCode = "runtime_unverified";
@@ -305,6 +305,9 @@ public sealed class RuntimeUnverifiedException(string reason, bool transient = f
 
     /// <summary>Server non raggiungibile: il tentativo successivo può riuscire. Finestra/tokenizer sconosciuti restano permanenti.</summary>
     public bool Transient { get; } = transient;
+
+    /// <summary>Motivo distinto per il ClassificationRecord (T126: model_unloaded, model_loading, runtime_unreachable, window_insufficient...); null = generico.</summary>
+    public string? Cause { get; } = cause;
 }
 
 /// <summary>Il runtime non coincide più con l'impronta congelata dal manifest (modello, finestra, tokenizer, template): niente invio.</summary>
@@ -354,6 +357,44 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
 {
     private static readonly System.Text.Json.JsonSerializerOptions Canonical = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    /// <summary>
+    /// Readiness bounded del modello della fase (T126), SENZA inferenza e senza forzare il caricamento: attende (poche sonde, tetto fisso, dentro
+    /// <paramref name="remaining"/>, il residuo della deadline originale del root) ciò che il runtime rende pronto. Ritorna a modello pronto; altrimenti lancia
+    /// il motivo del caso: <see cref="ModelNotAvailableException"/>, <see cref="ContextWindowMismatchException"/> (immediati) o
+    /// <see cref="RuntimeUnverifiedException"/> con <see cref="RuntimeUnverifiedException.Cause"/> (model_unloaded, model_loading, runtime_unreachable, deadline_exceeded).
+    /// </summary>
+    public async ValueTask EnsureReadyAsync(AiPhase phase, TimeSpan remaining, CancellationToken cancellationToken)
+    {
+        if (runtime is null || meter is null)
+        {
+            throw new RuntimeUnverifiedException("monitor o contatore dei token non configurati");
+        }
+
+        var settings = options.ForPhase(phase);
+        var wait = await runtime.WaitUntilReadyAsync(settings.ModelId, remaining, cancellationToken);
+        var snapshot = wait.Snapshot;
+        switch (snapshot.Readiness)
+        {
+            case RuntimeReadiness.Ready:
+                return;
+            case RuntimeReadiness.ModelMissing:
+                throw new ModelNotAvailableException(settings.ModelId, phase);
+            case RuntimeReadiness.WindowMismatch:
+                throw new ContextWindowMismatchException(snapshot.ConfiguredContextWindowTokens, snapshot.ContextWindowTokens!.Value);
+        }
+
+        var cause = wait.DeadlineReached
+            ? "deadline_exceeded"
+            : snapshot.Readiness switch
+            {
+                RuntimeReadiness.ModelUnloaded => "model_unloaded",
+                RuntimeReadiness.ModelLoading => "model_loading",
+                RuntimeReadiness.Unreachable => "runtime_unreachable",
+                _ => null,
+            };
+        throw new RuntimeUnverifiedException($"modello {settings.ModelId} non pronto ({snapshot.Readiness})", transient: cause is not null, cause: cause);
+    }
+
     /// <summary>Profilo verificato della fase; <see cref="RuntimeUnverifiedException"/> se finestra, modello, tokenizer o budget non sono dimostrati.</summary>
     public async ValueTask<DocumentRuntimeProfile> ResolveProfileAsync(AiPhase phase, CancellationToken cancellationToken)
     {
@@ -366,7 +407,7 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
         var snapshot = await runtime.GetSnapshotAsync(settings.ModelId, cancellationToken);
         if (snapshot.Status == ModelRuntimeStatus.Offline)
         {
-            throw new RuntimeUnverifiedException("server non raggiungibile", transient: true);
+            throw new RuntimeUnverifiedException("server non raggiungibile", transient: true, cause: "runtime_unreachable");
         }
 
         if (snapshot.IsModelMissing(settings.ModelId))
@@ -384,7 +425,7 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
         var margin = options.SafetyMarginTokens;
         if (output <= 0 || margin < 0 || window - output - margin <= 0)
         {
-            throw new RuntimeUnverifiedException($"budget di input non positivo (W={window}, O={output}, M={margin})");
+            throw new RuntimeUnverifiedException($"budget di input non positivo (W={window}, O={output}, M={margin})", cause: "window_insufficient");
         }
 
         var caps = await runtime.GetCountingCapabilitiesAsync(settings.ModelId, cancellationToken);

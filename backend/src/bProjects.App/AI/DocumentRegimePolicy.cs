@@ -53,6 +53,13 @@ public sealed record DocumentRegimeInput
     public bool InputValid { get; init; } = true;
     public string? InvalidReason { get; init; }
 
+    /// <summary>
+    /// Motivo distinto per cui il runtime non è pronto (T126: model_unloaded, model_loading, runtime_unreachable, tokenizer_unverified, model_not_available,
+    /// context_window_mismatch, deadline_exceeded); nullo se non c'è. Fuori dall'inputHash finché nullo, così gli hash storici non cambiano.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeFailure { get; init; }
+
     // Regola 2
     public bool RootTerminal { get; init; }
     public DateTimeOffset RequestedAt { get; init; }
@@ -226,7 +233,10 @@ public static class DocumentRegimePolicy
         // 3. Modello/finestra/tokenizer/template non identificabili, O<=0, M<0 o B<=0.
         if (string.IsNullOrWhiteSpace(input.RuntimeFingerprint) || input.WindowTokens is not > 0)
         {
-            return Done(ClassificationDisposition.NewRecord, ClassificationOutcome.Fail, "runtime_unverified", errorCode: "runtime_unverified");
+            // Il motivo del caso è nel record; il codice del root è quello del caso solo per modello assente, finestra incompatibile e deadline, altrimenti runtime_unverified.
+            var cause = string.IsNullOrWhiteSpace(input.RuntimeFailure) ? "runtime_unverified" : input.RuntimeFailure;
+            var code = cause is "model_not_available" or "context_window_mismatch" or "deadline_exceeded" ? cause : "runtime_unverified";
+            return Done(ClassificationDisposition.NewRecord, ClassificationOutcome.Fail, cause, errorCode: code);
         }
 
         if (input.OutputTokens is not > 0 || input.MarginTokens is not >= 0 || input.WindowTokens - input.OutputTokens - input.MarginTokens <= 0)

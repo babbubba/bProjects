@@ -25,6 +25,8 @@ public readonly record struct ModelFailure(bool IsTransient, string Code, TimeSp
             case DocumentWorkException work:
                 // Dati di lavoro o limiti documentali: sempre permanenti, con il loro codice stabile (mai il generico model_error).
                 return new(false, work.Code, null, work.Message);
+            case RuntimeUnverifiedException { Cause: "window_insufficient" } insufficient:
+                return new(false, ContextWindowMismatchException.ErrorCode, null, $"La finestra del runtime non basta per output e margine configurati ({insufficient.Message}): nessuna richiesta inviata. Allineare Ai:ContextWindowTokens, MaxOutputTokens e SafetyMarginTokens.");
             case RuntimeUnverifiedException unverified:
                 return new(unverified.Transient, unverified.Code, null, $"{unverified.Message} Nessuna richiesta documentale inviata: finestra, tokenizer o template del modello non sono dimostrati.");
             case RuntimeFingerprintMismatchException drift:

@@ -41,7 +41,66 @@ public sealed record ModelRuntimeSnapshot(
     /// </summary>
     public bool IsModelMissing(string? modelId) =>
         AvailableModels is { } listed && !string.IsNullOrEmpty(modelId) && !listed.Contains(modelId, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Prontezza del modello per la classificazione (T126). Solo ModelUnloaded, ModelLoading e Unreachable sono transitori e si attendono (con tetto);
+    /// modello assente, finestra diversa dalla configurata e runtime non verificabile sono permanenti. Mai dedotta dalla configurazione.
+    /// </summary>
+    public RuntimeReadiness Readiness
+    {
+        get
+        {
+            if (Status == ModelRuntimeStatus.Offline)
+            {
+                return RuntimeReadiness.Unreachable;
+            }
+
+            if (IsModelMissing(ModelId))
+            {
+                return RuntimeReadiness.ModelMissing;
+            }
+
+            if (ModelStatus is { } state && !string.Equals(state, "loaded", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(state, "loading", StringComparison.OrdinalIgnoreCase) ? RuntimeReadiness.ModelLoading : RuntimeReadiness.ModelUnloaded;
+            }
+
+            if (Status != ModelRuntimeStatus.Online || ContextWindowTokens is null)
+            {
+                return RuntimeReadiness.Unverified;
+            }
+
+            return WindowMismatch ? RuntimeReadiness.WindowMismatch : RuntimeReadiness.Ready;
+        }
+    }
 }
+
+/// <summary>Stato di prontezza di un modello per il preflight (T126); i motivi nel ClassificationRecord derivano da qui.</summary>
+public enum RuntimeReadiness
+{
+    Ready,
+
+    /// <summary>Disponibile ma non caricato (router: unloaded/sleeping).</summary>
+    ModelUnloaded,
+
+    /// <summary>In caricamento.</summary>
+    ModelLoading,
+
+    /// <summary>Server non raggiungibile.</summary>
+    Unreachable,
+
+    /// <summary>Il server elenca i modelli e quello richiesto non c'è.</summary>
+    ModelMissing,
+
+    /// <summary>Finestra reale inferiore a quella configurata.</summary>
+    WindowMismatch,
+
+    /// <summary>Il server risponde ma finestra o modello non sono dimostrabili.</summary>
+    Unverified,
+}
+
+/// <summary>Esito dell'attesa di readiness: ultimo stato noto e se è scaduta la deadline del chiamante prima del tetto.</summary>
+public sealed record ReadinessWait(ModelRuntimeSnapshot Snapshot, bool DeadlineReached);
 
 /// <summary>Capacità di conteggio verificate di un modello: tokenizer interrogabile e template applicato esposto dal runtime.</summary>
 public sealed record ModelCountingCapabilities(string ModelId, bool TokenizerVerified, bool TemplateExposed);
@@ -82,6 +141,12 @@ public sealed class ModelRuntimeMonitor
     /// <summary>Tetto del tempo complessivo di una sonda (ulteriormente limitato da <c>Ai:RequestTimeoutSeconds</c>).</summary>
     public const int MaxProbeSeconds = 10;
 
+    /// <summary>
+    /// Attese fra le sonde della readiness (T126): tetto FISSO di riprove (4) e di tempo (15 s) per modello, indipendente dal numero di richieste.
+    /// Un modello non pronto dopo il tetto non si attende oltre: il root fallisce col motivo del caso.
+    /// </summary>
+    public static readonly TimeSpan[] ReadinessBackoff = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8)];
+
     private readonly InternalModelClient _client;
     private readonly AiOptions _options;
     private readonly ILogger _logger;
@@ -97,6 +162,8 @@ public sealed class ModelRuntimeMonitor
         public DateTimeOffset ValidUntil { get; set; } = DateTimeOffset.MinValue;
 
         public Task<ModelRuntimeSnapshot>? Probe { get; set; }
+
+        public Task<ModelRuntimeSnapshot>? Readiness { get; set; }
 
         public Task<ModelCountingCapabilities>? Counting { get; set; }
 
@@ -156,6 +223,71 @@ public sealed class ModelRuntimeMonitor
         }
 
         return await probe.WaitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Attende la readiness di un modello transitoriamente non pronto (scaricato, in caricamento, server irraggiungibile) con poche sonde di backoff e tetto
+    /// fisso. Un solo giro per modello, condiviso fra i chiamanti concorrenti (nessuna sonda duplicata); non invia mai inferenze né richieste di caricamento:
+    /// attende solo ciò che il runtime rende pronto. <paramref name="remaining"/> è il residuo della deadline ORIGINALE del root (dal RequestedAt): il
+    /// chiamante smette di attendere a quell'istante, il giro condiviso resta comunque limitato dal tetto.
+    /// </summary>
+    public async Task<ReadinessWait> WaitUntilReadyAsync(string modelId, TimeSpan remaining, CancellationToken cancellationToken = default)
+    {
+        Task<ModelRuntimeSnapshot> loop;
+        lock (_gate)
+        {
+            var state = StateOf(modelId);
+            loop = state.Readiness ??= Task.Run(() => ReadinessLoopAsync(modelId), CancellationToken.None);
+        }
+
+        try
+        {
+            return new(await loop.WaitAsync(remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining, _time, cancellationToken), false);
+        }
+        catch (TimeoutException)
+        {
+            lock (_gate)
+            {
+                return new(StateOf(modelId).Snapshot, true);
+            }
+        }
+    }
+
+    private async Task<ModelRuntimeSnapshot> ReadinessLoopAsync(string modelId)
+    {
+        try
+        {
+            var snapshot = await GetSnapshotAsync(modelId, CancellationToken.None);
+            foreach (var pause in ReadinessBackoff)
+            {
+                if (snapshot.Readiness is not (RuntimeReadiness.ModelUnloaded or RuntimeReadiness.ModelLoading or RuntimeReadiness.Unreachable))
+                {
+                    break;
+                }
+
+                await Task.Delay(pause, _time);
+                snapshot = await RefreshAsync(modelId);
+            }
+
+            return snapshot;
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                StateOf(modelId).Readiness = null;
+            }
+        }
+    }
+
+    /// <summary>Nuova sonda ignorando il TTL, condivisa con una sonda già in volo.</summary>
+    private Task<ModelRuntimeSnapshot> RefreshAsync(string modelId)
+    {
+        lock (_gate)
+        {
+            var state = StateOf(modelId);
+            return state.Probe ??= Task.Run(() => ProbeAndStoreAsync(modelId), CancellationToken.None);
+        }
     }
 
     /// <summary>

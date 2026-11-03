@@ -23,6 +23,9 @@ public sealed record RegimeMeasurement
     /// <summary>Input/fonti non validi (regola 1): codice d'errore specifico del root.</summary>
     public string? InvalidReason { get; init; }
 
+    /// <summary>Motivo distinto della readiness del runtime non riuscita (T126); nullo se non c'è.</summary>
+    public string? RuntimeFailure { get; init; }
+
     /// <summary>Impronta del runtime verificato (modello, finestra, tokenizer, template); nulla = runtime non identificabile (regola 3).</summary>
     public string? RuntimeFingerprint { get; init; }
     public int? WindowTokens { get; init; }
@@ -45,6 +48,9 @@ public sealed record RegimeMeasurement
 public interface IDocumentRegimeProbe
 {
     Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, CancellationToken ct);
+
+    /// <summary>Come sopra con il residuo della deadline ORIGINALE del root (dal RequestedAt) entro cui attendere la readiness del runtime (T126). Default: nessuna attesa.</summary>
+    Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, TimeSpan remaining, CancellationToken ct) => MeasureAsync(kind, rootId, ct);
 }
 
 public enum ClassificationAttempt
@@ -130,6 +136,7 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
         {
             InputValid = measurement.InvalidReason is null,
             InvalidReason = measurement.InvalidReason,
+            RuntimeFailure = measurement.RuntimeFailure,
             RootTerminal = false,
             RequestedAt = requestedAt,
             Now = now,
@@ -227,7 +234,7 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
         var frozenPolicy = await FrozenPolicyAsync(kind, rootId, ct);
         var measurement = !string.Equals(frozenPolicy, expectedPolicy, StringComparison.Ordinal)
             ? new RegimeMeasurement { InvalidReason = "config_invalid" }
-            : await MeasureAsync(kind, rootId, ct);
+            : await MeasureAsync(kind, rootId, first.HardDeadlineAt!.Value - first.Now, ct);
 
         using var writeScope = _scopes.CreateScope();
         var write = writeScope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -260,11 +267,11 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
         return new(kind, rootId, failed ? ClassificationAttempt.Failed : ClassificationAttempt.Classified, decision);
     }
 
-    private async Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, CancellationToken ct)
+    private async Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, TimeSpan remaining, CancellationToken ct)
     {
         try
         {
-            return await _probe.MeasureAsync(kind, rootId, ct);
+            return await _probe.MeasureAsync(kind, rootId, remaining, ct);
         }
         catch (DocumentWorkException ex)
         {
@@ -306,6 +313,8 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
     {
         "runtime_unverified" => "Il runtime del modello non è verificato (finestra, tokenizer o template non identificabili): nessuna richiesta è stata inviata.",
         "config_invalid" => "La configurazione del budget o della policy non è valida: nessuna richiesta è stata inviata.",
+        "model_not_available" => "Il modello configurato non è esposto dal server: nessuna richiesta è stata inviata e nessun modello alternativo è stato usato.",
+        "context_window_mismatch" => "La finestra del runtime non coincide con quella configurata o non basta per output e margine: nessuna richiesta è stata inviata.",
         "deadline_exceeded" => "Il lavoro non è terminato entro la scadenza del comando.",
         "document_limit_exceeded" or "coverage_incomplete" => "Il lavoro supera i limiti consentiti: nessuna richiesta è stata inviata.",
         _ => "La richiesta non può essere elaborata: nessuna richiesta è stata inviata.",
@@ -377,10 +386,16 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
 /// <summary>Misura i soli input tecnici di un payload col preflight del workflow (runtime, tokenizer, template): nessuna chiamata al modello.</summary>
 public static class RegimeMeasurer
 {
-    public static async Task<RegimeMeasurement> MeasureAsync(RegimePayload payload, CancellationToken ct)
+    public static async Task<RegimeMeasurement> MeasureAsync(RegimePayload payload, CancellationToken ct, TimeSpan? remaining = null)
     {
         try
         {
+            // Readiness bounded PRIMA di ogni misura e di ogni invio (T126): nessuna inferenza, nessun warm-up; subordinata al root e dentro la sua deadline originale.
+            if (remaining is { } budget)
+            {
+                await payload.Preflight.EnsureReadyAsync(payload.Phase, budget, ct);
+            }
+
             PayloadPreflight? measure = null;
             DocumentRuntimeProfile profile;
             if (payload.Payload is { } composed)
@@ -420,10 +435,18 @@ public static class RegimeMeasurer
                 }),
             };
         }
-        catch (Exception ex) when (ex is RuntimeUnverifiedException or ModelNotAvailableException or HttpRequestException)
+        catch (Exception ex) when (ex is RuntimeUnverifiedException or ModelNotAvailableException or ContextWindowMismatchException or HttpRequestException)
         {
-            // Finestra, modello, tokenizer o budget non dimostrati: la policy (regola 3) fallisce il root runtime_unverified prima di ogni inferenza.
-            return new RegimeMeasurement { PlannedCalls = payload.PlannedCalls, HasDependencies = payload.HasDependencies };
+            // Finestra, modello, tokenizer o budget non dimostrati: la policy (regola 3) fallisce il root prima di ogni inferenza, col motivo del caso.
+            var failure = ex switch
+            {
+                ModelNotAvailableException => ModelNotAvailableException.ErrorCode,
+                ContextWindowMismatchException => ContextWindowMismatchException.ErrorCode,
+                RuntimeUnverifiedException { Cause: "window_insufficient" } => ContextWindowMismatchException.ErrorCode,
+                RuntimeUnverifiedException { Cause: { } cause } => cause,
+                _ => null,
+            };
+            return new RegimeMeasurement { PlannedCalls = payload.PlannedCalls, HasDependencies = payload.HasDependencies, RuntimeFailure = failure };
         }
     }
 }
@@ -432,7 +455,12 @@ public static class RegimeMeasurer
 public sealed class WorkflowRegimeProbe(
     IServiceScopeFactory scopes, DocumentChatWorkflow chat, DocumentAnalysisWorkflow analysis, DocumentSourceDraftWorkflow draft) : IDocumentRegimeProbe
 {
-    public async Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, CancellationToken ct)
+    public Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, CancellationToken ct) => MeasureAsync(kind, rootId, null, ct);
+
+    public Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, TimeSpan remaining, CancellationToken ct) =>
+        MeasureAsync(kind, rootId, (TimeSpan?)remaining, ct);
+
+    private async Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, TimeSpan? remaining, CancellationToken ct)
     {
         RegimePayload payload;
         try
@@ -455,7 +483,7 @@ public sealed class WorkflowRegimeProbe(
             return new RegimeMeasurement { InvalidReason = DocumentWorkException.IntegrityConflict };
         }
 
-        return await RegimeMeasurer.MeasureAsync(payload, ct);
+        return await RegimeMeasurer.MeasureAsync(payload, ct, remaining);
     }
 
     private async Task<(ProcessingRunKind Kind, string Definition)> RunOfAsync(Guid runId, CancellationToken ct)
