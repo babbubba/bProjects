@@ -637,8 +637,8 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         }
 
         var view = await Json(await client.GetAsync($"/api/projects/{project}/analyses/{run}", Ct));
-        v.Check($"{label}: revisione 1.1.0 (workflow documentale)", view.GetProperty("schemaVersion").GetString() == "1.1.0"
-            && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersion);
+        v.Check($"{label}: revisione 1.1.0 (workflow documentale v3 con alias)", view.GetProperty("schemaVersion").GetString() == "1.1.0"
+            && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersionV3);
         return new AnalysisOutcome(run, view.GetProperty("currentRevisionId").GetGuid(), JsonNode.Parse(view.GetProperty("content").GetRawText())!);
     }
 

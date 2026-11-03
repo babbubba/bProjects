@@ -710,7 +710,13 @@ public sealed class DocumentAnalysisWorkflowTests : ArchiveTestBase
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
         var response = await client.SendAsync(request, Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        return (await Json(response)).GetProperty("id").GetGuid();
+        var run = (await Json(response)).GetProperty("id").GetGuid();
+        // T125: le nuove richieste congelano la v3 con alias. Questi test provano il workflow v2 (storico, frozen, invariato) su un run richiesto prima della
+        // v3: definizione e prompt v2 congelati sul root. Nessuna asserzione di T059 è cambiata; il contratto v3 è in DocumentAnalysisAliasWorkflowTests.
+        await Execute(
+            "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v2', \"PromptVersions\" = '{\"analysis\":\"document-analysis-v2\",\"analysisSchema\":\"1.1.0\"}'::jsonb WHERE \"Id\" = @r",
+            ("r", run));
+        return run;
     }
 
     /// <summary>Presa in carico come il dispatcher: Running con owner, fence e lease validi (il claim reale non è parte di T059).</summary>

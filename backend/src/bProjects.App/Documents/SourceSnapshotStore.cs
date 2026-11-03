@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,14 +11,14 @@ namespace bProjects.App.Documents;
 /// <summary>
 /// Snapshot di selezione fissati al comando (002 T057; data-model «SourceSnapshot / Item», contracts/http-api.md §Selezione). Unico punto che
 /// scrive snapshot: chat e Analizza ne creano uno sotto il lock di progetto, la generazione ne eredita uno dalla revisione, mai quello corrente.
-/// Definizioni e versioni di prompt/schema documentali v2 sono persistite sul root alla richiesta; la loro registrazione e selezione nel
-/// dispatch spetta a T123 (fino ad allora un run con definizione v2 fallisce in modo esplicito con workflow_incompatible, senza conversione di run 001).
+/// Definizioni e versioni di prompt/schema documentali sono persistite sul root alla richiesta: le NUOVE richieste di Analizza congelano la v3 con
+/// alias (T125, AI §7.8); un run già congelato con la v2 (storica) resta v2 e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
 /// </summary>
 public sealed class SourceSnapshotStore(AppDbContext db)
 {
-    public const string AnalysisDefinition = "project-analysis-documents-v2";
+    public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV3;
     public const string DocumentDefinition = "project-document-documents-v2";
-    public const string AnalysisPromptVersion = "document-analysis-v2";
+    public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV3;
     public const string AnalysisSchemaVersion = "1.1.0";
     public const string DocumentPromptVersion = "document-documents-v2";
 
@@ -80,8 +81,14 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     public async Task<bool> HasReadyAsync(Guid snapshotId, CancellationToken ct) =>
         await db.SourceSnapshotItems.AsNoTracking().AnyAsync(i => i.SnapshotId == snapshotId && i.Availability == SourceAvailability.Ready, ct);
 
+    /// <summary>Versioni congelate di una nuova richiesta di Analizza v3: prompt, schema del canonico, schema AI, catalogo, id canonici, algoritmo e validazione.</summary>
     public static string AnalysisPromptVersions() =>
-        JsonSerializer.Serialize(new { analysis = AnalysisPromptVersion, analysisSchema = AnalysisSchemaVersion });
+        JsonSerializer.Serialize(new
+        {
+            analysis = AnalysisPromptVersion, analysisSchema = AnalysisSchemaVersion, analysisAiSchema = DocumentAnalysisWorkflow.SchemaVersionV3,
+            aliasCatalog = AnalysisAliasCatalog.Version, canonIds = AnalysisAliasCatalog.CanonIdsVersion,
+            algorithm = DocumentAnalysisWorkflow.AlgorithmVersionV3, validation = DocumentAnalysisWorkflow.ValidationVersionV3,
+        });
 
     public static string DocumentPromptVersions() =>
         JsonSerializer.Serialize(new { document = DocumentPromptVersion, analysisSchema = AnalysisSchemaVersion });

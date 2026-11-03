@@ -21,7 +21,8 @@ namespace bProjects.IntegrationTests;
 [Trait("Category", TestCategories.Integration)]
 public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
 {
-    private const string AnalysisDocumentsV2 = "project-analysis-documents-v2";
+    // T125: le NUOVE richieste di Analizza congelano la v3 con alias; la v2 resta storica (run già richiesti).
+    private const string AnalysisDocumentsV3 = "project-analysis-documents-v3";
     private const string DocumentDocumentsV2 = "project-document-documents-v2";
 
     protected override void Tune(DocumentOptions options)
@@ -112,7 +113,7 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
     // ================================================================ readiness di Analizza
 
     [Fact]
-    public async Task Analyze_with_only_ready_documents_and_no_pm_message_freezes_the_selection_with_cutoff_zero_and_the_documents_v2_definition()
+    public async Task Analyze_with_only_ready_documents_and_no_pm_message_freezes_the_selection_with_cutoff_zero_and_the_documents_v3_definition()
     {
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
@@ -129,11 +130,16 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         Assert.Equal(1, await Count(
             "SELECT count(*) FROM \"SourceSnapshotItems\" WHERE \"SnapshotId\" = @s AND \"Availability\" = 'Ready' AND \"Included\" AND \"DocumentVersionId\" = @v AND \"PreparationId\" = @p AND \"EvidenceVersionId\" = @e",
             ("s", snapshot), ("v", doc.Version), ("p", preparation), ("e", evidence)));
-        // Persistita la definizione documentale v2 con prompt/schema coerenti; nessun run 001 convertito.
-        Assert.Equal(AnalysisDocumentsV2, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
+        // Persistita la definizione documentale v3 con prompt/schema/catalogo/id canonici/algoritmo/validazione coerenti; nessun run 001 convertito.
+        Assert.Equal(AnalysisDocumentsV3, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
         var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId))).RootElement;
-        Assert.Equal("document-analysis-v2", prompts.GetProperty("analysis").GetString());
+        Assert.Equal("document-analysis-v3", prompts.GetProperty("analysis").GetString());
         Assert.Equal("1.1.0", prompts.GetProperty("analysisSchema").GetString());
+        Assert.Equal("document-analysis-alias-1", prompts.GetProperty("analysisAiSchema").GetString());
+        Assert.Equal("alias-catalog-1", prompts.GetProperty("aliasCatalog").GetString());
+        Assert.Equal("canon-ids-1", prompts.GetProperty("canonIds").GetString());
+        Assert.Equal("analysis-single-v2", prompts.GetProperty("algorithm").GetString());
+        Assert.Equal("document-analysis-validation-v2", prompts.GetProperty("validation").GetString());
     }
 
     private async Task<(Guid Preparation, Guid Evidence)> GetReady(Doc doc) => (
@@ -152,7 +158,7 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         var run = await AnalyzeAccepted(client, project);
 
         Assert.Equal(2, run.GetProperty("sourceCutoffSequence").GetInt64());   // solo il dialogo PM definisce il cutoff
-        Assert.Equal(AnalysisDocumentsV2, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run.GetProperty("id").GetGuid())));
+        Assert.Equal(AnalysisDocumentsV3, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run.GetProperty("id").GetGuid())));
         // Il gate Evidence PM resta: un lavoro di estrazione per ciascun messaggio PM entro il cutoff, nessuno per il documento.
         Assert.Equal(2, await Count("SELECT count(*) FROM \"EvidenceExtractionJobs\" WHERE \"OriginKind\" = 'Message'"));
     }

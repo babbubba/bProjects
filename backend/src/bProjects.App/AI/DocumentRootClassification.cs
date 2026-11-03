@@ -440,8 +440,8 @@ public sealed class WorkflowRegimeProbe(
             payload = kind switch
             {
                 ClassificationOwnerKind.ChatTurn => await chat.BuildRegimePayloadAsync(rootId, ct),
-                ClassificationOwnerKind.ProcessingRun => await KindOfAsync(rootId, ct) == ProcessingRunKind.Analysis
-                    ? analysis.BuildRegimePayload()
+                ClassificationOwnerKind.ProcessingRun => await RunOfAsync(rootId, ct) is { Kind: ProcessingRunKind.Analysis } run
+                    ? analysis.BuildRegimePayload(run.Definition)   // v3: schema del DTO con alias (AI §7.8), non l'involucro v2
                     : await draft.BuildRegimePayloadAsync(rootId, ct),
                 _ => throw new ArgumentOutOfRangeException(nameof(kind)),
             };
@@ -458,10 +458,11 @@ public sealed class WorkflowRegimeProbe(
         return await RegimeMeasurer.MeasureAsync(payload, ct);
     }
 
-    private async Task<ProcessingRunKind> KindOfAsync(Guid runId, CancellationToken ct)
+    private async Task<(ProcessingRunKind Kind, string Definition)> RunOfAsync(Guid runId, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().ProcessingRuns.AsNoTracking()
-            .Where(r => r.Id == runId).Select(r => r.Kind).SingleAsync(ct);
+        var run = await scope.ServiceProvider.GetRequiredService<AppDbContext>().ProcessingRuns.AsNoTracking()
+            .Where(r => r.Id == runId).Select(r => new { r.Kind, r.WorkflowDefinitionVersion }).SingleAsync(ct);
+        return (run.Kind, run.WorkflowDefinitionVersion);
     }
 }

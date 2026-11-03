@@ -86,6 +86,29 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(run);
         Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
+        Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
+        Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+
+        // T124 (invariato per v3): il payload dell'analisi non e determinabile prima del claim (selezione evidenze congelata sotto lease): T unavailable => Extended workload_unknown.
+        await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", run, expectedPayloadMeasured: false);
+        Assert.Equal(("Extended", "workload_unknown"), (await Scalar<string>("SELECT \"InitialRegime\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)), await Scalar<string>("SELECT \"ClassificationReason\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))));
+    }
+
+    [Fact]
+    public async Task A_run_frozen_with_v2_before_the_alias_contract_still_runs_the_v2_graph_with_its_own_prompt_and_completes()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+
+        var run = await StartAnalysis(client, project);
+        await PinToV2Async(run);
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
         Assert.Equal([Graph.DocAnalysis], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
@@ -111,7 +134,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(generation);
         Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
-        Assert.Equal([Graph.DocAnalysis, Graph.DocDraft], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV3, Graph.DocDraft], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProcessingRunId\" = @r AND \"AnalysisRevisionId\" = @v", ("r", generation), ("v", revision)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", generation)));
         Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
@@ -270,7 +293,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         await DrainAsync();
 
         Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
-        Assert.Equal([Graph.DocAnalysis], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);
         Assert.Contains(Statement, string.Concat(_model.Texts));                                        // fonti dello snapshot congelato
     }
 
@@ -302,6 +325,36 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         var project = await NewProject(first);
         await NewReadyDocument(first, project, "regole", Statement);
         var run = await StartAnalysis(first, project);
+        _model.FailNext(Graph.DocAnalysisV3);
+
+        await DrainAsync();
+        Assert.Equal("Queued", (await RunRow(run)).Status);
+        Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+
+        await RestartAppAsync();                                                                        // nuovo processo, stesso database
+        await Execute("UPDATE \"ProcessingRuns\" SET \"NextAttemptAt\" = clock_timestamp() - interval '1 second' WHERE \"Id\" = @r", ("r", run));
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.Equal(("Completed", null), row.Pair());
+        Assert.Equal(2, row.Attempts);
+        Assert.Equal([Graph.DocAnalysisV3, Graph.DocAnalysisV3], _model.Graphs);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+
+        // Replay: un run terminale non si rielabora e non invia nulla.
+        Assert.False(await Dispatcher().RunOnceAsync(Ct));
+        Assert.Equal(2, _model.Graphs.Count);
+    }
+
+    [Fact]
+    public async Task A_v2_document_run_resumes_the_v2_graph_after_a_transient_failure_and_an_application_restart()
+    {
+        using var first = await App.LoginAsync();
+        var project = await NewProject(first);
+        await NewReadyDocument(first, project, "regole", Statement);
+        var run = await StartAnalysis(first, project);
+        await PinToV2Async(run);
         _model.FailNext(Graph.DocAnalysis);
 
         await DrainAsync();
@@ -324,6 +377,25 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(2, _model.Graphs.Count);
     }
 
+    // ================================================================ T124/T125: il preflight misura lo schema del contratto congelato sul root
+
+    [Fact]
+    public void The_regime_preflight_measures_the_alias_dto_schema_for_v3_roots_and_the_v2_wrapper_for_v2_and_unknown_roots()
+    {
+        var analysis = App.Services.GetRequiredService<DocumentAnalysisWorkflow>();
+
+        var v3 = analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersionV3);
+        var v2 = analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersion);
+
+        Assert.Equal(AnalysisAliasContracts.JsonSchema().GetRawText(), v3.SchemaJson);
+        Assert.Contains("\"alias-1\"", v3.SchemaJson);
+        Assert.DoesNotContain("evidenceMap", v3.SchemaJson);                                   // l'involucro v2 non e piu quello misurato per v3
+        Assert.Equal(analysis.BuildRegimePayload().SchemaJson, v2.SchemaJson);
+        Assert.Contains("evidenceMap", v2.SchemaJson);
+        Assert.Equal(v2.SchemaJson, analysis.BuildRegimePayload("project-analysis-documents-v9").SchemaJson);   // ignota: nessun upgrade implicito (l'esito e del claim)
+        Assert.Equal((AiPhase.Analysis, (DocumentPayload?)null), (v3.Phase, v3.Payload));
+    }
+
     // ================================================================ definizione ignota o incompatibile: errore esplicito
 
     [Theory]
@@ -331,6 +403,10 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     [InlineData("project-document-documents-v2", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]      // definizione di un'altra famiglia
     [InlineData("project-analysis-documents-v2", """{"analysis":"document-analysis-v1","analysisSchema":"1.1.0"}""")]      // prompt congelato diverso
     [InlineData("project-analysis-v3", """{"analysis":"document-analysis-v2"}""")]                                         // 001 con prompt documentale: nessuna reinterpretazione
+    [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]  // v3 con prompt v2: mai un downgrade
+    [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0"}""")]  // v3 senza schema AI, catalogo e id canonici congelati
+    [InlineData("project-analysis-documents-v2", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // v2 con prompt v3: mai un upgrade
+    [InlineData("project-analysis-documents-v4", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // definizione futura ignota
     public async Task An_unknown_or_incompatible_analysis_definition_fails_explicitly_and_never_reaches_the_model(string definition, string prompts)
     {
         using var client = await App.LoginAsync();
@@ -369,6 +445,11 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     }
 
     // ================================================================ supporto: dispatcher e dati
+
+    /// <summary>Simula un run richiesto prima dell'introduzione del contratto con alias: definizione e prompt v2 congelati sul root.</summary>
+    private async Task PinToV2Async(Guid run) => await Execute(
+        "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v2', \"PromptVersions\" = '{\"analysis\":\"document-analysis-v2\",\"analysisSchema\":\"1.1.0\"}'::jsonb WHERE \"Id\" = @r",
+        ("r", run));
 
     private AiDispatchService Dispatcher() => ActivatorUtilities.CreateInstance<AiDispatchService>(App.Services);
 
@@ -546,7 +627,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { DocChat, Chat001, DocAnalysis, Analysis001, DocDraft, Draft001, Other }
+    internal enum Graph { DocChat, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -557,6 +638,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         var s = Norm(system);
         return s.Contains(Norm(DocumentChatWorkflow.Instructions)) ? Graph.DocChat
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
+            : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001
             : s.Contains(Norm(DocumentAgent.Instructions)) ? Graph.Draft001
@@ -570,6 +652,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Graph.DocChat => JsonSerializer.Serialize(new { mode = "documented", answer = $"Massimo 5 ordini al giorno [fonte:{Regex.Match(request.Text, "fonte:([0-9a-f-]{36})").Groups[1].Value}]." }),
         Graph.Chat001 => "Quali utenti userebbero il portale?",
         Graph.DocAnalysis => DocumentAnalysisReply(request.Text),
+        Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // il modello vede solo alias e produce il DTO semantico
         Graph.Analysis001 => LegacyAnalysisReply(request.Text),
         Graph.DocDraft => DocumentDraftReply(request.Text),
         Graph.Draft001 => $"# Documento\n\n- Obiettivo [fonte:{Regex.Match(request.Text, "\"sources\"\\s*:\\s*\\[\\s*\\{\\s*\"id\"\\s*:\\s*\"([0-9a-f-]{36})\"").Groups[1].Value}]",

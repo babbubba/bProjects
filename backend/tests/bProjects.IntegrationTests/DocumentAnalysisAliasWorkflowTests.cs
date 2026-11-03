@@ -190,6 +190,11 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.NotEqual(catalog1.CatalogHash, catalog2.CatalogHash);
         Assert.Equal(input1.Snapshot.SourceHash, input2.Snapshot.SourceHash);
         Assert.Equal(await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run1)), await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run2)));
+        // Il manifesto congela l'hash di catalogo SENZA id del run: stesso contenuto fra root e retry; il catalogHash con l'id del run sta nel WorkOutput di ciascun root.
+        Assert.Equal(catalog1.RunIndependentHash, await Scalar<string>("SELECT \"PlanJson\"->>'catalog' FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run1)));
+        Assert.Equal(catalog2.RunIndependentHash, await Scalar<string>("SELECT \"PlanJson\"->>'catalog' FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run2)));
+        Assert.Equal(catalog1.CatalogHash, await Scalar<string>("SELECT \"PayloadJson\"->>'catalogHash' FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run1)));
+        Assert.Equal(catalog2.CatalogHash, await Scalar<string>("SELECT \"PayloadJson\"->>'catalogHash' FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run2)));
         Assert.Equal(await Scalar<string>("SELECT \"PayloadJson\"->>'aiOutputHash' FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run1)), await Scalar<string>("SELECT \"PayloadJson\"->>'aiOutputHash' FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run2)));
 
         var content1 = DocumentAnalysisContentJson.Deserialize(await Scalar<string>("SELECT \"ContentJson\"::text FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run1)));
@@ -432,8 +437,34 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
     }
 
     [Fact]
-    public async Task An_original_source_that_cannot_be_verified_when_the_catalog_is_built_fails_source_snapshot_invalid_before_any_call()
+    public async Task A_source_shared_by_two_evidences_with_different_positions_fails_source_snapshot_invalid_before_any_call()
     {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewDocument(client, project, "regole", Statement1, Statement2);
+        var run = await StartRunAsync(client, project);
+        // Incoerenza che solo il catalogo vede: lo stesso SourceId con quote e range diversi in due evidenze (ogni evidenza da sola e valida).
+        await Execute(
+            """
+            ALTER TABLE "Evidences" DISABLE TRIGGER USER;
+            UPDATE "Evidences" SET "Content" = jsonb_set("Content", '{sources,0,sourceId}', (SELECT "Content"->'sources'->0->'sourceId' FROM "Evidences" WHERE "Key" = 'e1'))
+            WHERE "Key" = 'e2';
+            ALTER TABLE "Evidences" ENABLE TRIGGER USER;
+            """);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = _ => "{}" };
+
+        var result = await RunAsync(run, model);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal(DocumentWorkException.SourceSnapshotInvalid, result.ErrorCode);
+        Assert.Empty(model.Requests);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
+    }
+
+    [Fact]
+    public async Task A_persisted_source_with_an_invalid_range_or_part_is_rejected_by_the_shared_ledger_decoder_as_integrity_conflict_before_any_call()
+    {
+        // Assunzione di §7.9 verificata: il rifiuto di range/quote/part non nasce dal catalogo ma da DocumentAnalysisSources.LoadAsync (comune a v2 e v3).
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         await NewDocument(client, project, "regole", Statement1);
@@ -445,7 +476,7 @@ public sealed class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         var result = await RunAsync(run, model);
 
         Assert.Equal(ProcessingRunStatus.Failed, result.Status);
-        Assert.Equal(DocumentWorkException.SourceSnapshotInvalid, result.ErrorCode);
+        Assert.Equal(DocumentWorkException.IntegrityConflict, result.ErrorCode);
         Assert.Empty(model.Requests);
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
     }
