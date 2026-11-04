@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Documents;
 using bProjects.App.Persistence;
@@ -468,7 +469,7 @@ public static class CoverageEndpoints
         var findings = DocumentCoverage.Check(loaded.Input);
         var summary = DocumentCoverage.Summarize(loaded.Input, findings);
         var content = new DocumentCoverageContent(
-            DocumentCoverage.CheckerVersion, run.Id, aiRevision.Id, revision.Id, draftId, loaded.Hashes, summary, loaded.Preparations, findings, DocumentCoverage.Limits);
+            DocumentCoverage.CheckerVersion, run.Id, aiRevision.Id, revision.Id, draftId, loaded.Hashes, summary, loaded.Preparations, findings, DocumentCoverage.Limits, loaded.Input.Reconciliation);
         var report = new EvidenceCoverageReport
         {
             Id = Guid.NewGuid(),
@@ -508,7 +509,7 @@ public static class CoverageEndpoints
             return new DocumentCoverageReportView(
                 report.Id, report.AnalysisId, report.RevisionId, report.DraftId, report.CheckerVersion, report.InputHash, report.CreatedAt, names.GetValueOrDefault(report.CreatedBy),
                 new(report.DeterministicErrors, report.SemanticRisks, report.PmAssessments), document.Summary, document.Hashes, document.Preparations,
-                [.. document.Findings.Select(DocumentCoverageLoader.ToView)], document.Limits);
+                [.. document.Findings.Select(DocumentCoverageLoader.ToView)], document.Limits, document.Reconciliation);
         }
 
         var content = EvidenceJson.Deserialize<CoverageReportContent>(report.Report);
@@ -540,7 +541,7 @@ public sealed record DocumentCoverageRelation(Guid FromEvidenceId, Guid ToEviden
 public sealed record DocumentCoverageInput(
     IReadOnlyList<DocumentCoverageEvidence> Evidence, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> Links, DocumentAnalysisContent Ai,
     DocumentAnalysisContent Target, string? DraftMarkdown, IReadOnlyDictionary<Guid, string> OriginalTexts, IReadOnlyList<DocumentCoveragePortion> Portions,
-    IReadOnlyList<DocumentCoverageRelation> Relations);
+    IReadOnlyList<DocumentCoverageRelation> Relations, ReconciliationCoverageSection? Reconciliation = null);
 
 public sealed record DocumentCoverageFinding(
     FindingCategory Category, string Code, string Message, Guid? EvidenceId, string? Alias, Guid? ItemId, string? Section, string? Confidence, string? Details, bool Blocking);
@@ -553,7 +554,7 @@ public sealed record DocumentCoverageHashes(string SourceSnapshotHash, string Vi
 
 public sealed record DocumentCoverageContent(
     string CheckerVersion, Guid AnalysisId, Guid AiRevisionId, Guid RevisionId, Guid? DraftId, DocumentCoverageHashes Hashes, DocumentCoverageSummary Summary,
-    IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits);
+    IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
 
 /// <summary>Elemento di AnalysisContent 1.1 con la sezione in cui si trova.</summary>
 public sealed record DocumentSectionItem(string Section, DocumentAnalysisItem Item, Guid? ConflictId = null);
@@ -733,6 +734,7 @@ public static class DocumentCoverage
         }
 
         findings.AddRange(PortionFindings(input.Portions));
+        findings.AddRange(ReconciliationFindings(input.Reconciliation));
 
         foreach (var conflict in input.Target.Conflicts.Where(c => c.Status == AnalysisConflictStatus.Resolved))
         {
@@ -777,6 +779,26 @@ public static class DocumentCoverage
     public static IReadOnlyList<DocumentCoverageFinding> PortionFindings(IReadOnlyList<DocumentCoveragePortion> portions) =>
         [.. portions.Where(p => p.Status != PortionStatus.Completed).Select(portion => Doc(FindingCategory.DeterministicError, "portion_not_processed",
             $"La porzione {portion.Ordinal} non è stata elaborata dall'estrazione ({portion.Status}).", null, null, null, null, null, portion.PortionId.ToString()))];
+
+    /// <summary>
+    /// Residui della riconciliazione gerarchica proiettati dal run (T081): candidati non terminali e patch Stale/Invalid/NotProcessed sono errori deterministici
+    /// bloccanti con ID e motivo. Un candidato Open e un conflitto aperto non sono errori: sono dubbi preservati, mostrati nella sezione e rivisti dal PM.
+    /// </summary>
+    public static IReadOnlyList<DocumentCoverageFinding> ReconciliationFindings(ReconciliationCoverageSection? section)
+    {
+        if (section is null)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. section.Candidates.Where(c => !c.Terminal).Select(c => Doc(FindingCategory.DeterministicError, "candidate_not_terminal",
+                $"Il candidato {c.CandidateId} non è terminale ({c.State}{(c.Reason is null ? string.Empty : ": " + c.Reason)}).", details: c.CandidateId)),
+            .. section.Patches.Where(p => p.Blocking).Select(p => Doc(FindingCategory.DeterministicError, "patch_blocking",
+                $"La patch {p.PatchId} non è applicabile ({p.State}{(p.Reason is null ? string.Empty : ": " + p.Reason)}).", details: p.PatchId)),
+        ];
+    }
 
     private static HashSet<Guid> ItemsOf(Guid evidenceId, DocumentCoverageInput input, Dictionary<Guid, DocumentSectionItem> targetItems) =>
         input.Links.Where(l => l.EvidenceId == evidenceId && targetItems.ContainsKey(l.ItemId)).Select(l => l.ItemId).ToHashSet();
@@ -825,12 +847,32 @@ public sealed record DocumentCoverageFindingView(
 public sealed record DocumentCoverageReportView(
     Guid Id, Guid AnalysisId, Guid? RevisionId, Guid? DraftId, string CheckerVersion, string InputHash, DateTimeOffset CreatedAt, string? CreatedBy,
     CoverageCountsView Counts, DocumentCoverageSummary Summary, DocumentCoverageHashes Hashes, IReadOnlyList<PreparationCoverageRecord> Preparations,
-    IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits);
+    IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
 
 /// <summary>GET di preparazione/coverage: stato strutturale della preparazione prima dell'analisi. Non avvia lavori e non persiste report.</summary>
 public sealed record PreparationCoverageView(
     string CheckerVersion, Guid PreparationId, Guid DocumentId, Guid DocumentVersionId, int Generation, string Status, PreparationCoverageHashes Hashes,
     PortionCountsView Portions, IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits);
+
+// ---- riconciliazione gerarchica nel report (002 T081): lettura delle proiezioni T122, nessun nuovo calcolo e nessun booleano di completezza
+
+public sealed record ReconciliationLevelRecord(string View, int Level, int Nodes, int Pages);
+
+public sealed record ReconciliationCandidateRecord(string CandidateId, string Kind, string ProposedType, string State, string? Reason, IReadOnlyList<string> ChildCandidateIds, bool Terminal);
+
+public sealed record ReconciliationPatchRecord(string PatchId, string TargetKind, string TargetId, string State, string? Reason, bool Blocking);
+
+public sealed record ReconciliationFrontierRecord(string CandidateId, string Reason);
+
+public sealed record ReconciliationAlternativeRecord(Guid ItemId, string Text, string Classification, IReadOnlyList<Guid> EvidenceRefs);
+
+/// <summary>Punto aperto della revisione verificata: conflitto Open con tutte le alternative integrali, oppure domanda aperta (senza alternative).</summary>
+public sealed record ReconciliationOpenPoint(string Kind, Guid Id, string Description, IReadOnlyList<ReconciliationAlternativeRecord> Alternatives);
+
+/// <summary>`Projected` è falso se per il run non esistono proiezioni gerarchiche (analisi non gerarchica): non significa «completo», solo «nulla da elencare».</summary>
+public sealed record ReconciliationCoverageSection(
+    bool Projected, IReadOnlyList<ReconciliationLevelRecord> Levels, IReadOnlyList<ReconciliationCandidateRecord> Candidates, IReadOnlyList<ReconciliationPatchRecord> Patches,
+    IReadOnlyList<ReconciliationFrontierRecord> Frontier, IReadOnlyList<ReconciliationOpenPoint> OpenPoints);
 
 internal sealed record LoadedDocumentCoverage(DocumentCoverageInput Input, DocumentCoverageHashes Hashes, IReadOnlyList<PreparationCoverageRecord> Preparations);
 
@@ -860,6 +902,73 @@ internal static class DocumentCoverageLoader
             new(p.ManifestHash, parse, p.CurrentEvidenceVersionId, p.CurrentEvidenceVersionId is null ? null : $"{p.CurrentEvidenceVersionId:N}:{extraction}"),
             new(portions.Count, completed.Count, completed.Count(x => x.NoEvidenceReason is not null), missing.Count, missing));
         return (record, portions);
+    }
+
+    /// <summary>
+    /// Stato della riconciliazione del run dalle proiezioni append-only: livelli (nodi/pagine), candidati con l'ultima disposition, patch con l'ultimo esito, frontiera
+    /// (candidati Pending/NotProcessed con motivo) e punti aperti della revisione. Sola lettura.
+    /// </summary>
+    public static async Task<ReconciliationCoverageSection> ReconciliationAsync(AppDbContext db, Guid runId, DocumentAnalysisContent target, CancellationToken ct)
+    {
+        var nodes = await db.RunCatalogNodes.AsNoTracking().Where(n => n.RunId == runId).Select(n => new { n.NodeId, n.View, n.Level }).ToListAsync(ct);
+        var pageNodes = await db.RunCatalogPages.AsNoTracking().Where(p => p.RunId == runId).Select(p => p.NodeId).ToListAsync(ct);
+        var levels = nodes.GroupBy(n => (n.View, n.Level)).OrderBy(g => g.Key.View).ThenBy(g => g.Key.Level)
+            .Select(g => new ReconciliationLevelRecord(g.Key.View.ToString(), g.Key.Level, g.Count(), pageNodes.Count(id => g.Any(n => n.NodeId == id)))).ToList();
+
+        var candidates = await db.RunCandidates.AsNoTracking().Where(c => c.RunId == runId).OrderBy(c => c.CandidateId).Select(c => new { c.CandidateId, c.Kind, c.ProposedType }).ToListAsync(ct);
+        var latest = (await db.RunCandidateDispositions.AsNoTracking().Where(d => d.RunId == runId).ToListAsync(ct))
+            .GroupBy(d => d.CandidateId).ToDictionary(g => g.Key, g => g.MaxBy(d => d.Version)!, StringComparer.Ordinal);
+        var memo = new Dictionary<string, bool>(StringComparer.Ordinal);
+        bool Terminal(string id, HashSet<string> path)
+        {
+            if (memo.TryGetValue(id, out var known))
+            {
+                return known;
+            }
+
+            if (!latest.TryGetValue(id, out var d) || !path.Add(id))
+            {
+                return false;
+            }
+
+            var children = ReconciliationCodec.Decode<List<string>>(d.ChildCandidateIdsJson);
+            var result = d.State switch
+            {
+                CandidateState.Compared or CandidateState.Open => true,
+                CandidateState.Expanded => children.Count > 0 && children.All(c => Terminal(c, path)),
+                _ => false,
+            };
+            path.Remove(id);
+            return memo[id] = result;
+        }
+
+        var candidateRecords = candidates.Select(c =>
+        {
+            latest.TryGetValue(c.CandidateId, out var d);
+            return new ReconciliationCandidateRecord(
+                c.CandidateId, c.Kind.ToString(), c.ProposedType.ToString(), d?.State.ToString() ?? "NoDisposition", d?.Reason,
+                d is null ? [] : ReconciliationCodec.Decode<List<string>>(d.ChildCandidateIdsJson), Terminal(c.CandidateId, []));
+        }).ToList();
+        var frontier = candidateRecords.Where(c => c.State is "Pending" or "NotProcessed" or "NoDisposition")
+            .Select(c => new ReconciliationFrontierRecord(c.CandidateId, c.Reason ?? c.State)).ToList();
+
+        var patches = await db.RunPatches.AsNoTracking().Where(p => p.RunId == runId).OrderBy(p => p.PatchId).Select(p => new { p.PatchId, p.TargetKind, p.TargetId }).ToListAsync(ct);
+        var patchLatest = (await db.RunPatchDispositions.AsNoTracking().Where(d => d.RunId == runId).ToListAsync(ct))
+            .GroupBy(d => d.PatchId).ToDictionary(g => g.Key, g => g.MaxBy(d => d.Version)!, StringComparer.Ordinal);
+        var patchRecords = patches.Select(p =>
+        {
+            patchLatest.TryGetValue(p.PatchId, out var d);
+            var kind = d?.Kind;
+            var terminal = kind is RunPatchDispositionKind.Applied or RunPatchDispositionKind.Duplicate;
+            return new ReconciliationPatchRecord(p.PatchId, p.TargetKind.ToString(), p.TargetId, kind?.ToString() ?? "NoDisposition", d?.Reason,
+                !(terminal || kind == RunPatchDispositionKind.PreservedAsConflict));
+        }).Where(p => p.State is not ("Applied" or "Duplicate")).ToList();
+
+        var openPoints = new List<ReconciliationOpenPoint>();
+        openPoints.AddRange(target.Conflicts.Where(c => c.Status == AnalysisConflictStatus.Open).Select(c => new ReconciliationOpenPoint(
+            "conflict", c.Id, c.Description, [.. c.Alternatives.Select(a => new ReconciliationAlternativeRecord(a.Id, a.Text, a.Classification.ToString(), a.EvidenceRefs))])));
+        openPoints.AddRange(target.OpenQuestions.Select(q => new ReconciliationOpenPoint("question", q.Id, q.Text, [])));
+        return new(nodes.Count + candidates.Count + patches.Count > 0, levels, candidateRecords, patchRecords, frontier, openPoints);
     }
 
     public static async Task<LoadedDocumentCoverage> LoadAsync(
@@ -921,7 +1030,7 @@ internal static class DocumentCoverageLoader
             [.. preparations.Select(p => p.Hashes.ExtractionHash ?? string.Empty)], Sha256(revision.ContentJson), draft is null ? null : Sha256(draft.Markdown));
         var input = new DocumentCoverageInput(
             evidence, links, DocumentAnalysisContentJson.Deserialize(aiRevision.ContentJson), DocumentAnalysisContentJson.Deserialize(revision.ContentJson), draft?.Markdown,
-            texts, portions, relations);
+            texts, portions, relations, await ReconciliationAsync(db, run.Id, DocumentAnalysisContentJson.Deserialize(revision.ContentJson), ct));
         return new(input, hashes, preparations);
     }
 }

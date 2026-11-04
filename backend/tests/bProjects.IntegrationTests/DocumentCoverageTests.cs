@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Documents;
 using bProjects.App.Evidence;
@@ -26,6 +27,8 @@ public sealed class DocumentCoverageCheckerTests
         ["item_source_unresolved"] = FindingCategory.DeterministicError,
         ["item_without_fragment"] = FindingCategory.DeterministicError,
         ["portion_not_processed"] = FindingCategory.DeterministicError,
+        ["candidate_not_terminal"] = FindingCategory.DeterministicError,
+        ["patch_blocking"] = FindingCategory.DeterministicError,
         ["known_relation_unrepresented"] = FindingCategory.DeterministicError,
         ["revision_source_not_cited"] = FindingCategory.DeterministicError,
         ["qualifier_changed"] = FindingCategory.SemanticRisk,
@@ -448,6 +451,80 @@ public sealed class DocumentCoverageEndpointTests : ArchiveTestBase
         Assert.Equal("medium", finding.GetProperty("confidence").GetString());
     }
 
+    // ================================================================ riconciliazione gerarchica (T081)
+
+    [Fact]
+    public async Task The_report_lists_levels_pages_open_candidates_blocking_patches_and_frontier_with_ids_and_reasons_and_preserves_open_alternatives()
+    {
+        using var client = await App.LoginAsync();
+        var w = await SeedAsync(client, [PortionStatus.Completed], openConflict: true);
+        var (done, open, stuck) = (
+            ReconciliationFixtures.Candidate(),
+            ReconciliationFixtures.Candidate(CandidateKind.Relation, ReconcileProposedType.Contradicts),
+            ReconciliationFixtures.Candidate(CandidateKind.Relation, ReconcileProposedType.Qualifies, swap: true));
+        var applied = ReconciliationFixtures.AddSupport();
+        var hash3 = new string('3', 64);
+        using (var scope = App.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            foreach (var c in new[] { done, open, stuck })
+            {
+                db.AddRange(ReconciliationProjection.Candidate(w.Project, w.Run, ReconciliationFixtures.SourceHash, new string('d', 64), c with { OriginBatchIds = [] }, new Dictionary<string, string>()));
+            }
+
+            db.Add(ReconciliationProjection.Patch(w.Project, w.Run, ReconciliationFixtures.SourceHash, applied, [new string('1', 64)]));
+            await db.SaveChangesAsync(Ct);
+            db.AddRange(
+                new RunCandidateDisposition { RunId = w.Run, CandidateId = done.CandidateId, Version = 1, State = CandidateState.Pending, ChildCandidateIdsJson = "[]", ComparisonOutputHashesJson = "[]" },
+                new RunCandidateDisposition { RunId = w.Run, CandidateId = done.CandidateId, Version = 2, State = CandidateState.Compared, ChildCandidateIdsJson = "[]", ComparisonOutputHashesJson = $"[\"{hash3}\"]" },
+                new RunCandidateDisposition { RunId = w.Run, CandidateId = open.CandidateId, Version = 1, State = CandidateState.Open, ChildCandidateIdsJson = "[]", ComparisonOutputHashesJson = $"[\"{hash3}\"]", Reason = "orario discordante" },
+                new RunCandidateDisposition { RunId = w.Run, CandidateId = stuck.CandidateId, Version = 1, State = CandidateState.NotProcessed, ChildCandidateIdsJson = "[]", ComparisonOutputHashesJson = "[]", Reason = "limite di chiamate" },
+                new RunPatchDisposition { RunId = w.Run, PatchId = applied.PatchId, Version = 1, Kind = RunPatchDispositionKind.Stale, Reason = "base cambiata" });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var report = await Json(await client.PostAsJsonAsync(ReportsUrl(w), new { }, Ct));
+
+        var rec = report.GetProperty("reconciliation");
+        Assert.True(rec.GetProperty("projected").GetBoolean());
+        var candidates = rec.GetProperty("candidates").EnumerateArray().ToDictionary(c => c.GetProperty("candidateId").GetString()!);
+        Assert.Equal(3, candidates.Count);
+        Assert.Equal(("Compared", true), (candidates[done.CandidateId].GetProperty("state").GetString(), candidates[done.CandidateId].GetProperty("terminal").GetBoolean()));
+        Assert.Equal(("Open", "orario discordante", true), (candidates[open.CandidateId].GetProperty("state").GetString(), candidates[open.CandidateId].GetProperty("reason").GetString(), candidates[open.CandidateId].GetProperty("terminal").GetBoolean()));
+        Assert.Equal(("NotProcessed", "limite di chiamate", false), (candidates[stuck.CandidateId].GetProperty("state").GetString(), candidates[stuck.CandidateId].GetProperty("reason").GetString(), candidates[stuck.CandidateId].GetProperty("terminal").GetBoolean()));
+        var frontier = Assert.Single(rec.GetProperty("frontier").EnumerateArray());
+        Assert.Equal((stuck.CandidateId, "limite di chiamate"), (frontier.GetProperty("candidateId").GetString(), frontier.GetProperty("reason").GetString()));
+        var patch = Assert.Single(rec.GetProperty("patches").EnumerateArray());
+        Assert.Equal((applied.PatchId, "Stale", "base cambiata", true), (patch.GetProperty("patchId").GetString(), patch.GetProperty("state").GetString(), patch.GetProperty("reason").GetString(), patch.GetProperty("blocking").GetBoolean()));
+        var point = Assert.Single(rec.GetProperty("openPoints").EnumerateArray());
+        Assert.Equal("Orario di chiusura discordante", point.GetProperty("description").GetString());
+        Assert.Equal(["Il magazzino B chiude alle 18.", "Il magazzino B chiude alle 20 il venerdi."], point.GetProperty("alternatives").EnumerateArray().Select(a => a.GetProperty("text").GetString()));
+
+        var blocking = report.GetProperty("findings").EnumerateArray().Where(f => f.GetProperty("blocking").GetBoolean()).ToList();
+        Assert.Equal(["candidate_not_terminal", "patch_blocking"], blocking.Select(f => f.GetProperty("code").GetString()).Order());
+        Assert.Contains(blocking, f => f.GetProperty("details").GetString() == stuck.CandidateId && f.GetProperty("message").GetString()!.Contains("limite di chiamate"));
+        Assert.Contains(blocking, f => f.GetProperty("details").GetString() == applied.PatchId && f.GetProperty("message").GetString()!.Contains("base cambiata"));
+        Assert.Equal(2, report.GetProperty("summary").GetProperty("blockingFindings").GetInt32());
+        Assert.DoesNotMatch("(?i)\"(is)?complete", report.GetRawText());
+    }
+
+    [Fact]
+    public async Task A_report_without_hierarchical_projections_says_so_and_adds_no_reconciliation_finding()
+    {
+        using var client = await App.LoginAsync();
+        var w = await SeedAsync(client, [PortionStatus.Completed]);
+
+        var report = await Json(await client.PostAsJsonAsync(ReportsUrl(w), new { }, Ct));
+
+        var rec = report.GetProperty("reconciliation");
+        Assert.False(rec.GetProperty("projected").GetBoolean());
+        Assert.Empty(rec.GetProperty("candidates").EnumerateArray());
+        Assert.Empty(rec.GetProperty("patches").EnumerateArray());
+        Assert.Empty(rec.GetProperty("frontier").EnumerateArray());
+        Assert.Empty(rec.GetProperty("openPoints").EnumerateArray());
+        Assert.Empty(report.GetProperty("findings").EnumerateArray());
+    }
+
     // ================================================================ storico coverage-v1
 
     [Fact]
@@ -486,7 +563,7 @@ public sealed class DocumentCoverageEndpointTests : ArchiveTestBase
 
     private static string ReportsUrl(World w) => $"/api/projects/{w.Project}/analyses/{w.Run}/coverage-reports";
 
-    private async Task<World> SeedAsync(HttpClient client, PortionStatus[] portions, bool linkB = true, string? itemTextA = null, bool withAnalysis = true)
+    private async Task<World> SeedAsync(HttpClient client, PortionStatus[] portions, bool linkB = true, string? itemTextA = null, bool withAnalysis = true, bool openConflict = false)
     {
         var project = await NewProject(client);
         var created = await Json(await Upload(client, project, Text("regole"), "regole.txt", displayName: "regole"));
@@ -590,7 +667,19 @@ public sealed class DocumentCoverageEndpointTests : ArchiveTestBase
                 SchemaVersion = DocumentAnalysisContent.SchemaVersionValue, AnalysisId = run, ProjectId = project, SourceCutoffSequence = 0, ValidationState = AnalysisContentState.Unvalidated,
                 Sources = [Source(sourceA, blockA, TextA), Source(sourceB, blockB, TextB)], Goals = [],
                 ContextAndScope = new DocumentAnalysisContextAndScope { Overview = [], Included = [], Excluded = [] },
-                Requirements = items, OperationalFlows = [], Constraints = [], Dependencies = [], Assumptions = [], OpenQuestions = [], Conflicts = [],
+                Requirements = items, OperationalFlows = [], Constraints = [], Dependencies = [], Assumptions = [], OpenQuestions = [],
+                Conflicts = !openConflict ? [] :
+                [
+                    new DocumentAnalysisConflict
+                    {
+                        Id = Guid.NewGuid(), Description = "Orario di chiusura discordante", Status = AnalysisConflictStatus.Open, Resolution = null,
+                        Alternatives =
+                        [
+                            new() { Id = Guid.NewGuid(), Text = "Il magazzino B chiude alle 18.", Classification = DocumentAnalysisClassification.Documented, EvidenceRefs = [sourceB] },
+                            new() { Id = Guid.NewGuid(), Text = "Il magazzino B chiude alle 20 il venerdi.", Classification = DocumentAnalysisClassification.Documented, EvidenceRefs = [sourceA] },
+                        ],
+                    },
+                ],
             };
             db.AnalysisRevisions.Add(new AnalysisRevision
             {

@@ -723,6 +723,202 @@ describe('EvidenceViewComponent', () => {
     expect(semantic).toContain('Non è una conferma');
     expect(q('empty-DeterministicError')!.textContent).toContain('Nessuna segnalazione');
   });
+  describe('coverage-2 and hierarchical reconciliation', () => {
+    const finding = (over: Partial<CoverageReportView['findings'][number]>) => ({
+      category: 'DeterministicError' as const,
+      code: 'x',
+      message: 'm',
+      evidenceId: null,
+      alias: null,
+      itemId: null,
+      section: null,
+      confidence: null,
+      details: null,
+      ...over,
+    });
+
+    const open = async (report: Partial<CoverageReportView>) => {
+      await setup({ analysisId: 'a-1' });
+      await click('verify-coverage');
+      http
+        .expectOne(`${BASE}/draft`)
+        .flush({ code: 'draft_not_available' }, { status: 404, statusText: 'Not Found' });
+      await settle();
+      http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush(
+        {
+          id: 'c-9',
+          analysisId: 'a-1',
+          revisionId: 'rev-1',
+          draftId: null,
+          checkerVersion: 'coverage-2',
+          createdAt: '2030-01-03T10:00:00Z',
+          counts: { deterministicErrors: 0, semanticRisks: 0, pmAssessments: 0 },
+          inputHash: 'h',
+          createdBy: 'pm',
+          findings: [],
+          limits: [],
+          ...report,
+        },
+        { status: 201, statusText: 'Created' },
+      );
+      await settle();
+      http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush({ items: [] });
+      await settle();
+    };
+
+    const summary = (over: Record<string, number> = {}) => ({
+      expectedEvidence: 2,
+      representedEvidence: 2,
+      portionsExpected: 1,
+      portionsProcessed: 1,
+      portionsNoEvidence: 0,
+      portionsMissing: 0,
+      blockingFindings: 0,
+      ...over,
+    });
+
+    const none = {
+      projected: false,
+      levels: [],
+      candidates: [],
+      patches: [],
+      frontier: [],
+      openPoints: [],
+    };
+
+    const text = (id: string) => q(id)!.textContent!.replace(/\s+/g, ' ');
+
+    it('shows 100% ID coverage next to a separate semantic warning without certifying fidelity', async () => {
+      await open({
+        counts: { deterministicErrors: 0, semanticRisks: 1, pmAssessments: 1 },
+        summary: summary(),
+        reconciliation: none,
+        findings: [
+          finding({
+            category: 'SemanticRisk',
+            code: 'qualifier_changed',
+            message: 'Il qualificatore non si ritrova',
+            confidence: 'medium',
+          }),
+          finding({
+            category: 'PmAssessment',
+            code: 'item_rewritten_by_pm',
+            message: 'Elemento riscritto dal PM',
+          }),
+        ],
+      });
+
+      expect(text('id-coverage')).toContain('Copertura per ID: 2 di 2 evidenze attese');
+      expect(text('id-coverage-note')).toContain('non dimostra che il testo sia fedele');
+      expect(q('blocking-warning')).toBeNull();
+      expect(text('group-SemanticRisk')).toContain('Rischio stimato (1)');
+      expect(text('group-SemanticRisk')).toContain('Confidenza media');
+      expect(text('group-PmAssessment')).toContain('Valutazione PM (1)');
+      expect(q('group-SemanticRisk')!.textContent).not.toContain('Elemento riscritto dal PM');
+      expect(q('group-PmAssessment')!.textContent).not.toContain('qualificatore');
+      const all = q('report')!.textContent!.toLowerCase();
+      expect(all).not.toMatch(/fedele al 100|\bverificato\b|\bcompleto\b|\bcompleta\b/);
+      expect(text('reconciliation-none')).toContain('non è una conferma di completezza');
+    });
+
+    it('lists unresolved candidates, frontier and blocking patches with id and reason, plus open alternatives in full', async () => {
+      await open({
+        counts: { deterministicErrors: 2, semanticRisks: 0, pmAssessments: 0 },
+        summary: summary({ blockingFindings: 2, portionsMissing: 1, portionsProcessed: 0 }),
+        findings: [
+          finding({ code: 'candidate_not_terminal', message: 'Il candidato c1 non è terminale' }),
+        ],
+        reconciliation: {
+          projected: true,
+          levels: [{ view: 'A', level: 0, nodes: 2, pages: 3 }],
+          candidates: [
+            {
+              candidateId: 'cand-1',
+              kind: 'Relation',
+              proposedType: 'SameRule',
+              state: 'NotProcessed',
+              reason: 'limite di chiamate',
+              childCandidateIds: [],
+              terminal: false,
+            },
+            {
+              candidateId: 'cand-2',
+              kind: 'Relation',
+              proposedType: 'Contradicts',
+              state: 'Open',
+              reason: 'orario discordante',
+              childCandidateIds: [],
+              terminal: true,
+            },
+          ],
+          frontier: [{ candidateId: 'cand-1', reason: 'limite di chiamate' }],
+          patches: [
+            {
+              patchId: 'patch-1',
+              targetKind: 'Item',
+              targetId: 'i-1',
+              state: 'Stale',
+              reason: 'base cambiata',
+              blocking: true,
+            },
+          ],
+          openPoints: [
+            {
+              kind: 'conflict',
+              id: 'k-1',
+              description: 'Orario di chiusura discordante',
+              alternatives: [
+                {
+                  itemId: 'i-1',
+                  text: 'Chiude alle 18.',
+                  classification: 'Documented',
+                  evidenceRefs: [],
+                },
+                {
+                  itemId: 'i-2',
+                  text: 'Chiude alle 20.',
+                  classification: 'Documented',
+                  evidenceRefs: [],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      expect(text('blocking-warning')).toContain('2 segnalazioni bloccanti');
+      expect(text('blocking-warning')).toContain('la verifica non è chiusa');
+      expect(text('id-coverage')).toContain('(1 mancante)');
+      expect(text('reconciliation-levels')).toContain('Vista A, livello 0: 2 nodi, 3 pagine');
+      expect(text('reconciliation-unresolved')).toContain(
+        'cand-1 · NotProcessed · limite di chiamate',
+      );
+      expect(text('reconciliation-open-candidates')).toContain(
+        'cand-2 · dubbio preservato · orario discordante',
+      );
+      expect(text('reconciliation-frontier')).toContain('cand-1 · limite di chiamate');
+      expect(text('reconciliation-patches')).toContain('patch-1 · Stale bloccante · base cambiata');
+      expect(text('reconciliation-open-points')).toContain(
+        'Conflitto: Orario di chiusura discordante',
+      );
+      const alternatives = fixture.nativeElement.querySelectorAll(
+        '[data-testid="open-alternative"]',
+      );
+      expect([...alternatives].map((a) => (a as HTMLElement).textContent)).toEqual([
+        'Chiude alle 18.',
+        'Chiude alle 20.',
+      ]);
+      expect(text('group-DeterministicError')).toContain('Errore deterministico (1)');
+    });
+
+    it('keeps rendering a historic coverage-v1 report without summary or reconciliation', async () => {
+      await open({ checkerVersion: 'coverage-v1' });
+
+      expect(q('id-coverage')).toBeNull();
+      expect(q('reconciliation')).toBeNull();
+      expect(q('report')).not.toBeNull();
+    });
+  });
 
   it('includes the draft only when it belongs to the current revision', async () => {
     await setup({ analysisId: 'a-1' });

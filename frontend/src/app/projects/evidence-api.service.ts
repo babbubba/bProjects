@@ -346,6 +346,8 @@ export interface CoverageFinding {
   /** Solo per SemanticRisk: low | medium. */
   confidence: string | null;
   details: string | null;
+  /** Solo coverage-2: errore deterministico che impedisce di considerare chiusa la verifica. */
+  blocking?: boolean;
 }
 
 export interface CoverageCounts {
@@ -364,11 +366,67 @@ export interface CoverageReportSummary {
   counts: CoverageCounts;
 }
 
+/** Solo coverage-2: sintesi per ID e per porzioni. Non esiste un booleano di completezza: la copertura per ID non certifica la fedelta al testo. */
+export interface CoverageDocumentSummary {
+  expectedEvidence: number;
+  representedEvidence: number;
+  portionsExpected: number;
+  portionsProcessed: number;
+  portionsNoEvidence: number;
+  portionsMissing: number;
+  blockingFindings: number;
+}
+
+export interface ReconciliationLevel {
+  view: string;
+  level: number;
+  nodes: number;
+  pages: number;
+}
+
+export interface ReconciliationCandidate {
+  candidateId: string;
+  kind: string;
+  proposedType: string;
+  state: string;
+  reason: string | null;
+  childCandidateIds: string[];
+  terminal: boolean;
+}
+
+export interface ReconciliationPatch {
+  patchId: string;
+  targetKind: string;
+  targetId: string;
+  state: string;
+  reason: string | null;
+  blocking: boolean;
+}
+
+export interface ReconciliationOpenPoint {
+  kind: 'conflict' | 'question';
+  id: string;
+  description: string;
+  alternatives: { itemId: string; text: string; classification: string; evidenceRefs: string[] }[];
+}
+
+/** Residui della riconciliazione gerarchica letti dalle proiezioni del run; projected=false: nessuna proiezione per questa analisi. */
+export interface ReconciliationCoverage {
+  projected: boolean;
+  levels: ReconciliationLevel[];
+  candidates: ReconciliationCandidate[];
+  patches: ReconciliationPatch[];
+  frontier: { candidateId: string; reason: string }[];
+  openPoints: ReconciliationOpenPoint[];
+}
+
 export interface CoverageReportView extends CoverageReportSummary {
   inputHash: string;
   createdBy: string | null;
   findings: CoverageFinding[];
   limits: string[];
+  summary?: CoverageDocumentSummary;
+  reconciliation?: ReconciliationCoverage;
 }
 
 const enc = encodeURIComponent;

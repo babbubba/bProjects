@@ -228,6 +228,13 @@ export class EvidenceViewComponent {
   protected readonly coverageBusy = signal(false);
   protected readonly coverageError = signal('');
   protected readonly selectionInfo = signal('');
+  protected readonly reconciliation = computed(() => this.report()?.reconciliation ?? null);
+  protected readonly nonTerminal = computed(() =>
+    (this.reconciliation()?.candidates ?? []).filter((c) => !c.terminal),
+  );
+  protected readonly openCandidates = computed(() =>
+    (this.reconciliation()?.candidates ?? []).filter((c) => c.terminal && c.state === 'Open'),
+  );
   protected readonly groups = computed(() => {
     const findings = this.report()?.findings ?? [];
     return categories.map((category) => ({

@@ -716,6 +716,125 @@
           Report del {{ formatTime(r.createdAt) }} · verificatore {{ r.checkerVersion }} ·
           {{ r.draftId ? 'bozza inclusa' : 'senza bozza' }}
         </p>
+        @if (r.summary; as s) {
+          <div class="small mb-2" data-testid="id-coverage">
+            <p class="mb-1">
+              Copertura per ID: {{ s.representedEvidence }} di
+              {{ plural(s.expectedEvidence, 'evidenza attesa', 'evidenze attese') }} collegate a un
+              elemento · porzioni elaborate {{ s.portionsProcessed }} di {{ s.portionsExpected }}
+              @if (s.portionsMissing > 0) {
+                ({{ plural(s.portionsMissing, 'mancante', 'mancanti') }})
+              }
+            </p>
+            <p class="mb-1 text-secondary" data-testid="id-coverage-note">
+              Il collegamento per ID non dimostra che il testo sia fedele alle fonti: nessuna
+              copertura, anche al 100%, certifica il significato.
+            </p>
+            @if (s.blockingFindings > 0) {
+              <p class="alert alert-danger py-1 mb-0" role="alert" data-testid="blocking-warning">
+                {{
+                  plural(s.blockingFindings, 'segnalazione bloccante', 'segnalazioni bloccanti')
+                }}: la verifica non è chiusa.
+              </p>
+            }
+          </div>
+        }
+        @if (reconciliation(); as rec) {
+          <section
+            class="mb-2"
+            aria-labelledby="ev-reconciliation-title"
+            data-testid="reconciliation"
+          >
+            <h4 id="ev-reconciliation-title" class="h6 mb-1">Riconciliazione gerarchica</h4>
+            @if (!rec.projected) {
+              <p class="small text-secondary mb-1" data-testid="reconciliation-none">
+                Nessuna proiezione gerarchica per questa analisi: non c'è nulla da elencare, e non è
+                una conferma di completezza.
+              </p>
+            } @else {
+              <ul class="small ps-3 mb-1" data-testid="reconciliation-levels">
+                @for (l of rec.levels; track l.view + l.level) {
+                  <li>
+                    Vista {{ l.view }}, livello {{ l.level }}:
+                    {{ plural(l.nodes, 'nodo', 'nodi') }}, {{ plural(l.pages, 'pagina', 'pagine') }}
+                  </li>
+                }
+              </ul>
+              <p class="small mb-1">
+                Candidati: {{ rec.candidates.length }} · non terminali: {{ nonTerminal().length }} ·
+                aperti: {{ openCandidates().length }}
+              </p>
+              @if (nonTerminal().length > 0) {
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-unresolved">
+                  @for (c of nonTerminal(); track c.candidateId) {
+                    <li>
+                      <code>{{ c.candidateId }}</code> · {{ c.state }}
+                      @if (c.reason) {
+                        <span class="text-secondary"> · {{ c.reason }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+              @if (openCandidates().length > 0) {
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-open-candidates">
+                  @for (c of openCandidates(); track c.candidateId) {
+                    <li>
+                      <code>{{ c.candidateId }}</code> · dubbio preservato
+                      @if (c.reason) {
+                        <span class="text-secondary"> · {{ c.reason }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+              @if (rec.frontier.length > 0) {
+                <p class="small mb-0">Frontiera non risolta</p>
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-frontier">
+                  @for (f of rec.frontier; track f.candidateId) {
+                    <li>
+                      <code>{{ f.candidateId }}</code> · {{ f.reason }}
+                    </li>
+                  }
+                </ul>
+              }
+              @if (rec.patches.length > 0) {
+                <p class="small mb-0">Patch non applicate</p>
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-patches">
+                  @for (p of rec.patches; track p.patchId) {
+                    <li>
+                      <code>{{ p.patchId }}</code> · {{ p.state }}
+                      @if (p.blocking) {
+                        <span class="badge text-bg-light border ms-1">bloccante</span>
+                      }
+                      @if (p.reason) {
+                        <span class="text-secondary"> · {{ p.reason }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            }
+            @if (rec.openPoints.length > 0) {
+              <p class="small mb-0">Punti aperti della revisione</p>
+              <ul class="small ps-3 mb-1" data-testid="reconciliation-open-points">
+                @for (o of rec.openPoints; track o.id) {
+                  <li>
+                    {{ o.kind === 'conflict' ? 'Conflitto' : 'Domanda aperta' }}:
+                    {{ o.description }}
+                    @if (o.alternatives.length > 0) {
+                      <ol class="mb-0">
+                        @for (a of o.alternatives; track a.itemId) {
+                          <li data-testid="open-alternative">{{ a.text }}</li>
+                        }
+                      </ol>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+        }
         @for (g of groups(); track g.category) {
           <section
             [attr.aria-label]="categoryLabel(g.category)"
