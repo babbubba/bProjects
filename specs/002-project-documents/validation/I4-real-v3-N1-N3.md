@@ -228,3 +228,13 @@ Ambiente come sopra; una ripetizione per test; gold, asserzioni e validatori inv
 - N1 PASS (1m53s) · N2 PASS (1m34s) · N3 PASS (1m31s) · N5 PASS (1m31s).
 - **N4 FAIL** (15 PASS / 1 FAIL, 48s): `work_output_invalid`, `analysis.contextAndScope.included[1].evidenceRefs: Documented richiede almeno una fonte DocumentPassage`. È un errore diverso dalle due classi coperte dal retry (chiavi duplicate, evidenza non mappata), quindi per contratto (AI §10) non genera retry.
 - Gate N1–N5 NON soddisfatto (4/5). T130, T126 e T067 non spuntati. Il browser reale non è stato rieseguito.
+
+## Undicesima esecuzione: ripetizione di N4 (2026-11-04, HEAD 94294fa; nessuna modifica a codice, prompt, contratti, validatori o test)
+Una sola ripetizione, stesso dataset e configurazione DGX. Precedente FAIL (decima esecuzione, `Documented` senza `DocumentPassage`) **registrato e non cancellato**: una ripetizione non dimostra affidabilità.
+**N4 FAIL** (29 PASS / 5 FAIL, 1m08s), per cause DIVERSE dalla precedente:
+- Validità e provenienza: PASS. Analisi valida (revisione 1.1.0, workflow v3 con alias); ogni evidenceRef è una fonte dichiarata; 100% citazioni documentali corrette; «Declared solo con messaggio PM, Documented solo con passaggio di documento» PASS.
+- Classificazione: PASS. «Il termine di pagamento è fissato a 30 giorni» = Documented (citazione esatta); «…45 giorni» = Declared (messaggio PM). Attese annotate «documento: 30 giorni (Documented)» e «PM: 45 giorni (Declared)» PASS. Citazioni `DocumentPassage` richieste: presenti (l'errore `Documented richiede almeno una fonte DocumentPassage` NON si è ripresentato).
+- Conflitto: **FAIL ×4** — `conflitti=0`: il modello ha tenuto le due posizioni come voci separate senza dichiarare il conflitto (nessuna scelta automatica fra le posizioni, ma conflitto assente).
+- Retry T130: non determinabile con certezza dai log del test; le fasi Analysis registrano 2 chiamate (prompt 3107 e 3225 token, finish=stop), compatibile con l'unico retry guidato ma NON confermato (la telemetria non espone il motivo). Stato: NOT VERIFIED.
+- Bozza: **FAIL** — `work_output_invalid`, `blocks[2]` cita due fonti che non sostengono nessuno dei suoi item (violazione di provenienza). Una sola chiamata Document: nessun retry T129 (per contratto non si applica a fonti non sostenute). Nessuna chiamata troncata.
+- Gate N4 NON soddisfatto; T067/T126/T130 aperti. Nessuna nuova campagna di benchmark avviata.
