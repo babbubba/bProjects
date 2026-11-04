@@ -177,7 +177,7 @@ public sealed class DocumentReconciliationContractTests
         Assert.Throws<JsonException>(() => ReconciliationCodec.Decode<CatalogEntry>(entry.Replace("\"origin\":\"Literal\"", "\"origin\":\"literal\"")));
         Assert.Throws<JsonException>(() => ReconciliationCodec.Decode<CatalogEntry>(entry.Replace("\"value\":\"x\"", "\"value\":null")));
         Assert.Throws<JsonException>(() => ReconciliationCodec.Decode<CatalogEntry>(entry.Replace("\"keys\":[", "\"keys\":null,\"x\":[")));
-        Assert.Throws<JsonException>(() => ReconciliationCodec.Decode<CatalogEntry>(entry.Replace(ReconciliationFixtures.E1.ToString(), ReconciliationFixtures.E1.ToString().ToUpperInvariant())));
+        Assert.Throws<JsonException>(() => ReconciliationCodec.Decode<CatalogEntry>(entry.Replace(ReconciliationFixtures.E1.ToString(), "a0000000-0000-4000-8000-00000000000A")));   // UUID non lowercase
         Assert.Throws<JsonException>(() => ReconciliationCodec.Decode<CatalogEntry>(entry.Replace(",\"originOutputHash\":null", string.Empty)));   // proprietà obbligatoria assente
 
         var node = ReconciliationCodec.Encode(Build().Leaf0);
@@ -359,8 +359,9 @@ public sealed class DocumentReconciliationContractTests
         Assert.NotEmpty(Check(new([h.Leaf0, h.Leaf1, dup.Node], [.. h.Pages, .. dup.Pages], [])));
 
         // Copertura: con complete=true una foglia mancante lascia fuori un'evidenza.
-        Assert.Empty(Check(new([h.Leaf0], h.Pages, []), complete: false));
-        Assert.NotEmpty(Check(new([h.Leaf0], h.Pages, []), complete: true));
+        var leafPages = h.Pages.Where(p => p.NodeId == h.Leaf0.NodeId).ToList();
+        Assert.Empty(Check(new([h.Leaf0], leafPages, []), complete: false));
+        Assert.NotEmpty(Check(new([h.Leaf0], leafPages, []), complete: true));
     }
 
     private static (CatalogNode Node, List<CatalogPage> Pages) ForeignLeaf(Hierarchy h, IReadOnlyList<MemberPageEntry> members)

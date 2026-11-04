@@ -28,10 +28,225 @@ public static class ReconciliationReferences
     /// cardinalità e hash, insiemi = unione esatta dei nodi, riferimenti alle pagine. <paramref name="complete"/> richiede che ogni evidenza dello snapshot
     /// compaia una volta in ogni vista con nodi (foglie).
     /// </summary>
-    public static IReadOnlyList<string> CheckCatalog(ReconciliationCatalog catalog, ReconciliationSnapshot snapshot, string inputHash, bool complete = false) => throw new NotImplementedException();
+    public static IReadOnlyList<string> CheckCatalog(ReconciliationCatalog catalog, ReconciliationSnapshot snapshot, string inputHash, bool complete = false)
+    {
+        var v = new List<string>();
+        var evidence = snapshot.Evidence.ToDictionary(e => e.EvidenceId);
+        var relations = snapshot.Relations.ToDictionary(r => r.RelationId);
+        var nodes = new Dictionary<string, CatalogNode>(StringComparer.Ordinal);
+        foreach (var node in catalog.Nodes)
+        {
+            if (!nodes.TryAdd(node.NodeId, node))
+            {
+                v.Add($"nodes: {node.NodeId} duplicato.");
+            }
 
-    /// <summary>Come <see cref="CheckResult(ReconcileResult, ReconciliationSnapshot, IReadOnlySet{string}?)"/>, con endpoint Node/Set risolti nel catalogo (hash = memberSetHash).</summary>
-    public static IReadOnlyList<string> CheckResult(ReconcileResult result, ReconciliationSnapshot snapshot, ReconciliationCatalog catalog) => throw new NotImplementedException();
+            v.AddRange(ReconciliationCatalogRules.CheckNode(node, inputHash).Select(m => $"node {node.NodeId}: {m}"));
+        }
+
+        foreach (var group in catalog.Nodes.GroupBy(n => (n.View, n.Level, n.Ordinal)).Where(g => g.Count() > 1))
+        {
+            v.Add($"nodes: ordinal {group.Key.Ordinal} duplicato in {group.Key.View}/{group.Key.Level}.");
+        }
+
+        // Pagine: oggetto, catena per (nodo,kind) e riferimenti; l'hash della pagina è la sua identità nei nodi.
+        var chains = new Dictionary<(string Node, CatalogPageKind Kind), List<CatalogPage>>();
+        foreach (var page in catalog.Pages)
+        {
+            if (!nodes.ContainsKey(page.NodeId))
+            {
+                v.Add($"page {page.PageId}: nodo {page.NodeId} sconosciuto.");
+                continue;
+            }
+
+            v.AddRange(ReconciliationCatalogRules.CheckPage(page).Select(m => $"page {page.PageId}: {m}"));
+            if (!chains.TryGetValue((page.NodeId, page.Kind), out var list))
+            {
+                chains[(page.NodeId, page.Kind)] = list = [];
+            }
+
+            list.Add(page);
+        }
+
+        var ordered = new Dictionary<(string Node, CatalogPageKind Kind), List<CatalogPage>>();
+        foreach (var (key, pages) in chains)
+        {
+            v.AddRange(ReconciliationCatalogRules.CheckPageChain(pages).Select(m => $"pages {key.Node}/{key.Kind}: {m}"));
+            ordered[key] = [.. pages.OrderBy(p => p.Ordinal)];
+        }
+
+        var memberPageHashes = ordered.Where(c => c.Key.Kind == CatalogPageKind.Members).SelectMany(c => c.Value).Select(ReconciliationIds.PageHash).ToHashSet(StringComparer.Ordinal);
+        List<string> PageHashes(string nodeId, CatalogPageKind kind) => ordered.TryGetValue((nodeId, kind), out var p) ? [.. p.Select(ReconciliationIds.PageHash)] : [];
+
+        // Membership: foglie dalle pagine Members, genitori come unione disgiunta dei figli (livelli crescenti).
+        var members = new Dictionary<string, Dictionary<Guid, MemberPageEntry>>(StringComparer.Ordinal);
+        foreach (var node in catalog.Nodes.OrderBy(n => n.Level))
+        {
+            if (members.ContainsKey(node.NodeId))
+            {
+                continue;
+            }
+
+            var own = new Dictionary<Guid, MemberPageEntry>();
+            if (node.Level == 0)
+            {
+                if (!ordered.TryGetValue((node.NodeId, CatalogPageKind.Members), out var memberPages))
+                {
+                    v.Add($"node {node.NodeId}: una foglia richiede la membership esplicita in pagine Members.");
+                }
+                else
+                {
+                    foreach (var entry in memberPages.SelectMany(p => p.Entries).OfType<MemberPageEntry>())
+                    {
+                        if (!own.TryAdd(entry.EvidenceId, entry))
+                        {
+                            v.Add($"node {node.NodeId}: membro {entry.EvidenceId} ripetuto.");
+                        }
+                        else if (!evidence.TryGetValue(entry.EvidenceId, out var e))
+                        {
+                            v.Add($"node {node.NodeId}: membro {entry.EvidenceId} fuori snapshot.");
+                        }
+                        else if (e.EvidenceVersionId != entry.EvidenceVersionId || e.ContentHash != entry.ContentHash)
+                        {
+                            v.Add($"node {node.NodeId}: membro {entry.EvidenceId} con versione o contentHash diversi dallo snapshot.");
+                        }
+                    }
+                }
+
+                var leafKeys = PageHashes(node.NodeId, CatalogPageKind.Keys);
+                var leafRelations = PageHashes(node.NodeId, CatalogPageKind.Relations);
+                if (!node.KeyPageHashes.SequenceEqual(leafKeys, StringComparer.Ordinal) || !node.RelationPageHashes.SequenceEqual(leafRelations, StringComparer.Ordinal))
+                {
+                    v.Add($"node {node.NodeId}: keyPageHashes/relationPageHashes diversi dalle pagine concatenate del nodo.");
+                }
+
+                foreach (var entry in ordered.TryGetValue((node.NodeId, CatalogPageKind.Keys), out var kp) ? kp.SelectMany(p => p.Entries).OfType<KeyPageEntry>() : [])
+                {
+                    foreach (var id in entry.MemberIds.Where(id => !own.ContainsKey(id)))
+                    {
+                        v.Add($"node {node.NodeId}: la chiave cita {id}, che non è un membro della foglia.");
+                    }
+
+                    foreach (var reference in entry.MemberPageRefs.Where(r => !memberPageHashes.Contains(r)))
+                    {
+                        v.Add($"node {node.NodeId}: la chiave cita la pagina Members {reference}, inesistente.");
+                    }
+                }
+
+                foreach (var entry in ordered.TryGetValue((node.NodeId, CatalogPageKind.Relations), out var rp) ? rp.SelectMany(p => p.Entries).OfType<RelationPageEntry>() : [])
+                {
+                    if (!relations.TryGetValue(entry.RelationId, out var known) || known.FromEvidenceId != entry.FromEvidenceId || known.ToEvidenceId != entry.ToEvidenceId
+                        || known.Type != entry.Type || known.Basis != entry.Basis)
+                    {
+                        v.Add($"node {node.NodeId}: la relazione {entry.RelationId} non coincide con una relazione nota dello snapshot.");
+                    }
+                }
+            }
+            else
+            {
+                foreach (var childId in node.ChildNodeIds)
+                {
+                    if (!nodes.TryGetValue(childId, out var child) || child.Level != node.Level - 1 || (node.View != ReconcileView.Cross && child.View != node.View) || !members.TryGetValue(childId, out var childMembers))
+                    {
+                        v.Add($"node {node.NodeId}: figlio {childId} inesistente, di vista o di livello non coerenti.");
+                        continue;
+                    }
+
+                    foreach (var (id, entry) in childMembers)
+                    {
+                        if (!own.TryAdd(id, entry))
+                        {
+                            v.Add($"node {node.NodeId}: membro {id} presente in più figli (unione non disgiunta).");
+                        }
+                    }
+                }
+
+                var childNodes = node.ChildNodeIds.Where(nodes.ContainsKey).Select(c => nodes[c]).ToList();
+                if (!node.KeyPageHashes.SequenceEqual(childNodes.SelectMany(c => c.KeyPageHashes), StringComparer.Ordinal)
+                    || !node.RelationPageHashes.SequenceEqual(childNodes.SelectMany(c => c.RelationPageHashes), StringComparer.Ordinal))
+                {
+                    v.Add($"node {node.NodeId}: il genitore deve citare esattamente le pagine keys/relations dei figli.");
+                }
+            }
+
+            members[node.NodeId] = own;
+            if (own.Count != node.MemberCount || ReconciliationIds.MemberSetHash(own.Values) != node.MemberSetHash)
+            {
+                v.Add($"node {node.NodeId}: memberCount o memberSetHash diversi dalla membership.");
+            }
+        }
+
+        // Unione disgiunta per vista e livello; copertura completa delle foglie solo su richiesta.
+        foreach (var level in catalog.Nodes.GroupBy(n => (n.View, n.Level)))
+        {
+            var seen = new HashSet<Guid>();
+            foreach (var id in level.Where(n => members.ContainsKey(n.NodeId)).SelectMany(n => members[n.NodeId].Keys).Where(id => !seen.Add(id)).Distinct())
+            {
+                v.Add($"membership {level.Key.View}/{level.Key.Level}: {id} compare in più nodi.");
+            }
+
+            if (complete && level.Key.Level == 0)
+            {
+                foreach (var e in snapshot.Evidence.Where(e => !seen.Contains(e.EvidenceId)))
+                {
+                    v.Add($"membership {level.Key.View}: l'evidenza {e.EvidenceId} non compare nelle foglie.");
+                }
+            }
+        }
+
+        // Insiemi di routing: unione esatta dei nodi indicati, nessun membro eliminato per overlap.
+        foreach (var set in catalog.Sets)
+        {
+            v.AddRange(ReconciliationCatalogRules.CheckSet(set).Select(m => $"set {set.SetId}: {m}"));
+            var union = new Dictionary<Guid, MemberPageEntry>();
+            foreach (var nodeId in set.MemberNodeIds)
+            {
+                if (!nodes.TryGetValue(nodeId, out var node) || node.View != set.View || !members.TryGetValue(nodeId, out var nodeMembers))
+                {
+                    v.Add($"set {set.SetId}: nodo {nodeId} inesistente o di un'altra vista.");
+                    continue;
+                }
+
+                foreach (var (id, entry) in nodeMembers.Where(m => !union.TryAdd(m.Key, m.Value)))
+                {
+                    v.Add($"set {set.SetId}: il membro {id} compare in più nodi (overlap).");
+                }
+            }
+
+            if (union.Count != set.MemberCount || ReconciliationIds.MemberSetHash(union.Values) != set.MemberSetHash)
+            {
+                v.Add($"set {set.SetId}: memberCount o memberSetHash diversi dall'unione dei nodi.");
+            }
+        }
+
+        return [.. v.Distinct(StringComparer.Ordinal)];
+    }
+
+    /// <summary>Come la variante con insieme di ID noti, ma gli endpoint Node/Set sono risolti nel catalogo e il loro hash è il memberSetHash.</summary>
+    public static IReadOnlyList<string> CheckResult(ReconcileResult result, ReconciliationSnapshot snapshot, ReconciliationCatalog catalog)
+    {
+        var nodes = catalog.Nodes.ToDictionary(n => n.NodeId, n => n.MemberSetHash, StringComparer.Ordinal);
+        var sets = catalog.Sets.ToDictionary(s => s.SetId, s => s.MemberSetHash, StringComparer.Ordinal);
+        var v = new List<string>(CheckResult(result, snapshot, nodes.Keys.Concat(sets.Keys).ToHashSet(StringComparer.Ordinal)));
+        for (var i = 0; i < result.Candidates.Count; i++)
+        {
+            foreach (var endpoint in new[] { result.Candidates[i].Left, result.Candidates[i].Right }.Where(e => e.Kind != CandidateEndpointKind.Evidence))
+            {
+                var group = endpoint.Kind == CandidateEndpointKind.Node ? nodes : sets;
+                if (!group.TryGetValue(endpoint.Id, out var hash))
+                {
+                    v.Add($"candidates[{i}]: endpoint {endpoint.Kind} {endpoint.Id} non è del tipo dichiarato nel catalogo.");
+                }
+                else if (hash != endpoint.Hash)
+                {
+                    v.Add($"candidates[{i}]: hash dell'endpoint {endpoint.Id} diverso dal memberSetHash del catalogo.");
+                }
+            }
+        }
+
+        return v;
+    }
+
 
     /// <summary>Gli ID di Node/Set sono accettati solo se il consumer gerarchico li fornisce (T071); nella singola chiamata l'insieme è vuoto.</summary>
     public static IReadOnlyList<string> CheckResult(ReconcileResult result, ReconciliationSnapshot snapshot, IReadOnlySet<string>? knownGroupIds = null)

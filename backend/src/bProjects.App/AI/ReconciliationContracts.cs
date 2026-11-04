@@ -545,19 +545,30 @@ public static class ReconciliationIds
     }
 
     /// <summary>Hash di membership: SHA-256 tipizzato delle terne (evidenza, versione, contentHash) ordinate per EvidenceId.</summary>
-    public static string MemberSetHash(IEnumerable<MemberPageEntry> members) => throw new NotImplementedException();
+    public static string MemberSetHash(IEnumerable<MemberPageEntry> members) =>
+        Typed("members", [.. members.Select(m => $"{m.EvidenceId:D}|{m.EvidenceVersionId:D}|{m.ContentHash}").OrderBy(s => s, StringComparer.Ordinal)]);
 
     /// <summary>nodeId = hash(view,level,ordinal,child/member hash,inputHash): non dipende dalle pagine del nodo (nessun ciclo).</summary>
-    public static string NodeId(ReconcileView view, int level, int ordinal, string memberSetHash, IEnumerable<string> childNodeIds, string inputHash) => throw new NotImplementedException();
+    public static string NodeId(ReconcileView view, int level, int ordinal, string memberSetHash, IEnumerable<string> childNodeIds, string inputHash) =>
+        Typed("node", view.ToString(), level.ToString(System.Globalization.CultureInfo.InvariantCulture), ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            memberSetHash, string.Join(',', childNodeIds), inputHash);
 
     /// <summary>Hash di pagina: SHA-256 della forma canonica della pagina senza pageId (è il previousPageHash della successiva).</summary>
-    public static string PageHash(CatalogPage page) => throw new NotImplementedException();
+    public static string PageHash(CatalogPage page)
+    {
+        var node = JsonNode.Parse(ReconciliationCodec.Encode(page))!.AsObject();
+        node.Remove("pageId");
+        return CanonicalJson.Sha256Hex(node.ToJsonString());
+    }
 
     /// <summary>pageId = hash(nodeId,kind,ordinal,entries,previousPageHash).</summary>
-    public static string PageId(CatalogPage page) => throw new NotImplementedException();
+    public static string PageId(CatalogPage page) =>
+        Typed("page", page.NodeId, page.Kind.ToString(), page.Ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            CanonicalJson.Canonicalize("[" + string.Join(',', page.Entries.Select(e => ReconciliationCodec.Encode<object>(e))) + "]"), page.PreviousPageHash ?? "null");
 
     /// <summary>setId = hash(view,memberNodeIds,memberSetHash).</summary>
-    public static string SetId(ReconcileView view, IEnumerable<string> memberNodeIds, string memberSetHash) => throw new NotImplementedException();
+    public static string SetId(ReconcileView view, IEnumerable<string> memberNodeIds, string memberSetHash) =>
+        Typed("set", view.ToString(), string.Join(',', memberNodeIds), memberSetHash);
 
     public static IEnumerable<string> SortedIds(IEnumerable<Guid> ids) => ids.Select(g => g.ToString("D")).OrderBy(s => s, StringComparer.Ordinal);
 
@@ -920,16 +931,289 @@ public static class ReconciliationCatalogRules
 {
     public const int MaxDescriptorRunes = 512;
 
-    public static IReadOnlyList<string> CheckEntry(CatalogEntry entry, string sourceHash) => throw new NotImplementedException();
+    public static IReadOnlyList<string> CheckEntry(CatalogEntry entry, string sourceHash)
+    {
+        var v = new List<string>();
+        if (!ReconciliationContractRules.IsHash(entry.ContentHash))
+        {
+            v.Add("contentHash: SHA-256 esadecimale lowercase richiesto.");
+        }
+        else if (entry.EntryId != ReconciliationIds.EntryId(sourceHash, entry.EvidenceId, entry.ContentHash))
+        {
+            v.Add("entryId: diverso dall'ID derivato dal server.");
+        }
 
-    public static IReadOnlyList<string> CheckKey(CatalogKey key) => throw new NotImplementedException();
+        if (entry.SourceIds.Count == 0)
+        {
+            v.Add("sourceIds: non vuoto.");
+        }
 
-    public static IReadOnlyList<string> CheckNode(CatalogNode node, string inputHash) => throw new NotImplementedException();
+        Guids(v, "sourceIds", entry.SourceIds);
+        Guids(v, "knownRelationIds", entry.KnownRelationIds);
+        for (var i = 0; i < entry.Keys.Count; i++)
+        {
+            v.AddRange(CheckKey(entry.Keys[i]).Select(m => $"keys[{i}].{m}"));
+        }
 
-    public static IReadOnlyList<string> CheckPage(CatalogPage page) => throw new NotImplementedException();
+        if (!entry.Keys.Zip(entry.Keys.Skip(1), (a, b) => CompareKeys(a, b) < 0).All(x => x))
+        {
+            v.Add("keys: in ordine (view,kind,value,origin) e senza duplicati.");
+        }
+
+        if (entry.UnclassifiedViews.Any(x => x == ReconcileView.Cross) || !entry.UnclassifiedViews.Zip(entry.UnclassifiedViews.Skip(1), (a, b) => a < b).All(x => x))
+        {
+            v.Add("unclassifiedViews: solo A/B, in ordine e senza duplicati.");
+        }
+
+        return v;
+    }
+
+    public static IReadOnlyList<string> CheckKey(CatalogKey key)
+    {
+        var v = new List<string>();
+        if (key.View == ReconcileView.Cross)
+        {
+            v.Add("view: A o B (mai Cross).");
+        }
+
+        if (string.IsNullOrWhiteSpace(key.Value))
+        {
+            v.Add("value: non vuoto.");
+        }
+
+        if (key.Origin == CatalogKeyOrigin.Literal && key.OriginOutputHash is not null)
+        {
+            v.Add("originOutputHash: null per una chiave letterale.");
+        }
+
+        if (key.Origin == CatalogKeyOrigin.Inferred && !ReconciliationContractRules.IsHash(key.OriginOutputHash))
+        {
+            v.Add("originOutputHash: hash richiesto per una chiave inferita.");
+        }
+
+        return v;
+    }
+
+    public static IReadOnlyList<string> CheckNode(CatalogNode node, string inputHash)
+    {
+        var v = new List<string>();
+        if (node.Level < 0 || node.Ordinal < 0)
+        {
+            v.Add("level/ordinal: minimo 0.");
+        }
+
+        if (node.MemberCount < 1)
+        {
+            v.Add("memberCount: minimo 1.");
+        }
+
+        if (string.IsNullOrWhiteSpace(node.Descriptor) || node.Descriptor.EnumerateRunes().Count() > MaxDescriptorRunes)
+        {
+            v.Add($"descriptor: non vuoto e al massimo {MaxDescriptorRunes} caratteri Unicode.");
+        }
+
+        if (!ReconciliationContractRules.IsHash(node.MemberSetHash) || !ReconciliationContractRules.IsHash(node.DescriptorOutputHash))
+        {
+            v.Add("memberSetHash/descriptorOutputHash: SHA-256 esadecimale lowercase richiesto.");
+        }
+
+        if (node.Level == 0 && node.ChildNodeIds.Count != 0)
+        {
+            v.Add("childNodeIds: una foglia non ha figli.");
+        }
+
+        if (node.Level > 0 && node.ChildNodeIds.Count == 0)
+        {
+            v.Add("childNodeIds: un nodo di livello > 0 ha almeno un figlio.");
+        }
+
+        Hashes(v, "childNodeIds", node.ChildNodeIds);
+        Hashes(v, "keyPageHashes", node.KeyPageHashes);
+        Hashes(v, "relationPageHashes", node.RelationPageHashes);
+        if (node.NodeId != ReconciliationIds.NodeId(node.View, node.Level, node.Ordinal, node.MemberSetHash, node.ChildNodeIds, inputHash))
+        {
+            v.Add("nodeId: diverso dall'ID derivato dal server.");
+        }
+
+        return v;
+    }
+
+    public static IReadOnlyList<string> CheckPage(CatalogPage page)
+    {
+        var v = new List<string>();
+        if (!ReconciliationContractRules.IsHash(page.NodeId))
+        {
+            v.Add("nodeId: hash richiesto.");
+        }
+
+        if (page.Ordinal < 0)
+        {
+            v.Add("ordinal: minimo 0.");
+        }
+
+        if ((page.Ordinal == 0) != (page.PreviousPageHash is null) || (page.PreviousPageHash is not null && !ReconciliationContractRules.IsHash(page.PreviousPageHash)))
+        {
+            v.Add("previousPageHash: null solo per l'ordinal 0, altrimenti l'hash della pagina precedente.");
+        }
+
+        if (page.Entries.Count == 0)
+        {
+            v.Add("entries: non vuote.");
+        }
+
+        var expected = page.Kind switch { CatalogPageKind.Members => typeof(MemberPageEntry), CatalogPageKind.Keys => typeof(KeyPageEntry), _ => typeof(RelationPageEntry) };
+        if (page.Entries.Any(e => e.GetType() != expected))
+        {
+            v.Add($"entries: devono essere voci {page.Kind}.");
+        }
+        else
+        {
+            switch (page.Kind)
+            {
+                case CatalogPageKind.Members:
+                    var members = page.Entries.Cast<MemberPageEntry>().ToList();
+                    Ordered(v, "entries", members.Select(m => m.EvidenceId.ToString("D")));
+                    if (members.Any(m => !ReconciliationContractRules.IsHash(m.ContentHash)))
+                    {
+                        v.Add("entries.contentHash: SHA-256 esadecimale lowercase richiesto.");
+                    }
+
+                    break;
+                case CatalogPageKind.Keys:
+                    var keys = page.Entries.Cast<KeyPageEntry>().ToList();
+                    for (var i = 0; i < keys.Count; i++)
+                    {
+                        v.AddRange(CheckKey(keys[i].Key).Select(m => $"entries[{i}].key.{m}"));
+                        if ((keys[i].MemberIds.Count == 0) == (keys[i].MemberPageRefs.Count == 0))
+                        {
+                            v.Add($"entries[{i}]: esattamente uno fra memberIds e memberPageRefs non vuoto.");
+                        }
+
+                        Guids(v, $"entries[{i}].memberIds", keys[i].MemberIds);
+                        Hashes(v, $"entries[{i}].memberPageRefs", keys[i].MemberPageRefs, ordered: true);
+                    }
+
+                    if (!keys.Zip(keys.Skip(1), (a, b) => CompareKeys(a.Key, b.Key) < 0).All(x => x))
+                    {
+                        v.Add("entries: chiavi in ordine (view,kind,value,origin) e senza duplicati.");
+                    }
+
+                    break;
+                default:
+                    var relations = page.Entries.Cast<RelationPageEntry>().ToList();
+                    Ordered(v, "entries", relations.Select(r => r.RelationId.ToString("D")));
+                    if (relations.Any(r => r.FromEvidenceId == r.ToEvidenceId))
+                    {
+                        v.Add("entries: gli endpoint della relazione devono essere distinti.");
+                    }
+
+                    break;
+            }
+        }
+
+        if (page.PageId != ReconciliationIds.PageId(page))
+        {
+            v.Add("pageId: diverso dall'ID derivato dal server.");
+        }
+
+        return v;
+    }
 
     /// <summary>Pagine di un solo (nodo, kind): ordinal 0..n-1 contigui, previousPageHash = PageHash della precedente.</summary>
-    public static IReadOnlyList<string> CheckPageChain(IReadOnlyList<CatalogPage> pages) => throw new NotImplementedException();
+    public static IReadOnlyList<string> CheckPageChain(IReadOnlyList<CatalogPage> pages)
+    {
+        if (pages.Count == 0)
+        {
+            return ["pagine: catena vuota."];
+        }
 
-    public static IReadOnlyList<string> CheckSet(CatalogSet set) => throw new NotImplementedException();
+        var v = new List<string>();
+        if (pages.Select(p => (p.NodeId, p.Kind)).Distinct().Count() != 1)
+        {
+            v.Add("pagine: una catena appartiene a un solo nodo e a un solo kind.");
+        }
+
+        var ordered = pages.OrderBy(p => p.Ordinal).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            if (ordered[i].Ordinal != i)
+            {
+                v.Add($"pagine: ordinal contigui da 0 richiesti (atteso {i}, trovato {ordered[i].Ordinal}).");
+                break;
+            }
+
+            var expected = i == 0 ? null : ReconciliationIds.PageHash(ordered[i - 1]);
+            if (ordered[i].PreviousPageHash != expected)
+            {
+                v.Add($"pagine[{i}].previousPageHash: diverso dall'hash della pagina precedente.");
+            }
+        }
+
+        return v;
+    }
+
+    public static IReadOnlyList<string> CheckSet(CatalogSet set)
+    {
+        var v = new List<string>();
+        if (set.MemberNodeIds.Count == 0)
+        {
+            v.Add("memberNodeIds: non vuoto.");
+        }
+
+        Hashes(v, "memberNodeIds", set.MemberNodeIds, ordered: true);
+        if (set.MemberCount < 1)
+        {
+            v.Add("memberCount: minimo 1.");
+        }
+
+        if (!ReconciliationContractRules.IsHash(set.MemberSetHash))
+        {
+            v.Add("memberSetHash: SHA-256 esadecimale lowercase richiesto.");
+        }
+
+        if (set.SetId != ReconciliationIds.SetId(set.View, set.MemberNodeIds, set.MemberSetHash))
+        {
+            v.Add("setId: diverso dall'ID derivato dal server.");
+        }
+
+        return v;
+    }
+
+    /// <summary>Ordine normativo delle chiavi: (view, kind, value ordinal, origin); uguali = duplicato.</summary>
+    private static int CompareKeys(CatalogKey a, CatalogKey b)
+    {
+        var c = a.View.CompareTo(b.View);
+        c = c != 0 ? c : a.Kind.CompareTo(b.Kind);
+        c = c != 0 ? c : string.CompareOrdinal(a.Value, b.Value);
+        return c != 0 ? c : a.Origin.CompareTo(b.Origin);
+    }
+
+    private static void Ordered(List<string> v, string path, IEnumerable<string> values)
+    {
+        var list = values.ToList();
+        if (!list.Zip(list.Skip(1), (a, b) => string.CompareOrdinal(a, b) < 0).All(x => x))
+        {
+            v.Add($"{path}: in ordine ordinal e senza duplicati.");
+        }
+    }
+
+    private static void Guids(List<string> v, string path, IReadOnlyList<Guid> ids) => Ordered(v, path, ids.Select(g => g.ToString("D")));
+
+    /// <summary>Hash validi e senza duplicati; <paramref name="ordered"/> li richiede anche in ordine ordinal (insiemi), altrimenti sono sequenze.</summary>
+    private static void Hashes(List<string> v, string path, IReadOnlyList<string> values, bool ordered = false)
+    {
+        if (values.Any(s => !ReconciliationContractRules.IsHash(s)))
+        {
+            v.Add($"{path}: SHA-256 esadecimali lowercase richiesti.");
+        }
+
+        if (values.Distinct(StringComparer.Ordinal).Count() != values.Count)
+        {
+            v.Add($"{path}: duplicati non ammessi.");
+        }
+        else if (ordered)
+        {
+            Ordered(v, path, values);
+        }
+    }
 }
