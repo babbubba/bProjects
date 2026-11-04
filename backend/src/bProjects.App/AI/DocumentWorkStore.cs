@@ -29,6 +29,9 @@ public class DocumentWorkException(string code, string message) : Exception(mess
     /// <summary>Unità irriducibile fuori budget: la preparazione resta incompleta in modo esplicito (AI §3, §6).</summary>
     public const string DocumentIncomplete = "document_incomplete";
 
+    /// <summary>Non entrano due descriptor nello stesso Pack: la riconciliazione di livello non può avanzare (AI §4.2 punto 4).</summary>
+    public const string ReconciliationIrreducible = "reconciliation_irreducible";
+
     /// <summary>Un'unità non dimostra la copertura attesa di tutti i suoi range proprietari.</summary>
     public const string CoverageIncomplete = "coverage_incomplete";
 
