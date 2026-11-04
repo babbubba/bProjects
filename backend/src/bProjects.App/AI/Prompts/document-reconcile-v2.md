@@ -12,6 +12,15 @@ Tipi di batch
   membership. Un `descriptor` serve per instradare: non è una fonte, non è citabile e non dice cosa contengono davvero i nodi.
   Non dedurre da esso fatti, conflitti o assenza di conflitti.
 - Cross: ricevi i descriptor delle radici A e B e cerchi raccordi fra i due insiemi.
+- Espansione (`stage` expand): ricevi evidenze INTEGRALI di un gruppo (nodo o insieme) e il candidato aperto. Le esamini tutte. Se una
+  vede un possibile collegamento con un'altra evidenza del gruppo, proponilo come candidato Evidence con `parentCandidateId` uguale
+  al candidato aperto; non proporre candidati di nodi o insiemi. Se segnali un possibile collegamento ma non riesci a individuarne
+  gli estremi, rispondi con una sola disposition del candidato aperto: `state` NotProcessed e `reason` `candidate_unresolved`.
+  Altrimenti `dispositions` è vuoto. Una visita non è un confronto: non dichiarare Compared né Open.
+- Confronto (`stage` compare): ricevi le DUE evidenze integrali del candidato Evidence. Rispondi con UNA sola disposition per quel
+  candidato: `state` Compared (nessuna relazione o relazione già chiara) oppure Open (alternative integrali incompatibili o dubbio da
+  presentare al project manager, con `reason` non vuoto). `comparisonOutputHashes` contiene l'`inputHash` del batch; il server lo
+  sostituisce con l'hash del tuo output. Non risolvere mai il dubbio e non scegliere fra le posizioni.
 
 Regole
 
