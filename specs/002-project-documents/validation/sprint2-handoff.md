@@ -346,3 +346,20 @@ In `specs/002-project-documents/validation/resume-prompt.md`.
 - Ambiente: Docker Desktop da avviare; PG `bprojects-002-test-pg2` (15432), parser `bprojects-t055-parser` (58300); DGX via `BPROJECTS_TEST_DGX_*` nell'ambiente.
 
 **Prossimo passo**: decidere come portare la gerarchia ai run v3, poi T082/T083 su DGX (una inferenza alla volta), T126 a modello scaricato, browser reale per T067.
+
+## HANDOFF 2026-11-04 (fine sessione) — estensione v4 della riconciliazione gerarchica: PIANIFICATA, NON IMPLEMENTATA
+**Branch** `feature/002-implementation`; ultimi commit: 67ce6bf (T132 fix tetti/Applied), 2d91d52 (T132 test ordinamento), 0a3d203 (delta tecnico T131/T132: §11 di `contracts/ai-workflow.md` + task in `tasks.md`), 1a0f017 (handoff precedente). Nessun push. Nessun `Co-Authored-By`.
+
+**Decisione dell'autore (2026-11-04)**: portare la riconciliazione gerarchica di I5 ai run reali (v3) PRIMA di T126 DGX e poi T082/T083; nessun nuovo retry per N4; niente ADR; v2 storico invariato; non modificare gold/validatori; non spuntare DGX non eseguiti.
+
+**Causa (analisi, verificata nel codice dal subagent)**: `DocumentAnalysisWorkflow.RunAliasGraphAsync` (~r.507-512) lancia `CallLimitExceeded` se il payload non entra in una chiamata; `AnalysisEndpoints` (~r.209-212) congela sempre la definizione v3 (`SourceSnapshotStore.AnalysisDefinition`); `DocumentReconcilePlan` è legato a v2 (DefinitionVersion v2, `global-reconcile-v1`, prompt `document-reconcile-v2`): la gerarchia è raggiungibile solo da run v2 fabbricati nei test.
+
+**Piano (T131, definito in AI §11, NON spuntato, NON implementato)**: nuova definizione esplicita `project-analysis-documents-v4` (SourceSnapshotStore + `ContractOf` + routing `AnalysisWorkflow` ~r.391 + `WorkflowRegimeProbe`); motore condiviso, adattatore alias per batch `reconcile-alias-1` (DTO/codec/schema, catalogo E/S/R + N<n>, compositore server-side di batchId/inputHash/visited*/candidateId/patchId/hash/sourceIds/originBatchIds/id canonici), `Prompts/document-reconcile-v3.md`, WorkOutput con output canonico + hash per replay; limiti dalla policy congelata del root; test: run v4 oltre budget con modello finto, copertura, conflitto fra porzioni distanti, crash/replay, patch incluse `Applied`, limiti, compatibilità v2/v3, e prova tramite il POST reale `Analizza` con PostgreSQL. Rischi noti: carico del DTO alias per nodi/candidati; l'assembly mette gli item solo in `requirements`/`assumptions` (sezioni v3 non riprodotte); misure di preflight da allineare.
+
+**T132 (correzioni)**: eseguito da un subagent, commit 67ce6bf + 2d91d52 (test instabile corretto lato test, tetti byte/candidati/livelli dalla policy congelata, prove su patch `Applied`). Al momento dell'handoff **NON spuntato in tasks.md e NON verificato dal coordinatore**: rieseguire la suite non-DGX (2 volte, per il flake) prima di spuntarlo. Se il subagent era ancora in corso alla chiusura, controllare `git status` e `git log` per modifiche residue.
+
+**Stato task**: spuntati T125, T127–T129, T068–T081, T122. Aperti: T126 (IMPLEMENTED 2b4239b, prova DGX a modello scaricato NOT VERIFIED), T130 (IMPLEMENTED 1e8bfa0, non spuntato), T067 (N4 FAIL ×2; browser reale non eseguito), T131, T132 (da verificare), T082, T083.
+
+**Prossimi passi, in ordine**: (1) verificare T132 e spuntarlo se verde; (2) implementare T131 in TDD con subagent a contesto limitato (un agente alla volta, stessi file); (3) suite non-DGX completa con PG+parser; (4) T126 a modello scaricato sul DGX; (5) T082/T083 serializzati; (6) distinguere IMPLEMENTED/VERIFIED/FAILED/NOT VERIFIED in task e handoff.
+
+**Ambiente**: avviare Docker Desktop; `docker start bprojects-002-test-pg2 bprojects-t055-parser` (PG 15432 con `Username=postgres;Database=postgres`, password da `docker inspect`; parser 58300, secret `PARSER_INTERNAL_SECRET`); DGX via `BPROJECTS_TEST_DGX_*` nell'ambiente (API key già impostata; per i test non-DGX fare `unset`); l'output di `dotnet test` è in italiano (totale / non riuscito / operazione completata / ignorato).
