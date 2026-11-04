@@ -467,7 +467,8 @@ public sealed class DocumentAnalysisWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var policy = await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == claim.RunId).Select(r => r.PolicyHash).SingleAsync(ct);
-        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy);
+        var frozenLimits = (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits;
+        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits);
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try

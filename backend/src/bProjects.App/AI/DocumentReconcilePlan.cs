@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using bProjects.App.Analysis;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     public DocumentReconcilePlan(
         AnalysisRunClaim claim, DocumentAnalysisInput input, IReadOnlyDictionary<Guid, DirectoryFacts> facts, DocumentPreflight preflight, DocumentRuntimeProfile profile,
-        AiOptions options, InternalModelClient client, IServiceScopeFactory scopes, string? rootPolicyHash = null)
+        AiOptions options, InternalModelClient client, IServiceScopeFactory scopes, string? rootPolicyHash = null, DocumentLimits? limits = null)
     {
         _claim = claim;
         _input = input;
@@ -53,6 +54,10 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _scopes = scopes;
         _instructions = ReconciliationHierarchy.Instructions;
         _evidence = input.Evidence.ToDictionary(e => e.EvidenceId);
+
+        // Tetti della policy congelata del root (AI §4.5): senza limiti espliciti restano i default del motore.
+        _maxLevels = limits?.MaxReconciliationLevels ?? 32;
+        _limits = limits is null ? new ReconciliationLimits() : new ReconciliationLimits(MaxCandidates: limits.MaxCandidatesPerRun, MaxDerivedBytes: limits.MaxDerivedBytes);
 
         var settings = options.ForPhase(AiPhase.Analysis);
         var configHash = DocumentAnalysisWorkflow.Sha(JsonSerializer.Serialize(new
@@ -70,7 +75,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             ["algorithm"] = AlgorithmVersion,
             ["definition"] = DocumentAnalysisWorkflow.DefinitionVersion,
             ["graph"] = new JsonArray(DocumentBatchWorkflow.Stages.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()),
-            ["maxLevels"] = _contextMaxLevels,
+            ["maxLevels"] = _maxLevels,
         }.ToJsonString();
         Manifest = new WorkManifestInput(configHash, input.Snapshot.SourceHash, profile.Fingerprint, DocumentAnalysisWorkflow.DefinitionVersion, AlgorithmVersion, policyHash, planJson);
         _manifestIdentity = CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new
@@ -80,10 +85,11 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         }));
         _context = new ReconciliationContext(
             $"ProcessingRun|{claim.RunId:N}", _manifestIdentity, DocumentAnalysisWorkflow.DefinitionVersion,
-            new PlannerLimits(Math.Max(1, profile.InputBudgetTokens - HeaderReserveTokens), profile.OutputTokens, OutputExpansion: 1.0), SchemaVersion, ReconciliationHierarchy.PromptVersion);
+            new PlannerLimits(Math.Max(1, profile.InputBudgetTokens - HeaderReserveTokens), profile.OutputTokens, OutputExpansion: 1.0), SchemaVersion, ReconciliationHierarchy.PromptVersion, _maxLevels);
     }
 
-    private const int _contextMaxLevels = 32;
+    private readonly int _maxLevels;
+    private readonly ReconciliationLimits _limits;
 
     /// <summary>Vero dopo il commit atomico del run da questo piano.</summary>
     public bool Committed { get; private set; }
@@ -139,7 +145,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             var snapshot = _input.Snapshot;
             _directory ??= await ReconciliationDirectory.BuildAsync(snapshot, _facts, _context, new ReconciliationMeasurers(LeafMeasurer, PageMeasurer), ct);
             var hierarchy = await ReconciliationHierarchy.BuildAsync(snapshot, _directory, _context, NodeMeasurer, Invoke, ct);
-            var engine = new ReconciliationCandidates(snapshot, _directory, hierarchy, _context, LeafMeasurer, Invoke);
+            var engine = new ReconciliationCandidates(snapshot, _directory, hierarchy, _context, LeafMeasurer, Invoke, _limits);
             await engine.RunPhasesAsync(ct);
             var final = await ReconciliationFinalPass.RunAsync(engine, snapshot, _directory, [], ct);
             var finished = new ReconcileEngineResult(_directory, hierarchy, final.Run, final);

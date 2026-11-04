@@ -238,6 +238,127 @@ public sealed class DocumentReconcileWorkflowTests : ReconcileRig
         };
     }
 
+    // ================================================================ T132: tetti dalla policy congelata e patch Applied
+
+    [Fact]
+    public async Task The_frozen_policy_level_cap_stops_the_hierarchy_with_coverage_incomplete_and_commits_no_revision()
+    {
+        var (run, claim) = await ArrangeAsync();
+        await SetLimitsAsync(l => l with { MaxReconciliationLevels = 1 });
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Respond(r) };
+
+        var result = await RunAsync(claim, model);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal(DocumentWorkException.CoverageIncomplete, result.ErrorCode);
+        Assert.Contains("livelli congelati", await Message(run));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task The_frozen_policy_candidate_cap_stops_the_run_when_a_proposed_candidate_exceeds_it()
+    {
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        await SetLimitsAsync(l => l with { MaxCandidatesPerRun = 1 });
+        var model = N4Model(compared: false);
+
+        var result = await RunAsync(claim, model);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal(DocumentWorkException.CoverageIncomplete, result.ErrorCode);
+        Assert.Contains("oltre 1 candidati", await Message(run));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task The_frozen_policy_derived_bytes_cap_stops_the_run_before_the_next_candidate_batch()
+    {
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        await SetLimitsAsync(l => l with { MaxDerivedBytes = 1 });
+        var model = N4Model(compared: false);
+
+        var result = await RunAsync(claim, model);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal(DocumentWorkException.CoverageIncomplete, result.ErrorCode);
+        Assert.Contains("byte derivati esauriti", await Message(run));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task A_valid_applied_patch_composed_on_the_server_base_is_stored_and_completes_the_run_with_its_relation()
+    {
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        var snapshot = (await PrepareAsync(claim)).Snapshot;
+        var model = N4Model(compared: true, snapshot);
+
+        var result = await RunAsync(claim, model);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"RunPatchDispositions\" WHERE \"RunId\" = @r AND \"Kind\" = 'Applied'", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"RunPatchDispositions\" WHERE \"RunId\" = @r AND \"Kind\" <> 'Applied'", ("r", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisEvidenceRelations\" WHERE \"RunId\" = @r AND \"Type\" = 'Confirms' AND \"Basis\" = 'Inferred'", ("r", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
+    /// <summary>Modello finto del corpus «sharedKey»: l'espansione collega i documenti 1 e 8; il confronto è Compared e, se richiesto, porta una patch AddRelation sulla base calcolata dal server.</summary>
+    private DocumentChatWorkflowTests.FakeChatModel N4Model(bool compared, ReconciliationSnapshot? snapshot = null)
+    {
+        var known = new Dictionary<int, (Guid Evidence, string Hash)>();
+        var items = new List<ItemProposal>();
+        return new()
+        {
+            Responder = r => Respond(r, (p, result) =>
+            {
+                foreach (var v in p.Voci)
+                {
+                    known[int.Parse(Regex.Match(v.Statement, @"Requisito (\d+):").Groups[1].Value)] = (v.Evidence, v.Hash);
+                    if (p.Stage == "leaf" && p.View == ReconcileView.A)
+                    {
+                        items.Add(new ItemProposal { LocalKey = $"k-{v.Evidence:N}", Text = v.Statement, Classification = DocumentAnalysisClassification.Documented, EvidenceIds = [v.Evidence], SourceIds = [v.Source] });
+                    }
+                }
+
+                switch (p.Stage)
+                {
+                    case "expand" when p.Voci.Any(v => v.Statement.StartsWith("Requisito 1:", StringComparison.Ordinal)) && known.ContainsKey(8):
+                        return result with { Candidates = [Link(known[1], known[8], p.FocusId!, p.BatchId, p.SourceHash)], NoFindingsReason = null };
+                    case "compare":
+                        var disposition = new CandidateDisposition { CandidateId = p.FocusId!, State = CandidateState.Compared, ChildCandidateIds = [], ComparisonOutputHashes = [p.InputHash], Reason = "confronto integrale" };
+                        if (!compared || snapshot is null)
+                        {
+                            return result with { Dispositions = [disposition] };
+                        }
+
+                        var baseState = DocumentAnalysisBase.Compute(items, snapshot);
+                        var (from, to) = (p.Voci.Single(v => v.Evidence == known[1].Evidence), p.Voci.Single(v => v.Evidence == known[8].Evidence));
+                        var key = $"k-{from.Evidence:N}";
+                        var patch = ReconciliationFixtures.WithId(new Patch
+                        {
+                            PatchId = "x", BaseHash = baseState.BaseHash,
+                            Target = new PatchTarget { Kind = PatchTargetKind.Item, Id = key, ExpectedHash = baseState.TargetHashes[ReconciliationBase.TargetKey(PatchTargetKind.Item, key)] },
+                            Operation = PatchOperation.AddRelation,
+                            Value = new AddRelationValue { FromEvidenceId = from.Evidence, ToEvidenceId = to.Evidence, Type = EvidenceRelationType.Confirms, Basis = EvidenceRelationBasis.Inferred, Rationale = "stesso requisito ribadito" },
+                            EvidenceIds = [.. ReconciliationIds.SortedIds([from.Evidence, to.Evidence]).Select(Guid.Parse)],
+                            SourceIds = [.. new[] { from.Source, to.Source }.OrderBy(g => g.ToString("D"), StringComparer.Ordinal)], OriginBatchIds = [p.BatchId],
+                        });
+                        return result with { Dispositions = [disposition], Patches = [patch] };
+                    default:
+                        return result;
+                }
+            }),
+        };
+    }
+
+    private async Task SetLimitsAsync(Func<DocumentLimits, DocumentLimits> change)
+    {
+        using var scope = App.Services.CreateScope();
+        var (_, snapshot) = await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(Ct);
+        var limits = change(snapshot.Limits);
+        Assert.Empty(limits.Validate());
+        await Execute("UPDATE \"DocumentPolicies\" SET \"LimitsJson\" = @j::jsonb, \"PolicyHash\" = @h WHERE \"Id\" = 1", ("j", limits.ToJson()), ("h", limits.Hash()));
+    }
+
     // ================================================================ supporto: dati e esecuzione
 
     private async Task<(Guid Run, AnalysisRunClaim Claim)> ArrangeAsync(bool ordinary = false, bool sharedKey = false)
