@@ -251,7 +251,8 @@ public sealed class DocumentChatAliasWorkflowTests : ArchiveTestBase
         Assert.Contains("Secondo documento.", text);                                       // ancora nello snapshot del turno
         Assert.DoesNotContain("Comparso dopo la richiesta.", text);
         Assert.DoesNotContain("fonte:F3", text);
-        Assert.StartsWith($"Uno [fonte:{S1}] due [fonte:{S2}].", await AssistantOfAsync(turn));
+        var (first, second) = a.Document.CompareTo(b.Document) < 0 ? (S1, S2) : (S2, S1);                   // il catalogo ordina per DocumentId (AI §7.3): F1 = documento con id minore
+        Assert.StartsWith($"Uno [fonte:{first}] due [fonte:{second}].", await AssistantOfAsync(turn));
         Assert.Contains("Nota sulle fonti: 1 documento incluso nel progetto non è ancora disponibile", await AssistantOfAsync(turn));   // lo snapshot dichiara la fonte non pronta, mai la usa
     }
 
