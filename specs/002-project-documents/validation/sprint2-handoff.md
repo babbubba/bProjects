@@ -326,3 +326,23 @@ In `specs/002-project-documents/validation/resume-prompt.md`.
 - DGX N1 PASS, N2 PASS, N3 FAIL 2/2 (chiavi duplicate nell'analisi): dettagli in `I4-real-v3-N1-N3.md` (sesta esecuzione). Gate NON soddisfatto: T125/T127/T128/T129 restano non spuntati, T126/T067 non avviati.
 - Config demo: `AI_DOCUMENT_REQUEST_TIMEOUT_SECONDS=120` (altrimenti il retry T129 non parte entro la deadline Ordinary 180 s). Retry T129 provato su stack reale.
 - Decisione attesa dall'autore: come ridurre le chiavi duplicate dell'analisi (prompt/contratto) e la regola E2E «ordini annullati ESCLUSI».
+
+## SESSIONE 2026-11-04 — I4 residuo e I5 deterministico (leggere per primo)
+**Branch** `feature/002-implementation`, HEAD 4d37c3f (nessun push). Decisione dell'autore: nessuna ulteriore estensione dei retry T129/T130 («rendimenti decrescenti»); N4 resta caso di regressione semantico; T067 non chiuso.
+
+**Spuntati e verificati** (suite non-DGX con PG+parser reali: 2838 totali / 0 FAIL / 2833 completati / 5 ignorati):
+- I4: T125, T127, T128, T129 (N1–N3 PASS sul DGX con prompt v3, esecuzione 7ª).
+- I5 deterministico: T068, T069, T070, T071, T122, T072, T073, T074, T075, T076, T077, T078, T079, T080, T081.
+
+**Aperti / NON spuntati**: T126 (implementato, 2b4239b, 18 test; manca la prova a modello scaricato sul DGX: NOT VERIFIED), T130 (implementato 1e8bfa0; non spuntato), T067 (N4 FAIL ×2 con cause diverse: `Documented` senza `DocumentPassage`; poi conflitto assente + bozza con fonti non sostenute; browser reale non eseguito), T082, T083 (DGX, non avviati).
+
+**Esiti DGX** (dettagli in `I4-real-v3-N1-N3.md`, esecuzioni 7ª–11ª): N1, N2, N3, N5 PASS con retry T130; N4 FAIL ripetuto, registrato senza adattare gold/asserzioni.
+
+**Limiti noti I5**
+- Il percorso gerarchico è attivo solo per run con definizione **v2**; i run **v3** (alias) sopra budget falliscono ancora come prima. Va deciso/pianificato prima di T082/T083.
+- Il motore usa i default per `MaxDerivedBytes`/`MaxCandidatesPerRun` (non collegati alle opzioni); in T080 provato solo il tetto di chiamate. Patch `Applied` valide non provate nel workflow (solo Stale e frontiera irrisolta).
+- Il caso N4 non è rilevato dal motore: nessuna correzione ad hoc; il gold di conflitto perso (T079) è FAIL semantico con ID 100%.
+- Test instabile noto: `DocumentChatAliasWorkflowTests.The_catalog_comes_from_the_frozen_snapshot_a_selection_change_or_new_ready_document_after_the_post_does_not_enter` (catalogo ordinato per `DocumentId` casuale, DocumentChatWorkflow.cs:206); passa ~5 volte su 6 da solo.
+- Ambiente: Docker Desktop da avviare; PG `bprojects-002-test-pg2` (15432), parser `bprojects-t055-parser` (58300); DGX via `BPROJECTS_TEST_DGX_*` nell'ambiente.
+
+**Prossimo passo**: decidere come portare la gerarchia ai run v3, poi T082/T083 su DGX (una inferenza alla volta), T126 a modello scaricato, browser reale per T067.
