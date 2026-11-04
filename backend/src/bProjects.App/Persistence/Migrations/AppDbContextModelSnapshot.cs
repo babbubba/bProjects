@@ -415,8 +415,6 @@ namespace bProjects.App.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("OwnerKind", "OwnerId", "BatchId");
-
                     b.HasIndex("ProjectId");
 
                     b.HasIndex("OwnerKind", "OwnerId", "Ordinal");
@@ -704,6 +702,452 @@ namespace bProjects.App.Persistence.Migrations
                             t.HasCheckConstraint("CK_RegimeTransitions_Receipt", "jsonb_typeof(\"ReceiptJson\") = 'object'");
 
                             t.HasCheckConstraint("CK_RegimeTransitions_Root", "\"RootKind\" IN ('ProcessingRun', 'ChatTurn')");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCandidate", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProposedType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SourceHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("RunId", "CandidateId");
+
+                    b.HasIndex("RunId", "ProjectId");
+
+                    b.ToTable("RunCandidates", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCandidates_Hashes", "\"CandidateId\" ~ '^[0-9a-f]{64}$' AND \"SourceHash\" ~ '^[0-9a-f]{64}$' AND \"InputHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RunCandidates_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCandidateDisposition", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChildCandidateIdsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ComparisonOutputHashesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("RunId", "CandidateId", "Version");
+
+                    b.ToTable("RunCandidateDispositions", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCandidateDispositions_Shape", "\"Version\" >= 1 AND \"State\" IN ('Pending', 'Expanded', 'Compared', 'Open', 'NotProcessed') AND jsonb_typeof(\"ChildCandidateIdsJson\") = 'array' AND jsonb_typeof(\"ComparisonOutputHashesJson\") = 'array'");
+
+                            t.HasCheckConstraint("CK_RunCandidateDispositions_State", "(\"State\" <> 'Expanded' OR jsonb_array_length(\"ChildCandidateIdsJson\") > 0) AND (\"State\" NOT IN ('Compared', 'Open') OR jsonb_array_length(\"ComparisonOutputHashesJson\") > 0) AND (\"State\" NOT IN ('Open', 'NotProcessed') OR (\"Reason\" IS NOT NULL AND length(btrim(\"Reason\")) > 0))");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCandidateOrigin", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BatchId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("OriginOutputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("OwnerKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Rationale")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.HasKey("RunId", "CandidateId", "BatchId");
+
+                    b.HasIndex("OwnerKind", "RunId", "BatchId");
+
+                    b.ToTable("RunCandidateOrigins", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCandidateOrigins_Hash", "\"OriginOutputHash\" ~ '^[0-9a-f]{64}$' AND \"OwnerKind\" = 'ProcessingRun'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogMember", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NodeId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("EvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("EvidenceVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("View")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("RunId", "NodeId", "EvidenceId");
+
+                    b.HasIndex("EvidenceId");
+
+                    b.HasIndex("RunId", "NodeId", "View", "Level");
+
+                    b.HasIndex("RunId", "View", "Level", "EvidenceId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RunCatalogMembers_Level");
+
+                    b.ToTable("RunCatalogMembers", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCatalogMembers_Hash", "\"ContentHash\" ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogNode", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NodeId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BatchId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("DescriptorOutputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MemberCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MemberSetHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OwnerKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("View")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("RunId", "NodeId");
+
+                    b.HasIndex("RunId", "ProjectId");
+
+                    b.HasIndex("OwnerKind", "RunId", "BatchId");
+
+                    b.HasIndex("RunId", "View", "Level", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RunCatalogNodes_Position");
+
+                    b.ToTable("RunCatalogNodes", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCatalogNodes_Hashes", "\"NodeId\" ~ '^[0-9a-f]{64}$' AND \"MemberSetHash\" ~ '^[0-9a-f]{64}$' AND \"DescriptorOutputHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RunCatalogNodes_Numbers", "\"Level\" >= 0 AND \"Ordinal\" >= 0 AND \"MemberCount\" >= 1 AND \"View\" IN ('A', 'B', 'Cross') AND \"OwnerKind\" = 'ProcessingRun'");
+
+                            t.HasCheckConstraint("CK_RunCatalogNodes_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogPage", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PageHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("PreviousOrdinal")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("integer")
+                        .HasComputedColumnSql("CASE WHEN \"Ordinal\" > 0 THEN \"Ordinal\" - 1 END", true);
+
+                    b.Property<string>("PreviousPageHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("RunId", "PageId");
+
+                    b.HasAlternateKey("RunId", "NodeId", "Kind", "Ordinal", "PageHash");
+
+                    b.HasIndex("RunId", "NodeId", "Kind", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RunCatalogPages_Chain");
+
+                    b.ToTable("RunCatalogPages", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCatalogPages_Chain", "\"Ordinal\" >= 0 AND (\"Ordinal\" = 0) = (\"PreviousPageHash\" IS NULL) AND \"Kind\" IN ('Members', 'Keys', 'Relations')");
+
+                            t.HasCheckConstraint("CK_RunCatalogPages_Hashes", "\"PageId\" ~ '^[0-9a-f]{64}$' AND \"NodeId\" ~ '^[0-9a-f]{64}$' AND \"PageHash\" ~ '^[0-9a-f]{64}$' AND (\"PreviousPageHash\" IS NULL OR \"PreviousPageHash\" ~ '^[0-9a-f]{64}$')");
+
+                            t.HasCheckConstraint("CK_RunCatalogPages_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogSet", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("MemberCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MemberSetHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("View")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("RunId", "SetId");
+
+                    b.HasIndex("RunId", "ProjectId");
+
+                    b.ToTable("RunCatalogSets", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunCatalogSets_Hashes", "\"SetId\" ~ '^[0-9a-f]{64}$' AND \"MemberSetHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RunCatalogSets_Numbers", "\"MemberCount\" >= 1 AND \"View\" IN ('A', 'B', 'Cross')");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogSetNode", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("NodeId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("RunId", "SetId", "NodeId");
+
+                    b.HasIndex("RunId", "NodeId");
+
+                    b.ToTable("RunCatalogSetNodes");
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunPatch", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatchId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BaseHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExpectedHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("OriginOutputHashesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TargetId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("TargetKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("RunId", "PatchId");
+
+                    b.HasIndex("RunId", "ProjectId");
+
+                    b.ToTable("RunPatches", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunPatches_Hashes", "\"PatchId\" ~ '^[0-9a-f]{64}$' AND \"SourceHash\" ~ '^[0-9a-f]{64}$' AND \"BaseHash\" ~ '^[0-9a-f]{64}$' AND \"ExpectedHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RunPatches_Payload", "jsonb_typeof(\"PayloadJson\") = 'object' AND jsonb_typeof(\"OriginOutputHashesJson\") = 'array' AND jsonb_array_length(\"OriginOutputHashesJson\") > 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunPatchDisposition", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatchId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ResultHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("RunId", "PatchId", "Version");
+
+                    b.ToTable("RunPatchDispositions", t =>
+                        {
+                            t.HasCheckConstraint("CK_RunPatchDispositions_Reason", "\"Kind\" IN ('Applied', 'Duplicate') OR (\"Reason\" IS NOT NULL AND length(btrim(\"Reason\")) > 0)");
+
+                            t.HasCheckConstraint("CK_RunPatchDispositions_Shape", "\"Version\" >= 1 AND \"Kind\" IN ('Applied', 'Duplicate', 'PreservedAsConflict', 'Stale', 'Invalid', 'NotProcessed') AND (\"ResultHash\" IS NULL OR \"ResultHash\" ~ '^[0-9a-f]{64}$')");
                         });
                 });
 
@@ -3503,6 +3947,127 @@ namespace bProjects.App.Persistence.Migrations
                     b.HasOne("bProjects.App.Projects.Project", null)
                         .WithMany()
                         .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCandidate", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCandidateDisposition", b =>
+                {
+                    b.HasOne("bProjects.App.AI.RunCandidate", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCandidateOrigin", b =>
+                {
+                    b.HasOne("bProjects.App.AI.RunCandidate", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.AI.DerivedBatch", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerKind", "RunId", "BatchId")
+                        .HasPrincipalKey("OwnerKind", "OwnerId", "BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogMember", b =>
+                {
+                    b.HasOne("bProjects.App.Evidence.EvidenceItem", null)
+                        .WithMany()
+                        .HasForeignKey("EvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.AI.RunCatalogNode", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "NodeId", "View", "Level")
+                        .HasPrincipalKey("RunId", "NodeId", "View", "Level")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogNode", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.AI.DerivedBatch", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerKind", "RunId", "BatchId")
+                        .HasPrincipalKey("OwnerKind", "OwnerId", "BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogPage", b =>
+                {
+                    b.HasOne("bProjects.App.AI.RunCatalogNode", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "NodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogSet", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunCatalogSetNode", b =>
+                {
+                    b.HasOne("bProjects.App.AI.RunCatalogNode", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "NodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("bProjects.App.AI.RunCatalogSet", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "SetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunPatch", b =>
+                {
+                    b.HasOne("bProjects.App.Analysis.ProcessingRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "ProjectId")
+                        .HasPrincipalKey("Id", "ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("bProjects.App.AI.RunPatchDisposition", b =>
+                {
+                    b.HasOne("bProjects.App.AI.RunPatch", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "PatchId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

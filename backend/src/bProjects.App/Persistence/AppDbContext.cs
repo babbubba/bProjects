@@ -58,6 +58,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<RegimeTransition> RegimeTransitions => Set<RegimeTransition>();
     public DbSet<DerivedBatch> DerivedBatches => Set<DerivedBatch>();
     public DbSet<WorkOutput> WorkOutputs => Set<WorkOutput>();
+    public DbSet<RunCatalogNode> RunCatalogNodes => Set<RunCatalogNode>();
+    public DbSet<RunCatalogPage> RunCatalogPages => Set<RunCatalogPage>();
+    public DbSet<RunCatalogMember> RunCatalogMembers => Set<RunCatalogMember>();
+    public DbSet<RunCatalogSet> RunCatalogSets => Set<RunCatalogSet>();
+    public DbSet<RunCatalogSetNode> RunCatalogSetNodes => Set<RunCatalogSetNode>();
+    public DbSet<RunCandidate> RunCandidates => Set<RunCandidate>();
+    public DbSet<RunCandidateOrigin> RunCandidateOrigins => Set<RunCandidateOrigin>();
+    public DbSet<RunCandidateDisposition> RunCandidateDispositions => Set<RunCandidateDisposition>();
+    public DbSet<RunPatch> RunPatches => Set<RunPatch>();
+    public DbSet<RunPatchDisposition> RunPatchDispositions => Set<RunPatchDisposition>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -71,6 +81,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureEvidence(builder);
         ConfigureDocuments(builder);
         ConfigureDocumentWork(builder);
+        ConfigureReconciliation(builder);
         ConfigureDocumentRegime(builder);
 
         builder.Entity<RefreshSession>(session =>
@@ -586,6 +597,186 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 t.HasCheckConstraint("CK_Drafts_Status", "\"Status\" = 'Proposed' AND \"ApprovalStatus\" = 'NotApproved'");
             });
         });
+
+    /// <summary>
+    /// Cataloghi, candidati e patch del run (002 T122): proiezioni append-only (trigger nella migrazione) con FK al run/progetto, al batch d'origine (DerivedBatch)
+    /// e alle evidenze. Il payload autorevole resta WorkOutput/DerivedBatch; qui solo identità, membership e vincoli (nessun contenuto di EvidenceItem).
+    /// </summary>
+    private static void ConfigureReconciliation(ModelBuilder builder)
+    {
+        const string Hex = "~ '^[0-9a-f]{64}$'";
+        const string Views = "IN ('A', 'B', 'Cross')";
+
+
+        builder.Entity<RunCatalogNode>(node =>
+        {
+            node.HasKey(n => new { n.RunId, n.NodeId });
+            node.Property(n => n.NodeId).HasMaxLength(64);
+            node.Property(n => n.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            node.Property(n => n.BatchId).HasMaxLength(128);
+            node.Property(n => n.View).HasConversion<string>().HasMaxLength(8);
+            node.Property(n => n.MemberSetHash).HasMaxLength(64);
+            node.Property(n => n.DescriptorOutputHash).HasMaxLength(64);
+            node.Property(n => n.PayloadJson).HasColumnType("jsonb");
+            node.HasAlternateKey(n => new { n.RunId, n.NodeId, n.View, n.Level });
+            node.HasIndex(n => new { n.RunId, n.View, n.Level, n.Ordinal }).IsUnique().HasDatabaseName("UX_RunCatalogNodes_Position");
+            node.HasIndex(n => new { n.OwnerKind, n.RunId, n.BatchId });
+            node.HasOne<ProcessingRun>().WithMany().HasForeignKey(n => new { n.RunId, n.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            node.HasOne<DerivedBatch>().WithMany().HasForeignKey(n => new { n.OwnerKind, n.RunId, n.BatchId }).HasPrincipalKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId }).OnDelete(DeleteBehavior.Restrict);
+            node.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCatalogNodes_Hashes", $"\"NodeId\" {Hex} AND \"MemberSetHash\" {Hex} AND \"DescriptorOutputHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunCatalogNodes_Numbers", $"\"Level\" >= 0 AND \"Ordinal\" >= 0 AND \"MemberCount\" >= 1 AND \"View\" {Views} AND \"OwnerKind\" = 'ProcessingRun'");
+                t.HasCheckConstraint("CK_RunCatalogNodes_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<RunCatalogPage>(page =>
+        {
+            page.HasKey(p => new { p.RunId, p.PageId });
+            page.Property(p => p.PageId).HasMaxLength(64);
+            page.Property(p => p.NodeId).HasMaxLength(64);
+            page.Property(p => p.Kind).HasConversion<string>().HasMaxLength(16);
+            page.Property(p => p.PageHash).HasMaxLength(64);
+            page.Property(p => p.PreviousPageHash).HasMaxLength(64);
+            page.Property(p => p.PreviousOrdinal).HasComputedColumnSql("CASE WHEN \"Ordinal\" > 0 THEN \"Ordinal\" - 1 END", stored: true);
+            page.Property(p => p.PayloadJson).HasColumnType("jsonb");
+            page.HasIndex(p => new { p.RunId, p.NodeId, p.Kind, p.Ordinal }).IsUnique().HasDatabaseName("UX_RunCatalogPages_Chain");
+            // Bersaglio della FK di catena (aggiunta in migrazione: EF non modella FK composte con colonne nullable parziali).
+            page.HasAlternateKey(p => new { p.RunId, p.NodeId, p.Kind, p.Ordinal, p.PageHash });
+            page.HasOne<RunCatalogNode>().WithMany().HasForeignKey(p => new { p.RunId, p.NodeId }).OnDelete(DeleteBehavior.Restrict);
+            page.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCatalogPages_Hashes", $"\"PageId\" {Hex} AND \"NodeId\" {Hex} AND \"PageHash\" {Hex} AND (\"PreviousPageHash\" IS NULL OR \"PreviousPageHash\" {Hex})");
+                t.HasCheckConstraint("CK_RunCatalogPages_Chain", "\"Ordinal\" >= 0 AND (\"Ordinal\" = 0) = (\"PreviousPageHash\" IS NULL) AND \"Kind\" IN ('Members', 'Keys', 'Relations')");
+                t.HasCheckConstraint("CK_RunCatalogPages_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<RunCatalogMember>(member =>
+        {
+            member.HasKey(m => new { m.RunId, m.NodeId, m.EvidenceId });
+            member.Property(m => m.NodeId).HasMaxLength(64);
+            member.Property(m => m.ContentHash).HasMaxLength(64);
+            member.Property(m => m.View).HasConversion<string>().HasMaxLength(8);
+            // Unione disgiunta dei membri per vista e livello: la stessa evidenza compare in un solo nodo.
+            member.HasIndex(m => new { m.RunId, m.View, m.Level, m.EvidenceId }).IsUnique().HasDatabaseName("UX_RunCatalogMembers_Level");
+            member.HasIndex(m => m.EvidenceId);
+            member.HasOne<RunCatalogNode>().WithMany().HasForeignKey(m => new { m.RunId, m.NodeId, m.View, m.Level }).HasPrincipalKey(n => new { n.RunId, n.NodeId, n.View, n.Level }).OnDelete(DeleteBehavior.Restrict);
+            member.HasOne<EvidenceItem>().WithMany().HasForeignKey(m => m.EvidenceId).OnDelete(DeleteBehavior.Restrict);
+            member.ToTable(t => t.HasCheckConstraint("CK_RunCatalogMembers_Hash", $"\"ContentHash\" {Hex}"));
+        });
+
+        builder.Entity<RunCatalogSet>(set =>
+        {
+            set.HasKey(s => new { s.RunId, s.SetId });
+            set.Property(s => s.SetId).HasMaxLength(64);
+            set.Property(s => s.View).HasConversion<string>().HasMaxLength(8);
+            set.Property(s => s.MemberSetHash).HasMaxLength(64);
+            set.HasOne<ProcessingRun>().WithMany().HasForeignKey(s => new { s.RunId, s.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            set.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCatalogSets_Hashes", $"\"SetId\" {Hex} AND \"MemberSetHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunCatalogSets_Numbers", $"\"MemberCount\" >= 1 AND \"View\" {Views}");
+            });
+        });
+
+        builder.Entity<RunCatalogSetNode>(member =>
+        {
+            member.HasKey(m => new { m.RunId, m.SetId, m.NodeId });
+            member.Property(m => m.SetId).HasMaxLength(64);
+            member.Property(m => m.NodeId).HasMaxLength(64);
+            member.HasIndex(m => new { m.RunId, m.NodeId });
+            member.HasOne<RunCatalogSet>().WithMany().HasForeignKey(m => new { m.RunId, m.SetId }).OnDelete(DeleteBehavior.Restrict);
+            member.HasOne<RunCatalogNode>().WithMany().HasForeignKey(m => new { m.RunId, m.NodeId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<RunCandidate>(candidate =>
+        {
+            candidate.HasKey(c => new { c.RunId, c.CandidateId });
+            candidate.Property(c => c.CandidateId).HasMaxLength(64);
+            candidate.Property(c => c.SourceHash).HasMaxLength(64);
+            candidate.Property(c => c.InputHash).HasMaxLength(64);
+            candidate.Property(c => c.Kind).HasConversion<string>().HasMaxLength(16);
+            candidate.Property(c => c.ProposedType).HasConversion<string>().HasMaxLength(16);
+            candidate.Property(c => c.PayloadJson).HasColumnType("jsonb");
+            candidate.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => new { c.RunId, c.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            candidate.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCandidates_Hashes", $"\"CandidateId\" {Hex} AND \"SourceHash\" {Hex} AND \"InputHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunCandidates_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<RunCandidateOrigin>(origin =>
+        {
+            origin.HasKey(o => new { o.RunId, o.CandidateId, o.BatchId });
+            origin.Property(o => o.CandidateId).HasMaxLength(64);
+            origin.Property(o => o.BatchId).HasMaxLength(128);
+            origin.Property(o => o.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            origin.Property(o => o.OriginOutputHash).HasMaxLength(64);
+            origin.Property(o => o.Rationale).HasMaxLength(4_000);
+            origin.HasIndex(o => new { o.OwnerKind, o.RunId, o.BatchId });
+            origin.HasOne<RunCandidate>().WithMany().HasForeignKey(o => new { o.RunId, o.CandidateId }).OnDelete(DeleteBehavior.Restrict);
+            origin.HasOne<DerivedBatch>().WithMany().HasForeignKey(o => new { o.OwnerKind, o.RunId, o.BatchId }).HasPrincipalKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId }).OnDelete(DeleteBehavior.Restrict);
+            origin.ToTable(t => t.HasCheckConstraint("CK_RunCandidateOrigins_Hash", $"\"OriginOutputHash\" {Hex} AND \"OwnerKind\" = 'ProcessingRun'"));
+        });
+
+        builder.Entity<RunCandidateDisposition>(disposition =>
+        {
+            disposition.HasKey(d => new { d.RunId, d.CandidateId, d.Version });
+            disposition.Property(d => d.CandidateId).HasMaxLength(64);
+            disposition.Property(d => d.State).HasConversion<string>().HasMaxLength(16);
+            disposition.Property(d => d.ChildCandidateIdsJson).HasColumnType("jsonb");
+            disposition.Property(d => d.ComparisonOutputHashesJson).HasColumnType("jsonb");
+            disposition.Property(d => d.Reason).HasMaxLength(2_000);
+            disposition.HasOne<RunCandidate>().WithMany().HasForeignKey(d => new { d.RunId, d.CandidateId }).OnDelete(DeleteBehavior.Restrict);
+            disposition.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCandidateDispositions_Shape", "\"Version\" >= 1 AND \"State\" IN ('Pending', 'Expanded', 'Compared', 'Open', 'NotProcessed') " +
+                    "AND jsonb_typeof(\"ChildCandidateIdsJson\") = 'array' AND jsonb_typeof(\"ComparisonOutputHashesJson\") = 'array'");
+                t.HasCheckConstraint("CK_RunCandidateDispositions_State",
+                    "(\"State\" <> 'Expanded' OR jsonb_array_length(\"ChildCandidateIdsJson\") > 0) " +
+                    "AND (\"State\" NOT IN ('Compared', 'Open') OR jsonb_array_length(\"ComparisonOutputHashesJson\") > 0) " +
+                    "AND (\"State\" NOT IN ('Open', 'NotProcessed') OR (\"Reason\" IS NOT NULL AND length(btrim(\"Reason\")) > 0))");
+            });
+        });
+
+        builder.Entity<RunPatch>(patch =>
+        {
+            patch.HasKey(p => new { p.RunId, p.PatchId });
+            patch.Property(p => p.PatchId).HasMaxLength(64);
+            patch.Property(p => p.SourceHash).HasMaxLength(64);
+            patch.Property(p => p.BaseHash).HasMaxLength(64);
+            patch.Property(p => p.TargetKind).HasConversion<string>().HasMaxLength(16);
+            patch.Property(p => p.TargetId).HasMaxLength(128);
+            patch.Property(p => p.ExpectedHash).HasMaxLength(64);
+            patch.Property(p => p.PayloadJson).HasColumnType("jsonb");
+            patch.Property(p => p.OriginOutputHashesJson).HasColumnType("jsonb");
+            patch.HasOne<ProcessingRun>().WithMany().HasForeignKey(p => new { p.RunId, p.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            patch.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunPatches_Hashes", $"\"PatchId\" {Hex} AND \"SourceHash\" {Hex} AND \"BaseHash\" {Hex} AND \"ExpectedHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunPatches_Payload", "jsonb_typeof(\"PayloadJson\") = 'object' AND jsonb_typeof(\"OriginOutputHashesJson\") = 'array' AND jsonb_array_length(\"OriginOutputHashesJson\") > 0");
+            });
+        });
+
+        builder.Entity<RunPatchDisposition>(disposition =>
+        {
+            disposition.HasKey(d => new { d.RunId, d.PatchId, d.Version });
+            disposition.Property(d => d.PatchId).HasMaxLength(64);
+            disposition.Property(d => d.Kind).HasConversion<string>().HasMaxLength(24);
+            disposition.Property(d => d.ResultHash).HasMaxLength(64);
+            disposition.Property(d => d.Reason).HasMaxLength(2_000);
+            disposition.HasOne<RunPatch>().WithMany().HasForeignKey(d => new { d.RunId, d.PatchId }).OnDelete(DeleteBehavior.Restrict);
+            disposition.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunPatchDispositions_Shape", "\"Version\" >= 1 AND \"Kind\" IN ('Applied', 'Duplicate', 'PreservedAsConflict', 'Stale', 'Invalid', 'NotProcessed') " +
+                    $"AND (\"ResultHash\" IS NULL OR \"ResultHash\" {Hex})");
+                t.HasCheckConstraint("CK_RunPatchDispositions_Reason", "\"Kind\" IN ('Applied', 'Duplicate') OR (\"Reason\" IS NOT NULL AND length(btrim(\"Reason\")) > 0)");
+            });
+        });
+    }
 
     /// <summary>
     /// Dati di lavoro del workflow documentale (002 T040): manifesto, batch derivati e output committati, append-only (trigger nella migrazione).

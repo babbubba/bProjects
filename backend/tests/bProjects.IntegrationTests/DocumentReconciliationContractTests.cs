@@ -27,20 +27,20 @@ public sealed class DocumentReconciliationContractTests
         ContentHash = contentHash, SourceIds = [sourceId], Keys = keys, KnownRelationIds = [], UnclassifiedViews = [],
     };
 
-    private static MemberPageEntry Member(ReconciliationSnapshot s, Guid id)
+    internal static MemberPageEntry Member(ReconciliationSnapshot s, Guid id)
     {
         var e = s.Evidence.Single(x => x.EvidenceId == id);
         return new() { EvidenceId = id, EvidenceVersionId = e.EvidenceVersionId, ContentHash = e.ContentHash };
     }
 
-    private static CatalogPage Page(string nodeId, CatalogPageKind kind, int ordinal, IReadOnlyList<PageEntry> entries, string? previous)
+    internal static CatalogPage Page(string nodeId, CatalogPageKind kind, int ordinal, IReadOnlyList<PageEntry> entries, string? previous)
     {
         var page = new CatalogPage { PageId = "x", NodeId = nodeId, Kind = kind, Ordinal = ordinal, Entries = entries, PreviousPageHash = previous };
         return page with { PageId = ReconciliationIds.PageId(page) };
     }
 
     /// <summary>Catena di pagine contigue: ogni pagina cita l'hash della precedente.</summary>
-    private static List<CatalogPage> Chain(string nodeId, CatalogPageKind kind, params IReadOnlyList<PageEntry>[] pages)
+    internal static List<CatalogPage> Chain(string nodeId, CatalogPageKind kind, params IReadOnlyList<PageEntry>[] pages)
     {
         var list = new List<CatalogPage>();
         string? previous = null;
@@ -72,12 +72,12 @@ public sealed class DocumentReconciliationContractTests
     }
 
     /// <summary>Due foglie (E1+E2, E3) con pagine Members/Keys e il genitore che le unisce; tutto coerente con lo snapshot a tre evidenze.</summary>
-    private sealed record Hierarchy(ReconciliationSnapshot Snapshot, CatalogNode Leaf0, CatalogNode Leaf1, CatalogNode Parent, List<CatalogPage> Pages, CatalogSet Set)
+    internal sealed record Hierarchy(ReconciliationSnapshot Snapshot, CatalogNode Leaf0, CatalogNode Leaf1, CatalogNode Parent, List<CatalogPage> Pages, CatalogSet Set)
     {
         public ReconciliationCatalog Catalog => new([Leaf0, Leaf1, Parent], Pages, [Set]);
     }
 
-    private static Hierarchy Build()
+    internal static Hierarchy Build()
     {
         var s = ReconciliationFixtures.Snapshot(withThird: true);
         MemberPageEntry[] m0 = [Member(s, ReconciliationFixtures.E1), Member(s, ReconciliationFixtures.E2)];
