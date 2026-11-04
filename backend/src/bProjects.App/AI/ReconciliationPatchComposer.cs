@@ -29,13 +29,23 @@ public sealed record ConflictGroup(
     string GroupId, ConflictKind Kind, IReadOnlyList<string> PatchIds, IReadOnlyList<Guid> EvidenceIds, IReadOnlyList<Guid> SourceIds,
     IReadOnlyList<ConflictProposal> Proposals, bool RequiresPmDecision);
 
+public sealed record RunPatchDispositionRecord(string PatchId, RunPatchDispositionKind Kind, string? ResultHash, string? Reason);
+
+/// <summary>Composizione dei passaggi gerarchici: stesso <see cref="PatchComposition"/> del nucleo, hash degli output d'origine per patchId e disposition persistenti.</summary>
+public sealed record HierarchicalPatchComposition(
+    PatchComposition Composition, IReadOnlyDictionary<string, IReadOnlyList<string>> OriginOutputHashes, IReadOnlyList<RunPatchDispositionRecord> RunDispositions);
+
 public sealed record PatchComposition(
     IReadOnlyList<PatchDispositionRecord> Dispositions, IReadOnlyList<ComposedEffect> Effects, IReadOnlyList<ConflictGroup> Conflicts,
     IReadOnlyList<string> BlockingPatchIds, bool HasIntegrityConflict, string Hash);
 
 public static class ReconciliationPatchComposer
 {
-    public static PatchComposition Compose(IReadOnlyList<Patch> patches, ReconciliationBase baseState, ReconciliationSnapshot snapshot)
+    public static PatchComposition Compose(IReadOnlyList<Patch> patches, ReconciliationBase baseState, ReconciliationSnapshot snapshot) =>
+        Compose(patches, baseState, snapshot, null);
+
+    /// <summary>Compositore unico (core T121 e passaggi gerarchici T076): <paramref name="rejected"/> sono patch già escluse per un motivo di origine (patchId → motivo), mai un secondo percorso.</summary>
+    private static PatchComposition Compose(IReadOnlyList<Patch> patches, ReconciliationBase baseState, ReconciliationSnapshot snapshot, IReadOnlyDictionary<string, string>? rejected)
     {
         ArgumentNullException.ThrowIfNull(patches);
         var dispositions = new Dictionary<string, PatchDispositionRecord>(StringComparer.Ordinal);
@@ -61,6 +71,11 @@ public static class ReconciliationPatchComposer
         foreach (var patch in unique.Values)
         {
             var problems = ReconciliationContractRules.CheckPatch(patch).Concat(ReconciliationReferences.CheckPatch(patch, snapshot)).ToList();
+            if (rejected is not null && rejected.TryGetValue(patch.PatchId, out var originProblem))
+            {
+                problems.Add(originProblem);
+            }
+
             var key = ReconciliationBase.TargetKey(patch.Target.Kind, patch.Target.Id);
             if (problems.Count > 0)
             {
@@ -98,6 +113,97 @@ public static class ReconciliationPatchComposer
         var ordered = dispositions.Values.OrderBy(d => d.PatchId, StringComparer.Ordinal).ToList();
         var hash = CanonicalJson.HashText(ReconciliationCodec.Canonical(new { dispositions = ordered, effects, conflicts }));
         return new(ordered, effects, conflicts, blocking, integrity, hash);
+    }
+
+    /// <summary>
+    /// Passaggi gerarchici (T076): raccoglie le patch di tutti i batch Committed del run e le compone con lo STESSO compositore del nucleo, contro la stessa base.
+    /// Una patch deve citare il batch da cui proviene e tutti i suoi EvidenceId/endpoint devono essere stati riaperti integralmente in quel batch (voci di foglia,
+    /// espansione o confronto; un batch di soli descriptor non sostiene alcuna patch). Il risultato porta anche gli hash degli output d'origine e le disposition
+    /// persistenti (T122), identiche per ogni ordine di arrivo.
+    /// </summary>
+    public static HierarchicalPatchComposition ComposeHierarchical(IReadOnlyList<BatchOutcome> outcomes, ReconciliationBase baseState, ReconciliationSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(outcomes);
+        ArgumentNullException.ThrowIfNull(baseState);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var entryToEvidence = snapshot.Evidence.ToDictionary(e => ReconciliationIds.EntryId(snapshot.SourceHash, e.EvidenceId, e.ContentHash), e => e.EvidenceId, StringComparer.Ordinal);
+        var rejected = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var origins = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        var all = new List<Patch>();
+        foreach (var outcome in outcomes.OrderBy(o => o.Batch.BatchId, StringComparer.Ordinal))
+        {
+            var reopened = ReopenedEvidence(outcome.Batch, entryToEvidence);
+            foreach (var patch in outcome.Result.Patches)
+            {
+                all.Add(patch);
+                if (!origins.TryGetValue(patch.PatchId, out var hashes))
+                {
+                    origins[patch.PatchId] = hashes = new SortedSet<string>(StringComparer.Ordinal);
+                }
+
+                hashes.Add(outcome.OutputHash);
+                string? reason = null;
+                if (!patch.OriginBatchIds.Contains(outcome.Batch.BatchId, StringComparer.Ordinal))
+                {
+                    reason = $"originBatchIds: deve citare il batch {outcome.Batch.BatchId} da cui proviene.";
+                }
+                else if (EndpointsOf(patch).FirstOrDefault(id => !reopened.Contains(id)) is var missing && missing != Guid.Empty)
+                {
+                    reason = $"endpoint Evidence {missing:D} non riaperto integralmente nel batch d'origine {outcome.Batch.BatchId} ({outcome.Batch.Stage}).";
+                }
+
+                if (reason is not null)
+                {
+                    rejected.TryAdd(patch.PatchId, reason);
+                }
+            }
+        }
+
+        var composition = Compose(all, baseState, snapshot, rejected);
+        var effectOf = composition.Effects.SelectMany(e => e.PatchIds.Select(id => (Id: id, Effect: e))).GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Effect, StringComparer.Ordinal);
+        var records = composition.Dispositions.Select(d =>
+        {
+            var kind = d.Kind switch
+            {
+                PatchDispositionKind.Applied => effectOf.TryGetValue(d.PatchId, out var effect) && effect.PatchIds[0] != d.PatchId ? RunPatchDispositionKind.Duplicate : RunPatchDispositionKind.Applied,
+                PatchDispositionKind.PreservedAsConflict => RunPatchDispositionKind.PreservedAsConflict,
+                PatchDispositionKind.Stale => RunPatchDispositionKind.Stale,
+                _ => RunPatchDispositionKind.Invalid,
+            };
+            var reason = d.Kind == PatchDispositionKind.IntegrityConflict ? $"integrity_conflict: {d.Reason}" : d.Reason;
+            var terminal = kind is RunPatchDispositionKind.Applied or RunPatchDispositionKind.Duplicate or RunPatchDispositionKind.PreservedAsConflict;
+            return new RunPatchDispositionRecord(d.PatchId, kind, terminal ? composition.Hash : null, reason);
+        }).ToList();
+        return new(composition, origins.ToDictionary(o => o.Key, o => (IReadOnlyList<string>)[.. o.Value], StringComparer.Ordinal), records);
+    }
+
+    private static IEnumerable<Guid> EndpointsOf(Patch patch) => patch.EvidenceIds.Concat(patch.Value switch
+    {
+        AddRelationValue r => [r.FromEvidenceId, r.ToEvidenceId],
+        AddSupportValue s => s.EvidenceIds,
+        ProposeAlternativeValue a => a.EvidenceIds,
+        _ => [],
+    });
+
+    /// <summary>Evidenze riaperte integralmente da un batch: voci di foglia, espansione o confronto (entryId); un batch di nodi (riduzione, Cross) riapre soltanto descriptor.</summary>
+    private static HashSet<Guid> ReopenedEvidence(DerivedBatchInput batch, Dictionary<string, Guid> entryToEvidence)
+    {
+        var reopened = new HashSet<Guid>();
+        if (batch.Stage is not ("leaf" or "expand" or "compare"))
+        {
+            return reopened;
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(batch.InputIdsJson);
+        if (document.RootElement.TryGetProperty("members", out var members))
+        {
+            foreach (var id in members.EnumerateArray().Select(m => m.GetString()).OfType<string>().Where(entryToEvidence.ContainsKey))
+            {
+                reopened.Add(entryToEvidence[id]);
+            }
+        }
+
+        return reopened;
     }
 
     private static List<ComposedEffect> BuildEffects(IEnumerable<Patch> applied)

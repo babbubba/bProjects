@@ -145,9 +145,22 @@ public static class DocumentAnalysisBase
     public static ReconciliationBase Compute(SingleCallOutput output, ReconciliationSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(output);
+        return Compute(output.Results.SelectMany(r => r.ItemProposals), snapshot);
+    }
+
+    /// <summary>Base del passaggio gerarchico (T076): solo le proposte dei batch foglia, note prima di ogni espansione o confronto, quindi immutabili per le patch successive.</summary>
+    public static ReconciliationBase ComputeHierarchical(IEnumerable<BatchOutcome> outcomes, ReconciliationSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(outcomes);
+        return Compute(outcomes.Where(o => o.Batch.Stage == "leaf").OrderBy(o => o.Batch.BatchId, StringComparer.Ordinal).SelectMany(o => o.Result.ItemProposals), snapshot);
+    }
+
+    public static ReconciliationBase Compute(IEnumerable<ItemProposal> items, ReconciliationSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(snapshot);
         var targets = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var item in output.Results.SelectMany(r => r.ItemProposals))
+        foreach (var item in items)
         {
             targets.TryAdd(ReconciliationBase.TargetKey(PatchTargetKind.Item, item.LocalKey), ItemHash(item));
         }
