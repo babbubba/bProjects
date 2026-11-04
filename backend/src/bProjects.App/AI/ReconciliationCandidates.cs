@@ -107,6 +107,23 @@ public sealed class ReconciliationCandidates
 
     public CallBudget Calls { get; }
 
+    public bool Has(string candidateId) => candidates.ContainsKey(candidateId);
+
+    /// <summary>Registra insiemi di routing nati dal merge finale (membership esatta, già calcolata dal server).</summary>
+    public void AddSets(IEnumerable<CatalogSet> added)
+    {
+        foreach (var set in added.Where(s => sets.All(x => x.SetId != s.SetId)))
+        {
+            sets.Add(set);
+        }
+    }
+
+    /// <summary>Residuo non risolto: terminale esplicito con motivo (mai Open né Compared).</summary>
+    public void MarkNotProcessed(string id, string reason) => Set(id, CandidateState.NotProcessed, [], [], reason);
+
+    /// <summary>Risultato dell'unico round finale, se già eseguito: un secondo invio è un replay e non rifà lavoro.</summary>
+    public FinalPassResult? FinalResult { get; set; }
+
     /// <summary>Candidati ancora Pending, ordinati per candidateId.</summary>
     public IReadOnlyList<string> Pending =>
         [.. dispositions.Values.Where(d => d.State == CandidateState.Pending).Select(d => d.CandidateId).Order(StringComparer.Ordinal)];

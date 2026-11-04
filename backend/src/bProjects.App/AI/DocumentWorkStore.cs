@@ -35,6 +35,9 @@ public class DocumentWorkException(string code, string message) : Exception(mess
     /// <summary>Un'unità non dimostra la copertura attesa di tutti i suoi range proprietari.</summary>
     public const string CoverageIncomplete = "coverage_incomplete";
 
+    /// <summary>Nel round finale emergono collegamenti che richiedono altro lavoro: conservati NotProcessed, nessuna iterazione (AI §4.3).</summary>
+    public const string ReconciliationRoundLimit = "reconciliation_round_limit";
+
     public string Code { get; } = code;
 }
 
