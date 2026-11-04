@@ -1,3 +1,5 @@
+using bProjects.App.Analysis;
+
 namespace bProjects.App.AI;
 
 // Completezza finale (contracts/ai-workflow.md §4.5, T121): calcolata dal server su visite, obbligazioni, patch e mappa delle evidenze,
@@ -17,6 +19,20 @@ public sealed record CompletionReport(
     public bool SemanticQualityCertified => false;
 }
 
+/// <summary>Tutto ciò che il server ha prodotto nel percorso gerarchico e su cui calcola la completezza (T077): snapshot, directory, gerarchia, candidati, round finale e patch.</summary>
+public sealed record HierarchicalRun(
+    ReconciliationSnapshot Snapshot, ReconciliationDirectoryResult Directory, HierarchyResult Hierarchy, CandidateRun Candidates, FinalPassResult? FinalPass,
+    HierarchicalPatchComposition Patches);
+
+/// <summary>ReconciliationCoverage server (AI §4.5): il <see cref="Report"/> comune più gli insiemi dei nodi, delle pagine, dei candidati, delle patch, della frontiera e della mappa delle evidenze.</summary>
+public sealed record ReconciliationCoverage(
+    CompletionReport Report, IReadOnlyList<string> ExpectedNodeIds, IReadOnlyList<string> VisitedNodeIds, IReadOnlyList<string> MissingNodeIds, IReadOnlyList<string> PageHashes,
+    IReadOnlyList<string> UnresolvedCandidateIds, IReadOnlyList<string> BlockingPatchIds, IReadOnlyList<string> FrontierIds, IReadOnlyList<Guid> MappedEvidenceIds,
+    IReadOnlyList<Guid> UnmappedEvidenceIds)
+{
+    public bool IsComplete => Report.IsComplete;
+}
+
 public static class ReconciliationCompletion
 {
     public static CompletionReport EvaluateSingleCall(ReconciliationSnapshot snapshot, SingleCallOutput output, PatchComposition composition)
@@ -30,15 +46,7 @@ public static class ReconciliationCompletion
 
         var visitedA = Visited(ReconcileView.A);
         var visitedB = Visited(ReconcileView.B);
-        var missing = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var (view, visited) in new[] { ("A", visitedA), ("B", visitedB) })
-        {
-            foreach (var id in expected.Where(id => !visited.Contains(id, StringComparer.Ordinal)))
-            {
-                missing.Add(id);
-                gaps.Add(new("entry_not_visited", $"vista {view}: voce {id} non visitata."));
-            }
-        }
+        var missing = MissingVisits(expected, visitedA, visitedB, gaps);
 
         var candidates = output.Results.SelectMany(r => r.Candidates).GroupBy(c => c.CandidateId, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var dispositions = output.Results.SelectMany(r => r.Dispositions).GroupBy(d => d.CandidateId, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
@@ -82,6 +90,162 @@ public static class ReconciliationCompletion
 
         var hash = CanonicalJson.HashText(ReconciliationCodec.Canonical(new { expected, visitedA, visitedB, missing = missing.ToList(), gaps }));
         return new(gaps.Count == 0, gaps, expected, visitedA, visitedB, [.. missing], hash);
+    }
+
+    /// <summary>Voci attese non visitate nella vista A o B (stesso controllo per singola chiamata e gerarchico).</summary>
+    private static SortedSet<string> MissingVisits(IReadOnlyList<string> expected, IReadOnlyList<string> visitedA, IReadOnlyList<string> visitedB, List<CompletionGap> gaps)
+    {
+        var missing = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var (view, visited) in new[] { ("A", visitedA), ("B", visitedB) })
+        {
+            foreach (var id in expected.Where(id => !visited.Contains(id, StringComparer.Ordinal)))
+            {
+                missing.Add(id);
+                gaps.Add(new("entry_not_visited", $"vista {view}: voce {id} non visitata."));
+            }
+        }
+
+        return missing;
+    }
+
+    /// <summary>
+    /// Completezza del percorso gerarchico (T077, AI §4.5), calcolata dal server sugli insiemi attesi/visitati e mai da una dichiarazione dell'AI: voci A/B, nodi,
+    /// pagine e livelli (catalogo), radici e Cross, relazioni note, candidati, round finale e frontiera, patch e mappa di ogni EvidenceId. Un Open fondato su
+    /// originali è ammesso solo se il dubbio è rappresentato nella revisione; Pending/NotProcessed/Stale/Invalid necessari impediscono Completed. Usa gli stessi
+    /// gap e lo stesso report di <see cref="EvaluateSingleCall"/>: nessun percorso di completamento alternativo.
+    /// </summary>
+    public static ReconciliationCoverage EvaluateHierarchical(HierarchicalRun run, DocumentAnalysisContent analysis, IReadOnlyList<EvidenceMapEntry> evidenceMap)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentNullException.ThrowIfNull(evidenceMap);
+        var gaps = new List<CompletionGap>();
+        var snapshot = run.Snapshot;
+        var hierarchy = run.Hierarchy;
+        var expected = snapshot.Evidence.Select(e => ReconciliationIds.EntryId(snapshot.SourceHash, e.EvidenceId, e.ContentHash)).Order(StringComparer.Ordinal).ToList();
+
+        IReadOnlyList<string> Visited(ReconcileView view) => [.. hierarchy.Outcomes.Where(o => o.Batch.Stage == "leaf" && o.Result.View == view)
+            .SelectMany(o => o.Result.VisitedEntryIds).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+
+        var visitedA = Visited(ReconcileView.A);
+        var visitedB = Visited(ReconcileView.B);
+        var missing = MissingVisits(expected, visitedA, visitedB, gaps);
+
+        // Nodi: ogni radice e ogni figlio di un genitore non inoltrato deve essere stato visitato da un batch di riduzione o di Cross (un nodo inoltrato non ha AI).
+        var carried = hierarchy.Carries.ToHashSet(StringComparer.Ordinal);
+        var expectedNodes = hierarchy.Nodes.Where(n => n.Level > 0 && !carried.Contains(n.NodeId)).SelectMany(n => n.ChildNodeIds).Concat(hierarchy.Roots.Values)
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        var visitedNodes = hierarchy.Outcomes.Where(o => o.Batch.Stage is "reduce" or "cross").SelectMany(o => o.Result.VisitedNodeIds).Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal).ToList();
+        var missingNodes = expectedNodes.Where(id => !visitedNodes.Contains(id, StringComparer.Ordinal)).ToList();
+        gaps.AddRange(missingNodes.Select(id => new CompletionGap("node_not_visited", $"nodo {id} non visitato da alcun batch di riduzione o Cross.")));
+        foreach (var view in run.Directory.Leaves.Select(l => l.View).Distinct().Order())
+        {
+            if (!hierarchy.Roots.ContainsKey(view))
+            {
+                gaps.Add(new("root_missing", $"vista {view}: nessuna radice."));
+            }
+        }
+
+        if (hierarchy.Roots.Count == 2 && !hierarchy.Outcomes.Any(o => o.Batch.Stage == "cross"))
+        {
+            gaps.Add(new("cross_not_visited", "passaggio Cross fra le radici A e B non eseguito."));
+        }
+
+        // Pagine e livelli: concatenazione, membership disgiunta e cardinalità verificate sul catalogo (nessun buco).
+        var pageHashes = hierarchy.Pages.Select(ReconciliationIds.PageHash).Order(StringComparer.Ordinal).ToList();
+        foreach (var violation in ReconciliationReferences.CheckCatalog(new ReconciliationCatalog(hierarchy.Nodes, hierarchy.Pages, run.Directory.Sets), snapshot, run.Directory.InputHash, complete: true).Take(8))
+        {
+            gaps.Add(new("catalog_invalid", violation));
+        }
+
+        // Candidati e relazioni note: disposition terminale fondata su originali.
+        var candidates = run.Candidates;
+        var byId = candidates.Dispositions.ToDictionary(d => d.CandidateId, StringComparer.Ordinal);
+        var unresolved = candidates.Unresolved;
+        foreach (var id in unresolved)
+        {
+            var state = byId.TryGetValue(id, out var d) ? $"{d.State}{(d.Reason is null ? string.Empty : ": " + d.Reason)}" : "senza disposition";
+            gaps.Add(new("candidate_not_terminal", $"candidato {id} non terminale ({state})."));
+        }
+
+        foreach (var d in candidates.Dispositions.Where(d => d.State is CandidateState.Compared or CandidateState.Open && d.ComparisonOutputHashes.Count == 0))
+        {
+            gaps.Add(new("candidate_not_grounded", $"candidato {d.CandidateId} {d.State} senza l'hash dell'output di confronto sugli originali."));
+        }
+
+        var known = candidates.Candidates.Select(c => c.CandidateId).ToHashSet(StringComparer.Ordinal);
+        foreach (var relation in run.Directory.KnownRelations.OrderBy(c => c.CandidateId, StringComparer.Ordinal).Where(c => !known.Contains(c.CandidateId) || unresolved.Contains(c.CandidateId)))
+        {
+            gaps.Add(new("known_relation_unresolved", $"relazione nota (candidato {relation.CandidateId}) senza confronto terminale."));
+        }
+
+        var frontier = run.FinalPass?.Frontier.Select(f => f.CandidateId).Order(StringComparer.Ordinal).ToList() ?? [];
+        if (run.FinalPass is null)
+        {
+            gaps.Add(new("final_pass_missing", "round finale non eseguito."));
+        }
+        else if (run.FinalPass.Outcome != FinalPassOutcome.Complete)
+        {
+            gaps.Add(new(run.FinalPass.Code ?? DocumentWorkException.CoverageIncomplete, run.FinalPass.Reason ?? "round finale non completo."));
+            gaps.AddRange(run.FinalPass.Frontier.Select(f => new CompletionGap("frontier", $"candidato {f.CandidateId}: {f.Reason}")));
+        }
+
+        // Patch: soltanto Applied/Duplicate/PreservedAsConflict sono terminali; Invalid, Stale necessari e NotProcessed impediscono Completed.
+        var composition = run.Patches.Composition;
+        foreach (var patchId in composition.BlockingPatchIds)
+        {
+            gaps.Add(new("patch_blocking", $"patch {patchId} Invalid/Stale necessaria o in conflitto d'integrità."));
+        }
+
+        foreach (var d in run.Patches.RunDispositions.Where(d => d.Kind == RunPatchDispositionKind.NotProcessed))
+        {
+            gaps.Add(new("patch_not_processed", $"patch {d.PatchId} NotProcessed."));
+        }
+
+        // Rappresentazione nella revisione: i conflitti di patch e i candidati Open vanno portati con tutte le fonti nelle alternative (o nelle domande aperte).
+        foreach (var group in composition.Conflicts)
+        {
+            var represented = analysis.Conflicts.Any(c => c.Alternatives.Count >= group.Proposals.Count && group.SourceIds.All(s => c.Alternatives.SelectMany(a => a.EvidenceRefs).Contains(s)));
+            if (!represented)
+            {
+                gaps.Add(new("conflict_not_represented", $"gruppo di conflitto {group.GroupId}: nessun conflitto della revisione porta tutte le proposte e fonti."));
+            }
+        }
+
+        var sourcesOf = snapshot.Evidence.ToDictionary(e => e.EvidenceId.ToString("D"), e => e.Sources.Select(s => s.SourceId).ToList(), StringComparer.Ordinal);
+        foreach (var open in candidates.Dispositions.Where(d => d.State == CandidateState.Open).OrderBy(d => d.CandidateId, StringComparer.Ordinal))
+        {
+            var candidate = candidates.Candidates.Single(c => c.CandidateId == open.CandidateId);
+            var needed = new[] { candidate.Left, candidate.Right }.Where(e => e.Kind == CandidateEndpointKind.Evidence).SelectMany(e => sourcesOf.GetValueOrDefault(e.Id) ?? []).ToList();
+            var held = analysis.Conflicts.Any(c => needed.All(s => c.Alternatives.SelectMany(a => a.EvidenceRefs).Contains(s)))
+                || analysis.OpenQuestions.Any(q => needed.All(s => q.EvidenceRefs.Contains(s)));
+            if (!held)
+            {
+                gaps.Add(new("open_candidate_not_represented", $"candidato Open {open.CandidateId}: le fonti di entrambe le alternative non sono rappresentate in un conflitto o in una domanda aperta della revisione."));
+            }
+        }
+
+        // Mappa di ogni EvidenceId su item della revisione.
+        var items = ReconciliationContractRules.ItemIds(analysis).ToHashSet();
+        foreach (var entry in evidenceMap.Where(m => !items.Contains(m.ItemId)))
+        {
+            gaps.Add(new("evidence_map_item_unknown", $"evidenceMap: item {entry.ItemId:D} assente dalla revisione."));
+        }
+
+        var mapped = evidenceMap.SelectMany(e => e.EvidenceIds).Distinct().OrderBy(g => g.ToString("D"), StringComparer.Ordinal).ToList();
+        var unmapped = snapshot.Evidence.Select(e => e.EvidenceId).Where(id => !mapped.Contains(id)).OrderBy(g => g.ToString("D"), StringComparer.Ordinal).ToList();
+        gaps.AddRange(unmapped.Select(id => new CompletionGap("evidence_not_mapped", $"evidenza {id:D} non mappata su alcun item.")));
+
+        var hash = CanonicalJson.HashText(ReconciliationCodec.Canonical(new
+        {
+            expected, visitedA, visitedB, missing = missing.ToList(), expectedNodes, visitedNodes, missingNodes, pageHashes,
+            candidates = candidates.Candidates.Select(c => c.CandidateId).Order(StringComparer.Ordinal).ToList(), unresolved,
+            patches = run.Patches.RunDispositions.Select(d => $"{d.PatchId}:{d.Kind}").Order(StringComparer.Ordinal).ToList(), blocking = composition.BlockingPatchIds, frontier,
+            mapped = mapped.Select(g => g.ToString("D")).ToList(), gaps,
+        }));
+        var report = new CompletionReport(gaps.Count == 0, gaps, expected, visitedA, visitedB, [.. missing], hash);
+        return new(report, expectedNodes, visitedNodes, missingNodes, pageHashes, unresolved, [.. composition.BlockingPatchIds], frontier, mapped, unmapped);
     }
 
     /// <summary>Compared/Open sono terminali; Expanded solo con figli presenti e tutti terminali; Pending e NotProcessed no. Cicli = non terminale.</summary>
