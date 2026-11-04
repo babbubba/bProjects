@@ -18,53 +18,11 @@ namespace bProjects.IntegrationTests;
 /// replay riusano gli output Committed senza nodi nuovi; una promozione valida mantiene t0 e cap; non esiste un Completed parziale.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
-public sealed class DocumentReconcileWorkflowTests : ArchiveTestBase
+public sealed class DocumentReconcileWorkflowTests : ReconcileRig
 {
     private const int Documents = 8;
 
-    protected override void Tune(DocumentOptions options)
-    {
-        options.MaxFileBytes = 5_000;
-        options.ProjectQuotaBytes = 100_000;
-    }
-
     private static string Statement(int n) => $"Requisito {n}: " + string.Join(' ', Enumerable.Range(0, 120).Select(i => $"w{n}x{i}"));
-
-    // ================================================================ modello finto reconcile-1
-
-    private sealed record Parsed(string BatchId, string InputHash, string Stage, ReconcileView View, int Level, string[] Entries, string[] Nodes, (string Entry, Guid Evidence, string Hash, string Statement, Guid Source)[] Voci, string SourceHash, string? FocusId);
-
-    private static Parsed Parse(string text)
-    {
-        string Line(string key) => Regex.Match(text, $"^{key}: (.+)$", RegexOptions.Multiline).Groups[1].Value.Trim();
-        string[] List(string key) => JsonSerializer.Deserialize<string[]>(Regex.Match(text, $@"^{key} \(\d+ elementi[^)]*\): (\[.*\])$", RegexOptions.Multiline).Groups[1].Value)!;
-        var voci = Regex.Matches(text, @"<<<VOCE entryId=(\w+) evidenza=([0-9a-f-]{36}) hash=(\w+) [^>]*>>>\n(.*)\n<<<FONTE fonte:([0-9a-f-]{36})")
-            .Select(m => (m.Groups[1].Value, Guid.Parse(m.Groups[2].Value), m.Groups[3].Value, m.Groups[4].Value, Guid.Parse(m.Groups[5].Value))).ToArray();
-        var focus = Regex.Match(text, "\"candidateId\":\"(\\w+)\"");
-        return new(
-            Line("batchId"), Line("inputHash"), Line("stage"), Enum.Parse<ReconcileView>(Line("view")), int.Parse(Line("level")), List("visitedEntryIds"), List("visitedNodeIds"), voci,
-            Line("sourceHash"), focus.Success ? focus.Groups[1].Value : null);
-    }
-
-    /// <summary>Risposta reconcile-1 valida: visite identiche all'input, descriptor dove si costruiscono nodi, una proposta per voce nelle foglie della vista A.</summary>
-    private static string Respond(DocumentChatWorkflowTests.ChatRequest request, Func<Parsed, ReconcileResult, ReconcileResult>? change = null)
-    {
-        var p = Parse(request.AllText);
-        var proposals = p.Stage == "leaf" && p.View == ReconcileView.A
-            ? p.Voci.Select(v => new ItemProposal
-            {
-                LocalKey = $"k-{v.Evidence:N}", Text = v.Statement, Classification = DocumentAnalysisClassification.Documented, EvidenceIds = [v.Evidence], SourceIds = [v.Source],
-                // (v.Hash serve solo ai candidati)
-            }).ToList()
-            : [];
-        var result = new ReconcileResult
-        {
-            BatchId = p.BatchId, InputHash = p.InputHash, View = p.View, Level = p.Level, VisitedEntryIds = p.Entries, VisitedNodeIds = p.Nodes, Candidates = [], Dispositions = [],
-            ItemProposals = proposals, Patches = [], Descriptor = p.Stage is "leaf" or "reduce" ? $"gruppo {p.BatchId[..8]}" : null,
-            NoFindingsReason = proposals.Count > 0 ? null : "nessun collegamento emerso",
-        };
-        return ReconciliationCodec.Encode(change?.Invoke(p, result) ?? result);
-    }
 
     // ================================================================ scenari
 
@@ -211,18 +169,6 @@ public sealed class DocumentReconcileWorkflowTests : ArchiveTestBase
         Assert.Equal(1, await Count("SELECT count(*) FROM \"RunCandidateDispositions\" WHERE \"RunId\" = @r AND \"State\" = 'Open'", ("r", run)));
     }
 
-    private static ReconcileCandidate Link((Guid Evidence, string Hash) from, (Guid Evidence, string Hash) to, string parent, string batch, string sourceHash)
-    {
-        var l = ReconciliationFixtures.Endpoint(from.Evidence, from.Hash);
-        var r = ReconciliationFixtures.Endpoint(to.Evidence, to.Hash);
-        return new()
-        {
-            CandidateId = ReconciliationIds.CandidateId(CandidateKind.Conflict, l, r, ReconcileProposedType.Contradicts, sourceHash), Kind = CandidateKind.Conflict, Left = l, Right = r,
-            ProposedType = ReconcileProposedType.Contradicts, Rationale = "30 giorni nel documento contro 45 giorni dichiarati", Basis = EvidenceRelationBasis.Inferred,
-            OriginBatchIds = [batch], ParentCandidateId = parent,
-        };
-    }
-
     [Fact]
     public async Task A_valid_promotion_keeps_t0_and_the_hard_cap_and_does_not_reset_the_counters()
     {
@@ -294,8 +240,6 @@ public sealed class DocumentReconcileWorkflowTests : ArchiveTestBase
 
     // ================================================================ supporto: dati e esecuzione
 
-    private async Task<string> Message(Guid run) => await Scalar<string>("SELECT coalesce(\"ErrorCode\",'') || ': ' || coalesce(\"ErrorMessage\",'') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run));
-
     private async Task<(Guid Run, AnalysisRunClaim Claim)> ArrangeAsync(bool ordinary = false, bool sharedKey = false)
     {
         using var client = await App.LoginAsync();
@@ -324,108 +268,4 @@ public sealed class DocumentReconcileWorkflowTests : ArchiveTestBase
         return (run, await ClaimAsync(run));
     }
 
-    private sealed record Doc(Guid Document, Guid Version, Guid SourceId);
-
-    private async Task<Doc> NewDocument(HttpClient client, Guid project, string name, string statement, string? subject = null, string? scopeKey = null)
-    {
-        var created = await Json(await Upload(client, project, Text(name), name + ".txt", displayName: name));
-        var doc = new Doc(created.GetProperty("documentId").GetGuid(), created.GetProperty("id").GetGuid(), Guid.NewGuid());
-        using var scope = App.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var preparation = await db.DocumentPreparations.SingleAsync(p => p.DocumentVersionId == doc.Version, Ct);
-        var now = DateTimeOffset.UtcNow;
-        var (job, version) = (Guid.NewGuid(), Guid.NewGuid());
-        db.EvidenceExtractionJobs.Add(new EvidenceExtractionJob
-        {
-            Id = job, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Reason = ExtractionJobReason.Initial,
-            Status = ExtractionJobStatus.Queued, RequestedAt = now, DeadlineAt = now.AddHours(1), MaxAttempts = 3, ExtractorConfig = "{}",
-        });
-        db.EvidenceExtractionVersions.Add(new EvidenceExtractionVersion
-        {
-            Id = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, ManifestHash = new string('1', 64),
-            Version = 1, JobId = job, SchemaVersion = "evidence-1.1.0", PromptVersion = "document-extraction-v2", ModelId = "m", Parameters = "{}", EvidenceCount = 1, CreatedAt = now,
-        });
-        await db.SaveChangesAsync(Ct);
-        var content = new DocumentEvidenceContent
-        {
-            SchemaVersion = DocumentEvidenceContent.SchemaVersionValue,
-            KindRationale = null,
-            Structure = new DocumentEvidenceStructure { Subject = subject, Action = null, Object = null, Scope = scopeKey, Purpose = null, Instrument = null, Channel = null, Recipient = null },
-            Qualifiers = [],
-            Sources =
-            [
-                new PersistedSource
-                {
-                    SourceId = doc.SourceId, Kind = EvidenceSourceKind.DocumentPassage, Role = EvidenceSourceRole.Primary, CitationGroupId = Guid.NewGuid(), Part = 0,
-                    MessageId = null, Sequence = null, DocumentId = doc.Document, DocumentVersionId = doc.Version, PreparationId = preparation.Id,
-                    ArtifactId = Guid.NewGuid(), BlockId = Guid.NewGuid(), Start = 0, End = statement.Length, Quote = statement,
-                },
-            ],
-        };
-        db.Evidences.Add(new EvidenceItem
-        {
-            Id = Guid.NewGuid(), VersionId = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Ordinal = 1,
-            Key = "e1", Kind = EvidenceKind.Requirement, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = statement,
-            Content = DocumentEvidenceCodec.EncodeContent(content),
-        });
-        db.EvidenceDocumentStates.Add(new EvidenceDocumentState
-        {
-            DocumentVersionId = doc.Version, ProjectId = preparation.ProjectId, CurrentPreparationId = preparation.Id, CurrentEvidenceVersionId = version, Revision = 1, UpdatedAt = now,
-        });
-        await db.SaveChangesAsync(Ct);
-        preparation.Status = PreparationStatus.Ready;
-        preparation.CurrentEvidenceVersionId = version;
-        await db.SaveChangesAsync(Ct);
-        await db.ProjectDocuments.Where(d => d.Id == doc.Document).ExecuteUpdateAsync(x => x.SetProperty(d => d.LatestReadyVersionId, doc.Version), Ct);
-        return doc;
-    }
-
-    private async Task<Guid> StartRunAsync(HttpClient client, Guid project)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
-        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-        var response = await client.SendAsync(request, Ct);
-        Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
-        var run = (await Json(response)).GetProperty("id").GetGuid();
-        // La riconciliazione gerarchica è del contratto v2 (definizione e prompt v2 congelati alla richiesta).
-        await Execute(
-            "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v2', \"PromptVersions\" = '{\"analysis\":\"document-analysis-v2\",\"analysisSchema\":\"1.1.0\"}'::jsonb WHERE \"Id\" = @r",
-            ("r", run));
-        return run;
-    }
-
-    private async Task<AnalysisRunClaim> ClaimAsync(Guid run)
-    {
-        await Execute(
-            """
-            UPDATE "ProcessingRuns" SET "Status" = 'Running', "LeaseOwner" = 'test-owner', "FencingToken" = 1, "AttemptCount" = 1, "StartedAt" = now(),
-                   "LeaseUntil" = now() + interval '10 minutes'
-            WHERE "Id" = @r AND "Status" = 'Queued'
-            """,
-            ("r", run));
-        return new AnalysisRunClaim(run, "test-owner", 1, 1);
-    }
-
-    private async Task<DocumentAnalysisInput> PrepareAsync(AnalysisRunClaim claim)
-    {
-        using var scope = App.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var frozen = await new EvidenceLedgerStore(db).FreezeDocumentSelectionAsync(claim, Ct);
-        Assert.True(frozen.Outcome is SelectionOutcome.Frozen or SelectionOutcome.Existing, frozen.Outcome.ToString());
-        return await DocumentAnalysisSources.LoadAsync(db, claim.RunId, Ct);
-    }
-
-    private async Task<AnalysisRunResult> RunAsync(AnalysisRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model)
-    {
-        var options = new AiOptions
-        {
-            Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = DocumentChatWorkflowTests.FakeChatModel.Window,
-            MaxOutputTokens = 1500, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60,
-        };
-        using var client = new InternalModelClient(options, model);
-        var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
-        var factory = new AgentFactory(options, client.ChatClient, (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
-        var workflow = new DocumentAnalysisWorkflow(App.Services.GetRequiredService<IServiceScopeFactory>(), factory, client, Options.Create(new DocumentOptions()));
-        return await workflow.ExecuteAsync(claim, Ct);
-    }
 }
