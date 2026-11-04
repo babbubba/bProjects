@@ -1,0 +1,182 @@
+using bProjects.App.Analysis;
+using bProjects.App.Evidence;
+
+namespace bProjects.App.AI;
+
+/// <summary>Esito del motore di riconciliazione rigiocato sugli output Committed: directory, gerarchia, candidati e round finale (T072–T075).</summary>
+internal sealed record ReconcileEngineResult(ReconciliationDirectoryResult Directory, HierarchyResult Hierarchy, CandidateRun Candidates, FinalPassResult Final);
+
+/// <summary>Risultato dell'assemblaggio server: tutto ciò che serve a calcolare la copertura e a committare revisione, mappa, relazioni e proiezioni in un'unica transazione.</summary>
+internal sealed record ReconcileAssembly(
+    HierarchicalRun Run, DocumentAnalysisContent Analysis, IReadOnlyList<EvidenceMapEntry> Map, IReadOnlyList<RunRelation> Relations, IReadOnlyList<BatchOutcome> Outcomes);
+
+/// <summary>
+/// Assemblaggio dell'analisi dal risultato gerarchico (AI §4.5): item dalle proposte validate (id canonici del server, mai del modello), conflitti dai gruppi di
+/// patch preservati e dai candidati Open (alternative integrali con tutte le fonti), nessuna scelta automatica. Gli item senza sezione nello schema delle proposte
+/// vanno in `requirements` (le assunzioni in `assumptions`). Nessuna evidenza è sintetizzata dal server: ciò che il modello non ha proposto resta non mappato.
+/// </summary>
+internal static class DocumentReconcileAssembly
+{
+    public static ReconcileAssembly Assemble(DocumentAnalysisInput input, ReconcileEngineResult engine)
+    {
+        var snapshot = input.Snapshot;
+        var outcomes = engine.Hierarchy.Outcomes.Concat(engine.Candidates.Outcomes).GroupBy(o => o.Batch.BatchId).Select(g => g.First()).ToList();
+        var baseState = DocumentAnalysisBase.ComputeHierarchical(outcomes, snapshot);
+        var patches = ReconciliationPatchComposer.ComposeHierarchical(outcomes, baseState, snapshot);
+        if (patches.Composition.HasIntegrityConflict)
+        {
+            throw new DocumentWorkException(
+                DocumentWorkException.IntegrityConflict,
+                "Stesso patchId con payload diverso: " + string.Join(", ", patches.Composition.Dispositions.Where(d => d.Kind == PatchDispositionKind.IntegrityConflict).Select(d => d.PatchId)));
+        }
+
+        var run = new HierarchicalRun(snapshot, engine.Directory, engine.Hierarchy, engine.Candidates, engine.Final, patches);
+
+        var proposals = new List<ItemProposal>();
+        foreach (var proposal in engine.Hierarchy.Outcomes.Where(o => o.Batch.Stage == "leaf").SelectMany(o => o.Result.ItemProposals))
+        {
+            if (proposals.FirstOrDefault(p => p.LocalKey == proposal.LocalKey) is { } existing)
+            {
+                if (ReconciliationCodec.Canonical(existing) != ReconciliationCodec.Canonical(proposal))
+                {
+                    throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, $"La localKey {proposal.LocalKey} è proposta con contenuti diversi da batch diversi.");
+                }
+
+                continue;
+            }
+
+            proposals.Add(proposal);
+        }
+
+        var persisted = snapshot.Evidence.SelectMany(e => e.Sources).GroupBy(s => s.SourceId).ToDictionary(g => g.Key, g => g.First());
+        var evidence = input.Evidence.ToDictionary(e => e.EvidenceId);
+        var map = new List<EvidenceMapEntry>();
+        var usedSources = new HashSet<Guid>();
+
+        Guid IdOf(string kind, string key) => AnalysisAliasComposer.CanonicalId(kind, input.AnalysisId, snapshot.SourceHash, key);
+
+        DocumentAnalysisItem MakeItem(Guid id, string text, DocumentAnalysisClassification classification, IReadOnlyList<Guid> sources, IReadOnlyList<Guid> evidenceIds)
+        {
+            usedSources.UnionWith(sources);
+            map.Add(new EvidenceMapEntry { ItemId = id, EvidenceIds = evidenceIds });
+            return new DocumentAnalysisItem { Id = id, Text = text, Classification = classification, EvidenceRefs = sources };
+        }
+
+        var items = proposals.Select(p => (Proposal: p, Item: MakeItem(IdOf("item", p.LocalKey), p.Text, p.Classification, p.SourceIds, p.EvidenceIds))).ToList();
+
+        var conflicts = new List<DocumentAnalysisConflict>();
+        var patchById = outcomes.SelectMany(o => o.Result.Patches).GroupBy(p => p.PatchId).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var group in patches.Composition.Conflicts)
+        {
+            var alternatives = group.PatchIds.Select(id =>
+            {
+                var patch = patchById[id];
+                var (text, classification) = patch.Value switch
+                {
+                    ProposeAlternativeValue a => (a.Text, a.Classification),
+                    AddRelationValue r => ($"{r.Type}: {r.FromEvidenceId:D} -> {r.ToEvidenceId:D}" + (r.Rationale is null ? string.Empty : $" ({r.Rationale})"), DocumentAnalysisClassification.Inferred),
+                    _ => ("Fonte aggiuntiva proposta", DocumentAnalysisClassification.Inferred),
+                };
+                return MakeItem(IdOf("item", $"conflict:{group.GroupId}:{id}"), text, classification, patch.SourceIds, patch.EvidenceIds);
+            }).ToList();
+            conflicts.Add(new DocumentAnalysisConflict
+            {
+                Id = IdOf("conflict", $"group:{group.GroupId}"), Description = $"Proposte incompatibili ({group.Kind}): nessuna prevale, decisione al PM.", Status = AnalysisConflictStatus.Open,
+                Alternatives = alternatives, Resolution = null,
+            });
+        }
+
+        foreach (var open in engine.Candidates.Dispositions.Where(d => d.State == CandidateState.Open).OrderBy(d => d.CandidateId, StringComparer.Ordinal))
+        {
+            var candidate = engine.Candidates.Candidates.Single(c => c.CandidateId == open.CandidateId);
+            var alternatives = new[] { ("L", candidate.Left), ("R", candidate.Right) }.Select(side =>
+            {
+                var e = evidence[Guid.Parse(side.Item2.Id)];
+                var sources = snapshot.Evidence.Single(x => x.EvidenceId == e.EvidenceId).Sources.Select(s => s.SourceId).ToList();
+                var classification = e.Origin == EvidenceOriginKind.Document ? DocumentAnalysisClassification.Documented : DocumentAnalysisClassification.Declared;
+                return MakeItem(IdOf("item", $"open:{candidate.CandidateId}:{side.Item1}"), e.Statement, classification, sources, [e.EvidenceId]);
+            }).ToList();
+            conflicts.Add(new DocumentAnalysisConflict
+            {
+                Id = IdOf("conflict", $"open:{candidate.CandidateId}"), Description = string.IsNullOrWhiteSpace(open.Reason) ? "Alternative integrali da sottoporre al PM." : open.Reason,
+                Status = AnalysisConflictStatus.Open, Alternatives = alternatives, Resolution = null,
+            });
+        }
+
+        var sources2 = usedSources.OrderBy(g => g.ToString("D"), StringComparer.Ordinal).Select(id => Source(input, persisted[id])).ToList();
+        var analysis = new DocumentAnalysisContent
+        {
+            SchemaVersion = DocumentAnalysisContent.SchemaVersionValue, AnalysisId = input.AnalysisId, ProjectId = input.ProjectId, SourceCutoffSequence = input.Cutoff,
+            ValidationState = AnalysisContentState.Unvalidated, Sources = sources2, Goals = [],
+            ContextAndScope = new DocumentAnalysisContextAndScope { Overview = [], Included = [], Excluded = [] },
+            Requirements = [.. items.Where(i => i.Proposal.Classification != DocumentAnalysisClassification.Assumed).Select(i => i.Item)], OperationalFlows = [], Constraints = [],
+            Dependencies = [], Assumptions = [.. items.Where(i => i.Proposal.Classification == DocumentAnalysisClassification.Assumed).Select(i => i.Item)], OpenQuestions = [],
+            Conflicts = conflicts,
+        };
+
+        var relations = new List<RunRelation>();
+        var accepted = patches.RunDispositions.Where(d => d.Kind is RunPatchDispositionKind.Applied or RunPatchDispositionKind.Duplicate or RunPatchDispositionKind.PreservedAsConflict)
+            .Select(d => d.PatchId).ToHashSet(StringComparer.Ordinal);
+        foreach (var patch in patchById.Values.Where(p => accepted.Contains(p.PatchId)).OrderBy(p => p.PatchId, StringComparer.Ordinal))
+        {
+            if (patch.Value is AddRelationValue r && !relations.Any(x => x.From == r.FromEvidenceId && x.To == r.ToEvidenceId && x.Type == r.Type))
+            {
+                relations.Add(new RunRelation(r.FromEvidenceId, r.ToEvidenceId, r.Type, r.Basis, r.Rationale));
+            }
+        }
+
+        return new(run, analysis, map, relations, outcomes);
+    }
+
+    private static DocumentAnalysisSource Source(DocumentAnalysisInput input, PersistedSource s) => s.Kind == EvidenceSourceKind.Message
+        ? new DocumentAnalysisSource
+        {
+            Id = s.SourceId, Kind = DocumentAnalysisSourceKind.Message, MessageId = s.MessageId, RevisionId = null, DocumentId = null, DocumentVersionId = null, PreparationId = null,
+            ArtifactId = null, BlockId = null, Start = null, End = null, Quote = null, MessageRole = input.Dialog.First(m => m.Id == s.MessageId).Role,
+        }
+        : new DocumentAnalysisSource
+        {
+            Id = s.SourceId, Kind = DocumentAnalysisSourceKind.DocumentPassage, MessageId = null, MessageRole = null, RevisionId = null, DocumentId = s.DocumentId,
+            DocumentVersionId = s.DocumentVersionId, PreparationId = s.PreparationId, ArtifactId = s.ArtifactId, BlockId = s.BlockId, Start = s.Start, End = s.End, Quote = s.Quote,
+        };
+
+    /// <summary>
+    /// Righe T122 del run (append-only, payload autorevole in WorkOutput/DerivedBatch): nodi, pagine, membri, insiemi, candidati con origini e disposition, patch con le
+    /// loro disposition. Nessun EvidenceItem.Content copiato. Sono scritte nella stessa transazione della revisione.
+    /// </summary>
+    public static IReadOnlyList<object> Projections(DocumentAnalysisInput input, Guid runId, HierarchicalRun run, IReadOnlyList<BatchOutcome> outcomes)
+    {
+        var rows = new List<object>();
+        var hierarchy = run.Hierarchy;
+        var batchOfOutput = outcomes.GroupBy(o => o.OutputHash).ToDictionary(g => g.Key, g => g.First().Batch.BatchId, StringComparer.Ordinal);
+        var hashOfBatch = outcomes.GroupBy(o => o.Batch.BatchId).ToDictionary(g => g.Key, g => g.First().OutputHash, StringComparer.Ordinal);
+        foreach (var node in hierarchy.Nodes)
+        {
+            var pages = hierarchy.Pages.Where(p => p.NodeId == node.NodeId).ToList();
+            rows.AddRange(ReconciliationProjection.Catalog(input.ProjectId, runId, batchOfOutput[node.DescriptorOutputHash], new ReconciliationCatalog([node], pages, [])));
+        }
+
+        rows.AddRange(ReconciliationProjection.Catalog(input.ProjectId, runId, outcomes[0].Batch.BatchId, new ReconciliationCatalog([], [], run.Directory.Sets)));
+
+        var sourceHash = input.Snapshot.SourceHash;
+        foreach (var candidate in run.Candidates.Candidates)
+        {
+            rows.AddRange(ReconciliationProjection.Candidate(input.ProjectId, runId, sourceHash, run.Directory.InputHash, candidate, hashOfBatch));
+        }
+
+        rows.AddRange(run.Candidates.Dispositions.Select(d => new RunCandidateDisposition
+        {
+            RunId = runId, CandidateId = d.CandidateId, Version = 1, State = d.State, ChildCandidateIdsJson = ReconciliationCodec.Encode(d.ChildCandidateIds.ToList()),
+            ComparisonOutputHashesJson = ReconciliationCodec.Encode(d.ComparisonOutputHashes.ToList()), Reason = d.Reason,
+        }));
+
+        var patchById = outcomes.SelectMany(o => o.Result.Patches).GroupBy(p => p.PatchId).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var patch in patchById.Values.OrderBy(p => p.PatchId, StringComparer.Ordinal))
+        {
+            rows.Add(ReconciliationProjection.Patch(input.ProjectId, runId, sourceHash, patch, run.Patches.OriginOutputHashes[patch.PatchId]));
+        }
+
+        rows.AddRange(run.Patches.RunDispositions.Select(d => new RunPatchDisposition { RunId = runId, PatchId = d.PatchId, Version = 1, Kind = d.Kind, ResultHash = d.ResultHash, Reason = d.Reason }));
+        return rows;
+    }
+}

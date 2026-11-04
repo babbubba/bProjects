@@ -197,7 +197,8 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
     /// selezione congelata) e relazioni interpretative del run append-only, tutto nella stessa transazione di Completed e CurrentAnalysisId.
     /// </summary>
     public async Task<AnalysisCommitResult> CommitDocumentAsync(
-        AnalysisRunClaim claim, DocumentAnalysisContent content, IReadOnlyList<EvidenceMapEntry> evidenceMap, IReadOnlyList<RunRelation> relations, CancellationToken ct)
+        AnalysisRunClaim claim, DocumentAnalysisContent content, IReadOnlyList<EvidenceMapEntry> evidenceMap, IReadOnlyList<RunRelation> relations, CancellationToken ct,
+        IReadOnlyList<object>? projections = null)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(content);
@@ -275,6 +276,16 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
             .Distinct()
             .Select(x => new AnalysisEvidenceLink { RunId = run.Id, ItemId = x.Item, EvidenceId = x.Evidence, ProjectId = run.ProjectId }));
         new EvidenceLedgerStore(db).AppendRunRelations(run.Id, run.ProjectId, relations);
+
+        // Proiezioni della riconciliazione gerarchica (T122) nella stessa transazione: le pagine una per volta, perché la catena (n richiede n-1) è imposta dal database.
+        foreach (var row in projections ?? [])
+        {
+            db.Add(row);
+            if (row is AI.RunCatalogPage)
+            {
+                await db.SaveChangesAsync(ct);
+            }
+        }
 
         var inference = InferenceScope.Current;
         InferenceCallLog.Stage(db, inference, run.ProjectId, new(null, run.Id, claim.AttemptCount, claim.FencingToken), result: true);

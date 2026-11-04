@@ -461,7 +461,8 @@ public sealed class DocumentAnalysisWorkflowTests : ArchiveTestBase
         var result = await RunAsync(run, model);
 
         Assert.Equal(ProcessingRunStatus.Failed, result.Status);
-        Assert.Equal(DocumentWorkException.CallLimitExceeded, result.ErrorCode);
+        // T078: oltre una chiamata si passa alla riconciliazione gerarchica; una singola evidenza che non entra nemmeno da sola è irriducibile (ID e motivo, mai troncata), prima di ogni chiamata.
+        Assert.Equal(DocumentWorkException.DocumentIncomplete, result.ErrorCode);
         Assert.Empty(model.Requests);
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
     }

@@ -43,6 +43,18 @@ public interface IDocumentBatchPlan
     /// <summary>Vero se esiste un batch con questo ordinale (cursore del grafo).</summary>
     bool HasBatch(int ordinal);
 
+    /// <summary>
+    /// Come <see cref="HasBatch"/> per i piani il cui numero di batch dipende dagli output già Committed (riconciliazione gerarchica, T078): il cursore resta
+    /// quello del grafo, mai un secondo scheduler. Predefinito: la risposta statica del piano.
+    /// </summary>
+    ValueTask<bool> HasBatchAsync(int ordinal, IBatchOutputs prior, CancellationToken ct) => new(HasBatch(ordinal));
+
+    /// <summary>
+    /// Come <see cref="Validate"/> per i piani che validano la risposta nel contesto degli output precedenti (la richiesta del batch è ricostruita dagli output
+    /// Committed, anche dopo una ripresa in un processo nuovo). Predefinito: <see cref="Validate"/>.
+    /// </summary>
+    ValueTask<ValidatedBatch> ValidateAsync(BatchRef batch, string responseText, IBatchOutputs prior, CancellationToken ct) => new(Validate(batch, responseText));
+
     /// <summary>PrepareBatch: batch derivato dell'ordinale; un figlio che dipende da più output legge i genitori Committed e fallisce se mancano.</summary>
     ValueTask<DerivedBatchInput> PrepareAsync(int ordinal, IBatchOutputs prior, CancellationToken ct);
 
@@ -236,7 +248,7 @@ public sealed class DocumentBatchPort(
         ValidatedBatch validated;
         try
         {
-            validated = plan.Validate(batch, responseText);
+            validated = await plan.ValidateAsync(batch, responseText, this, ct);
         }
         catch (GuidedRetryTrigger trigger) when (plan is IGuidedRetryPlan retryPlan)
         {
@@ -290,7 +302,7 @@ public sealed class DocumentBatchPort(
         return retryPlan.ValidateFinal(batch, text);
     }
 
-    public ValueTask<bool> HasMoreAsync(int nextCursor, CancellationToken ct) => new(plan.HasBatch(nextCursor));
+    public ValueTask<bool> HasMoreAsync(int nextCursor, CancellationToken ct) => plan.HasBatchAsync(nextCursor, this, ct);
 
     public ValueTask AssembleAsync(CancellationToken ct) => plan.AssembleAsync(this, ct);
 

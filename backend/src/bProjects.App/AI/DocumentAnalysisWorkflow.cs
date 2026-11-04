@@ -110,6 +110,37 @@ public static class DocumentAnalysisSources
             evidence, dialog);
     }
 
+    /// <summary>Fatti strutturali delle evidenze della selezione congelata del run, per le sole chiavi di routing della directory (T072): mai l'enunciato.</summary>
+    public static async Task<IReadOnlyDictionary<Guid, DirectoryFacts>> LoadDirectoryFactsAsync(AppDbContext db, Guid runId, CancellationToken ct)
+    {
+        var versionIds = await db.AnalysisEvidenceSelectionItems.AsNoTracking().Where(i => i.RunId == runId).Select(i => i.VersionId).ToListAsync(ct);
+        var rows = await db.Evidences.AsNoTracking().Where(e => versionIds.Contains(e.VersionId)).ToListAsync(ct);
+        var facts = new Dictionary<Guid, DirectoryFacts>();
+        foreach (var row in rows)
+        {
+            try
+            {
+                if (row.OriginKind == EvidenceOriginKind.Document)
+                {
+                    var c = DocumentEvidenceCodec.DecodeContent(row.Content);
+                    var s = c.Structure;
+                    facts[row.Id] = new(new EvidenceStructure(s.Subject, s.Action, s.Object, s.Scope, s.Purpose, s.Instrument, s.Channel, s.Recipient), [.. c.Qualifiers.Select(q => q.Text)]);
+                }
+                else
+                {
+                    var c = EvidenceJson.Deserialize<EvidenceContent>(row.Content);
+                    facts[row.Id] = new(c.Structure, [.. c.Qualifiers.Select(q => q.Text)]);
+                }
+            }
+            catch (JsonException)
+            {
+                throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Il contenuto di un'evidenza dello snapshot non è decodificabile.");
+            }
+        }
+
+        return facts;
+    }
+
     private static IReadOnlyList<PersistedSource> PmSources(EvidenceItem row)
     {
         var content = EvidenceJson.Deserialize<EvidenceContent>(row.Content);
@@ -401,9 +432,9 @@ public sealed class DocumentAnalysisWorkflow(
 
         if (!measure.Fits)
         {
-            throw new DocumentWorkException(
-                DocumentWorkException.CallLimitExceeded,
-                $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
+            // Oltre la capacità di una chiamata (T078): riconciliazione gerarchica globale sullo stesso grafo fisso, un batch per invio e una sessione nuova per batch.
+            await RunReconcileGraphAsync(db, claim, input, ct);
+            return;
         }
 
         using var scope = scopes.CreateScope();
@@ -411,6 +442,32 @@ public sealed class DocumentAnalysisWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisPlan(claim, input, messages, instructions, measure, structured, factory, client, WrapperSchema, scopes);
+        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
+        var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
+        try
+        {
+            await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, new BatchInvocationCounter()), checkpoints, SessionId(claim.RunId), null, ct);
+        }
+        catch (Exception ex) when (Find<LeaseLostException>(ex) is not null)
+        {
+            // Il dominio prevale sul checkpoint: se il commit atomico ha già completato il run, la scrittura del checkpoint finale è stata rifiutata.
+            if (!plan.Committed)
+            {
+                throw;
+            }
+        }
+    }
+
+    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, CancellationToken ct)
+    {
+        var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Analysis, ct);
+        var facts = await DocumentAnalysisSources.LoadDirectoryFactsAsync(db, claim.RunId, ct);
+        using var scope = scopes.CreateScope();
+        var planDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
+        var store = new DocumentWorkStore(planDb, writer);
+        var policy = await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == claim.RunId).Select(r => r.PolicyHash).SingleAsync(ct);
+        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy);
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try
