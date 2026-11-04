@@ -18,8 +18,21 @@ public sealed record ReconciliationSnapshot(Guid ProjectId, string SourceHash, I
     public static ReconciliationSnapshot Empty(Guid projectId, string sourceHash) => new(projectId, sourceHash, [], []);
 }
 
+/// <summary>Cataloghi gerarchici di un run: nodi, pagine e insiemi di routing (membership esatta, mai un secondo registro Evidence).</summary>
+public sealed record ReconciliationCatalog(IReadOnlyList<CatalogNode> Nodes, IReadOnlyList<CatalogPage> Pages, IReadOnlyList<CatalogSet> Sets);
+
 public static class ReconciliationReferences
 {
+    /// <summary>
+    /// Membership dei cataloghi contro lo snapshot: pagine contigue e concatenate, foglie con membership esplicita, genitori = unione disgiunta dei figli,
+    /// cardinalità e hash, insiemi = unione esatta dei nodi, riferimenti alle pagine. <paramref name="complete"/> richiede che ogni evidenza dello snapshot
+    /// compaia una volta in ogni vista con nodi (foglie).
+    /// </summary>
+    public static IReadOnlyList<string> CheckCatalog(ReconciliationCatalog catalog, ReconciliationSnapshot snapshot, string inputHash, bool complete = false) => throw new NotImplementedException();
+
+    /// <summary>Come <see cref="CheckResult(ReconcileResult, ReconciliationSnapshot, IReadOnlySet{string}?)"/>, con endpoint Node/Set risolti nel catalogo (hash = memberSetHash).</summary>
+    public static IReadOnlyList<string> CheckResult(ReconcileResult result, ReconciliationSnapshot snapshot, ReconciliationCatalog catalog) => throw new NotImplementedException();
+
     /// <summary>Gli ID di Node/Set sono accettati solo se il consumer gerarchico li fornisce (T071); nella singola chiamata l'insieme è vuoto.</summary>
     public static IReadOnlyList<string> CheckResult(ReconcileResult result, ReconciliationSnapshot snapshot, IReadOnlySet<string>? knownGroupIds = null)
     {

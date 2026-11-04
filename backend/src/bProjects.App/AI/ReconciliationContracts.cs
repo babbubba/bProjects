@@ -151,6 +151,184 @@ public sealed record SingleCallOutput
     public required IReadOnlyList<EvidenceMapEntry> EvidenceMap { get; init; }
 }
 
+// ---- Schemi gerarchici (§4.1, T071): solo forme; nessun algoritmo di partizione/riduzione (T072–T075) né tabelle (T122).
+
+public enum CatalogKeyKind
+{
+    [JsonStringEnumMemberName("subject")] Subject,
+    [JsonStringEnumMemberName("object")] Object,
+    [JsonStringEnumMemberName("scope")] Scope,
+    [JsonStringEnumMemberName("reference")] Reference,
+    [JsonStringEnumMemberName("action")] Action,
+    [JsonStringEnumMemberName("instrument")] Instrument,
+    [JsonStringEnumMemberName("channel")] Channel,
+    [JsonStringEnumMemberName("qualifier")] Qualifier,
+    [JsonStringEnumMemberName("alias")] Alias,
+}
+
+public enum CatalogKeyOrigin { Literal, Inferred }
+
+public enum CatalogPageKind { Members, Keys, Relations }
+
+/// <summary>Chiave di directory: vista A|B (mai Cross); le chiavi letterali e gli alias inferiti (con originOutputHash) restano distinti.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CatalogKey
+{
+    public required ReconcileView View { get; init; }
+    public required CatalogKeyKind Kind { get; init; }
+    public required string Value { get; init; }
+    public required CatalogKeyOrigin Origin { get; init; }
+    public required string? OriginOutputHash { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CatalogEntry
+{
+    public required string EntryId { get; init; }
+    public required Guid EvidenceId { get; init; }
+    public required Guid EvidenceVersionId { get; init; }
+    public required string ContentHash { get; init; }
+    public required IReadOnlyList<Guid> SourceIds { get; init; }
+    public required IReadOnlyList<CatalogKey> Keys { get; init; }
+    public required IReadOnlyList<Guid> KnownRelationIds { get; init; }
+    public required IReadOnlyList<ReconcileView> UnclassifiedViews { get; init; }
+}
+
+/// <summary>Nodo di routing: membership esatta fuori dal prompt (pagine), descriptor solo per instradare e non citabile.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CatalogNode
+{
+    public required string NodeId { get; init; }
+    public required ReconcileView View { get; init; }
+    public required int Level { get; init; }
+    public required int Ordinal { get; init; }
+    public required IReadOnlyList<string> ChildNodeIds { get; init; }
+    public required string MemberSetHash { get; init; }
+    public required int MemberCount { get; init; }
+    public required IReadOnlyList<string> KeyPageHashes { get; init; }
+    public required IReadOnlyList<string> RelationPageHashes { get; init; }
+    public required string Descriptor { get; init; }
+    public required string DescriptorOutputHash { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CatalogSet
+{
+    public required string SetId { get; init; }
+    public required ReconcileView View { get; init; }
+    public required IReadOnlyList<string> MemberNodeIds { get; init; }
+    public required string MemberSetHash { get; init; }
+    public required int MemberCount { get; init; }
+}
+
+/// <summary>Voce di pagina (union secondo <see cref="CatalogPage.Kind"/>): membership, directory di chiavi o relazioni note.</summary>
+public abstract record PageEntry;
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MemberPageEntry : PageEntry
+{
+    public required Guid EvidenceId { get; init; }
+    public required Guid EvidenceVersionId { get; init; }
+    public required string ContentHash { get; init; }
+}
+
+/// <summary>Chiave con esattamente uno fra memberIds (UUID) e memberPageRefs (hash di pagine Members) non vuoto.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record KeyPageEntry : PageEntry
+{
+    public required CatalogKey Key { get; init; }
+    public required IReadOnlyList<Guid> MemberIds { get; init; }
+    public required IReadOnlyList<string> MemberPageRefs { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record RelationPageEntry : PageEntry
+{
+    public required Guid RelationId { get; init; }
+    public required Guid FromEvidenceId { get; init; }
+    public required Guid ToEvidenceId { get; init; }
+    public required EvidenceRelationType Type { get; init; }
+    public required EvidenceRelationBasis Basis { get; init; }
+}
+
+/// <summary>Pagina append-only: ordinal contigui e catena di hash (previousPageHash = hash della pagina precedente, null alla prima).</summary>
+public sealed record CatalogPage
+{
+    public required string PageId { get; init; }
+    public required string NodeId { get; init; }
+    public required CatalogPageKind Kind { get; init; }
+    public required int Ordinal { get; init; }
+    public required IReadOnlyList<PageEntry> Entries { get; init; }
+    public required string? PreviousPageHash { get; init; }
+}
+
+/// <summary>Pagina con `entries` union discriminata da `kind`; esattamente le 6 proprietà, nessuna extra o duplicata.</summary>
+internal sealed class CatalogPageConverter : JsonConverter<CatalogPage>
+{
+    private static readonly string[] Names = ["pageId", "nodeId", "kind", "ordinal", "entries", "previousPageHash"];
+
+    public override CatalogPage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("Pagina: oggetto richiesto.");
+        }
+
+        var names = root.EnumerateObject().Select(p => p.Name).ToList();
+        if (names.Count != Names.Length || names.Distinct(StringComparer.Ordinal).Count() != names.Count || Names.Any(n => !names.Contains(n)))
+        {
+            throw new JsonException("Pagina: proprietà esatte pageId, nodeId, kind, ordinal, entries, previousPageHash.");
+        }
+
+        var kind = root.GetProperty("kind").Deserialize<CatalogPageKind>(options);
+        var entries = root.GetProperty("entries");
+        if (entries.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException("Pagina.entries: array richiesto.");
+        }
+
+        List<PageEntry> list = kind switch
+        {
+            CatalogPageKind.Members => [.. entries.Deserialize<List<MemberPageEntry>>(options)!],
+            CatalogPageKind.Keys => [.. entries.Deserialize<List<KeyPageEntry>>(options)!],
+            _ => [.. entries.Deserialize<List<RelationPageEntry>>(options)!],
+        };
+
+        return new CatalogPage
+        {
+            PageId = root.GetProperty("pageId").Deserialize<string>(options) ?? throw new JsonException("Pagina.pageId: null non ammesso."),
+            NodeId = root.GetProperty("nodeId").Deserialize<string>(options) ?? throw new JsonException("Pagina.nodeId: null non ammesso."),
+            Kind = kind,
+            Ordinal = root.GetProperty("ordinal").Deserialize<int>(options),
+            Entries = list,
+            PreviousPageHash = root.GetProperty("previousPageHash").Deserialize<string?>(options),
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, CatalogPage value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("pageId", value.PageId);
+        writer.WriteString("nodeId", value.NodeId);
+        writer.WritePropertyName("kind");
+        JsonSerializer.Serialize(writer, value.Kind, options);
+        writer.WriteNumber("ordinal", value.Ordinal);
+        writer.WritePropertyName("entries");
+        writer.WriteStartArray();
+        foreach (var entry in value.Entries)
+        {
+            JsonSerializer.Serialize(writer, entry, entry.GetType(), options);
+        }
+
+        writer.WriteEndArray();
+        writer.WritePropertyName("previousPageHash");
+        JsonSerializer.Serialize(writer, value.PreviousPageHash, options);
+        writer.WriteEndObject();
+    }
+}
+
 /// <summary>Envelope server `reconcile-1`: identità e hash non sono mai ridefiniti dall'AI.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ReconcileEnvelope<TPayload>
@@ -179,7 +357,7 @@ public static class ReconciliationCodec
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         RespectNullableAnnotations = true,
         AllowDuplicateProperties = false,
-        Converters = { new LowercaseGuidConverter(), new ExactEnumConverterFactory(), new PatchConverter() },
+        Converters = { new LowercaseGuidConverter(), new ExactEnumConverterFactory(), new PatchConverter(), new CatalogPageConverter() },
     };
 
     public static T Decode<T>(string json)
@@ -365,6 +543,21 @@ public static class ReconciliationIds
             "patch", patch.BaseHash, $"{patch.Target.Kind}|{patch.Target.Id}|{patch.Target.ExpectedHash}", patch.Operation.ToString(), value.ToJsonString(),
             string.Join(',', SortedIds(patch.EvidenceIds)), string.Join(',', SortedIds(patch.SourceIds)));
     }
+
+    /// <summary>Hash di membership: SHA-256 tipizzato delle terne (evidenza, versione, contentHash) ordinate per EvidenceId.</summary>
+    public static string MemberSetHash(IEnumerable<MemberPageEntry> members) => throw new NotImplementedException();
+
+    /// <summary>nodeId = hash(view,level,ordinal,child/member hash,inputHash): non dipende dalle pagine del nodo (nessun ciclo).</summary>
+    public static string NodeId(ReconcileView view, int level, int ordinal, string memberSetHash, IEnumerable<string> childNodeIds, string inputHash) => throw new NotImplementedException();
+
+    /// <summary>Hash di pagina: SHA-256 della forma canonica della pagina senza pageId (è il previousPageHash della successiva).</summary>
+    public static string PageHash(CatalogPage page) => throw new NotImplementedException();
+
+    /// <summary>pageId = hash(nodeId,kind,ordinal,entries,previousPageHash).</summary>
+    public static string PageId(CatalogPage page) => throw new NotImplementedException();
+
+    /// <summary>setId = hash(view,memberNodeIds,memberSetHash).</summary>
+    public static string SetId(ReconcileView view, IEnumerable<string> memberNodeIds, string memberSetHash) => throw new NotImplementedException();
 
     public static IEnumerable<string> SortedIds(IEnumerable<Guid> ids) => ids.Select(g => g.ToString("D")).OrderBy(s => s, StringComparer.Ordinal);
 
@@ -720,4 +913,23 @@ public static class ReconciliationContractRules
             v.Add($"{path}: identificativo duplicato.");
         }
     }
+}
+
+/// <summary>Regole strutturali dei cataloghi gerarchici (§4.1) verificabili da un singolo oggetto o dalla catena di pagine di un nodo.</summary>
+public static class ReconciliationCatalogRules
+{
+    public const int MaxDescriptorRunes = 512;
+
+    public static IReadOnlyList<string> CheckEntry(CatalogEntry entry, string sourceHash) => throw new NotImplementedException();
+
+    public static IReadOnlyList<string> CheckKey(CatalogKey key) => throw new NotImplementedException();
+
+    public static IReadOnlyList<string> CheckNode(CatalogNode node, string inputHash) => throw new NotImplementedException();
+
+    public static IReadOnlyList<string> CheckPage(CatalogPage page) => throw new NotImplementedException();
+
+    /// <summary>Pagine di un solo (nodo, kind): ordinal 0..n-1 contigui, previousPageHash = PageHash della precedente.</summary>
+    public static IReadOnlyList<string> CheckPageChain(IReadOnlyList<CatalogPage> pages) => throw new NotImplementedException();
+
+    public static IReadOnlyList<string> CheckSet(CatalogSet set) => throw new NotImplementedException();
 }
