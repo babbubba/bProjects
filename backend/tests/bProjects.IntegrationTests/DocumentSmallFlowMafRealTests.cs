@@ -127,7 +127,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
 
     private static async Task Require()
     {
-        Assert.SkipUnless(Configured, "Servono BPROJECTS_TEST_DGX_*, BPROJECTS_TEST_PARSER_ENDPOINT/_SECRET e BPROJECTS_TEST_POSTGRES: livello DGX non eseguibile.");
+        Assert.SkipUnless(Configured, (TestEnvironment.DgxUnavailableReason() ?? string.Empty) + " Servono BPROJECTS_TEST_DGX_* (con opt-in), BPROJECTS_TEST_PARSER_ENDPOINT/_SECRET e BPROJECTS_TEST_POSTGRES: livello DGX non eseguibile.");
 
         // Il DGX e in router mode: a modello scaricato la sonda del runtime non vede ancora la finestra e il preflight da `runtime_unverified`
         // (limite noto di T055, vedi I3-real.md). Una richiesta minima carica lo stesso modello (nessun fallback) prima del percorso; il

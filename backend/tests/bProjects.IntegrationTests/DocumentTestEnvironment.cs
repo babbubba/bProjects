@@ -65,7 +65,7 @@ public static class DocumentTestEnvironment
     {
         DocumentTestLevel.Pg or DocumentTestLevel.MafPg when TestEnvironment.PostgresAdminConnectionString is null => $"{TestEnvironment.PostgresVariable} non impostata",
         DocumentTestLevel.Parser when ParserEndpoint is null => $"{ParserEndpointVariable} non impostata",
-        DocumentTestLevel.Dgx when TestEnvironment.DgxEndpoint is null => $"{TestEnvironment.DgxEndpointVariable} non impostata",
+        DocumentTestLevel.Dgx when TestEnvironment.DgxUnavailableReason() is { } reason => reason,
         DocumentTestLevel.Browser when BrowserBaseUrl is null => $"{BrowserBaseUrlVariable} non impostata (Playwright avvia il dev server con fake-stack)",
         _ => null,
     };

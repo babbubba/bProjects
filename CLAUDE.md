@@ -29,10 +29,10 @@ dotnet restore bProjects.sln --locked-mode
 dotnet build bProjects.sln --no-restore
 dotnet test --solution bProjects.sln
 dotnet test --solution bProjects.sln --filter-trait "Category=Integration"   # richiede BPROJECTS_TEST_POSTGRES
-dotnet test --solution bProjects.sln --filter-trait "Category=MafReal"       # richiede BPROJECTS_TEST_DGX_ENDPOINT
+dotnet test --solution bProjects.sln --filter-trait "Category=MafReal"       # inferenza REALE: richiede BPROJECTS_TEST_DGX_ENDPOINT/_MODEL/_API_KEY e l'opt-in BPROJECTS_TEST_DGX_ALLOW=1
 ```
 
-Senza le variabili d'ambiente i test di integrazione risultano *ignorati*, mai superati.
+Senza le variabili d'ambiente i test di integrazione risultano *ignorati*, mai superati. Endpoint, modello e chiave DGX nell'ambiente **non bastano**: senza `BPROJECTS_TEST_DGX_ALLOW=1` i test reali sono ignorati con messaggio esplicito e nessuna inferenza viene eseguita (`DgxGuardTests`). Impostare l'opt-in solo per un'esecuzione DGX autorizzata.
 
 Frontend (Node ≥ 22.22.3 o ≥ 24.15, richiesto da Angular 22):
 

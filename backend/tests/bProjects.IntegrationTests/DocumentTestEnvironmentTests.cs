@@ -16,7 +16,7 @@ public sealed class DocumentTestEnvironmentTests
         AssertReason(DocumentTestLevel.Pg, TestEnvironment.PostgresAdminConnectionString, TestEnvironment.PostgresVariable);
         AssertReason(DocumentTestLevel.MafPg, TestEnvironment.PostgresAdminConnectionString, TestEnvironment.PostgresVariable);
         AssertReason(DocumentTestLevel.Parser, DocumentTestEnvironment.ParserEndpoint, DocumentTestEnvironment.ParserEndpointVariable);
-        AssertReason(DocumentTestLevel.Dgx, TestEnvironment.DgxEndpoint, TestEnvironment.DgxEndpointVariable);
+        AssertReason(DocumentTestLevel.Dgx, TestEnvironment.DgxEndpoint, "DGX");   // opt-in o endpoint mancanti: il motivo cita la variabile DGX
         AssertReason(DocumentTestLevel.Browser, DocumentTestEnvironment.BrowserBaseUrl, DocumentTestEnvironment.BrowserBaseUrlVariable);
     }
 
