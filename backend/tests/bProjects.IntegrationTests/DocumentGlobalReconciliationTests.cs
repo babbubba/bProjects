@@ -55,7 +55,7 @@ public sealed class DocumentGlobalReconciliationTests : ReconcileRig
 
     internal sealed class Gate(IEnumerable<Fact> corpus, bool dropPayment = false, Func<Parsed, ReconcileResult, ReconcileResult>? tweak = null)
     {
-        public readonly Dictionary<string, (Guid Evidence, string Hash)> Known = [];
+        public readonly System.Collections.Concurrent.ConcurrentDictionary<string, (Guid Evidence, string Hash)> Known = new();
         private readonly List<Fact> _corpus = [.. corpus];
 
         private (string A, string B, string Rationale)[] Pairs => dropPayment

@@ -1,6 +1,8 @@
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Documents;
+using bProjects.App.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using CorpusFact = bProjects.IntegrationTests.DocumentGlobalReconciliationTests.Fact;
 using static bProjects.IntegrationTests.DocumentGlobalReconciliationTests;
 
@@ -162,41 +164,136 @@ public sealed class DocumentReconciliationPersistenceTests : ReconcileRig
 
     // ================================================================ due worker
 
+    /// <summary>
+    /// Presa in carico come in produzione: il lease del precedente proprietario scade e il claim reale (<see cref="ExecutionLeaseStore"/>) assegna un nuovo
+    /// LeaseOwner e un FencingToken incrementato. Il vecchio claim diventa uno zombie: ogni sua scrittura fenced viene rifiutata.
+    /// </summary>
+    private async Task<AnalysisRunClaim> TakeOverAsync(Guid run, string owner, CancellationToken ct)
+    {
+        // Il rig salta il preflight di classificazione (il claim di test lascia il run Pending): il claim reale non vede i root Pending, quindi lo si sospende dalla classificazione per
+        // la sola durata del claim e si ripristina subito il valore originale, perché il resto del run si comporti come nei test senza takeover.
+        var classification = await Scalar<string>("SELECT coalesce(\"ClassificationStatus\", '') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run));
+        await Execute("UPDATE \"ProcessingRuns\" SET \"LeaseUntil\" = now() - interval '1 second', \"ClassificationStatus\" = NULL WHERE \"Id\" = @r AND \"Status\" = 'Running'", ("r", run));
+        WorkClaim? work;
+        using (var scope = App.Services.CreateScope())
+        {
+            work = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>().ClaimNextWorkAsync(owner, turns: false, runs: true, ct);
+        }
+
+        await Execute("UPDATE \"ProcessingRuns\" SET \"ClassificationStatus\" = NULLIF(@c, '') WHERE \"Id\" = @r", ("r", run), ("c", classification));
+        var claim = work?.Run ?? throw new InvalidOperationException("Il claim reale non ha preso in carico il run a lease scaduto.");
+        Assert.Equal(run, claim.RunId);
+        Assert.Equal(owner, claim.LeaseOwner);
+        return claim;
+    }
+
     [Fact]
     public async Task Two_workers_on_the_same_run_end_with_one_terminal_one_revision_and_unique_committed_batches()
     {
         var corpus = Corpus();
-        var (run, claim) = await ArrangeAsync(corpus);
+        var (run, original) = await ArrangeAsync(corpus);
         var gate = new Gate(corpus);
-        var (first, second) = (Model(gate), Model(gate));
+        var winnerModel = Model(gate);
+        var ct = Ct;
+        AnalysisRunClaim? takenOver = null;
+        Task<AnalysisRunResult>? winnerTask = null;
+        var taken = 0;
+        // Il primo worker è in volo sul primo invio quando il secondo prende il lease (nuovo owner e fence) e lavora in parallelo: il primo è ormai uno zombie.
+        var zombieModel = Model(gate, _ =>
+        {
+            if (Interlocked.Exchange(ref taken, 1) == 0)
+            {
+                takenOver = TakeOverAsync(run, "worker-b", ct).GetAwaiter().GetResult();
+                winnerTask = Task.Run(() => RunAsync(takenOver, winnerModel));
+            }
 
-        var outcomes = await Task.WhenAll(Attempt(claim, first), Attempt(claim, second));
+            return null;
+        });
 
-        Assert.Contains(outcomes, o => o?.Status == ProcessingRunStatus.Completed);
+        AnalysisRunResult? zombie = null;
+        Exception? zombieFailure = null;
+        try
+        {
+            zombie = await Task.Run(() => RunAsync(original, zombieModel));
+        }
+        catch (Exception e)
+        {
+            zombieFailure = e;
+        }
+
+        Assert.NotNull(winnerTask);
+        var winner = await winnerTask!;
+
+        Assert.True(takenOver!.FencingToken > original.FencingToken && takenOver.LeaseOwner != original.LeaseOwner);
+        Assert.Equal(ProcessingRunStatus.Completed, winner.Status);
+        Assert.True(zombie is null || (zombie.Status == ProcessingRunStatus.Completed && zombie.ResultRevisionId == winner.ResultRevisionId), $"{zombie?.Status} {zombie?.ErrorCode} {zombieFailure?.GetType().Name}");
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
         Assert.Equal("Completed", await Scalar<string>("SELECT \"Status\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Id\" = @r AND \"ErrorCode\" IS NULL", ("r", run)));
         var batches = await ScalarList("SELECT \"BatchId\" FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Status\" = 'Committed'", run);
         Assert.Equal(batches.Count, batches.Distinct().Count());
-        var sent = first.Requests.Concat(second.Requests).Select(r => Parse(r.AllText).BatchId).ToHashSet();
+        var sent = zombieModel.Requests.Concat(winnerModel.Requests).Select(r => Parse(r.AllText).BatchId).ToHashSet();
         Assert.Superset(batches.ToHashSet(), sent);   // ogni batch committato è stato inviato da almeno un worker, nessuno è inventato
         var signature = await SignatureAsync(run);
 
         var again = Model(gate);
-        await RunAsync(claim, again);
+        await RunAsync(takenOver, again);
         Assert.Empty(again.Requests);
         Assert.Equal(signature, await SignatureAsync(run));
     }
 
-    private async Task<AnalysisRunResult?> Attempt(AnalysisRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model)
+    [Fact]
+    public async Task A_worker_that_lost_the_lease_and_meets_a_work_exception_cannot_turn_the_completed_run_into_failed()
     {
+        var corpus = Corpus();
+        var (run, original) = await ArrangeAsync(corpus);
+        var gate = new Gate(corpus);
+        var winnerModel = Model(gate);
+        var ct = Ct;
+        AnalysisRunResult? winner = null;
+        var taken = 0;
+        // Ordine deterministico: il primo worker è fermo sul suo primo invio; il secondo prende il lease e porta a termine TUTTO il run. Quando il primo riprende,
+        // il piano rigiocato vede i batch del secondo già committati e non ha più alcuna richiesta pendente per il proprio ordinale (checkpoint_incompatible).
+        var zombieModel = Model(gate, _ =>
+        {
+            if (Interlocked.Exchange(ref taken, 1) == 0)
+            {
+                var next = TakeOverAsync(run, "worker-b", ct).GetAwaiter().GetResult();
+                winner = Task.Run(() => RunAsync(next, winnerModel)).GetAwaiter().GetResult();
+            }
+
+            return null;
+        });
+
+        // Lo zombie non può né committare né scrivere checkpoint: il suo run termina con il rifiuto del fence (o, se avesse già un risultato, con lo stato reale del run).
+        AnalysisRunResult? zombie = null;
+        Exception? zombieFailure = null;
         try
         {
-            return await Task.Run(() => RunAsync(claim, model));
+            zombie = await RunAsync(original, zombieModel);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            return null;   // il perdente della corsa non produce un terminale suo
+            zombieFailure = e;
         }
+
+        Assert.NotNull(winner);
+        Assert.Equal(ProcessingRunStatus.Completed, winner!.Status);
+        Assert.Single(zombieModel.Requests);   // il primo worker è arrivato fino alla risposta del primo invio, poi ha perso il lease
+        Assert.True(zombie is null ? zombieFailure is CheckpointFencedException or LeaseLostException : zombie.Status == ProcessingRunStatus.Completed && zombie.ResultRevisionId == winner.ResultRevisionId, zombieFailure?.ToString());
+
+        // Qualunque eccezione di lavoro (es. checkpoint_incompatible: nessuna richiesta pendente dopo che l'altro worker ha committato tutto) sfocia in FailAsync col vecchio claim: rifiutato.
+        using (var scope = App.Services.CreateScope())
+        {
+            var failed = await new AnalysisRunCompletion(scope.ServiceProvider.GetRequiredService<bProjects.App.Persistence.AppDbContext>())
+                .FailAsync(original, DocumentWorkException.CheckpointIncompatible, "Nessuna richiesta di riconciliazione pendente per l'ordinale 0.", Ct);
+            Assert.False(failed);
+        }
+
+        Assert.Equal("Completed", await Scalar<string>("SELECT \"Status\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"ProcessingRuns\" WHERE \"Id\" = @r AND \"ErrorCode\" IS NULL AND \"ErrorMessage\" IS NULL", ("r", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        Assert.Equal(winnerModel.Requests.Count, await Count(Committed, ("r", run)));   // lo zombie non ha aggiunto né alterato output
     }
 
     // ================================================================ hash discordanti
