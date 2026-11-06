@@ -510,8 +510,9 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_call_cap_stops_the_run_at_exactly_the_cap()
     {
-        var (run, claim) = await ArrangeAsync();
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxAiCallsPerRun = 3 });
+        var (run, claim) = await ArrangeAsync();
         var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
 
         var result = await RunAsync(claim, model, new DocumentOptions { MaxAiCallsPerRun = 512 });   // le opzioni correnti non prevalgono sulla policy congelata
@@ -526,8 +527,9 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_level_cap_stops_the_hierarchy_with_coverage_incomplete()
     {
-        var (run, claim) = await ArrangeAsync();
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxReconciliationLevels = 1 });
+        var (run, claim) = await ArrangeAsync();
         var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
 
         var result = await RunAsync(claim, model);
@@ -541,8 +543,9 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_candidate_cap_stops_the_run_when_a_proposed_candidate_exceeds_it()
     {
-        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxCandidatesPerRun = 1 });
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
         var model = LinkModel("Compared");
 
         var result = await RunAsync(claim, model);
@@ -556,8 +559,9 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_derived_bytes_cap_stops_the_run_before_the_next_candidate_batch()
     {
-        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxDerivedBytes = 1 });
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
         var model = LinkModel("Compared");
 
         var result = await RunAsync(claim, model);

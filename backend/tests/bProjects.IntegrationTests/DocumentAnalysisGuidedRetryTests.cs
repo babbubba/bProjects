@@ -39,7 +39,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests
         return (client, project, await StartRunAsync(client, project));
     }
 
-    /// <summary>Tetto di chiamate del root dalla policy congelata (letto dal piano v4 a ogni esecuzione), come in produzione.</summary>
+    /// <summary>Tetto di chiamate dalla policy corrente: va impostato PRIMA di creare il run, che lo congela nel proprio snapshot (come in produzione).</summary>
     private async Task SetFrozenCallLimitAsync(int max)
     {
         using var scope = App.Services.CreateScope();
@@ -354,11 +354,10 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests
     [Fact]
     public async Task When_the_call_budget_allows_exactly_one_more_call_the_retry_runs_and_call_count_reaches_the_limit()
     {
+        await SetFrozenCallLimitAsync(2);   // v4 (T131): il tetto è quello della policy congelata, non le opzioni correnti
         var (client, _, run) = await SeedRunAsync();
         using var _c = client;
         var model = Seq(Unmapped, Valid);
-
-        await SetFrozenCallLimitAsync(2);   // v4 (T131): il tetto è quello della policy congelata, non le opzioni correnti
         var result = await RunAsync(run, model);
 
         Assert.Equal(ProcessingRunStatus.Completed, result.Status);
@@ -371,11 +370,11 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests
     [InlineData("unmapped", DocumentWorkException.CoverageIncomplete)]
     public async Task When_the_call_budget_is_exhausted_the_retry_is_not_sent_and_the_original_error_stands(string kind, string expectedCode)
     {
+        // Il tetto si fissa nello snapshot alla creazione del run: la policy va modificata prima della richiesta.
+        await SetFrozenCallLimitAsync(1);
         var (client, _, run) = await SeedRunAsync();
         using var _c = client;
         var model = Seq(kind == "dup" ? DuplicateKeys : Unmapped, Valid);
-
-        await SetFrozenCallLimitAsync(1);
         var result = await RunAsync(run, model);
 
         Assert.Equal((ProcessingRunStatus.Failed, expectedCode), (result.Status, result.ErrorCode));      // non document_limit_exceeded

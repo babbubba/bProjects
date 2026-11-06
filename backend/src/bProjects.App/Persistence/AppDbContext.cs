@@ -504,6 +504,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             run.Property(r => r.MafVersion).HasMaxLength(32);
             run.Property(r => r.AgentConfig).HasColumnType("jsonb");
             run.Property(r => r.PromptVersions).HasColumnType("jsonb");
+            run.Property(r => r.DocumentLimitsSnapshot).HasColumnType("jsonb");
             run.Property(r => r.WorkflowSessionId).HasMaxLength(128);
             run.Property(r => r.LeaseOwner).HasMaxLength(128);
             run.Property(r => r.LastObservedStage).HasMaxLength(64);
@@ -541,6 +542,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                     "CK_ProcessingRuns_Completed_Result",
                     "\"Status\" <> 'Completed' OR (\"Kind\" = 'Analysis' AND \"ResultRevisionId\" IS NOT NULL) OR (\"Kind\" = 'Document' AND \"DraftId\" IS NOT NULL)");
                 t.HasCheckConstraint("CK_ProcessingRuns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+                // Run documentale di Analizza (definizione project-analysis-documents-* o root classificato): limiti congelati obbligatori e ben formati.
+                // Gli altri run (001, Genera) non hanno snapshot. L'immutabilità è del trigger TR_ProcessingRuns_DocumentLimitsSnapshot.
+                t.HasCheckConstraint(
+                    "CK_ProcessingRuns_DocumentLimitsSnapshot",
+                    "\"Kind\" <> 'Analysis' OR (\"ClassificationStatus\" IS NULL AND \"WorkflowDefinitionVersion\" NOT LIKE 'project-analysis-documents-%') " +
+                    "OR COALESCE(jsonb_typeof(\"DocumentLimitsSnapshot\") = 'object' AND jsonb_typeof(\"DocumentLimitsSnapshot\"->'limits') = 'object' " +
+                    "AND (\"DocumentLimitsSnapshot\"->>'schemaVersion') ~ '^[0-9]+$' AND (\"DocumentLimitsSnapshot\"->>'policyRevision') ~ '^[0-9]+$' " +
+                    "AND (\"DocumentLimitsSnapshot\"->>'hash') ~ '^[0-9a-f]{64}$', false)");
             });
         });
 

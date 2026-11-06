@@ -1,4 +1,5 @@
 using bProjects.App.AI;
+using bProjects.App.Documents;
 
 namespace bProjects.IntegrationTests;
 
@@ -44,6 +45,9 @@ public static class DocumentRegimeRoots
 {
     public static string PolicyHash => new('c', 64);
 
+    /// <summary>Snapshot dei limiti di un run documentale di Analizza, costruito dal codice reale (RunLimitsSnapshot) sui limiti di default: il vincolo del database lo esige.</summary>
+    public static string LimitsSnapshotJson => RunLimitsSnapshot.Of(DocumentPolicySnapshot.Of(new DocumentOptions().ToLimits(), 1)).ToJson();
+
     public static async Task<SeededRoot> SeedAsync(ParsingDatabase database, RootKind kind, RootSpec? spec = null, (Guid User, Guid Project)? owner = null)
     {
         spec ??= new RootSpec();
@@ -73,8 +77,8 @@ public static class DocumentRegimeRoots
         else
         {
             await database.ExecuteAsync($"""
-                INSERT INTO "ProcessingRuns" ("Id","ProjectId","Kind","ConversationId","SourceCutoffSequence","RequestKey","RequestedBy","RequestedAt","Status","DeadlineAt","WorkflowDefinitionVersion","MafVersion","AttemptCount","MaxAttempts","LeaseOwner","LeaseUntil","FencingToken","UpdatedAt","CompletedAt","ErrorCode")
-                VALUES ('{id}','{project}','Analysis','{conversation}',1,'{Guid.NewGuid()}','{user}',now(),'{spec.Status}',now() + interval '3 minutes','project-analysis-documents-v2','1.26.0',{spec.AttemptCount},3,{lease},{leaseUntil},{spec.Fence},now(),{completed},{error});
+                INSERT INTO "ProcessingRuns" ("Id","ProjectId","Kind","ConversationId","SourceCutoffSequence","RequestKey","RequestedBy","RequestedAt","Status","DeadlineAt","WorkflowDefinitionVersion","MafVersion","AttemptCount","MaxAttempts","LeaseOwner","LeaseUntil","FencingToken","UpdatedAt","CompletedAt","ErrorCode","DocumentLimitsSnapshot")
+                VALUES ('{id}','{project}','Analysis','{conversation}',1,'{Guid.NewGuid()}','{user}',now(),'{spec.Status}',now() + interval '3 minutes','project-analysis-documents-v2','1.26.0',{spec.AttemptCount},3,{lease},{leaseUntil},{spec.Fence},now(),{completed},{error},'{LimitsSnapshotJson}'::jsonb);
                 """);
         }
 

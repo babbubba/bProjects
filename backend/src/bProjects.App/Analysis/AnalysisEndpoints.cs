@@ -221,7 +221,11 @@ public static class AnalysisEndpoints
             if (documentary)
             {
                 // Ramo documentale: Pending (Extended provvisorio, cap dal t0), nessuna misura né invio nel POST; classificazione nel dispatcher (T124).
-                DocumentRootRegime.Pending(run, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
+                // Un'unica lettura della policy: limiti del Pending e snapshot persistito nella stessa transazione del run sono la stessa fotografia.
+                // Da qui in poi i limiti del run sono quelli dello snapshot (immutabile), mai la policy corrente.
+                var policySnapshot = (await documentPolicy.GetAsync(ct)).Snapshot;
+                DocumentRootRegime.Pending(run, now, policySnapshot.Limits);
+                run.DocumentLimitsSnapshot = RunLimitsSnapshot.Of(policySnapshot).ToJson();
             }
 
             db.ProcessingRuns.Add(run);

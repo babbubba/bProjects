@@ -1600,6 +1600,9 @@ namespace bProjects.App.Persistence.Migrations
                     b.Property<DateTimeOffset>("DeadlineAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DocumentLimitsSnapshot")
+                        .HasColumnType("jsonb");
+
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("uuid");
 
@@ -1771,6 +1774,8 @@ namespace bProjects.App.Persistence.Migrations
                             t.HasCheckConstraint("CK_ProcessingRuns_Completed_Result", "\"Status\" <> 'Completed' OR (\"Kind\" = 'Analysis' AND \"ResultRevisionId\" IS NOT NULL) OR (\"Kind\" = 'Document' AND \"DraftId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_ProcessingRuns_DeadlineIsEffective", "\"EffectiveDeadlineAt\" IS NULL OR \"DeadlineAt\" = \"EffectiveDeadlineAt\"");
+
+                            t.HasCheckConstraint("CK_ProcessingRuns_DocumentLimitsSnapshot", "\"Kind\" <> 'Analysis' OR (\"ClassificationStatus\" IS NULL AND \"WorkflowDefinitionVersion\" NOT LIKE 'project-analysis-documents-%') OR COALESCE(jsonb_typeof(\"DocumentLimitsSnapshot\") = 'object' AND jsonb_typeof(\"DocumentLimitsSnapshot\"->'limits') = 'object' AND (\"DocumentLimitsSnapshot\"->>'schemaVersion') ~ '^[0-9]+$' AND (\"DocumentLimitsSnapshot\"->>'policyRevision') ~ '^[0-9]+$' AND (\"DocumentLimitsSnapshot\"->>'hash') ~ '^[0-9a-f]{64}$', false)");
 
                             t.HasCheckConstraint("CK_ProcessingRuns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
 

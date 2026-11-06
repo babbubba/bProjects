@@ -381,6 +381,19 @@ public sealed class DocumentAnalysisWorkflow(
             return new(run.Status, run.ResultRevisionId, run.ErrorCode); // replay: un risultato terminale non si rielabora
         }
 
+        // Limiti del run: unica autorità lo snapshot persistito alla richiesta (riletto a ogni esecuzione, claim, retry o recovery), mai la policy corrente.
+        // Mancante, corrotto, con hash incoerente o schema non supportato: config_invalid prima di ogni selezione, misura o invio; nessun ripiego.
+        DocumentLimits limits;
+        try
+        {
+            limits = RunLimitsSnapshot.Read(run.DocumentLimitsSnapshot);
+        }
+        catch (DocumentWorkException invalid)
+        {
+            await FailAsync(claim, invalid.Code, invalid.Message, ct);
+            return await ReadAsync(claim.RunId, ct);
+        }
+
         if (ContractOf(run) is not { } contract)
         {
             // Nessuna migrazione implicita né downgrade (v3 → v2) di un altro grafo: errore esplicito e permanente (T123 instrada le definizioni supportate).
@@ -401,7 +414,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, ct) : RunGraphAsync(db, claim, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -431,7 +444,7 @@ public sealed class DocumentAnalysisWorkflow(
             ? new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight)
             : BuildRegimePayload();
 
-    private async Task RunGraphAsync(AppDbContext db, AnalysisRunClaim claim, CancellationToken ct)
+    private async Task RunGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentLimits limits, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
@@ -447,7 +460,7 @@ public sealed class DocumentAnalysisWorkflow(
         if (!measure.Fits)
         {
             // Oltre la capacità di una chiamata (T078): riconciliazione gerarchica globale sullo stesso grafo fisso, un batch per invio e una sessione nuova per batch.
-            await RunReconcileGraphAsync(db, claim, input, ct);
+            await RunReconcileGraphAsync(db, claim, input, limits, ct);
             return;
         }
 
@@ -472,7 +485,7 @@ public sealed class DocumentAnalysisWorkflow(
         }
     }
 
-    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null)
+    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, DocumentLimits frozenLimits, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null)
     {
         var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Analysis, ct);
         var facts = await DocumentAnalysisSources.LoadDirectoryFactsAsync(db, claim.RunId, ct);
@@ -481,8 +494,8 @@ public sealed class DocumentAnalysisWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var policy = await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == claim.RunId).Select(r => r.PolicyHash).SingleAsync(ct);
-        var frozenLimits = (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits;
-        // v4 (T131): adattatore alias e tetto di chiamate dalla policy congelata del root; v2 resta sul comportamento storico (opzioni correnti).
+        // v4 (T131): adattatore alias e tetto di chiamate dallo snapshot dei limiti del run (frozenLimits); v2 conserva il tetto di chiamate storico (opzioni correnti),
+        // ma i tetti di livelli, candidati e byte derivati sono sempre quelli dello snapshot.
         var alias = aliasCatalog is null ? null : new ReconcileAliasMode(
             aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), DefinitionVersionV4);
         var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias);
@@ -509,7 +522,7 @@ public sealed class DocumentAnalysisWorkflow(
     /// non verificabile è <c>source_snapshot_invalid</c> prima di ogni chiamata. Se il payload non entra in una chiamata: v3 fallisce come sempre (storico), v4 passa
     /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata.
     /// </summary>
-    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, CancellationToken ct)
+    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         var catalog = AnalysisAliasCatalog.Build(input);
@@ -529,7 +542,7 @@ public sealed class DocumentAnalysisWorkflow(
             if (contract == 4)
             {
                 // v4 (T131): oltre una chiamata, riconciliazione gerarchica con alias nello stesso motore (nessuna seconda pipeline).
-                await RunReconcileGraphAsync(db, claim, input, ct, catalog);
+                await RunReconcileGraphAsync(db, claim, input, limits, ct, catalog);
                 return;
             }
 
@@ -544,7 +557,7 @@ public sealed class DocumentAnalysisWorkflow(
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisAliasPlan(
             claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes, contract == 4 ? DefinitionVersionV4 : DefinitionVersionV3);
-        var maxCalls = contract == 4 ? (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
+        var maxCalls = contract == 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try

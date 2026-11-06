@@ -243,8 +243,9 @@ public sealed class DocumentReconcileWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_level_cap_stops_the_hierarchy_with_coverage_incomplete_and_commits_no_revision()
     {
-        var (run, claim) = await ArrangeAsync();
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxReconciliationLevels = 1 });
+        var (run, claim) = await ArrangeAsync();
         var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Respond(r) };
 
         var result = await RunAsync(claim, model);
@@ -258,8 +259,9 @@ public sealed class DocumentReconcileWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_candidate_cap_stops_the_run_when_a_proposed_candidate_exceeds_it()
     {
-        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxCandidatesPerRun = 1 });
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
         var model = N4Model(compared: false);
 
         var result = await RunAsync(claim, model);
@@ -273,8 +275,9 @@ public sealed class DocumentReconcileWorkflowTests : ReconcileRig
     [Fact]
     public async Task The_frozen_policy_derived_bytes_cap_stops_the_run_before_the_next_candidate_batch()
     {
-        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        // I limiti si fissano nello snapshot alla creazione del run: la policy va modificata PRIMA della richiesta (dopo, il run conserva quelli originali).
         await SetLimitsAsync(l => l with { MaxDerivedBytes = 1 });
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
         var model = N4Model(compared: false);
 
         var result = await RunAsync(claim, model);

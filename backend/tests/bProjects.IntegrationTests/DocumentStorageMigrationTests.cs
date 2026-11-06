@@ -323,9 +323,9 @@ public sealed class DocumentStorageMigrationTests
         await database.ExecuteAsync($"INSERT INTO \"AnalysisRevisions\" (\"Id\",\"AnalysisId\",\"Version\",\"ParentRevisionId\",\"Origin\",\"CreatedBy\",\"CreatedAt\",\"SchemaVersion\",\"ContentJson\",\"ValidationState\",\"ConfirmedBy\",\"ConfirmedAt\") VALUES ('{revision2}','{run}',2,'{revision1}','PmEdit','{user}',now(),'1.0.0','{{\"schemaVersion\":\"1.0.0\",\"goals\":[ ]}}','PmConfirmed','{user}',now())");
     }
 
-    /// <summary>Colonne nullable del regime (002 T046, migrazione DocumentRegime): additive, nulle sui record 001, escluse dal confronto pre/post.</summary>
+    /// <summary>Colonne nullable del regime (002 T046, migrazione DocumentRegime) e snapshot dei limiti (migrazione DocumentLimitsSnapshot): additive, nulle sui record 001, escluse dal confronto pre/post.</summary>
     private const string RegimeColumns =
-        "'InitialRegime','Regime','ClassificationStatus','ClassificationVersion','ClassificationReason','OrdinaryDeadlineAt','PromotionCount','PromotedAt','PromotedReason','PolicyHash','HardDeadlineAt','EffectiveDeadlineAt','CallCount','RetryOfId'";
+        "'InitialRegime','Regime','ClassificationStatus','ClassificationVersion','ClassificationReason','OrdinaryDeadlineAt','PromotionCount','PromotedAt','PromotedReason','PolicyHash','HardDeadlineAt','EffectiveDeadlineAt','CallCount','RetryOfId','DocumentLimitsSnapshot'";
 
     /// <summary>Contenuto della tabella come jsonb canonico ordinato per Id; il nuovo campo di snapshot è escluso per il confronto pre/post.</summary>
     private static Task<string> Snapshot(TempDatabase database, string table, bool dropSnapshotColumn = true) =>

@@ -113,6 +113,12 @@ public sealed class ProcessingRun
     /// <summary>Hash della policy congelata alla richiesta; null per i root legacy.</summary>
     public string? PolicyHash { get; set; }
 
+    /// <summary>
+    /// Limiti documentali congelati alla richiesta (JSONB, <see cref="bProjects.App.Documents.RunLimitsSnapshot"/>): obbligatori e immutabili (CHECK e trigger) per i run
+    /// documentali di Analizza; null per i run 001 e per gli altri workflow.
+    /// </summary>
+    public string? DocumentLimitsSnapshot { get; set; }
+
     /// <summary>Cap finito dal t0 (documentale); null per i root legacy.</summary>
     public DateTimeOffset? HardDeadlineAt { get; set; }
 
