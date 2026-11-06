@@ -6,18 +6,27 @@ namespace bProjects.App.AI;
 /// <summary>Esito del motore di riconciliazione rigiocato sugli output Committed: directory, gerarchia, candidati e round finale (T072–T075).</summary>
 internal sealed record ReconcileEngineResult(ReconciliationDirectoryResult Directory, HierarchyResult Hierarchy, CandidateRun Candidates, FinalPassResult Final);
 
+/// <summary>
+/// Sezioni dichiarate dal modello per gli item dei batch alias (T131, AI §11): il canonico <c>reconcile-1</c> non ha sezioni, quindi le porta la mappa (chiave locale canonica →
+/// sezione) ricostruita dagli output Committed; <see cref="Ungrounded"/> sono le domande aperte senza evidenze (non proposte del motore, fuori dalla mappa delle evidenze).
+/// Con <c>null</c> (percorso v2) vale la regola storica: requirements e assumptions.
+/// </summary>
+internal sealed record HierarchicalItemSections(IReadOnlyDictionary<string, AiSection> SectionOf, IReadOnlyList<UngroundedAliasItem> Ungrounded);
+
 /// <summary>Risultato dell'assemblaggio server: tutto ciò che serve a calcolare la copertura e a committare revisione, mappa, relazioni e proiezioni in un'unica transazione.</summary>
 internal sealed record ReconcileAssembly(
     HierarchicalRun Run, DocumentAnalysisContent Analysis, IReadOnlyList<EvidenceMapEntry> Map, IReadOnlyList<RunRelation> Relations, IReadOnlyList<BatchOutcome> Outcomes);
 
 /// <summary>
 /// Assemblaggio dell'analisi dal risultato gerarchico (AI §4.5): item dalle proposte validate (id canonici del server, mai del modello), conflitti dai gruppi di
-/// patch preservati e dai candidati Open (alternative integrali con tutte le fonti), nessuna scelta automatica. Gli item senza sezione nello schema delle proposte
-/// vanno in `requirements` (le assunzioni in `assumptions`). Nessuna evidenza è sintetizzata dal server: ciò che il modello non ha proposto resta non mappato.
+/// patch preservati e dai candidati Open (alternative integrali con tutte le fonti), nessuna scelta automatica. Con le sezioni dei batch alias (<paramref name="sections"/>,
+/// T131) gli item vanno nella sezione dichiarata dal modello (obiettivi, ambito, requisiti, flussi, vincoli, dipendenze, assunzioni, domande aperte), con classificazione e
+/// fonti delle proposte; senza sezioni (v2) quelli senza sezione nello schema delle proposte vanno in `requirements` (le assunzioni in `assumptions`).
+/// Nessuna evidenza è sintetizzata dal server: ciò che il modello non ha proposto resta non mappato.
 /// </summary>
 internal static class DocumentReconcileAssembly
 {
-    public static ReconcileAssembly Assemble(DocumentAnalysisInput input, ReconcileEngineResult engine)
+    public static ReconcileAssembly Assemble(DocumentAnalysisInput input, ReconcileEngineResult engine, HierarchicalItemSections? sections = null)
     {
         var snapshot = input.Snapshot;
         var outcomes = engine.Hierarchy.Outcomes.Concat(engine.Candidates.Outcomes).GroupBy(o => o.Batch.BatchId).Select(g => g.First()).ToList();
@@ -103,16 +112,39 @@ internal static class DocumentReconcileAssembly
             });
         }
 
-        var sources2 = usedSources.OrderBy(g => g.ToString("D"), StringComparer.Ordinal).Select(id => Source(input, persisted[id])).ToList();
-        var analysis = new DocumentAnalysisContent
+        // Domande aperte senza evidenze (solo batch alias): item della revisione senza fonti e senza voce nella mappa delle evidenze, come nel percorso a chiamata singola.
+        var ungrounded = (sections?.Ungrounded ?? []).Select(u => new DocumentAnalysisItem
         {
-            SchemaVersion = DocumentAnalysisContent.SchemaVersionValue, AnalysisId = input.AnalysisId, ProjectId = input.ProjectId, SourceCutoffSequence = input.Cutoff,
-            ValidationState = AnalysisContentState.Unvalidated, Sources = sources2, Goals = [],
-            ContextAndScope = new DocumentAnalysisContextAndScope { Overview = [], Included = [], Excluded = [] },
-            Requirements = [.. items.Where(i => i.Proposal.Classification != DocumentAnalysisClassification.Assumed).Select(i => i.Item)], OperationalFlows = [], Constraints = [],
-            Dependencies = [], Assumptions = [.. items.Where(i => i.Proposal.Classification == DocumentAnalysisClassification.Assumed).Select(i => i.Item)], OpenQuestions = [],
-            Conflicts = conflicts,
-        };
+            Id = IdOf("item", u.LocalKey), Text = u.Text, Classification = u.Classification, EvidenceRefs = [],
+        }).ToList();
+
+        IReadOnlyList<DocumentAnalysisItem> InSection(AiSection section) =>
+            [.. items.Where(i => sections!.SectionOf.TryGetValue(i.Proposal.LocalKey, out var s) ? s == section : throw new DocumentWorkException(
+                DocumentWorkException.WorkOutputInvalid, $"L'item {i.Proposal.LocalKey} non ha una sezione dichiarata dal modello.")).Select(i => i.Item)];
+
+        var sources2 = usedSources.OrderBy(g => g.ToString("D"), StringComparer.Ordinal).Select(id => Source(input, persisted[id])).ToList();
+        var analysis = sections is null
+            ? new DocumentAnalysisContent
+            {
+                SchemaVersion = DocumentAnalysisContent.SchemaVersionValue, AnalysisId = input.AnalysisId, ProjectId = input.ProjectId, SourceCutoffSequence = input.Cutoff,
+                ValidationState = AnalysisContentState.Unvalidated, Sources = sources2, Goals = [],
+                ContextAndScope = new DocumentAnalysisContextAndScope { Overview = [], Included = [], Excluded = [] },
+                Requirements = [.. items.Where(i => i.Proposal.Classification != DocumentAnalysisClassification.Assumed).Select(i => i.Item)], OperationalFlows = [], Constraints = [],
+                Dependencies = [], Assumptions = [.. items.Where(i => i.Proposal.Classification == DocumentAnalysisClassification.Assumed).Select(i => i.Item)], OpenQuestions = [],
+                Conflicts = conflicts,
+            }
+            : new DocumentAnalysisContent
+            {
+                SchemaVersion = DocumentAnalysisContent.SchemaVersionValue, AnalysisId = input.AnalysisId, ProjectId = input.ProjectId, SourceCutoffSequence = input.Cutoff,
+                ValidationState = AnalysisContentState.Unvalidated, Sources = sources2, Goals = InSection(AiSection.Goals),
+                ContextAndScope = new DocumentAnalysisContextAndScope
+                {
+                    Overview = InSection(AiSection.ScopeOverview), Included = InSection(AiSection.ScopeIncluded), Excluded = InSection(AiSection.ScopeExcluded),
+                },
+                Requirements = InSection(AiSection.Requirements), OperationalFlows = InSection(AiSection.Flows), Constraints = InSection(AiSection.Constraints),
+                Dependencies = InSection(AiSection.Dependencies), Assumptions = InSection(AiSection.Assumptions),
+                OpenQuestions = [.. InSection(AiSection.OpenQuestions), .. ungrounded], Conflicts = conflicts,
+            };
 
         var relations = new List<RunRelation>();
         var accepted = patches.RunDispositions.Where(d => d.Kind is RunPatchDispositionKind.Applied or RunPatchDispositionKind.Duplicate or RunPatchDispositionKind.PreservedAsConflict)

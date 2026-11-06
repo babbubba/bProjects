@@ -71,7 +71,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
     // ================================================================ freeze alla richiesta
 
     [Fact]
-    public async Task A_new_analyze_request_freezes_the_v3_definition_prompt_schema_catalog_and_canonical_id_versions()
+    public async Task A_new_analyze_request_freezes_the_v4_definition_with_the_v3_alias_prompt_schema_catalog_and_canonical_id_versions()
     {
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
@@ -79,7 +79,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 
         var run = await StartRunAsync(client, project);
 
-        Assert.Equal("project-analysis-documents-v3", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal("project-analysis-documents-v4", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // T131: le nuove richieste sono v4
         var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))).RootElement;
         Assert.Equal("document-analysis-v3", prompts.GetProperty("analysis").GetString());
         Assert.Equal("1.1.0", prompts.GetProperty("analysisSchema").GetString());
@@ -148,7 +148,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.Equal(composed.AiOutputHash, payload.GetProperty("aiOutputHash").GetString());
         Assert.Equal("document-analysis-alias-1", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
         Assert.Equal("document-analysis-validation-v2", await Scalar<string>("SELECT \"ValidationVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
-        Assert.Equal("project-analysis-documents-v3", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal("project-analysis-documents-v4", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
     }
 
     [Fact]

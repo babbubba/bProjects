@@ -334,7 +334,11 @@ public sealed class DocumentAnalysisWorkflow(
 
     public static string InstructionsV3 => PromptV3.Value;
 
-    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen) o v3 (alias); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
+    // v4 (T131, contracts/ai-workflow.md §11): percorso alias v3 se il payload entra in una chiamata, altrimenti riconciliazione gerarchica con alias nel motore condiviso
+    // (prompt document-reconcile-v3, DTO reconcile-alias-1). Le nuove richieste di Analizza congelano la v4; v2 e v3 storici o in volo restano invariati.
+    public const string DefinitionVersionV4 = "project-analysis-documents-v4";
+
+    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata) o v4 (alias con gerarchia); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
     internal static int? ContractOf(ProcessingRun run)
     {
         if (run.MafVersion != Conversation.CurrentMafVersion)
@@ -348,11 +352,20 @@ public sealed class DocumentAnalysisWorkflow(
         }
 
         // v3: ogni versione congelata deve coincidere con quella supportata (prompt, schema AI, catalogo, id canonici, algoritmo, validazione).
-        return run.WorkflowDefinitionVersion == DefinitionVersionV3 && run.PromptVersionMatches("analysis", PromptVersionV3)
+        var alias = run.PromptVersionMatches("analysis", PromptVersionV3)
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV3) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV3)
-            && run.PromptVersionMatches("validation", ValidationVersionV3)
-            ? 3
+            && run.PromptVersionMatches("validation", ValidationVersionV3);
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV3 && alias)
+        {
+            return 3;
+        }
+
+        // v4: le versioni del percorso alias più quelle della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch).
+        return run.WorkflowDefinitionVersion == DefinitionVersionV4 && alias
+            && run.PromptVersionMatches("reconcile", ReconcileAliasContracts.PromptVersion) && run.PromptVersionMatches("reconcileAiSchema", ReconcileAliasContracts.SchemaVersion)
+            && run.PromptVersionMatches("reconcileAlgorithm", DocumentReconcilePlan.AlgorithmVersion) && run.PromptVersionMatches("reconcileCatalog", ReconcileAliasContracts.CatalogVersion)
+            ? 4
             : null;
     }
 
@@ -388,7 +401,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract == 3 ? RunAliasGraphAsync(db, claim, ct) : RunGraphAsync(db, claim, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, ct) : RunGraphAsync(db, claim, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -409,11 +422,12 @@ public sealed class DocumentAnalysisWorkflow(
     public RegimePayload BuildRegimePayload() => new(AiPhase.Analysis, null, WrapperSchema.GetRawText(), factory.Preflight);
 
     /// <summary>
-    /// Come <see cref="BuildRegimePayload()"/> ma per la definizione congelata sul root: per v3 lo schema misurato è quello del DTO con alias
-    /// (<c>document-analysis-alias-1</c>), non l'involucro v2. Una definizione diversa da v3 resta sulla misura v2 (l'esito incompatibile è del claim).
+    /// Come <see cref="BuildRegimePayload()"/> ma per la definizione congelata sul root: per v3 e v4 lo schema misurato è quello del DTO con alias
+    /// (<c>document-analysis-alias-1</c>), non l'involucro v2 (il carico resta non noto prima del claim: Extended). Una definizione diversa resta sulla misura v2
+    /// (l'esito incompatibile è del claim).
     /// </summary>
     public RegimePayload BuildRegimePayload(string? definitionVersion) =>
-        definitionVersion == DefinitionVersionV3
+        definitionVersion is DefinitionVersionV3 or DefinitionVersionV4
             ? new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight)
             : BuildRegimePayload();
 
@@ -458,7 +472,7 @@ public sealed class DocumentAnalysisWorkflow(
         }
     }
 
-    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, CancellationToken ct)
+    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null)
     {
         var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Analysis, ct);
         var facts = await DocumentAnalysisSources.LoadDirectoryFactsAsync(db, claim.RunId, ct);
@@ -468,8 +482,12 @@ public sealed class DocumentAnalysisWorkflow(
         var store = new DocumentWorkStore(planDb, writer);
         var policy = await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == claim.RunId).Select(r => r.PolicyHash).SingleAsync(ct);
         var frozenLimits = (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits;
-        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits);
-        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
+        // v4 (T131): adattatore alias e tetto di chiamate dalla policy congelata del root; v2 resta sul comportamento storico (opzioni correnti).
+        var alias = aliasCatalog is null ? null : new ReconcileAliasMode(
+            aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), DefinitionVersionV4);
+        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias);
+        var maxCalls = alias is null ? documents.Value.MaxAiCallsPerRun : frozenLimits.MaxAiCallsPerRun;
+        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try
         {
@@ -486,11 +504,12 @@ public sealed class DocumentAnalysisWorkflow(
     }
 
     /// <summary>
-    /// Grafo v3 (alias): stesso grafo fisso T043 e stesso port T044 della v2, con messaggio a soli alias, schema del DTO <c>document-analysis-alias-1</c>
+    /// Grafo v3/v4 (alias): stesso grafo fisso T043 e stesso port T044 della v2, con messaggio a soli alias, schema del DTO <c>document-analysis-alias-1</c>
     /// e piano che compone il canonico sul server. Il catalogo si costruisce dallo snapshot congelato del run (mai dalla selezione corrente); una fonte
-    /// non verificabile è <c>source_snapshot_invalid</c> prima di ogni chiamata.
+    /// non verificabile è <c>source_snapshot_invalid</c> prima di ogni chiamata. Se il payload non entra in una chiamata: v3 fallisce come sempre (storico), v4 passa
+    /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata.
     /// </summary>
-    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, CancellationToken ct)
+    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         var catalog = AnalysisAliasCatalog.Build(input);
@@ -507,6 +526,13 @@ public sealed class DocumentAnalysisWorkflow(
 
         if (!measure.Fits)
         {
+            if (contract == 4)
+            {
+                // v4 (T131): oltre una chiamata, riconciliazione gerarchica con alias nello stesso motore (nessuna seconda pipeline).
+                await RunReconcileGraphAsync(db, claim, input, ct, catalog);
+                return;
+            }
+
             throw new DocumentWorkException(
                 DocumentWorkException.CallLimitExceeded,
                 $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
@@ -516,8 +542,10 @@ public sealed class DocumentAnalysisWorkflow(
         var planDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
-        var plan = new DocumentAnalysisAliasPlan(claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes);
-        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun));
+        var plan = new DocumentAnalysisAliasPlan(
+            claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes, contract == 4 ? DefinitionVersionV4 : DefinitionVersionV3);
+        var maxCalls = contract == 4 ? (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
+        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try
         {

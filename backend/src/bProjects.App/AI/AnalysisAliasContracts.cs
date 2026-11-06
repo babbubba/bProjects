@@ -410,7 +410,7 @@ public static class AnalysisAliasContracts
     /// </summary>
     public static JsonElement JsonSchema() => Schema.Value;
 
-    private static JsonObject ObjectSchema(params (string Name, JsonNode Schema)[] properties)
+    internal static JsonObject ObjectSchema(params (string Name, JsonNode Schema)[] properties)
     {
         var props = new JsonObject();
         var required = new JsonArray();
@@ -423,18 +423,18 @@ public static class AnalysisAliasContracts
         return new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["required"] = required, ["properties"] = props };
     }
 
-    private static JsonObject TextSchema() => new() { ["type"] = "string" };
+    internal static JsonObject TextSchema() => new() { ["type"] = "string" };
 
-    private static JsonObject NullableTextSchema() => new() { ["type"] = new JsonArray("string", "null") };
+    internal static JsonObject NullableTextSchema() => new() { ["type"] = new JsonArray("string", "null") };
 
-    private static JsonObject AliasSchema(string pattern) => new() { ["type"] = "string", ["pattern"] = pattern };
+    internal static JsonObject AliasSchema(string pattern) => new() { ["type"] = "string", ["pattern"] = pattern };
 
-    private static JsonObject NullableAliasSchema(string pattern) => new() { ["type"] = new JsonArray("string", "null"), ["pattern"] = pattern };
+    internal static JsonObject NullableAliasSchema(string pattern) => new() { ["type"] = new JsonArray("string", "null"), ["pattern"] = pattern };
 
-    private static JsonObject EnumSchema<T>() where T : struct, Enum =>
+    internal static JsonObject EnumSchema<T>() where T : struct, Enum =>
         new() { ["type"] = "string", ["enum"] = new JsonArray([.. Enum.GetNames<T>().Select(n => (JsonNode)JsonValue.Create(n)!)]) };
 
-    private static JsonObject ArraySchema(JsonNode items) => new() { ["type"] = "array", ["items"] = items };
+    internal static JsonObject ArraySchema(JsonNode items) => new() { ["type"] = "array", ["items"] = items };
 
     private static JsonElement BuildSchema()
     {

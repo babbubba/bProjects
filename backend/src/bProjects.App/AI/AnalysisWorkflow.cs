@@ -388,9 +388,9 @@ public sealed class AnalysisWorkflow(
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Analysis, ct);
-        if (documentary is not null && run.WorkflowDefinitionVersion is DocumentAnalysisWorkflow.DefinitionVersion or DocumentAnalysisWorkflow.DefinitionVersionV3)
+        if (documentary is not null && run.WorkflowDefinitionVersion is DocumentAnalysisWorkflow.DefinitionVersion or DocumentAnalysisWorkflow.DefinitionVersionV3 or DocumentAnalysisWorkflow.DefinitionVersionV4)
         {
-            // Definizione documentale congelata alla richiesta (T057/T123/T125): {v2, v3} vanno al workflow documentale, che sceglie l'implementazione dalla
+            // Definizione documentale congelata alla richiesta (T057/T123/T125/T131): {v2, v3, v4} vanno al workflow documentale, che sceglie l'implementazione dalla
             // versione congelata (mai un downgrade) e ha il proprio guard di prompt, schema e versione MAF; il run non passa dal guard 001, che lo
             // rifiuterebbe. Con una definizione ignota si resta qui sotto e fallisce workflow_incompatible.
             return await documentary.ExecuteAsync(claim, ct);

@@ -26,12 +26,15 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
     private readonly PayloadPreflight _measure;
     private readonly IServiceScopeFactory _scopes;
     private readonly string _manifestIdentity;
+    private readonly string _definition;
 
     public DocumentAnalysisAliasPlan(
         AnalysisRunClaim claim, DocumentAnalysisInput input, AnalysisAliasCatalog catalog, IReadOnlyList<ChatMessage> messages, string instructions,
-        PayloadPreflight measure, bool structured, AgentFactory factory, InternalModelClient client, JsonElement schema, IServiceScopeFactory scopes)
+        PayloadPreflight measure, bool structured, AgentFactory factory, InternalModelClient client, JsonElement schema, IServiceScopeFactory scopes,
+        string definition = DocumentAnalysisWorkflow.DefinitionVersionV3)
     {
         _claim = claim;
+        _definition = definition;
         _input = input;
         _catalog = catalog;
         _messages = messages;
@@ -56,14 +59,14 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
             ["algorithm"] = DocumentAnalysisWorkflow.AlgorithmVersionV3,
             ["batches"] = new JsonArray(JsonNode.Parse(InputIdsJson())!),
             ["catalog"] = catalog.RunIndependentHash,
-            ["definition"] = DocumentAnalysisWorkflow.DefinitionVersionV3,
+            ["definition"] = definition,
             ["graph"] = new JsonArray(DocumentBatchWorkflow.Stages.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()),
         }.ToJsonString();
         Manifest = new WorkManifestInput(
-            configHash, input.Snapshot.SourceHash, measure.Profile.Fingerprint, DocumentAnalysisWorkflow.DefinitionVersionV3, DocumentAnalysisWorkflow.AlgorithmVersionV3, policyHash, planJson);
+            configHash, input.Snapshot.SourceHash, measure.Profile.Fingerprint, definition, DocumentAnalysisWorkflow.AlgorithmVersionV3, policyHash, planJson);
         _manifestIdentity = CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new
         {
-            configHash, source = input.Snapshot.SourceHash, runtime = measure.Profile.Fingerprint, definition = DocumentAnalysisWorkflow.DefinitionVersionV3,
+            configHash, source = input.Snapshot.SourceHash, runtime = measure.Profile.Fingerprint, definition,
             algorithm = DocumentAnalysisWorkflow.AlgorithmVersionV3, policy = policyHash, plan = JsonDocument.Parse(planJson).RootElement,
         }));
     }
@@ -163,7 +166,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
 
         var inputHash = _measure.PayloadHash;
         var batchId = DocumentAnalysisWorkflow.Sha(
-            $"batch|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{DocumentAnalysisWorkflow.DefinitionVersionV3}|{DocumentAnalysisWorkflow.BatchStage}|{ordinal}|{inputHash}");
+            $"batch|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{_definition}|{DocumentAnalysisWorkflow.BatchStage}|{ordinal}|{inputHash}");
         var provenance = _measure.Quality == TokenCountQuality.Measured ? "measured" : "calibrated_upper_bound";
         return new(new DerivedBatchInput(
             batchId, DocumentAnalysisWorkflow.BatchStage, null, null, null, ordinal, [], InputIdsJson(), _measure.Tokens, provenance, inputHash,
@@ -181,7 +184,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
     public DerivedBatchInput GuidedRetryMarker(BatchRef batch, GuidedRetryTrigger trigger)
     {
         var retry = (AnalysisRetryException)trigger;
-        var id = DocumentAnalysisWorkflow.Sha($"guided-retry|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{DocumentAnalysisWorkflow.DefinitionVersionV3}|{batch.BatchId}");
+        var id = DocumentAnalysisWorkflow.Sha($"guided-retry|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{_definition}|{batch.BatchId}");
         var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, kind = retry.Kind.ToString(), items = retry.Items.Count, firstOutputHash = retry.OutputHash });
         return new DerivedBatchInput(
             id, GuidedRetryStage, null, null, null, 1, [], inputs, null, "calibrated_upper_bound", DocumentAnalysisWorkflow.Sha($"guided-retry-input|{batch.InputHash}"),

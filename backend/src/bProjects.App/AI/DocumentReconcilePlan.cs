@@ -11,11 +11,19 @@ using Microsoft.Extensions.AI;
 namespace bProjects.App.AI;
 
 /// <summary>
+/// Adattatore alias del piano di riconciliazione (T131, AI §11): lo STESSO motore e lo stesso piano, con messaggi a soli alias, DTO <c>reconcile-alias-1</c> composto sul
+/// server e definizione v4. Senza adattatore (<c>null</c>) il piano è quello v2, storico e immutato.
+/// </summary>
+internal sealed record ReconcileAliasMode(AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition);
+
+/// <summary>
 /// Riconciliazione gerarchica globale dell'analisi documentale oltre la capacità di una chiamata (002 T078, contracts/ai-workflow.md §4–§5). Stesso grafo fisso
 /// T043 e stesso port T044 della singola chiamata: il piano dice cosa elaborare e come validare, mai come recuperare. Il motore di T072–T075 (directory,
 /// livelli, riapertura dei candidati, round finale) è puro rispetto al modello e dichiara un solo confine, <see cref="ReconcileInvoker"/>: qui il confine è
 /// il grafo. Ogni invio è un batch del grafo (nuova AgentSession, nessun accumulo di sessione); ripreso in un processo nuovo il motore si rigioca sugli output
 /// Committed (<see cref="IBatchOutputs"/>) e si ferma alla prima richiesta senza output: quella è il prossimo batch. Nessun nodo nuovo al replay.
+/// Con <see cref="ReconcileAliasMode"/> (v4, T131) il modello vede solo alias e restituisce <c>reconcile-alias-1</c>: il WorkOutput conserva il canonico composto più
+/// <c>schemaVersion</c>, <c>catalogHash</c>, <c>aiOutputHash</c> e <c>canonicalHash</c>, verificati a ogni replay senza nuova inferenza.
 /// </summary>
 internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 {
@@ -35,16 +43,23 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private readonly IServiceScopeFactory _scopes;
     private readonly string _manifestIdentity;
     private readonly ReconciliationContext _context;
+    private readonly ReconcileAliasMode? _alias;
+    private readonly string? _schemaJson;
+    private readonly string _schemaVersion;
     private readonly Dictionary<string, UnitMeasure> _measures = new(StringComparer.Ordinal);
     private readonly Dictionary<int, (string BatchId, string Text)> _texts = [];
+    private readonly Dictionary<int, AliasEntry> _aliasEntries = [];
     private readonly Dictionary<Guid, DocumentAnalysisEvidence> _evidence;
     private ReconciliationDirectoryResult? _directory;
     private ReconcileEngineResult? _finished;
+    private ReplayState? _finishedState;
+    private ReplayState _state = new();
+    private (int Ordinal, AliasEntry Entry)? _pending;
     private ReconcileAssembly? _assembled;
 
     public DocumentReconcilePlan(
         AnalysisRunClaim claim, DocumentAnalysisInput input, IReadOnlyDictionary<Guid, DirectoryFacts> facts, DocumentPreflight preflight, DocumentRuntimeProfile profile,
-        AiOptions options, InternalModelClient client, IServiceScopeFactory scopes, string? rootPolicyHash = null, DocumentLimits? limits = null)
+        AiOptions options, InternalModelClient client, IServiceScopeFactory scopes, string? rootPolicyHash = null, DocumentLimits? limits = null, ReconcileAliasMode? alias = null)
     {
         _claim = claim;
         _input = input;
@@ -52,7 +67,12 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _preflight = preflight;
         _profile = profile;
         _scopes = scopes;
-        _instructions = ReconciliationHierarchy.Instructions;
+        _alias = alias;
+        _instructions = alias is null ? ReconciliationHierarchy.Instructions : ReconcileAliasContracts.Instructions;
+        _schemaVersion = alias is null ? SchemaVersion : ReconcileAliasContracts.SchemaVersion;
+        _schemaJson = alias is { Structured: true } ? alias.Schema.GetRawText() : null;
+        var definition = alias?.Definition ?? DocumentAnalysisWorkflow.DefinitionVersion;
+        var promptVersion = alias is null ? ReconciliationHierarchy.PromptVersion : ReconcileAliasContracts.PromptVersion;
         _evidence = input.Evidence.ToDictionary(e => e.EvidenceId);
 
         // Tetti della policy congelata del root (AI §4.5): senza limiti espliciti restano i default del motore.
@@ -60,32 +80,50 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _limits = limits is null ? new ReconciliationLimits() : new ReconciliationLimits(MaxCandidates: limits.MaxCandidatesPerRun, MaxDerivedBytes: limits.MaxDerivedBytes);
 
         var settings = options.ForPhase(AiPhase.Analysis);
-        var configHash = DocumentAnalysisWorkflow.Sha(JsonSerializer.Serialize(new
-        {
-            prompt = ReconciliationHierarchy.PromptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = SchemaVersion, model = settings.ModelId,
-            maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
-        }));
+        // v2 (storico): forma e hash di configurazione invariati; v4 aggiunge soltanto la modalità di output strutturato.
+        var configHash = DocumentAnalysisWorkflow.Sha(alias is null
+            ? JsonSerializer.Serialize(new
+            {
+                prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, model = settings.ModelId,
+                maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
+            })
+            : JsonSerializer.Serialize(new
+            {
+                prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
+                canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, model = settings.ModelId, maxOutput = settings.MaxOutputTokens,
+                thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
+            }));
         Agent = new BatchAgentSpec(
-            "DocumentReconcile", DocumentAnalysisWorkflow.AgentId + "-reconcile", _instructions, client.CreateChatOptions(temperature: 0.1f, phase: AiPhase.Analysis), AiPhase.Analysis,
-            profile.Fingerprint);
+            "DocumentReconcile", DocumentAnalysisWorkflow.AgentId + "-reconcile", _instructions,
+            alias is { Structured: true }
+                ? client.CreateChatOptions(alias.Schema, ReconcileAliasContracts.SchemaName, temperature: 0.1f, phase: AiPhase.Analysis)
+                : client.CreateChatOptions(temperature: 0.1f, phase: AiPhase.Analysis),
+            AiPhase.Analysis, profile.Fingerprint);
 
         var policyHash = rootPolicyHash is not null && System.Text.RegularExpressions.Regex.IsMatch(rootPolicyHash, "^[0-9a-f]{64}$") ? rootPolicyHash : DocumentAnalysisWorkflow.Sha("document-reconcile-policy-v1");
-        var planJson = new JsonObject
+        var plan = new JsonObject
         {
             ["algorithm"] = AlgorithmVersion,
-            ["definition"] = DocumentAnalysisWorkflow.DefinitionVersion,
+            ["definition"] = definition,
             ["graph"] = new JsonArray(DocumentBatchWorkflow.Stages.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()),
             ["maxLevels"] = _maxLevels,
-        }.ToJsonString();
-        Manifest = new WorkManifestInput(configHash, input.Snapshot.SourceHash, profile.Fingerprint, DocumentAnalysisWorkflow.DefinitionVersion, AlgorithmVersion, policyHash, planJson);
+        };
+        if (alias is not null)
+        {
+            plan["adapter"] = ReconcileAliasContracts.SchemaVersion;
+            plan["catalog"] = alias.RunCatalog.RunIndependentHash;
+        }
+
+        var planJson = plan.ToJsonString();
+        Manifest = new WorkManifestInput(configHash, input.Snapshot.SourceHash, profile.Fingerprint, definition, AlgorithmVersion, policyHash, planJson);
         _manifestIdentity = CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new
         {
-            configHash, source = input.Snapshot.SourceHash, runtime = profile.Fingerprint, definition = DocumentAnalysisWorkflow.DefinitionVersion, algorithm = AlgorithmVersion,
+            configHash, source = input.Snapshot.SourceHash, runtime = profile.Fingerprint, definition, algorithm = AlgorithmVersion,
             policy = policyHash, plan = JsonDocument.Parse(planJson).RootElement,
         }));
         _context = new ReconciliationContext(
-            $"ProcessingRun|{claim.RunId:N}", _manifestIdentity, DocumentAnalysisWorkflow.DefinitionVersion,
-            new PlannerLimits(Math.Max(1, profile.InputBudgetTokens - HeaderReserveTokens), profile.OutputTokens, OutputExpansion: 1.0), SchemaVersion, ReconciliationHierarchy.PromptVersion, _maxLevels);
+            $"ProcessingRun|{claim.RunId:N}", _manifestIdentity, definition,
+            new PlannerLimits(Math.Max(1, profile.InputBudgetTokens - HeaderReserveTokens), profile.OutputTokens, OutputExpansion: 1.0), _schemaVersion, promptVersion, _maxLevels);
     }
 
     private readonly int _maxLevels;
@@ -96,7 +134,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     public WorkManifestInput Manifest { get; }
 
-    public WorkLookupExpectation Expectation => new(SchemaVersion, ValidationVersion);
+    public WorkLookupExpectation Expectation => new(_schemaVersion, ValidationVersion);
 
     public BatchAgentSpec Agent { get; }
 
@@ -106,8 +144,41 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     // ------------------------------------------------------------------ motore rigiocato sugli output Committed
 
+    /// <summary>Output composto di un batch alias (committato o in validazione): risultato canonico e DTO con i suoi hash.</summary>
+    private sealed record AliasEntry(string BatchId, ReconcileAliasComposition Composition, string Text, ReconcileAliasCatalog Catalog, string AiCanonical);
 
-    private sealed record Replay(ReconcileBatchRequest? Request, int Ordinal, ReconcileEngineResult? Finished);
+    /// <summary>Stato accumulato da UN replay del motore: gli item già proposti dalle foglie A (per i bersagli delle patch) e le sezioni dichiarate dal modello.</summary>
+    private sealed class ReplayState
+    {
+        public List<ReconcileItemRef> Items { get; } = [];
+
+        public List<ItemProposal> Proposals { get; } = [];
+
+        public Dictionary<string, AiSection> Sections { get; } = new(StringComparer.Ordinal);
+
+        public List<UngroundedAliasItem> Ungrounded { get; } = [];
+
+        /// <summary>Vero dopo la costruzione della gerarchia: i batch seguenti sono espansioni e confronti.</summary>
+        public bool CandidatePhase { get; set; }
+
+        public void Absorb(ReconcileAliasComposition composition)
+        {
+            foreach (var proposal in composition.Result!.ItemProposals)
+            {
+                Items.Add(new(proposal.LocalKey, proposal.Text, proposal.EvidenceIds));
+                Proposals.Add(proposal);
+            }
+
+            foreach (var (key, section) in composition.Sections)
+            {
+                Sections[key] = section;
+            }
+
+            Ungrounded.AddRange(composition.Ungrounded);
+        }
+    }
+
+    private sealed record Replay(ReconcileBatchRequest? Request, int Ordinal, ReconcileEngineResult? Finished, ReplayState State);
 
     private sealed class NeedBatch(ReconcileBatchRequest request, int ordinal) : Exception("richiesta senza output Committed")
     {
@@ -120,24 +191,22 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     {
         if (_finished is not null && candidate is null)
         {
-            return new(null, -1, _finished);
+            return new(null, -1, _finished, _finishedState!);
         }
 
+        var state = new ReplayState();
+        _state = state;
         var counter = 0;
         async ValueTask<string> Invoke(ReconcileBatchRequest request, CancellationToken token)
         {
             var k = counter++;
             if (candidate is { } c && c.Ordinal == k)
             {
-                return c.Text;
+                return _alias is null ? c.Text : AbsorbCandidate(k, request, c.Text, state);
             }
 
-            if (await CommittedTextAsync(k, request.Batch.BatchId, prior, token) is { } text)
-            {
-                return text;
-            }
-
-            throw new NeedBatch(request, k);
+            var text = _alias is null ? await CommittedTextAsync(k, request.Batch.BatchId, prior, token) : await CommittedAliasTextAsync(k, request, state, prior, token);
+            return text ?? throw new NeedBatch(request, k);
         }
 
         try
@@ -145,6 +214,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             var snapshot = _input.Snapshot;
             _directory ??= await ReconciliationDirectory.BuildAsync(snapshot, _facts, _context, new ReconciliationMeasurers(LeafMeasurer, PageMeasurer), ct);
             var hierarchy = await ReconciliationHierarchy.BuildAsync(snapshot, _directory, _context, NodeMeasurer, Invoke, ct);
+            state.CandidatePhase = true;
             var engine = new ReconciliationCandidates(snapshot, _directory, hierarchy, _context, LeafMeasurer, Invoke, _limits);
             await engine.RunPhasesAsync(ct);
             var final = await ReconciliationFinalPass.RunAsync(engine, snapshot, _directory, [], ct);
@@ -152,13 +222,14 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             if (candidate is null)
             {
                 _finished = finished;
+                _finishedState = state;
             }
 
-            return new(null, -1, finished);
+            return new(null, -1, finished, state);
         }
         catch (NeedBatch need)
         {
-            return new(need.Request, need.Ordinal, null);
+            return new(need.Request, need.Ordinal, null, state);
         }
     }
 
@@ -189,6 +260,107 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private static DocumentWorkException Incompatible(int ordinal) =>
         new(DocumentWorkException.CheckpointIncompatible, $"L'output del batch {ordinal} non appartiene alla richiesta rigiocata dal piano di riconciliazione.");
 
+    // ------------------------------------------------------------------ adattatore alias (T131)
+
+    private ReconcileAliasCatalog CatalogOf(ReconcileBatchRequest request, ReplayState state) => ReconcileAliasCatalog.Build(_alias!.RunCatalog, request, state.Items);
+
+    /// <summary>Base immutabile del passaggio (proposte delle foglie e relazioni note): nota solo dopo le foglie, serve a firmare le patch di espansione e confronto.</summary>
+    private ReconciliationBase? BaseOf(ReconcileBatchRequest request, ReplayState state) =>
+        request.Batch.Stage is "expand" or "compare" ? DocumentAnalysisBase.Compute(state.Proposals, _input.Snapshot) : null;
+
+    /// <summary>Compone la risposta del modello (DTO alias) nel canonico del batch: un rifiuto è <c>work_output_invalid</c> permanente, senza riparazione.</summary>
+    private string AbsorbCandidate(int k, ReconcileBatchRequest request, string text, ReplayState state)
+    {
+        var catalog = CatalogOf(request, state);
+        var composition = ReconcileAliasComposer.Compose(text, catalog, request, _input.Snapshot, BaseOf(request, state));
+        if (!composition.IsValid)
+        {
+            throw new DocumentWorkException(
+                composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid,
+                $"Output del batch {request.Batch.BatchId} non valido ({composition.Violations.Count} violazioni): " + string.Join(" | ", composition.Violations.Take(8)));
+        }
+
+        var entry = new AliasEntry(request.Batch.BatchId, composition, ReconciliationCodec.Encode(composition.Result!), catalog, ReconcileAliasContracts.Canonical(ReconcileAliasContracts.Decode(text)));
+        _pending = (k, entry);
+        state.Absorb(composition);
+        return entry.Text;
+    }
+
+    /// <summary>
+    /// Output Committed di un batch alias: catalogo del batch ricostruito dalla richiesta e verificato contro <c>catalogHash</c> (<c>checkpoint_incompatible</c>), DTO verificato
+    /// contro <c>aiOutputHash</c> (<c>work_output_invalid</c>), canonico ricomposto e verificato contro <c>canonicalHash</c> (<c>integrity_conflict</c>). Nessuna inferenza.
+    /// </summary>
+    private async ValueTask<string?> CommittedAliasTextAsync(int ordinal, ReconcileBatchRequest request, ReplayState state, IBatchOutputs prior, CancellationToken ct)
+    {
+        var batchId = request.Batch.BatchId;
+        if (_aliasEntries.TryGetValue(ordinal, out var known))
+        {
+            if (known.BatchId != batchId)
+            {
+                throw Incompatible(ordinal);
+            }
+
+            state.Absorb(known.Composition);
+            return known.Text;
+        }
+
+        var output = await prior.GetByOrdinalAsync(ordinal, ct);
+        if (output is null || output.Status != WorkOutputStatus.Committed)
+        {
+            return null;
+        }
+
+        if (output.BatchId != batchId)
+        {
+            throw Incompatible(ordinal);
+        }
+
+        string catalogHash, aiOutputHash, canonicalHash, aiJson, catalogJson, outputJson;
+        try
+        {
+            using var document = JsonDocument.Parse(output.PayloadJson ?? throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Payload mancante."));
+            var root = document.RootElement;
+            if (root.GetProperty("schemaVersion").GetString() != ReconcileAliasContracts.SchemaVersion)
+            {
+                throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, $"Il WorkOutput del batch {ordinal} non è del contratto con alias.");
+            }
+
+            (catalogHash, aiOutputHash, canonicalHash) = (root.GetProperty("catalogHash").GetString()!, root.GetProperty("aiOutputHash").GetString()!, root.GetProperty("canonicalHash").GetString()!);
+            (aiJson, catalogJson, outputJson) = (root.GetProperty("ai").GetRawText(), root.GetProperty("catalog").GetRawText(), root.GetProperty("output").GetRawText());
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, $"Il payload del WorkOutput del batch {ordinal} non è nel formato con alias.");
+        }
+
+        var catalog = CatalogOf(request, state);
+        if (catalog.CatalogHash != catalogHash || CanonicalJson.Canonicalize(catalogJson) != catalog.Encode())
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, $"Il catalogo ricostruito del batch {ordinal} ha un hash diverso da quello congelato.");
+        }
+
+        var composition = ReconcileAliasComposer.Compose(aiJson, catalog, request, _input.Snapshot, BaseOf(request, state), canonicalHash);
+        if (!composition.IsValid)
+        {
+            throw new DocumentWorkException(composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid, $"WorkOutput del batch {ordinal} non verificabile: " + string.Join(" | ", composition.Violations.Take(5)));
+        }
+
+        if (composition.AiOutputHash != aiOutputHash)
+        {
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, $"Il DTO committato del batch {ordinal} ha un hash diverso da aiOutputHash.");
+        }
+
+        if (ReconcileAliasComposer.CanonicalHash(ReconciliationCodec.DecodeResult(outputJson)) != canonicalHash)
+        {
+            throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, $"L'output canonico committato del batch {ordinal} ha un hash diverso da canonicalHash.");
+        }
+
+        var entry = new AliasEntry(batchId, composition, ReconciliationCodec.Encode(composition.Result!), catalog, ReconcileAliasContracts.Canonical(ReconcileAliasContracts.Decode(aiJson)));
+        _aliasEntries[ordinal] = entry;
+        state.Absorb(composition);
+        return entry.Text;
+    }
+
     // ------------------------------------------------------------------ IDocumentBatchPlan
 
     public async ValueTask<bool> HasBatchAsync(int ordinal, IBatchOutputs prior, CancellationToken ct)
@@ -199,8 +371,13 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     public async ValueTask<DerivedBatchInput> PrepareAsync(int ordinal, IBatchOutputs prior, CancellationToken ct)
     {
-        var request = await PendingAsync(ordinal, prior, ct);
+        var (request, state) = await PendingAsync(ordinal, prior, ct);
         var batch = request.Batch with { Ordinal = ordinal };
+        if (_alias is not null)
+        {
+            batch = await RemeasureAsync(batch, request, state, ct);
+        }
+
         if (ordinal >= 1)
         {
             await PromoteIfOrdinaryAsync(batch, request, ordinal, prior, ct);
@@ -209,30 +386,57 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         return batch;
     }
 
-    private async ValueTask<ReconcileBatchRequest> PendingAsync(int ordinal, IBatchOutputs prior, CancellationToken ct)
+    /// <summary>
+    /// Il Pack misura il messaggio senza il candidato in esame (non noto al misuratore, coperto dalla riserva di intestazione): prima di pubblicare il batch si misura il messaggio
+    /// REALMENTE inviato, con candidato, item e relazioni, e si rifiuta (<c>document_limit_exceeded</c>) ciò che non entra nel budget. L'inputHash pubblicato è quello del payload inviato.
+    /// </summary>
+    private async ValueTask<DerivedBatchInput> RemeasureAsync(DerivedBatchInput batch, ReconcileBatchRequest request, ReplayState state, CancellationToken ct)
+    {
+        var messages = ComposeAlias(request, state);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages, _schemaJson), ct, _profile.Fingerprint);
+        if (measured.Quality == TokenCountQuality.Unavailable)
+        {
+            throw new RuntimeUnverifiedException("conteggio del payload del batch non disponibile (nessun tokenizer o calibrazione identificata)");
+        }
+
+        if (!measured.Fits)
+        {
+            throw new DocumentWorkException(
+                DocumentWorkException.CallLimitExceeded,
+                $"Il messaggio del batch {batch.BatchId} ({measured.Tokens} token) supera il budget di input ({measured.InputBudgetTokens} token) una volta aggiunti candidato in esame, item e relazioni note.");
+        }
+
+        return batch with
+        {
+            InputHash = measured.PayloadHash, MeasuredTokens = measured.Tokens, TokenProvenance = measured.Quality == TokenCountQuality.Measured ? "measured" : "calibrated_upper_bound",
+        };
+    }
+
+    private async ValueTask<(ReconcileBatchRequest Request, ReplayState State)> PendingAsync(int ordinal, IBatchOutputs prior, CancellationToken ct)
     {
         var replay = await ReplayAsync(prior, null, ct);
         return replay.Request is { } request && replay.Ordinal == ordinal
-            ? request
+            ? (request, replay.State)
             : throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, $"Nessuna richiesta di riconciliazione pendente per l'ordinale {ordinal}.");
     }
 
     public async ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct)
     {
-        var request = await PendingAsync(batch.Ordinal, prior, ct);
+        var (request, state) = await PendingAsync(batch.Ordinal, prior, ct);
         return request.Batch.BatchId == batch.BatchId
-            ? Compose(request)
+            ? _alias is null ? Compose(request) : ComposeAlias(request, state)
             : throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il batch da comporre non coincide con la richiesta pendente.");
     }
 
     /// <summary>
     /// Valida PRIMA del WorkOutput rigiocando il motore con la risposta candidata nel suo punto: il motore applica le stesse regole di T072–T075 (decodifica strict,
     /// riferimenti, visite, descriptor) e un output non valido è un errore permanente senza riparazione. Un output valido è Committed anche con obbligazioni residue.
+    /// Con gli alias la risposta è il DTO <c>reconcile-alias-1</c>: il server lo compone nel canonico e il motore valida quello.
     /// </summary>
     public async ValueTask<ValidatedBatch> ValidateAsync(BatchRef batch, string responseText, IBatchOutputs prior, CancellationToken ct)
     {
-        var request = await PendingAsync(batch.Ordinal, prior, ct);
-        if (request.Batch.BatchId != batch.BatchId || request.Batch.InputHash != batch.InputHash)
+        var (request, _) = await PendingAsync(batch.Ordinal, prior, ct);
+        if (request.Batch.BatchId != batch.BatchId || (_alias is null && request.Batch.InputHash != batch.InputHash))
         {
             throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "La risposta non appartiene alla richiesta pendente.");
         }
@@ -248,12 +452,37 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, $"Output del batch {batch.BatchId} non valido: JSON non conforme ({e.Message}).");
         }
 
+        _pending = null;
         await ReplayAsync(prior, (batch.Ordinal, responseText), ct);   // lancia work_output_invalid se la risposta viola il contratto
-        var payload = JsonSerializer.Serialize(new { schemaVersion = SchemaVersion, stage = request.Batch.Stage, view = request.View.ToString(), level = request.Level, output = root });
+        string payload;
+        if (_alias is null)
+        {
+            payload = JsonSerializer.Serialize(new { schemaVersion = SchemaVersion, stage = request.Batch.Stage, view = request.View.ToString(), level = request.Level, output = root });
+        }
+        else
+        {
+            var entry = _pending is { } pending && pending.Ordinal == batch.Ordinal && pending.Entry.BatchId == batch.BatchId
+                ? pending.Entry
+                : throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "La risposta validata non è stata composta dal piano.");
+            payload = new JsonObject
+            {
+                ["schemaVersion"] = ReconcileAliasContracts.SchemaVersion,
+                ["stage"] = request.Batch.Stage,
+                ["view"] = request.View.ToString(),
+                ["level"] = request.Level,
+                ["aiOutputHash"] = entry.Composition.AiOutputHash,
+                ["catalogHash"] = entry.Composition.CatalogHash,
+                ["canonicalHash"] = entry.Composition.CanonicalHash,
+                ["ai"] = JsonNode.Parse(entry.AiCanonical),
+                ["catalog"] = JsonNode.Parse(entry.Catalog.Encode()),
+                ["output"] = JsonNode.Parse(entry.Text),
+            }.ToJsonString();
+        }
+
         var covered = JsonSerializer.Serialize<string[]>(
             [.. request.Entries.Select(e => e.EntryId), .. request.Nodes.Select(n => n.NodeId)]);
         var output = new WorkOutputInput(
-            batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, null, null, SchemaVersion, ValidationVersion, null);
+            batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, null, null, _schemaVersion, ValidationVersion, null);
         return new ValidatedBatch(output);
     }
 
@@ -314,7 +543,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             throw new DocumentWorkException(DocumentWorkException.CoverageIncomplete, "Assemble prima del termine della riconciliazione: restano batch da elaborare.");
         }
 
-        _assembled = DocumentReconcileAssembly.Assemble(_input, finished);
+        var sections = _alias is null ? null : new HierarchicalItemSections(replay.State.Sections, replay.State.Ungrounded);
+        _assembled = DocumentReconcileAssembly.Assemble(_input, finished, sections);
         var coverage = ReconciliationCompletion.EvaluateHierarchical(_assembled.Run, _assembled.Analysis, _assembled.Map);
         if (!coverage.IsComplete)
         {
@@ -359,14 +589,14 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     // ------------------------------------------------------------------ misure e messaggi
 
     private PackMeasurer<CatalogEntry> LeafMeasurer => (members, ct) =>
-        MeasureAsync("e|" + string.Join(',', members.Select(m => m.EntryId)), () => Compose(Placeholder(members, [])), ct);
+        MeasureAsync("e|" + string.Join(',', members.Select(m => m.EntryId)) + "|" + VisibleItems(members), () => Compose(Placeholder(members, [])), ct);
 
     private PackMeasurer<CatalogNode> NodeMeasurer => (members, ct) =>
         MeasureAsync("n|" + string.Join(',', members.Select(m => m.NodeId)), () => Compose(Placeholder([], members)), ct);
 
     private PackMeasurer<PageEntry> PageMeasurer => (members, ct) => MeasureAsync(
         "p|" + ReconciliationCodec.Canonical(new CatalogPage { PageId = "x", NodeId = "x", Kind = KindOf(members), Ordinal = 0, Entries = members, PreviousPageHash = null }),
-        () => [new ChatMessage(ChatRole.User, ReconciliationCodec.Canonical(new CatalogPage { PageId = "x", NodeId = "x", Kind = KindOf(members), Ordinal = 0, Entries = members, PreviousPageHash = null }))], ct);
+        () => [new ChatMessage(ChatRole.User, ReconciliationCodec.Canonical(new CatalogPage { PageId = "x", NodeId = "x", Kind = KindOf(members), Ordinal = 0, Entries = members, PreviousPageHash = null }))], ct, schema: false);
 
     private static CatalogPageKind KindOf(IReadOnlyList<PageEntry> members) => members.FirstOrDefault() switch
     {
@@ -375,24 +605,47 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _ => CatalogPageKind.Members,
     };
 
-    private async ValueTask<UnitMeasure> MeasureAsync(string key, Func<IReadOnlyList<ChatMessage>> messages, CancellationToken ct)
+    /// <summary>Chiave di cache del Pack di voci: negli stadi di espansione e confronto il messaggio porta anche gli item già proposti per quelle evidenze.</summary>
+    private string VisibleItems(IReadOnlyList<CatalogEntry> members)
+    {
+        if (_alias is null || !_state.CandidatePhase)
+        {
+            return string.Empty;
+        }
+
+        var ids = members.Select(m => m.EvidenceId).ToHashSet();
+        return string.Join(',', _state.Items.Select((item, index) => (item, index)).Where(t => t.item.EvidenceIds.Any(ids.Contains)).Select(t => t.index));
+    }
+
+    private async ValueTask<UnitMeasure> MeasureAsync(string key, Func<IReadOnlyList<ChatMessage>> messages, CancellationToken ct, bool schema = true)
     {
         if (_measures.TryGetValue(key, out var known))
         {
             return known;
         }
 
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages()), ct, _profile.Fingerprint);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages(), schema ? _schemaJson : null), ct, _profile.Fingerprint);
         return _measures[key] = new UnitMeasure(measured.Tokens, measured.Quality, measured.PayloadHash, measured.Tokens);
     }
 
-    private static ReconcileBatchRequest Placeholder(IReadOnlyList<CatalogEntry> entries, IReadOnlyList<CatalogNode> nodes) => new(
-        new DerivedBatchInput(new string('0', 64), NodeStage, null, null, null, 0, [], "{}", null, "measured", new string('0', 64), SchemaVersion, ReconciliationHierarchy.PromptVersion),
+    private ReconcileBatchRequest Placeholder(IReadOnlyList<CatalogEntry> entries, IReadOnlyList<CatalogNode> nodes) => new(
+        new DerivedBatchInput(
+            new string('0', 64), _alias is null ? NodeStage : entries.Count > 0 ? (_state.CandidatePhase ? "expand" : "leaf") : "reduce", null, null, null, 0, [], "{}", null, "measured",
+            new string('0', 64), _schemaVersion, _alias is null ? ReconciliationHierarchy.PromptVersion : ReconcileAliasContracts.PromptVersion),
         ReconcileView.A, 0, entries, nodes);
+
+    /// <summary>Messaggio alias del batch (§11): soli alias, nessun UUID né hash. Stessa funzione per il Pack, per la misura finale e per l'invio.</summary>
+    private IReadOnlyList<ChatMessage> ComposeAlias(ReconcileBatchRequest request, ReplayState state) =>
+        ReconcileAliasMessages.Build(_alias!.RunCatalog, CatalogOf(request, state), request, _evidence);
 
     /// <summary>Messaggio unico del batch: dati del server, voci integrali (enunciato e fonti) o descriptor dei nodi e il candidato in esame. Nessun testo di altri batch.</summary>
     internal IReadOnlyList<ChatMessage> Compose(ReconcileBatchRequest request)
     {
+        if (_alias is not null)
+        {
+            return ComposeAlias(request, _state);
+        }
+
         var text = new StringBuilder();
         text.Append("Dati affidabili del server:\n")
             .Append($"runId: {_claim.RunId:D}\nprojectId: {_input.ProjectId:D}\nsourceHash: {_input.Snapshot.SourceHash}\nbatchId: {request.Batch.BatchId}\ninputHash: {request.Batch.InputHash}\n")

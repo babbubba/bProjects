@@ -185,7 +185,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         Assert.All(passageSources, s => Assert.Contains(evidences.SelectMany(e => e.Sources), x => x.SourceId.ToString() == s!["id"]!.GetValue<string>() && x.Quote == s["quote"]!.GetValue<string>()));
         Assert.Contains(content["requirements"]!.AsArray(), i => i!["classification"]!.GetValue<string>() == "Documented");
         Assert.All(content["requirements"]!.AsArray(), i => Assert.NotEmpty(i!["evidenceRefs"]!.AsArray()));
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV3, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis)));
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV4, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis)));
         var linked = await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\" WHERE \"RunId\" = @r", ("r", analysis));
         Assert.True(linked >= passageSources.Count);
 

@@ -73,7 +73,7 @@ public abstract class ReconcileRig : ArchiveTestBase
 
     protected sealed record Doc(Guid Document, Guid Version, Guid SourceId);
 
-    protected async Task<Doc> NewDocument(HttpClient client, Guid project, string name, string statement, string? subject = null, string? scopeKey = null)
+    protected async Task<Doc> NewDocument(HttpClient client, Guid project, string name, string statement, string? subject = null, string? scopeKey = null, Guid? evidenceId = null)
     {
         var created = await Json(await Upload(client, project, Text(name), name + ".txt", displayName: name));
         var doc = new Doc(created.GetProperty("documentId").GetGuid(), created.GetProperty("id").GetGuid(), Guid.NewGuid());
@@ -111,7 +111,7 @@ public abstract class ReconcileRig : ArchiveTestBase
         };
         db.Evidences.Add(new EvidenceItem
         {
-            Id = Guid.NewGuid(), VersionId = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Ordinal = 1,
+            Id = evidenceId ?? Guid.NewGuid(), VersionId = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Ordinal = 1,
             Key = "e1", Kind = EvidenceKind.Requirement, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = statement,
             Content = DocumentEvidenceCodec.EncodeContent(content),
         });

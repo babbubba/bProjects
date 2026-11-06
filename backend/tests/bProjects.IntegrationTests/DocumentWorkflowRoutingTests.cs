@@ -148,7 +148,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV4], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
 
         // T124 (invariato per v3): il payload dell'analisi non e determinabile prima del claim (selezione evidenze congelata sotto lease): T unavailable => Extended workload_unknown.
         await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", run, expectedPayloadMeasured: false);
@@ -444,7 +444,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(2, row.Attempts);
         Assert.Equal([Graph.DocAnalysisV3, Graph.DocAnalysisV3], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV4], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
 
         // Replay: un run terminale non si rielabora e non invia nulla.
         Assert.False(await Dispatcher().RunOnceAsync(Ct));
@@ -490,8 +490,11 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var v3 = analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersionV3);
         var v2 = analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersion);
+        var v4 = analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersionV4);
 
         Assert.Equal(AnalysisAliasContracts.JsonSchema().GetRawText(), v3.SchemaJson);
+        Assert.Equal(v3.SchemaJson, v4.SchemaJson);                                            // v4: stesso schema misurato (carico non noto prima del claim, T131)
+        Assert.Equal((AiPhase.Analysis, (DocumentPayload?)null), (v4.Phase, v4.Payload));
         Assert.Contains("\"alias-1\"", v3.SchemaJson);
         Assert.DoesNotContain("evidenceMap", v3.SchemaJson);                                   // l'involucro v2 non e piu quello misurato per v3
         Assert.Equal(analysis.BuildRegimePayload().SchemaJson, v2.SchemaJson);
@@ -510,7 +513,8 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]  // v3 con prompt v2: mai un downgrade
     [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0"}""")]  // v3 senza schema AI, catalogo e id canonici congelati
     [InlineData("project-analysis-documents-v2", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // v2 con prompt v3: mai un upgrade
-    [InlineData("project-analysis-documents-v4", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // definizione futura ignota
+    [InlineData("project-analysis-documents-v5", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // definizione futura ignota
+    [InlineData("project-analysis-documents-v4", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // v4 senza le versioni della riconciliazione: mai una v3 promossa
     public async Task An_unknown_or_incompatible_analysis_definition_fails_explicitly_and_never_reaches_the_model(string definition, string prompts)
     {
         using var client = await App.LoginAsync();

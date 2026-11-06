@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Documents;
@@ -36,6 +37,16 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests
         var project = await NewProject(client);
         await NewDocument(client, project, "regole", Statement1, Statement2);
         return (client, project, await StartRunAsync(client, project));
+    }
+
+    /// <summary>Tetto di chiamate del root dalla policy congelata (letto dal piano v4 a ogni esecuzione), come in produzione.</summary>
+    private async Task SetFrozenCallLimitAsync(int max)
+    {
+        using var scope = App.Services.CreateScope();
+        var (_, snapshot) = await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(Ct);
+        var limits = snapshot.Limits with { MaxAiCallsPerRun = max };
+        Assert.Empty(limits.Validate());
+        await Execute("UPDATE \"DocumentPolicies\" SET \"LimitsJson\" = @j::jsonb, \"PolicyHash\" = @h WHERE \"Id\" = 1", ("j", limits.ToJson()), ("h", limits.Hash()));
     }
 
     private async Task<long> CallsAsync(Guid run) => await Scalar<int>("SELECT COALESCE(\"CallCount\", 0) FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run));
@@ -347,7 +358,8 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests
         using var _c = client;
         var model = Seq(Unmapped, Valid);
 
-        var result = await RunAsync(run, model, new DocumentOptions { MaxAiCallsPerRun = 2 });
+        await SetFrozenCallLimitAsync(2);   // v4 (T131): il tetto è quello della policy congelata, non le opzioni correnti
+        var result = await RunAsync(run, model);
 
         Assert.Equal(ProcessingRunStatus.Completed, result.Status);
         Assert.Equal(2, model.Requests.Count);
@@ -363,7 +375,8 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests
         using var _c = client;
         var model = Seq(kind == "dup" ? DuplicateKeys : Unmapped, Valid);
 
-        var result = await RunAsync(run, model, new DocumentOptions { MaxAiCallsPerRun = 1 });
+        await SetFrozenCallLimitAsync(1);
+        var result = await RunAsync(run, model);
 
         Assert.Equal((ProcessingRunStatus.Failed, expectedCode), (result.Status, result.ErrorCode));      // non document_limit_exceeded
         Assert.Single(model.Requests);
