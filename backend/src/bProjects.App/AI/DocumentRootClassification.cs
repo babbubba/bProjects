@@ -131,7 +131,7 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
     /// della deadline. Misure non determinabili restano nulle (la policy le tratta come unknown).
     /// </summary>
     public static DocumentRegimeInput BuildInput(
-        RegimeMeasurement measurement, DateTimeOffset requestedAt, DateTimeOffset hardDeadlineAt, DateTimeOffset now, DocumentLimits limits) =>
+        RegimeMeasurement measurement, DateTimeOffset requestedAt, DateTimeOffset hardDeadlineAt, DateTimeOffset now, DocumentLimits? limits) =>
         new()
         {
             InputValid = measurement.InvalidReason is null,
@@ -142,14 +142,14 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
             Now = now,
             HardDeadlineAt = hardDeadlineAt,
             ClassifiedEffectiveDeadlineAt = null,
-            OrdinaryDeadlineSeconds = limits.OrdinaryDeadlineSeconds,
+            OrdinaryDeadlineSeconds = limits?.OrdinaryDeadlineSeconds ?? 180,
             RuntimeFingerprint = measurement.RuntimeFingerprint,
             WindowTokens = measurement.WindowTokens,
             OutputTokens = measurement.OutputTokens,
             MarginTokens = measurement.MarginTokens,
             IsPreparation = false,
             IrreducibleInput = false,
-            CallLimitExceeded = measurement.PlannedCalls is { } planned && planned > limits.MaxAiCallsPerRun,
+            CallLimitExceeded = limits is not null && measurement.PlannedCalls is { } planned && planned > limits.MaxAiCallsPerRun,
             PayloadTokens = measurement.PayloadTokens,
             TokenQuality = measurement.TokenQuality,
             PlannedCalls = measurement.PlannedCalls,
@@ -213,7 +213,8 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
 
         ClassificationResult NotPending() => new(kind, rootId, ClassificationAttempt.NotPending, null);
 
-        DocumentLimits limits;
+        DocumentLimits? limits;
+        var snapshotInvalid = false;
         RootRow? first;
         using (var scope = _scopes.CreateScope())
         {
@@ -224,15 +225,36 @@ public sealed class DocumentRootClassifier(IServiceScopeFactory scopes, IDocumen
                 return NotPending();
             }
 
-            limits = (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits;
+            var runRow = kind == ClassificationOwnerKind.ProcessingRun
+                ? await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == rootId).Select(r => new { r.Kind, r.DocumentLimitsSnapshot }).SingleOrDefaultAsync(ct)
+                : null;
+            if (runRow is { Kind: ProcessingRunKind.Analysis })
+            {
+                // Run documentale di Analizza (T133): i limiti sono quelli dello snapshot persistito alla richiesta, mai la policy corrente. Snapshot mancante, corrotto,
+                // con hash incoerente o schema non supportato: config_invalid senza misura né ripiego.
+                try
+                {
+                    limits = RunLimitsSnapshot.Read(runRow.DocumentLimitsSnapshot);
+                }
+                catch (DocumentWorkException)
+                {
+                    limits = null;
+                    snapshotInvalid = true;
+                }
+            }
+            else
+            {
+                // Chat e Genera: nessuno snapshot, restano sulla policy corrente.
+                limits = (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(ct)).Snapshot.Limits;
+            }
         }
 
-        // Il cap è congelato alla richiesta: la policy attuale deve coincidere con quella fotografata nel PolicyHash del root, altrimenti il root non si
+        // Il cap è congelato alla richiesta: i timer dei limiti (snapshot del run per Analizza, policy corrente per Chat/Genera) devono coincidere con quelli del PolicyHash del root, altrimenti non si
         // reinterpreta (config_invalid). Il cap Extended è quello del root (hard - t0), mai ricalcolato.
         var extendedSeconds = (int)Math.Round((first.HardDeadlineAt!.Value - first.RequestedAt).TotalSeconds);
-        var expectedPolicy = DocumentRegimePolicy.ComputePolicyHash(limits.OrdinaryDeadlineSeconds, extendedSeconds);
+        var expectedPolicy = limits is null ? null : DocumentRegimePolicy.ComputePolicyHash(limits.OrdinaryDeadlineSeconds, extendedSeconds);
         var frozenPolicy = await FrozenPolicyAsync(kind, rootId, ct);
-        var measurement = !string.Equals(frozenPolicy, expectedPolicy, StringComparison.Ordinal)
+        var measurement = snapshotInvalid || !string.Equals(frozenPolicy, expectedPolicy, StringComparison.Ordinal)
             ? new RegimeMeasurement { InvalidReason = "config_invalid" }
             : await MeasureAsync(kind, rootId, first.HardDeadlineAt!.Value - first.Now, ct);
 
