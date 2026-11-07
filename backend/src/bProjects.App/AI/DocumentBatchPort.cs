@@ -257,8 +257,16 @@ public sealed class DocumentBatchPort(
         return new BatchRef(batch.Ordinal, batch.BatchId, batch.InputHash);
     }
 
-    public async ValueTask<bool> LookupAsync(BatchRef batch, CancellationToken ct) =>
-        (await store.LookupAsync(batch.BatchId, batch.InputHash, plan.Expectation, ct)).Kind == WorkLookupKind.Hit;
+    public async ValueTask<bool> LookupAsync(BatchRef batch, CancellationToken ct)
+    {
+        if ((await store.LookupAsync(batch.BatchId, batch.InputHash, plan.Expectation, ct)).Kind == WorkLookupKind.Hit)
+        {
+            return true;
+        }
+
+        // Retry PM (T099): su Miss, un output compatibile di un root precedente è importato senza AI; altrimenti si procede col lavoro normale.
+        return (await store.TryImportAsync(batch.BatchId, plan.Expectation, ct)).Kind is WorkImportKind.Imported or WorkImportKind.Replayed;
+    }
 
     public ValueTask ReserveCallAsync(BatchRef batch, CancellationToken ct) => calls.ReserveAsync(batch, ct);
 

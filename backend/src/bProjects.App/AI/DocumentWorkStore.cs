@@ -83,6 +83,26 @@ public enum WorkLookupKind
 
 public sealed record WorkLookup(WorkLookupKind Kind, WorkOutput? Output, string? Payload);
 
+public enum WorkImportKind
+{
+    /// <summary>Nessun root precedente o nessun suo output con lo stesso input: si procede col lavoro normale.</summary>
+    NoCandidate,
+
+    /// <summary>Output compatibile importato nell'owner corrente (DerivedFromOutputHash valorizzato).</summary>
+    Imported,
+
+    /// <summary>L'owner aveva già l'output per lo stesso input: nulla scritto.</summary>
+    Replayed,
+
+    /// <summary>Esiste un candidato ma una componente differisce: non riusato né sovrascritto.</summary>
+    Incompatible,
+
+    /// <summary>Il payload porta dati del run d'origine non rimappabili in modo deterministico: non importato.</summary>
+    NotRemappable,
+}
+
+public sealed record WorkImportResult(WorkImportKind Kind, WorkOutput? Output, Guid? SourceOwnerId, string? Reason);
+
 /// <summary>Esito del lock dell'owner: progetto e, per i run, le versioni da stampare sui checkpoint.</summary>
 internal sealed record OwnerLock(Guid ProjectId, string? MafVersion, string? DefinitionVersion);
 
@@ -350,6 +370,207 @@ public sealed partial class DocumentWorkStore(AppDbContext db, CheckpointWriter 
 
         var payload = await VerifyPayloadAsync(output.ProjectId, output.PayloadJson, output.StorageKey, output.PayloadByteLength, output.OutputHash, ct);
         return new WorkLookup(WorkLookupKind.Hit, output, payload);
+    }
+
+    /// <summary>
+    /// Riuso cross-root dopo un retry PM (T099; AI §5.3, data-model «RetryOfId non implica compatibilità»). Per il batch GIÀ pubblicato di questo owner cerca,
+    /// nei root precedenti della sua catena di retry (RetryOfId, stesso progetto e tipo), un output Committed con lo stesso inputHash e importa solo se TUTTO
+    /// coincide esattamente: hash del manifesto (fonti/cutoff, parser, config, runtime, definizione, algoritmo, policy e budget, piano), identità del batch
+    /// (stage/vista/passo/livello/ordinale, genitori, id d'ingresso, schema, prompt) e schema/validazione attesi, con payload rilegg­ibile e hash valido.
+    /// L'importazione è una nuova riga nell'owner corrente con <c>DerivedFromOutputHash</c> = hash dell'output di origine, nello stesso commit fenced degli altri
+    /// output (stale worker, lease o padre scaduti: nulla scritto). Non invia nulla all'AI, non tocca contatori né deadline e non modifica mai il root d'origine;
+    /// un output già presente nell'owner non si sovrascrive. Il solo id run rimappabile è quello del root d'origine, sostituito in modo deterministico dal nuovo;
+    /// un payload su storage che lo contiene non è rimappabile e non si importa. Incompatibilità o assenza non sono errori: il chiamante esegue il lavoro normale.
+    /// </summary>
+    public async Task<WorkImportResult> TryImportAsync(string batchId, WorkLookupExpectation expected, CancellationToken ct)
+    {
+        var batch = await db.Set<DerivedBatch>().AsNoTracking()
+            .SingleOrDefaultAsync(b => b.OwnerKind == writer.OwnerKind && b.OwnerId == writer.OwnerId && b.BatchId == batchId, ct)
+            ?? throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Il batch da importare non è stato pubblicato.");
+        var sources = await RetryLineageAsync(ct);
+        if (sources.Count == 0)
+        {
+            return new WorkImportResult(WorkImportKind.NoCandidate, null, null, null);
+        }
+
+        var project = await WorkOwnerGuard.ProjectOfAsync(db, writer, ct);
+        var manifest = await RequireManifestAsync(ct);
+        var candidates = await (from b in db.Set<DerivedBatch>().AsNoTracking()
+                                join o in db.Set<WorkOutput>().AsNoTracking()
+                                    on new { b.OwnerKind, b.OwnerId, b.BatchId } equals new { o.OwnerKind, o.OwnerId, o.BatchId }
+                                where b.OwnerKind == writer.OwnerKind && b.ProjectId == project && sources.Contains(b.OwnerId) && b.InputHash == batch.InputHash
+                                select new { Batch = b, Output = o }).ToListAsync(ct);
+        string? lastReason = null;
+        foreach (var candidate in candidates.OrderBy(c => sources.IndexOf(c.Batch.OwnerId)))
+        {
+            var sourceManifest = await db.Set<WorkManifest>().AsNoTracking()
+                .SingleOrDefaultAsync(m => m.OwnerKind == writer.OwnerKind && m.OwnerId == candidate.Batch.OwnerId, ct);
+            var mismatch = ImportMismatch(batch, manifest, candidate.Batch, sourceManifest, candidate.Output, expected);
+            if (mismatch is not null)
+            {
+                lastReason = mismatch;
+                continue;
+            }
+
+            string payload;
+            try
+            {
+                payload = await VerifyPayloadAsync(candidate.Output.ProjectId, candidate.Output.PayloadJson, candidate.Output.StorageKey, candidate.Output.PayloadByteLength, candidate.Output.OutputHash, ct);
+            }
+            catch (DocumentWorkException)
+            {
+                lastReason = "payload d'origine assente o non valido";
+                continue;
+            }
+
+            var remapped = Remap(candidate.Output, payload, candidate.Batch.OwnerId, writer.OwnerId);
+            if (remapped is null)
+            {
+                lastReason = "payload legato al run d'origine non rimappabile";
+                return new WorkImportResult(WorkImportKind.NotRemappable, null, candidate.Batch.OwnerId, lastReason);
+            }
+
+            return await InTransactionAsync(async owner =>
+            {
+                int inserted;
+                await using (var insert = Command(
+                    """
+                    INSERT INTO "WorkOutputs" ("Id","ProjectId","OwnerKind","OwnerId","BatchId","NodeId","InputHash","OutputHash","PayloadJson","StorageKey","PayloadByteLength",
+                        "CoveredIdsJson","MapsJson","ExpansionReceiptJson","SchemaVersion","ManifestHash","Status","ValidationVersion","CommittedAt","CommittedFence","DerivedFromOutputHash")
+                    VALUES (@id,@project,@kind,@owner,@batch,@node,@input,@output,@payload,@key,@length,@covered,@maps,@receipt,@schema,@manifest,'Committed',@validation,clock_timestamp(),@fence,@derived)
+                    ON CONFLICT ("OwnerKind","OwnerId","BatchId") DO NOTHING
+                    """))
+                {
+                    var source = candidate.Output;
+                    insert.Parameters.AddWithValue("id", Guid.NewGuid());
+                    insert.Parameters.AddWithValue("project", owner.ProjectId);
+                    insert.Parameters.AddWithValue("kind", writer.OwnerKind.ToString());
+                    insert.Parameters.AddWithValue("owner", writer.OwnerId);
+                    insert.Parameters.AddWithValue("batch", batch.BatchId);
+                    insert.Parameters.AddWithValue("node", source.NodeId);
+                    insert.Parameters.AddWithValue("input", batch.InputHash);
+                    insert.Parameters.AddWithValue("output", remapped.OutputHash);
+                    Json(insert, "payload", remapped.PayloadJson);
+                    insert.Parameters.Add(new NpgsqlParameter("key", NpgsqlDbType.Varchar) { Value = (object?)source.StorageKey ?? DBNull.Value });
+                    insert.Parameters.Add(new NpgsqlParameter("length", NpgsqlDbType.Bigint) { Value = (object?)source.PayloadByteLength ?? DBNull.Value });
+                    Json(insert, "covered", remapped.CoveredIdsJson);
+                    Json(insert, "maps", remapped.MapsJson);
+                    Json(insert, "receipt", remapped.ExpansionReceiptJson);
+                    insert.Parameters.AddWithValue("schema", source.SchemaVersion);
+                    insert.Parameters.AddWithValue("manifest", manifest.Hash);
+                    insert.Parameters.AddWithValue("validation", source.ValidationVersion);
+                    insert.Parameters.AddWithValue("fence", writer.FencingToken);
+                    insert.Parameters.AddWithValue("derived", source.OutputHash);
+                    inserted = await insert.ExecuteNonQueryAsync(ct);
+                }
+
+                var stored = await db.Set<WorkOutput>().AsNoTracking()
+                    .SingleAsync(o => o.OwnerKind == writer.OwnerKind && o.OwnerId == writer.OwnerId && o.BatchId == batch.BatchId, ct);
+                if (inserted == 1)
+                {
+                    return new WorkImportResult(WorkImportKind.Imported, stored, candidate.Batch.OwnerId, null);
+                }
+
+                // Già presente nell'owner: mai sovrascritto. Utilizzabile solo se è lo stesso risultato logico per lo stesso input.
+                return stored.InputHash == batch.InputHash && stored.Status == WorkOutputStatus.Committed
+                    ? new WorkImportResult(WorkImportKind.Replayed, stored, candidate.Batch.OwnerId, null)
+                    : new WorkImportResult(WorkImportKind.Incompatible, null, candidate.Batch.OwnerId, "output già presente nell'owner con altro input");
+            }, ct);
+        }
+
+        return candidates.Count == 0
+            ? new WorkImportResult(WorkImportKind.NoCandidate, null, null, null)
+            : new WorkImportResult(WorkImportKind.Incompatible, null, null, lastReason);
+    }
+
+    private static string? ImportMismatch(
+        DerivedBatch batch, WorkManifest manifest, DerivedBatch sourceBatch, WorkManifest? sourceManifest, WorkOutput sourceOutput, WorkLookupExpectation expected)
+    {
+        if (sourceManifest is null || sourceManifest.Hash != manifest.Hash)
+        {
+            return "manifesto diverso (fonti, parser, config, runtime, algoritmo, policy o budget)";
+        }
+
+        if (!SameBatch(sourceBatch, new DerivedBatchInput(
+                sourceBatch.BatchId, batch.Stage, batch.View, batch.Pass, batch.Level, batch.Ordinal, JsonSerializer.Deserialize<string[]>(batch.ParentOutputHashes)!,
+                batch.InputIdsJson, batch.MeasuredTokens, batch.TokenProvenance, batch.InputHash, batch.SchemaVersion, batch.PromptVersion)))
+        {
+            return "identità del batch diversa (genitori, stage, schema o prompt)";
+        }
+
+        return sourceOutput.Status != WorkOutputStatus.Committed || sourceOutput.InputHash != batch.InputHash || sourceOutput.ManifestHash != sourceManifest.Hash
+            || sourceOutput.SchemaVersion != expected.SchemaVersion || sourceOutput.ValidationVersion != expected.ValidationVersion
+            ? "schema o validazione diversi"
+            : null;
+    }
+
+    private sealed record RemappedOutput(string OutputHash, string? PayloadJson, string CoveredIdsJson, string? MapsJson, string? ExpansionReceiptJson);
+
+    /// <summary>Sostituzione deterministica del solo id del root d'origine; null se è presente in un payload su storage (non riscrivibile).</summary>
+    private static RemappedOutput? Remap(WorkOutput source, string payload, Guid from, Guid to)
+    {
+        string? Swap(string? text)
+        {
+            if (text is null)
+            {
+                return null;
+            }
+
+            foreach (var format in new[] { "D", "N" })
+            {
+                text = text.Replace(from.ToString(format), to.ToString(format), StringComparison.OrdinalIgnoreCase);
+            }
+
+            return text;
+        }
+
+        var carries = Swap(payload) != payload;
+        if (carries && source.StorageKey is not null)
+        {
+            return null;
+        }
+
+        var inline = source.PayloadJson is null ? null : Swap(source.PayloadJson);
+        return new RemappedOutput(
+            inline is not null && carries ? CanonicalJson.Sha256Hex(inline) : source.OutputHash,
+            inline, Swap(source.CoveredIdsJson)!, Swap(source.MapsJson), Swap(source.ExpansionReceiptJson));
+    }
+
+    /// <summary>Root precedenti nella catena RetryOfId dell'owner, dal più vicino (per un job documentale: i job delle preparazioni antenate).</summary>
+    private async Task<List<Guid>> RetryLineageAsync(CancellationToken ct)
+    {
+        var sql = writer.OwnerKind switch
+        {
+            WorkOwnerKind.ProcessingRun => LineageSql("ProcessingRuns", "r"),
+            WorkOwnerKind.ChatTurn => LineageSql("ChatTurns", "r"),
+            _ => """
+                WITH RECURSIVE chain AS (
+                    SELECT p."RetryOfId" AS id, 1 AS depth FROM "DocumentJobs" j JOIN "DocumentPreparations" p ON p."Id" = j."PreparationId" WHERE j."Id" = @owner
+                    UNION ALL
+                    SELECT p."RetryOfId", c.depth + 1 FROM chain c JOIN "DocumentPreparations" p ON p."Id" = c.id WHERE c.id IS NOT NULL AND c.depth < 32)
+                SELECT j."Id" FROM chain c JOIN "DocumentJobs" j ON j."PreparationId" = c.id WHERE c.id IS NOT NULL ORDER BY c.depth, j."RequestedAt", j."Id"
+                """,
+        };
+
+        var ids = new List<Guid>();
+        await db.Database.OpenConnectionAsync(ct);
+        await using var command = Command(sql);
+        command.Parameters.AddWithValue("owner", writer.OwnerId);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            ids.Add(reader.GetGuid(0));
+        }
+
+        return ids;
+
+        static string LineageSql(string table, string alias) => $"""
+            WITH RECURSIVE chain AS (
+                SELECT {alias}."RetryOfId" AS id, 1 AS depth FROM "{table}" {alias} WHERE {alias}."Id" = @owner
+                UNION ALL
+                SELECT {alias}."RetryOfId", c.depth + 1 FROM chain c JOIN "{table}" {alias} ON {alias}."Id" = c.id WHERE c.id IS NOT NULL AND c.depth < 32)
+            SELECT id FROM chain WHERE id IS NOT NULL ORDER BY depth
+            """;
     }
 
     /// <summary>
