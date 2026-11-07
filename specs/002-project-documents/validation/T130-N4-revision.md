@@ -67,3 +67,7 @@ Scegliere fra A, B, C, D (o variante) e aggiornare di conseguenza AI §13.4/T138
 | DGX, MafReal, browser | NOT RUN |
 
 Le prove di caratterizzazione sono etichettate `Characterization_LIMIT_*`: documentano l'impossibilità del nominale e si romperanno se il grafo cambierà; non sono una prova che il gate passi.
+
+## Decisione successiva (aggiunta 2026-11-07, il report sopra resta invariato)
+
+Il committente ha approvato come soluzione temporanea C + D, recepita in `contracts/ai-workflow.md` §13.6 e nel task T143: valutazione Gap solo single-call, oltre contesto con Gap fail-fast: run `Failed` con `document_limit_exceeded` e motivo `hierarchical_gap_assessment_unsupported`, zero chiamate LLM, senza revisione né WorkOutput. T138 resta aperto e bloccato in attesa di una nuova decisione tra A e B; il gate non è dichiarato superato.
