@@ -61,7 +61,8 @@ public sealed record DocumentValidationResult(
     IReadOnlyList<string> Violations,
     IReadOnlyList<ValidatedDocumentEvidence> Evidences,
     IReadOnlyList<ValidatedRelation> Relations,
-    string? NoEvidenceReason);
+    string? NoEvidenceReason,
+    IReadOnlyList<string>? OtherWithoutRationaleKeys = null);
 
 public static partial class DocumentEvidenceValidator
 {
@@ -110,6 +111,7 @@ public static partial class DocumentEvidenceValidator
             violations.Add("noEvidenceReason ammesso solo con zero evidenze");
         }
 
+        var otherWithoutRationale = new List<string>();
         var keys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var e in items)
         {
@@ -148,6 +150,7 @@ public static partial class DocumentEvidenceValidator
             if (e.Kind == EvidenceKind.Other && rationale is null)
             {
                 violations.Add($"{where}: kind Other richiede kindRationale");
+                otherWithoutRationale.Add(e.Key!);
             }
 
             var qualifiers = new List<DocumentEvidenceQualifier>();
@@ -230,7 +233,9 @@ public static partial class DocumentEvidenceValidator
 
         return violations.Count == 0
             ? new(true, false, null, [], evidences, relations, items.Count == 0 ? reason : null)
-            : new(false, true, EvidenceExtractionValidator.InvalidAgentOutput, violations, [], [], null);
+            : new(false, true, EvidenceExtractionValidator.InvalidAgentOutput, violations, [], [], null,
+                // Segnale tipizzato del retry guidato (T134): SOLO se ogni violazione è un Other senza motivazione; qualunque altra violazione lo annulla.
+                violations.Count == otherWithoutRationale.Count ? otherWithoutRationale : null);
     }
 
     private sealed record Checked(CandidateSource Source, PersistedSource Persisted, Guid? DocumentVersionId);

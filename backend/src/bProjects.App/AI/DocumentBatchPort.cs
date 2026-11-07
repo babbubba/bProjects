@@ -110,7 +110,17 @@ public sealed class AnalysisRetryException(string code, string message, Analysis
 }
 
 /// <summary>
-/// Capacità opzionale di un piano: un solo retry guidato di rigenerazione completa dopo un <see cref="GuidedRetryTrigger"/> (T129, T130). Il piano compone il
+/// Estrazione rifiutata SOLO perché tutte le violazioni sono <c>kind Other</c> senza <c>kindRationale</c> (T134, contracts/ai-workflow.md §2.3): segnale tipizzato del
+/// validatore (mai da stringhe). <see cref="EvidenceKeys"/> sono le chiavi locali <c>eN</c> delle evidenze coinvolte; codice originale <c>work_output_invalid</c>.
+/// </summary>
+public sealed class ExtractionOtherRationaleException(string message, IReadOnlyList<string> evidenceKeys, string? outputHash)
+    : GuidedRetryTrigger(WorkOutputInvalid, message, outputHash)
+{
+    public IReadOnlyList<string> EvidenceKeys { get; } = evidenceKeys;
+}
+
+/// <summary>
+/// Capacità opzionale di un piano: un solo retry guidato di rigenerazione completa dopo un <see cref="GuidedRetryTrigger"/> (T129, T130, T134). Il piano compone il
 /// marcatore del tentativo consumato (<see cref="DerivedBatchInput"/>, mai un output) e il messaggio del secondo invio; il port orchestra budget, deadline,
 /// fencing e persistenza del marcatore. Nessun merge del primo output: la risposta del retry è validata per intero come la prima, ma con
 /// <see cref="ValidateFinal"/>, che non lancia più un trigger di retry.

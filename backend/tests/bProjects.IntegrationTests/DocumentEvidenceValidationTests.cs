@@ -360,6 +360,25 @@ public sealed class DocumentEvidenceValidationTests
     }
 
     [Fact]
+    public void The_validator_flags_structurally_when_the_only_violations_are_other_without_rationale_and_lists_their_keys()
+    {
+        var other = Evidence("e1") with { Kind = EvidenceKind.Other };
+        var other3 = Evidence("e3") with { Kind = EvidenceKind.Other, KindRationale = "  " };
+        var result = Validate(Output(other, Evidence("e2"), other3));
+        Assert.False(result.Accepted);
+        Assert.Equal(["e1", "e3"], result.OtherWithoutRationaleKeys);
+
+        // Mista: qualunque altra violazione (statement vuoto, citazione inventata, zero evidenze senza motivo...) annulla il segnale.
+        Assert.Null(Validate(Output(other, Evidence("e2") with { Statement = " " })).OtherWithoutRationaleKeys);
+        Assert.Null(Validate(Output(other, Evidence("e2", Passage("r25", "testo inesistente")))).OtherWithoutRationaleKeys);
+        Assert.Null(Validate(Output(other with { Statement = "" })).OtherWithoutRationaleKeys);
+        Assert.Null(Validate(Output(other, Evidence("e1"))).OtherWithoutRationaleKeys);   // chiave duplicata
+        Assert.Null(Validate(Output(Evidence("e1") with { Statement = " " })).OtherWithoutRationaleKeys);
+        Assert.Null(Validate(Output(Evidence("e1"))).OtherWithoutRationaleKeys);          // accettato
+        Assert.Null(Validate(Output(Evidence("e1") with { Kind = EvidenceKind.Other, KindRationale = "Clausola di manleva." })).OtherWithoutRationaleKeys);
+    }
+
+    [Fact]
     public void Duplicate_keys_other_without_rationale_and_blank_statements_are_rejected()
     {
         AssertRejected(Validate(Output(Evidence("e1"), Evidence("e1"))), "duplicata");

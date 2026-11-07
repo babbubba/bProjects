@@ -281,7 +281,7 @@ internal delegate ValueTask UnitCompletion(string resultHash, IReadOnlyList<Port
 /// Parte di dominio del grafo batch per un'unità di estrazione (<see cref="IDocumentBatchPlan"/>): cosa si invia, come si valida, come si
 /// chiude. Deterministico nel replay: identità dei batch = hash di owner, manifesto, definizione, stadio, ordinale e payload completo.
 /// </summary>
-internal sealed class DocumentExtractionPlan : IDocumentBatchPlan
+internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryPlan
 {
     private readonly DocumentUnitClaim _claim;
     private readonly UnitInput _input;
@@ -380,7 +380,58 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan
         return text.Length <= 600 ? text : text[..600] + "…";
     }
 
-    public ValidatedBatch Validate(BatchRef batch, string responseText)
+    /// <summary>Stadio del marcatore del retry consumato (T134): batch d'appoggio fuori dal cursore del grafo, mai con un WorkOutput.</summary>
+    public const string GuidedRetryStage = "extract_retry";
+
+    /// <summary>Ordinale del marcatore: sopra ogni ordinale di batch dell'unità, così <c>GetByOrdinalAsync</c> non lo incontra mai.</summary>
+    private const int GuidedRetryOrdinalBase = 1_000_000;
+
+    /// <summary>
+    /// Marcatore del retry consumato (T134): identità = job, manifesto, definizione e batch originale, quindi uguale a ogni replay (un solo retry per batch anche dopo
+    /// restart/recovery/altro worker); porta solo classe, conteggio e hash del primo output (nessun testo). Stessi schema e prompt dell'estrazione: nessuna identità cambia.
+    /// </summary>
+    public DerivedBatchInput GuidedRetryMarker(BatchRef batch, GuidedRetryTrigger trigger)
+    {
+        var retry = (ExtractionOtherRationaleException)trigger;
+        var id = DocumentEvidenceAgent.Sha($"guided-retry|DocumentJob|{_claim.JobId:N}|{_manifestIdentity}|{DocumentEvidenceAgent.DefinitionVersion}|{batch.BatchId}");
+        var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, kind = "other_without_rationale", evidences = retry.EvidenceKeys.Count, firstOutputHash = retry.OutputHash });
+        return new DerivedBatchInput(
+            id, GuidedRetryStage, null, null, null, GuidedRetryOrdinalBase + batch.Ordinal, [], inputs, null, "calibrated_upper_bound",
+            DocumentEvidenceAgent.Sha($"guided-retry-input|{batch.InputHash}"), DocumentEvidenceContent.SchemaVersionValue, DocumentEvidenceAgent.PromptVersion);
+    }
+
+    /// <summary>
+    /// Secondo messaggio: il primo ripetuto per intero (stessi range, stesso schema) più la correzione. Nessun testo né evidenza del primo output: nessun merge, il server non
+    /// scrive semantica; il modello rigenera l'estrazione COMPLETA.
+    /// </summary>
+    public IReadOnlyList<ChatMessage> ComposeGuidedRetry(BatchRef batch, GuidedRetryTrigger trigger)
+    {
+        var retry = (ExtractionOtherRationaleException)trigger;
+        var first = DocumentEvidenceAgent.BuildMessages(_partition.Batches[batch.Ordinal].Ranges);
+        var text = new StringBuilder(string.Concat(first.Select(m => m.Text)))
+            .Append("\n\nCORREZIONE (unico nuovo tentativo): la tua risposta precedente è stata scartata perché queste evidenze hanno kind Other senza kindRationale:\n")
+            .Append(string.Join("\n", retry.EvidenceKeys.Select(k => $"- {k}")))
+            .Append("\nLe informazioni narrative non pertinenti al progetto (cronaca, aneddoti, contesto discorsivo senza effetto su requisiti, vincoli, decisioni o dati del progetto) non devono diventare evidenze: ")
+            .Append("se un'unità contiene solo questo, restituisci zero evidenze con noEvidenceReason. ")
+            .Append("Usa kind Other solo per informazioni pertinenti al progetto che non sono classificabili in nessun altro kind; ogni Other legittimo richiede una kindRationale specifica che spieghi perché nessun altro kind si applica. ")
+            .Append("Produci di nuovo l'estrazione COMPLETA, tutte le evidenze e tutti i campi: conserva le evidenze valide della risposta precedente (con le loro condizioni, negazioni e citazioni esatte), ")
+            .Append("rimuovi quelle non pertinenti o motiva quelle legittime, e non limitarti alle evidenze corrette. ")
+            .Append("Rispondi con l'unico oggetto JSON evidence-1.1.0 per i soli intervalli Primary.");
+        var message = new ChatMessage(ChatRole.User, text.ToString());
+        if (first.Count > 0 && first[0].AdditionalProperties is { } properties)
+        {
+            message.AdditionalProperties = new AdditionalPropertiesDictionary(properties);   // categoria document_sources del primo messaggio
+        }
+
+        return [message];
+    }
+
+    /// <summary>Validazione definitiva (risposta del retry o retry non ammesso): lo stesso validatore, ma un rifiuto è sempre il permanente <c>work_output_invalid</c>, mai un nuovo trigger.</summary>
+    public ValidatedBatch ValidateFinal(BatchRef batch, string responseText) => ValidateCore(batch, responseText, allowRetry: false);
+
+    public ValidatedBatch Validate(BatchRef batch, string responseText) => ValidateCore(batch, responseText, allowRetry: true);
+
+    private ValidatedBatch ValidateCore(BatchRef batch, string responseText, bool allowRetry)
     {
         var planned = _partition.Batches[batch.Ordinal];
         var unitOrdinal = UnitOrdinal(batch.Ordinal);
@@ -389,9 +440,14 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan
         if (!result.Accepted)
         {
             // Regole violate senza il testo citato: i frammenti fra «» (citazioni del modello/documento) sono sostituiti da «…».
-            throw new DocumentWorkException(
-                DocumentWorkException.WorkOutputInvalid,
-                $"L'output del modello non è un'estrazione valida ({result.Violations.Count} violazioni): nessun output committato. Regole: {DescribeRules(result.Violations)}");
+            var message = $"L'output del modello non è un'estrazione valida ({result.Violations.Count} violazioni): nessun output committato. Regole: {DescribeRules(result.Violations)}";
+            if (allowRetry && result.OtherWithoutRationaleKeys is { Count: > 0 } keys)
+            {
+                // Retry guidato (T134): unico caso tipizzato dal validatore (tutte le violazioni sono Other senza motivazione); ogni altra violazione resta permanente.
+                throw new ExtractionOtherRationaleException(message, keys, DocumentEvidenceAgent.Sha(responseText));
+            }
+
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, message);
         }
 
         var output = new DocumentUnitOutput(

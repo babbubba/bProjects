@@ -21,7 +21,7 @@ namespace bProjects.IntegrationTests;
 /// timeout residuo. Nessun commit aggregato: l'unità non rende Ready la preparazione.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
-public sealed class DocumentEvidenceAgentTests
+public sealed partial class DocumentEvidenceAgentTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
