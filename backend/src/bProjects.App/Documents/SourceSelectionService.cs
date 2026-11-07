@@ -69,9 +69,14 @@ public sealed class SourceSelectionService(AppDbContext db)
         var latestByDocument = versions.GroupBy(v => v.DocumentId).ToDictionary(g => g.Key, g => g.MaxBy(v => v.Version)!);
         var preparationsByVersion = preparations.GroupBy(p => p.DocumentVersionId).ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.Generation).ToList());
 
+        // Preparazione applicabile di una versione file: quella puntata dal suo bundle corrente (T096), mai la massima generazione Ready né una candidata.
+        var currentPreparationByVersion = await db.EvidenceDocumentStates.AsNoTracking()
+            .Where(s => s.ProjectId == projectId && s.CurrentPreparationId != null && s.CurrentEvidenceVersionId != null)
+            .ToDictionaryAsync(s => s.DocumentVersionId, s => s.CurrentPreparationId!.Value, ct);
+
         DocumentPreparation? Ready(DocumentVersion? version) =>
-            version is not null && preparationsByVersion.TryGetValue(version.Id, out var list)
-                ? list.FirstOrDefault(p => p.Status == PreparationStatus.Ready && p.CurrentEvidenceVersionId is not null)
+            version is not null && currentPreparationByVersion.TryGetValue(version.Id, out var currentId) && preparationsByVersion.TryGetValue(version.Id, out var list)
+                ? list.FirstOrDefault(p => p.Id == currentId && p.Status == PreparationStatus.Ready && p.CurrentEvidenceVersionId is not null)
                 : null;
 
         var entries = new List<SourceEntry>(documents.Count);

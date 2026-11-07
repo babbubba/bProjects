@@ -17,177 +17,8 @@ namespace bProjects.IntegrationTests;
 /// quindi il lavoro accodato resta Queued. Le letture (GET) non ritentano né accodano mai nulla.
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
-public sealed class DocumentVersionLifecycleTests : ParseRetryTestBase
+public sealed class DocumentVersionLifecycleTests : LifecycleTestBase
 {
-    private sealed record Generation(Guid Preparation, Guid ParseJob, Guid? EvidenceVersion, int Number);
-
-    private static string PrepUrl(Target t, string suffix = "") => $"/api/projects/{t.Project}/documents/{t.Document}/versions/1/preparations{suffix}";
-
-    private Task<HttpResponseMessage> PostPreparations(HttpClient client, Target t, Guid? key = null, bool withKey = true, Guid? project = null, Guid? document = null, string version = "1")
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project ?? t.Project}/documents/{document ?? t.Document}/versions/{version}/preparations");
-        if (withKey)
-        {
-            request.Headers.Add("Idempotency-Key", (key ?? Guid.NewGuid()).ToString());
-        }
-
-        return client.SendAsync(request, Ct);
-    }
-
-    private Task<HttpResponseMessage> Promote(HttpClient client, Target t, string generation, object? body, Guid? project = null)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project ?? t.Project}/documents/{t.Document}/versions/1/preparations/{generation}/promote");
-        if (body is not null)
-        {
-            request.Content = JsonContent.Create(body);
-        }
-
-        return client.SendAsync(request, Ct);
-    }
-
-    private static object Expect(int revision, string? reason = null) => new { expectedRevision = revision, reason };
-
-    // ---- seed ---------------------------------------------------------------------------------------------------------------------------------
-
-    /// <summary>
-    /// Porta in una generazione dello stato dato. La 1 esiste già (acquisizione); le successive sono inserite come le lascerebbe il servizio.
-    /// Ready scrive aggregatore, versione Evidence e collega la preparazione; Failed/Incomplete/Extracting restano senza versione Evidence.
-    /// </summary>
-    private async Task<Generation> SeedGenerationAsync(Target t, int number, PreparationStatus status, bool issue = false)
-    {
-        using var scope = App.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var now = DateTimeOffset.UtcNow;
-        DocumentPreparation preparation;
-        DocumentJob parse;
-        if (number == 1)
-        {
-            preparation = await db.DocumentPreparations.SingleAsync(p => p.Id == t.Preparation, Ct);
-            parse = await db.DocumentJobs.SingleAsync(j => j.Id == t.Job, Ct);
-        }
-        else
-        {
-            preparation = new DocumentPreparation
-            {
-                Id = Guid.NewGuid(), ProjectId = t.Project, DocumentVersionId = t.Version, Generation = number, Status = PreparationStatus.Queued,
-                PolicyHash = new string('e', 64), RequestedAt = now, HardDeadlineAt = now.AddHours(1), EffectiveDeadlineAt = now.AddHours(1), CreatedAt = now,
-            };
-            db.DocumentPreparations.Add(preparation);
-            await db.SaveChangesAsync(Ct);
-            parse = new DocumentJob
-            {
-                Id = Guid.NewGuid(), ProjectId = t.Project, PreparationId = preparation.Id, Kind = DocumentJobKind.Parse, Status = DocumentJobStatus.Queued,
-                RequestKey = Guid.NewGuid(), RequestedAt = now, DeadlineAt = now.AddHours(1), MaxAttempts = 3,
-            };
-            db.DocumentJobs.Add(parse);
-            await db.SaveChangesAsync(Ct);
-            preparation.ParseJobId = parse.Id;
-            await db.SaveChangesAsync(Ct);
-        }
-
-        if (status != PreparationStatus.Queued)
-        {
-            parse.Status = DocumentJobStatus.Completed;
-            parse.ResultHash = new string('a', 64);
-            parse.StartedAt = now;
-            parse.CompletedAt = now;
-            parse.AttemptCount = 1;
-            parse.FencingToken = 1;
-            await db.SaveChangesAsync(Ct);
-        }
-
-        Guid? evidenceVersion = null;
-        if (status == PreparationStatus.Ready)
-        {
-            var job = new EvidenceExtractionJob
-            {
-                Id = Guid.NewGuid(), ProjectId = t.Project, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Reason = ExtractionJobReason.Initial,
-                Status = ExtractionJobStatus.Queued, RequestedAt = now, DeadlineAt = now.AddHours(1), MaxAttempts = 3, ExtractorConfig = "{}",
-            };
-            db.EvidenceExtractionJobs.Add(job);
-            await db.SaveChangesAsync(Ct);
-            var version = new EvidenceExtractionVersion
-            {
-                Id = Guid.NewGuid(), ProjectId = t.Project, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, ManifestHash = new string((char)('0' + number), 64),
-                Version = 1, JobId = job.Id, SchemaVersion = "evidence-1.1.0", PromptVersion = "document-extraction-v2", ModelId = "m", Parameters = "{}",
-                EvidenceCount = 0, NoEvidenceReason = "documento senza evidenze", CreatedAt = now,
-            };
-            db.EvidenceExtractionVersions.Add(version);
-            await db.SaveChangesAsync(Ct);
-            evidenceVersion = version.Id;
-            preparation.CurrentEvidenceVersionId = version.Id;
-        }
-
-        preparation.Status = status;
-        if (issue)
-        {
-            db.PreparationIssues.Add(new PreparationIssue
-            {
-                Id = Guid.NewGuid(), ProjectId = t.Project, PreparationId = preparation.Id, Code = "image_unprocessed", Severity = IssueSeverity.Blocking,
-                Reason = "Immagine non trattata", AffectsCompleteness = true,
-            });
-        }
-
-        if (status is PreparationStatus.Failed or PreparationStatus.Incomplete)
-        {
-            preparation.ErrorCode = status == PreparationStatus.Failed ? "extraction_failed" : "incomplete_coverage";
-            preparation.ErrorMessage = "Estrazione non riuscita.";
-        }
-
-        await db.SaveChangesAsync(Ct);
-        return new(preparation.Id, parse.Id, evidenceVersion, number);
-    }
-
-    /// <summary>Stato corrente della versione file, come lo lascia la pubblicazione automatica della prima preparazione completa (revisione 1).</summary>
-    private async Task MakeCurrentAsync(Target t, Generation g)
-    {
-        using var scope = App.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var now = DateTimeOffset.UtcNow;
-        db.EvidenceDocumentStates.Add(new EvidenceDocumentState
-        {
-            DocumentVersionId = t.Version, ProjectId = t.Project, CurrentPreparationId = g.Preparation, CurrentEvidenceVersionId = g.EvidenceVersion, Revision = 1, UpdatedAt = now,
-        });
-        db.DocumentPromotions.Add(new DocumentPromotion
-        {
-            Id = Guid.NewGuid(), ProjectId = t.Project, DocumentVersionId = t.Version, FromPreparationId = null, FromEvidenceVersionId = null,
-            ToPreparationId = g.Preparation, ToEvidenceVersionId = g.EvidenceVersion!.Value, PromotedBy = null, PromotedAt = now, Reason = EvidencePromotion.FirstValidVersionReason,
-        });
-        await db.SaveChangesAsync(Ct);
-        await Execute(
-            "UPDATE \"ProjectDocuments\" SET \"LatestReadyVersionId\" = @v WHERE \"Id\" = @d", ("v", t.Version), ("d", t.Document));
-    }
-
-    /// <summary>v1 con g1 Ready e corrente (revisione 1) e le generazioni successive indicate come candidate.</summary>
-    private async Task<(Target Target, Generation[] Generations)> CurrentWithCandidatesAsync(HttpClient client, params PreparationStatus[] candidates)
-    {
-        var t = await NewTarget(client);
-        var first = await SeedGenerationAsync(t, 1, PreparationStatus.Ready);
-        await MakeCurrentAsync(t, first);
-        var all = new List<Generation> { first };
-        for (var i = 0; i < candidates.Length; i++)
-        {
-            all.Add(await SeedGenerationAsync(t, i + 2, candidates[i], issue: false));
-        }
-
-        return (t, [.. all]);
-    }
-
-    private async Task<(Guid? Preparation, Guid? Evidence, int Revision)> State(Target t)
-    {
-        var revision = await Scalar<int>("SELECT COALESCE((SELECT \"Revision\" FROM \"EvidenceDocumentStates\" WHERE \"DocumentVersionId\" = @v), -1)", ("v", t.Version));
-        var prep = await Scalar<string>("SELECT COALESCE((SELECT \"CurrentPreparationId\"::text FROM \"EvidenceDocumentStates\" WHERE \"DocumentVersionId\" = @v), '')", ("v", t.Version));
-        var evidence = await Scalar<string>("SELECT COALESCE((SELECT \"CurrentEvidenceVersionId\"::text FROM \"EvidenceDocumentStates\" WHERE \"DocumentVersionId\" = @v), '')", ("v", t.Version));
-        return (prep.Length == 0 ? null : Guid.Parse(prep), evidence.Length == 0 ? null : Guid.Parse(evidence), revision);
-    }
-
-    private Task<string> StateRowJson(Target t) => Scalar<string>("SELECT row_to_json(t)::text FROM \"EvidenceDocumentStates\" t WHERE \"DocumentVersionId\" = @v", ("v", t.Version));
-
-    private Task<long> Promotions(Target t) => Count("SELECT count(*) FROM \"DocumentPromotions\" WHERE \"DocumentVersionId\" = @v", ("v", t.Version));
-
-    private Task<long> Preparations(Target t) => Count("SELECT count(*) FROM \"DocumentPreparations\" WHERE \"DocumentVersionId\" = @v", ("v", t.Version));
-
-    private Task<long> Jobs(Target t) => Count("SELECT count(*) FROM \"DocumentJobs\" WHERE \"ProjectId\" = @p", ("p", t.Project));
 
     // ================================================================ POST preparations: rielaborazione candidata
 
@@ -806,6 +637,97 @@ public sealed class DocumentVersionLifecycleTests : ParseRetryTestBase
         Assert.False(item.GetProperty("included").GetBoolean());
         Assert.Equal((g[1].Preparation, g[1].EvidenceVersion, 2), await State(t));   // l'esclusione non cancella storia né bundle
         Assert.Equal(3L, await Preparations(t));
+    }
+
+    // ================================================================ T096: risoluzione della selezione sul bundle corrente
+
+    private async Task<Target> UploadNextVersionAsync(HttpClient client, Target t, string text)
+    {
+        var created = await Json(await Upload(client, t.Project, Text(text), "nota.txt", "text/plain", documentId: t.Document));
+        var version = created.GetProperty("id").GetGuid();
+        var preparation = await Scalar<Guid>("SELECT \"Id\" FROM \"DocumentPreparations\" WHERE \"DocumentVersionId\" = @v", ("v", version));
+        var job = await Scalar<Guid>("SELECT \"ParseJobId\" FROM \"DocumentPreparations\" WHERE \"Id\" = @p", ("p", preparation));
+        return new(t.Project, t.Document, version, preparation, job);
+    }
+
+    private async Task<JsonElement> SelectionItemAsync(HttpClient client, Target t)
+    {
+        var selection = await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct));
+        return selection.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("documentId").GetGuid() == t.Document).Clone();
+    }
+
+    private async Task<HttpResponseMessage> PutSelectionAsync(HttpClient client, Target t, object item)
+    {
+        var revision = (await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct))).GetProperty("revision").GetInt64();
+        var put = new HttpRequestMessage(HttpMethod.Put, $"/api/projects/{t.Project}/source-selection") { Content = JsonContent.Create(new { items = new[] { item } }) };
+        put.Headers.TryAddWithoutValidation("If-Match", $"\"{revision}\"");
+        return await client.SendAsync(put, Ct);
+    }
+
+    [Fact]
+    public async Task Selection_and_snapshot_resolve_the_current_bundle_never_the_highest_ready_generation()
+    {
+        using var client = await App.LoginAsync();
+        var (t, g) = await CurrentWithCandidatesAsync(client, PreparationStatus.Ready);   // g2 Ready con generazione maggiore, ma solo candidata
+
+        var item = await SelectionItemAsync(client, t);
+        Assert.Equal("Ready", item.GetProperty("availability").GetString());
+        Assert.Equal(g[0].Preparation, item.GetProperty("preparationId").GetGuid());
+
+        // Lo snapshot fissa il bundle corrente (preparazione + versione Evidence), non la candidata.
+        using (var scope = App.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var evaluation = await scope.ServiceProvider.GetRequiredService<SourceSelectionService>().EvaluateAsync(t.Project, Ct);
+            var snapshot = scope.ServiceProvider.GetRequiredService<SourceSnapshotStore>().Add(t.Project, evaluation, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync(Ct);
+            var row = await db.SourceSnapshotItems.AsNoTracking().SingleAsync(i => i.SnapshotId == snapshot.Id, Ct);
+            Assert.Equal(g[0].Preparation, row.PreparationId);
+            Assert.Equal(g[0].EvidenceVersion, row.EvidenceVersionId);
+        }
+
+        // Dopo la promozione esplicita la risoluzione segue il nuovo bundle corrente.
+        Assert.Equal(HttpStatusCode.OK, (await Promote(client, t, "2", Expect(1))).StatusCode);
+        Assert.Equal(g[1].Preparation, (await SelectionItemAsync(client, t)).GetProperty("preparationId").GetGuid());
+    }
+
+    [Fact]
+    public async Task A_pin_on_a_file_version_without_a_current_bundle_blocks_while_the_default_keeps_the_previous_ready_version()
+    {
+        using var client = await App.LoginAsync();
+        var (t, _) = await CurrentWithCandidatesAsync(client);
+        var v2 = await UploadNextVersionAsync(client, t, "Seconda");
+        await SeedGenerationAsync(v2, 1, PreparationStatus.Ready);   // Ready ma nessun bundle corrente: non applicabile
+
+        var defaultItem = await SelectionItemAsync(client, t);
+        Assert.Equal("Ready", defaultItem.GetProperty("availability").GetString());
+        Assert.Equal(t.Version, defaultItem.GetProperty("resolvedVersionId").GetGuid());   // v2 incompleta non rimuove v1 di default
+
+        Assert.Equal(HttpStatusCode.OK, (await PutSelectionAsync(client, t, new { documentId = t.Document, included = true, mode = "Pinned", versionId = v2.Version })).StatusCode);
+        var pinned = await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct));
+        var item = pinned.GetProperty("items")[0];
+        Assert.Equal("Unavailable", item.GetProperty("availability").GetString());
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("preparationId").ValueKind);
+        Assert.Equal(t.Document, pinned.GetProperty("blockingSources")[0].GetProperty("documentId").GetGuid());
+    }
+
+    [Fact]
+    public async Task A_pin_on_an_older_file_version_uses_its_own_current_bundle_and_exclusion_persists_on_a_newer_version()
+    {
+        using var client = await App.LoginAsync();
+        var (t, g) = await CurrentWithCandidatesAsync(client);
+        Assert.Equal(HttpStatusCode.OK, (await PutSelectionAsync(client, t, new { documentId = t.Document, included = true, mode = "Pinned", versionId = t.Version })).StatusCode);
+        var v2 = await UploadNextVersionAsync(client, t, "Seconda");
+        var second = await SeedGenerationAsync(v2, 1, PreparationStatus.Ready);
+        await MakeCurrentAsync(v2, second);   // v2 diventa l'ultima pronta, ma il PM ha fissato v1
+
+        var item = await SelectionItemAsync(client, t);
+        Assert.Equal(t.Version, item.GetProperty("resolvedVersionId").GetGuid());
+        Assert.Equal(g[0].Preparation, item.GetProperty("preparationId").GetGuid());
+
+        Assert.Equal(HttpStatusCode.OK, (await PutSelectionAsync(client, t, new { documentId = t.Document, included = false, mode = "LatestReady", versionId = (Guid?)null })).StatusCode);
+        await UploadNextVersionAsync(client, t, "Terza");
+        Assert.False((await SelectionItemAsync(client, t)).GetProperty("included").GetBoolean());
     }
 }
 
