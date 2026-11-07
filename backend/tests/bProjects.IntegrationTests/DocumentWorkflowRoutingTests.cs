@@ -531,6 +531,27 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
     }
 
+    // T143: la v5 e riconosciuta solo con tutte le chiavi single-call e le chiavi gerarchiche v4 + policy Gap; il routing di nuove richieste v5 resta T141.
+    [Theory]
+    [InlineData("""{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3"}""")]   // gerarchia e policy mancanti
+    [InlineData("""{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v4","reconcileAiSchema":"reconcile-alias-2","reconcileAlgorithm":"global-reconcile-v2","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""")]   // gerarchia nominale futura
+    [InlineData("""{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"altra-policy"}""")]   // policy diversa
+    public async Task A_v5_analysis_with_incomplete_hierarchical_versions_or_another_gap_policy_fails_as_incompatible_through_the_dispatcher(string prompts)
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v5', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", prompts), ("r", run));
+
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.Equal(("Failed", "workflow_incompatible"), (row.Status, row.ErrorCode));
+        Assert.Empty(_model.Graphs);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
     [Theory]
     [InlineData("project-document-documents-v9", """{"document":"document-documents-v2","analysisSchema":"1.1.0"}""")]
     [InlineData("project-document-documents-v3", """{"document":"document-documents-v2","analysisSchema":"1.1.0"}""")]   // v3 con prompt v2: mai un downgrade

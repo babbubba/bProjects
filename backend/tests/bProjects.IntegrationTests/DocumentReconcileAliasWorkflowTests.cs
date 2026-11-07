@@ -670,6 +670,358 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         }
     }
 
+    // ================================================================ v5 oltre contesto (T143, contracts/ai-workflow.md §13.6)
+
+    private const string V5Hierarchical =
+        """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
+
+    private const string V5 = "project-analysis-documents-v5";
+
+    /// <summary>Modello che fallisce se invocato: i percorsi fail-fast non devono mai arrivare al modello.</summary>
+    private static DocumentChatWorkflowTests.FakeChatModel Tripwire() => new() { Responder = _ => throw new InvalidOperationException("il fail-fast non deve invocare il modello") };
+
+    /// <summary>La v5 NON è instradata per le nuove richieste (T141): il test riscrive la definizione congelata, come per la v5 single-call.</summary>
+    private async Task PinToV5Async(Guid run, string prompts = V5Hierarchical) => await FreezeHistoricalAsync(run, V5, prompts);
+
+    /// <summary>Corpus con <paramref name="gaps"/> documenti di tipo Gap (i primi) e gli altri Requirement; run creato dal vero endpoint e poi congelato v5 (o lasciato v4).</summary>
+    private async Task<(Guid Run, AnalysisRunClaim Claim, Guid Project)> ArrangeV5Async(int documents = Documents, int gaps = 0, int words = 120, bool v5 = true, HttpClient? existing = null, Guid? existingProject = null)
+    {
+        using var owned = existing is null ? await App.LoginAsync() : null;
+        var client = existing ?? owned!;
+        var project = existingProject ?? await NewProject(client);
+        if (existingProject is null)
+        {
+            for (var n = 1; n <= documents; n++)
+            {
+                var subject = n == 1 ? "aaa" : n == Documents ? "zzz" : $"mmm{n}";
+                await NewDocument(client, project, $"doc{n}", Statement(n, words), subject, kind: n <= gaps ? EvidenceKind.Gap : EvidenceKind.Requirement);
+            }
+        }
+
+        var run = await StartV4Async(client, project);
+        if (v5)
+        {
+            await PinToV5Async(run);
+        }
+
+        return (run, await ClaimAsync(run), project);
+    }
+
+    private async Task<(string Status, string Code, string Message, int Calls)> RunRow(Guid run) => (
+        await Scalar<string>("SELECT \"Status\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)),
+        await Scalar<string>("SELECT coalesce(\"ErrorCode\",'') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)),
+        await Scalar<string>("SELECT coalesce(\"ErrorMessage\",'') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)),
+        await Scalar<int>("SELECT coalesce(\"CallCount\",0) FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+
+    private async Task AssertNothingProducedAsync(Guid run)
+    {
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"RunCatalogNodes\" WHERE \"RunId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task V5_above_context_with_a_gap_fails_fast_with_zero_model_calls_and_nothing_produced()
+    {
+        var (run, claim, _) = await ArrangeV5Async(gaps: 1);
+        var model = Tripwire();
+
+        var result = await RunAsync(claim, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
+        Assert.Empty(model.Requests);
+        var row = await RunRow(run);
+        Assert.Equal(("Failed", "document_limit_exceeded", 0), (row.Status, row.Code, row.Calls));   // CallCount invariato: nessuna riserva
+        Assert.StartsWith(DocumentWorkException.HierarchicalGapAssessmentUnsupported + ": ", row.Message, StringComparison.Ordinal);
+        Assert.Equal("hierarchical_gap_assessment_unsupported", DocumentWorkException.HierarchicalGapAssessmentUnsupported);
+        Assert.Matches(@"\d+ token", row.Message);        // token misurati
+        Assert.Matches(@"budget[^.]*\d+", row.Message);   // budget di input
+        Assert.Matches(@"(?i)(Measured|Calibrated|Estimated|qualit)", row.Message);   // qualità della misura
+        Assert.Matches(@"\b1 (evidenz|Gap)", row.Message);   // numero di Gap
+        Assert.DoesNotContain("T138", row.Message);
+        await AssertNothingProducedAsync(run);
+    }
+
+    [Fact]
+    public async Task V5_fail_fast_keeps_the_typed_reason_first_and_the_message_within_the_column_limit_even_with_many_gaps()
+    {
+        var (run, claim, _) = await ArrangeV5Async(documents: Documents, gaps: Documents);   // tutte le evidenze sono Gap
+        var model = Tripwire();
+
+        var result = await RunAsync(claim, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
+        var row = await RunRow(run);
+        Assert.StartsWith("hierarchical_gap_assessment_unsupported: ", row.Message, StringComparison.Ordinal);
+        Assert.True(row.Message.Length <= 1000, row.Message.Length.ToString());
+        Assert.Matches($@"\b{Documents} (evidenz|Gap)", row.Message);
+        Assert.Empty(model.Requests);
+        await AssertNothingProducedAsync(run);
+    }
+
+    [Fact]
+    public async Task V5_fail_fast_is_deterministic_on_takeover_replay_and_a_crash_between_the_measure_and_the_failure_record()
+    {
+        var (run, claim, _) = await ArrangeV5Async(gaps: 2);
+        // Crash simulato fra misura e FailAsync: un trigger di test rifiuta la transizione a Failed, quindi il processo "muore" con il run ancora Running.
+        await Execute(
+            """
+            CREATE OR REPLACE FUNCTION t143_block_failed() RETURNS trigger AS $$ BEGIN IF NEW."Status" = 'Failed' THEN RAISE EXCEPTION 't143 crash simulato'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
+            CREATE TRIGGER t143_block_failed BEFORE UPDATE ON "ProcessingRuns" FOR EACH ROW EXECUTE FUNCTION t143_block_failed();
+            """);
+        var crashing = Tripwire();
+        await Assert.ThrowsAnyAsync<Exception>(() => RunAsync(claim, crashing));
+        Assert.Empty(crashing.Requests);
+        Assert.Equal("Running", (await RunRow(run)).Status);
+        await AssertNothingProducedAsync(run);
+        await Execute("DROP TRIGGER t143_block_failed ON \"ProcessingRuns\"; DROP FUNCTION t143_block_failed();");
+
+        // Takeover: un altro owner con un fencing token più alto riprende lo stesso run.
+        await Execute(
+            "UPDATE \"ProcessingRuns\" SET \"LeaseOwner\" = 'owner-2', \"FencingToken\" = 2, \"AttemptCount\" = 2, \"LeaseUntil\" = now() + interval '10 minutes' WHERE \"Id\" = @r", ("r", run));
+        var resumed = Tripwire();
+        var first = await RunAsync(new AnalysisRunClaim(run, "owner-2", 2, 2), resumed);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (first.Status, first.ErrorCode));
+        Assert.Empty(resumed.Requests);
+        var row = await RunRow(run);
+        Assert.StartsWith("hierarchical_gap_assessment_unsupported: ", row.Message, StringComparison.Ordinal);
+        Assert.Equal(0, row.Calls);
+        await AssertNothingProducedAsync(run);
+
+        // Replay di un run già Failed: ritorna all'inizio di ExecuteAsync con lo stesso esito, senza chiamate né nuove scritture.
+        var replay = Tripwire();
+        var again = await RunAsync(new AnalysisRunClaim(run, "owner-2", 2, 2), replay);
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (again.Status, again.ErrorCode));
+        Assert.Empty(replay.Requests);
+        Assert.Equal(row, await RunRow(run));
+    }
+
+    [Fact]
+    public async Task V5_above_context_without_a_gap_runs_the_v4_equivalent_hierarchy_with_the_same_payloads_calls_and_completeness()
+    {
+        // Stesso progetto, stessi documenti: prima il run v4, poi il run v5 (nessun riuso di WorkOutput per sola uguaglianza di fonti).
+        using var client = await App.LoginAsync();
+        var (v4Run, v4Claim, project) = await ArrangeV5Async(v5: false, existing: client);
+        var v4Model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
+        var v4Result = await RunAsync(v4Claim, v4Model);
+        Assert.True(v4Result.Status == ProcessingRunStatus.Completed, await Message(v4Run));
+
+        var (v5Run, v5Claim, _) = await ArrangeV5Async(existing: client, existingProject: project);
+        var v5Model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
+        var v5Result = await RunAsync(v5Claim, v5Model);
+
+        Assert.True(v5Result.Status == ProcessingRunStatus.Completed, await Message(v5Run));
+        Assert.NotEmpty(v5Model.Requests);
+        Assert.Equal(v4Model.Requests.Count, v5Model.Requests.Count);
+        Assert.Equal(v4Model.Requests.Select(r => r.System + "\n" + r.AllText).Order(StringComparer.Ordinal), v5Model.Requests.Select(r => r.System + "\n" + r.AllText).Order(StringComparer.Ordinal));
+        Assert.Equal((await RunRow(v4Run)).Calls, (await RunRow(v5Run)).Calls);
+        Assert.Equal(v5Model.Requests.Count, (await RunRow(v5Run)).Calls);
+        // Stessi batch (stage, ordinal, versioni, schema) e stessa completezza; nessun gap-assessment generato dal server.
+        Assert.Equal(
+            await BatchShape(v4Run),
+            await BatchShape(v5Run));
+        Assert.Equal(v5Model.Requests.Count, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'reconcile-alias-1'", ("r", v5Run)));
+        foreach (var payload in await Strings("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v5Run)))
+        {
+            var json = JsonDocument.Parse(payload).RootElement;
+            Assert.False(json.TryGetProperty("gapAssessments", out _));
+            Assert.False(json.TryGetProperty("gapAssessmentsHash", out _));
+        }
+
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", v5Run)));
+        Assert.Equal(Documents, await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\" WHERE \"RunId\" = @r", ("r", v5Run)));
+        Assert.Equal(await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\" WHERE \"RunId\" = @r", ("r", v4Run)), await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\" WHERE \"RunId\" = @r", ("r", v5Run)));
+    }
+
+    [Fact]
+    public async Task V5_hierarchy_manifest_differs_from_v4_only_by_the_definition_and_the_plan_config_hash_is_identical()
+    {
+        using var client = await App.LoginAsync();
+        var (v4Run, v4Claim, project) = await ArrangeV5Async(v5: false, existing: client);
+        var model4 = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
+        Assert.True((await RunAsync(v4Claim, model4)).Status == ProcessingRunStatus.Completed, await Message(v4Run));
+        var (v5Run, v5Claim, _) = await ArrangeV5Async(existing: client, existingProject: project);
+        var model5 = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
+        Assert.True((await RunAsync(v5Claim, model5)).Status == ProcessingRunStatus.Completed, await Message(v5Run));
+
+        Assert.NotEmpty(model5.Requests);   // nessun riuso di WorkOutput del v4 per sola uguaglianza di fonti
+        Assert.Equal(V4, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4Run)));
+        Assert.Equal(V5, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5Run)));
+        Assert.Equal(
+            await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4Run)),
+            await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5Run)));   // configHash del piano invariato
+        Assert.NotEqual(
+            await Scalar<string>("SELECT \"Hash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4Run)),
+            await Scalar<string>("SELECT \"Hash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5Run)));          // identità del manifest diversa
+        Assert.Equal(
+            await Scalar<string>("SELECT \"AlgorithmVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4Run)),
+            await Scalar<string>("SELECT \"AlgorithmVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5Run)));
+        var plan4 = JsonNode.Parse(await Scalar<string>("SELECT \"PlanJson\"::text FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4Run)))!.AsObject();
+        var plan5 = JsonNode.Parse(await Scalar<string>("SELECT \"PlanJson\"::text FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5Run)))!.AsObject();
+        Assert.False(plan5.ContainsKey("gapPolicy"));      // nessun plan["gapPolicy"]
+        Assert.Equal(V5, plan5["definition"]!.GetValue<string>());
+        Assert.Equal(V4, plan4["definition"]!.GetValue<string>());
+        Assert.Equal(plan4.Select(p => p.Key).Order(StringComparer.Ordinal), plan5.Select(p => p.Key).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_v4_run_above_context_with_a_gap_still_completes_as_before()
+    {
+        var (run, claim, _) = await ArrangeV5Async(gaps: 1, v5: false);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => Dto(ParseAlias(r.AllText)) };
+
+        var result = await RunAsync(claim, model);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+        Assert.True(model.Requests.Count > 1);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        Assert.Equal(V4, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task A_v5_run_with_gaps_and_a_regime_classification_never_reaches_completed_or_a_hierarchical_call()
+    {
+        var (run, claim, _) = await ArrangeV5Async(gaps: 3);
+        await Execute(
+            """
+            UPDATE "ProcessingRuns" SET "Regime" = 'Ordinary', "InitialRegime" = 'Ordinary', "ClassificationStatus" = 'Classified', "PromotionCount" = 0,
+                   "OrdinaryDeadlineAt" = "RequestedAt" + interval '180 seconds', "EffectiveDeadlineAt" = "RequestedAt" + interval '180 seconds',
+                   "DeadlineAt" = "RequestedAt" + interval '180 seconds', "HardDeadlineAt" = "RequestedAt" + interval '3600 seconds', "CallCount" = 0,
+                   "PolicyHash" = repeat('a', 64)
+            WHERE "Id" = @r
+            """,
+            ("r", run));
+        var model = Tripwire();
+
+        var result = await RunAsync(claim, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
+        Assert.Null(result.ResultRevisionId);
+        Assert.Empty(model.Requests);
+        Assert.StartsWith("hierarchical_gap_assessment_unsupported: ", (await RunRow(run)).Message, StringComparison.Ordinal);
+        Assert.Equal(0, (await RunRow(run)).Calls);
+        await AssertNothingProducedAsync(run);
+    }
+
+    // ---------------------------------------------------------------- confine: payload misurato con prompt document-analysis-v4 e schema alias-2
+
+    private const int BoundaryOutput = 1500;
+    private const int BoundaryMargin = 20;
+
+    /// <summary>
+    /// Misura REALE del payload v5 (istruzioni document-analysis-v4, schema alias-2, messaggio a soli alias): un run con un Gap e un budget volutamente
+    /// minuscolo fallisce subito, e il fail-fast riporta i token misurati dal preflight del server (nessuna stima del test).
+    /// </summary>
+    private async Task<int> ProbeV5TokensAsync(HttpClient client, Guid project)
+    {
+        var run = await StartV4Async(client, project);
+        await PinToV5Async(run);
+        var model = Tripwire();
+        var result = await RunAsync(await ClaimAsync(run), model, contextWindow: BoundaryOutput + BoundaryMargin + 80);
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
+        Assert.Empty(model.Requests);
+        var message = (await RunRow(run)).Message;
+        Assert.StartsWith("hierarchical_gap_assessment_unsupported: ", message, StringComparison.Ordinal);
+        return int.Parse(Regex.Match(message, @"(\d+) token").Groups[1].Value);
+    }
+
+    private static int WindowForBudget(int budget) => budget + BoundaryOutput + BoundaryMargin;
+
+    private async Task<Guid> CorpusAsync(HttpClient client, int gaps)
+    {
+        var project = await NewProject(client);
+        for (var n = 1; n <= 2; n++)
+        {
+            await NewDocument(client, project, $"doc{n}", Statement(n, 40), n == 1 ? "aaa" : "mmm2", kind: n <= gaps ? EvidenceKind.Gap : EvidenceKind.Requirement);
+        }
+
+        return project;
+    }
+
+    [Theory]
+    [InlineData(0, true)]    // appena dentro: esattamente il budget => single-call v5
+    [InlineData(-1, false)]  // appena oltre: un token in meno di budget => non entra
+    public async Task V5_boundary_with_a_gap_is_single_call_just_inside_and_fail_fast_just_beyond_the_measured_threshold(int delta, bool singleCall)
+    {
+        using var client = await App.LoginAsync();
+        var project = await CorpusAsync(client, gaps: 1);
+        var tokens = await ProbeV5TokensAsync(client, project);
+        var run = await StartV4Async(client, project);
+        await PinToV5Async(run);
+        var claim = await ClaimAsync(run);
+        var model = singleCall ? new DocumentChatWorkflowTests.FakeChatModel { Responder = r => AliasModelRepliesV5.Reply(r.AllText) } : Tripwire();
+
+        var result = await RunAsync(claim, model, contextWindow: WindowForBudget(tokens + delta));   // budget di input = token misurati + delta
+
+        if (singleCall)
+        {
+            Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+            var request = Assert.Single(model.Requests);
+            Assert.Equal(DocumentAnalysisWorkflow.InstructionsV4.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));   // misurato con il prompt document-analysis-v4
+            Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+            Assert.Equal(1, (await RunRow(run)).Calls);
+        }
+        else
+        {
+            Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
+            Assert.Empty(model.Requests);
+            var message = (await RunRow(run)).Message;
+            Assert.StartsWith("hierarchical_gap_assessment_unsupported: ", message, StringComparison.Ordinal);
+            Assert.Contains($"{tokens} token", message);
+            await AssertNothingProducedAsync(run);
+        }
+    }
+
+    [Theory]
+    [InlineData(0, true)]    // appena dentro: single-call v5 con lista gapAssessments vuota
+    [InlineData(-1, false)]  // appena oltre: gerarchia equivalente alla v4 (mai troncamento né fallback silenzioso a v4)
+    public async Task V5_boundary_without_a_gap_is_single_call_just_inside_and_the_v4_equivalent_hierarchy_just_beyond_the_measured_threshold(int delta, bool singleCall)
+    {
+        using var client = await App.LoginAsync();
+        var tokens = await ProbeV5TokensAsync(client, await CorpusAsync(client, gaps: 1));   // gemello con un Gap: stesso numero di parole (tipo=Gap / tipo=Requirement)
+        var project = await CorpusAsync(client, gaps: 0);
+        var run = await StartV4Async(client, project);
+        await PinToV5Async(run);
+        var claim = await ClaimAsync(run);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => r.AllText.Contains("Tipo di batch:", StringComparison.Ordinal) ? Dto(ParseAlias(r.AllText)) : AliasModelRepliesV5.Reply(r.AllText) };
+
+        var result = await RunAsync(claim, model, contextWindow: WindowForBudget(tokens + delta));
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, "Failed: " + await Message(run));
+        if (singleCall)
+        {
+            Assert.Single(model.Requests);
+            Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+            var payload = JsonNode.Parse(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)))!.AsObject();
+            Assert.Empty(payload["gapAssessments"]!.AsArray());
+        }
+        else
+        {
+            Assert.True(model.Requests.Count > 1);
+            Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'document-analysis-alias-2'", ("r", run)));
+            Assert.Equal(model.Requests.Count, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'reconcile-alias-1'", ("r", run)));
+            Assert.Equal(V5, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+        }
+    }
+
+    private async Task<List<string>> BatchShape(Guid run)
+    {
+        var count = await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r", ("r", run));
+        var result = new List<string>();
+        for (var i = 0; i < count; i++)
+        {
+            result.Add(await Scalar<string>(
+                "SELECT \"InputHash\" || '|' || \"Stage\" || '|' || coalesce(\"View\",'') || '|' || coalesce(\"Level\"::text,'') || '|' || \"Ordinal\" || '|' || \"SchemaVersion\" || '|' || \"PromptVersion\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r ORDER BY \"Ordinal\", \"Stage\", \"BatchId\" LIMIT 1 OFFSET " + i,
+                ("r", run)));
+        }
+
+        return result;
+    }
+
     // ================================================================ supporto
 
     /// <summary>Prompt `document-reconcile-v3`: risorsa incorporata nell'assembly dell'app (le istruzioni di sistema che il modello riceve nel percorso alias).</summary>

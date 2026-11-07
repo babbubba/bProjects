@@ -162,11 +162,11 @@ public abstract class ReconcileRig : ArchiveTestBase
         return await DocumentAnalysisSources.LoadAsync(db, claim.RunId, Ct);
     }
 
-    internal async Task<AnalysisRunResult> RunAsync(AnalysisRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model, DocumentOptions? documentOptions = null)
+    internal async Task<AnalysisRunResult> RunAsync(AnalysisRunClaim claim, DocumentChatWorkflowTests.FakeChatModel model, DocumentOptions? documentOptions = null, int? contextWindow = null)
     {
         var options = new AiOptions
         {
-            Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = DocumentChatWorkflowTests.FakeChatModel.Window,
+            Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = contextWindow ?? DocumentChatWorkflowTests.FakeChatModel.Window,
             MaxOutputTokens = 1500, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60,
         };
         using var client = new InternalModelClient(options, model);

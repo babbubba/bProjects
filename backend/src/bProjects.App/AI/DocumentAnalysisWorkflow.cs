@@ -334,8 +334,15 @@ public sealed class DocumentAnalysisWorkflow(
 
     // v5 (T136, contracts/ai-workflow.md §13.1): percorso a chiamata singola con valutazione dei Gap (prompt document-analysis-v4, schema document-analysis-alias-2, contract
     // alias-2, algoritmo analysis-single-v3, validazione document-analysis-validation-v3). La definizione esiste ed è riconosciuta da ContractOf, ma NON è instradata per nuove
-    // richieste né congelata da SourceSnapshotStore: l'attivazione (routing, freeze, gerarchia v5) è T141. Oltre una chiamata la v5 fallisce finché non esiste la gerarchia (T138).
+    // richieste né congelata da SourceSnapshotStore: l'attivazione (routing e freeze) è T141. Oltre una chiamata (T143, decisione C + D, §13.6): con almeno un Gap fail-fast
+    // senza alcuna invocazione del modello, senza Gap la gerarchia v4 invariata con la sola definizione v5 nel manifest.
     public const string DefinitionVersionV5 = "project-analysis-documents-v5";
+
+    /// <summary>
+    /// Chiave di freeze <c>reconcileGapPolicy</c> (T143, AI §13.6): marcatore di identità del run che dichiara che la v5 non supporta la valutazione Gap gerarchica.
+    /// Vive solo in <c>ProcessingRun.PromptVersions</c> e in <see cref="ContractOf"/>: nessun effetto sul calcolo, né sul manifest né sul <c>configHash</c> del piano.
+    /// </summary>
+    public const string ReconcileGapPolicyV1 = "hierarchical-gap-incomplete-1";
     public const string PromptVersionV4 = "document-analysis-v4";
     public const string AlgorithmVersionV5 = AnalysisAliasComposer.AlgorithmVersionV3;
     public const string SchemaNameV5 = "document_analysis_alias_2";
@@ -373,22 +380,25 @@ public sealed class DocumentAnalysisWorkflow(
             return 3;
         }
 
-        // v5 (T136): ogni versione del single-call con valutazione dei Gap deve coincidere; la parte gerarchica v5 (document-reconcile-v4, reconcile-alias-2) si aggiunge con T138.
+        // v5 (T136 + T143): ogni versione del single-call con valutazione dei Gap deve coincidere E ogni versione della gerarchia v4 più la policy Gap temporanea (C + D, §13.6).
+        // Chiavi gerarchiche mancanti o diverse (es. document-reconcile-v4, reconcile-alias-2, global-reconcile-v2 della futura gerarchia nominale) ⇒ workflow_incompatible, mai reinterpretate.
         if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && run.PromptVersionMatches("analysis", PromptVersionV4)
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
-            && run.PromptVersionMatches("validation", ValidationVersionV5))
+            && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run)
+            && run.PromptVersionMatches("reconcileGapPolicy", ReconcileGapPolicyV1))
         {
             return 5;
         }
 
         // v4: le versioni del percorso alias più quelle della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch).
-        return run.WorkflowDefinitionVersion == DefinitionVersionV4 && alias
-            && run.PromptVersionMatches("reconcile", ReconcileAliasContracts.PromptVersion) && run.PromptVersionMatches("reconcileAiSchema", ReconcileAliasContracts.SchemaVersion)
-            && run.PromptVersionMatches("reconcileAlgorithm", DocumentReconcilePlan.AlgorithmVersion) && run.PromptVersionMatches("reconcileCatalog", ReconcileAliasContracts.CatalogVersion)
-            ? 4
-            : null;
+        return run.WorkflowDefinitionVersion == DefinitionVersionV4 && alias && HierarchyMatches(run) ? 4 : null;
     }
+
+    /// <summary>Versioni della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch): comuni a v4 e v5.</summary>
+    private static bool HierarchyMatches(ProcessingRun run) =>
+        run.PromptVersionMatches("reconcile", ReconcileAliasContracts.PromptVersion) && run.PromptVersionMatches("reconcileAiSchema", ReconcileAliasContracts.SchemaVersion)
+        && run.PromptVersionMatches("reconcileAlgorithm", DocumentReconcilePlan.AlgorithmVersion) && run.PromptVersionMatches("reconcileCatalog", ReconcileAliasContracts.CatalogVersion);
 
     public static string SessionId(Guid runId) => $"analysis-{runId:N}";
 
@@ -509,7 +519,7 @@ public sealed class DocumentAnalysisWorkflow(
         }
     }
 
-    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, DocumentLimits frozenLimits, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null)
+    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, DocumentLimits frozenLimits, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null, string definition = DefinitionVersionV4)
     {
         var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Analysis, ct);
         var facts = await DocumentAnalysisSources.LoadDirectoryFactsAsync(db, claim.RunId, ct);
@@ -521,7 +531,7 @@ public sealed class DocumentAnalysisWorkflow(
         // v4 (T131): adattatore alias e tetto di chiamate dallo snapshot dei limiti del run (frozenLimits); v2 conserva il tetto di chiamate storico (opzioni correnti),
         // ma i tetti di livelli, candidati e byte derivati sono sempre quelli dello snapshot.
         var alias = aliasCatalog is null ? null : new ReconcileAliasMode(
-            aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), DefinitionVersionV4);
+            aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), definition);
         var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias);
         var maxCalls = alias is null ? documents.Value.MaxAiCallsPerRun : frozenLimits.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
@@ -544,7 +554,8 @@ public sealed class DocumentAnalysisWorkflow(
     /// Grafo v3/v4 (alias): stesso grafo fisso T043 e stesso port T044 della v2, con messaggio a soli alias, schema del DTO <c>document-analysis-alias-1</c>
     /// e piano che compone il canonico sul server. Il catalogo si costruisce dallo snapshot congelato del run (mai dalla selezione corrente); una fonte
     /// non verificabile è <c>source_snapshot_invalid</c> prima di ogni chiamata. Se il payload non entra in una chiamata: v3 fallisce come sempre (storico), v4 passa
-    /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata.
+    /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata; v5 (T143, §13.6): con almeno un Gap fail-fast senza chiamate (<c>document_limit_exceeded</c>,
+    /// motivo <c>hierarchical_gap_assessment_unsupported</c>), senza Gap gerarchia come v4 con la definizione v5.
     /// </summary>
     private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, CancellationToken ct)
     {
@@ -572,11 +583,29 @@ public sealed class DocumentAnalysisWorkflow(
                 return;
             }
 
+            if (gaps)
+            {
+                // v5 (T143, decisione C + D, AI §13.6). Con almeno un Gap la valutazione gerarchica non è supportata: fail-fast PRIMA di piano, port e riserva di chiamate
+                // (zero invocazioni LLM, nessun WorkOutput/batch/checkpoint, CallCount invariato), deterministico su snapshot congelato e misura.
+                var gapCount = catalog.Data.Evidence.Count(e => e.Kind == EvidenceKind.Gap);
+                if (gapCount > 0)
+                {
+                    throw new DocumentWorkException(
+                        DocumentWorkException.CallLimitExceeded,
+                        $"{DocumentWorkException.HierarchicalGapAssessmentUnsupported}: le fonti selezionate ({measure.Tokens} token, qualità della misura: {measure.Quality}) superano il budget di input "
+                        + $"dell'analisi a singola chiamata ({measure.InputBudgetTokens} token) e contengono {gapCount} evidenze di tipo Gap: la valutazione dei Gap oltre il contesto non è ancora supportata "
+                        + "e nessuna elaborazione è stata eseguita (nessuna chiamata al modello). Riduci la selezione delle fonti e riprova.");
+                }
+
+                // Senza Gap: gerarchia come v4 (stesso motore, prompt, DTO reconcile-alias-1 e algoritmo), con la sola definizione v5 nel manifest. Il catalogo del batch ha identità alias-1
+                // come in v4 (il DTO è reconcile-alias-1): distinto da quello alias-2 usato per misurare il single-call.
+                await RunReconcileGraphAsync(db, claim, input, limits, ct, AnalysisAliasCatalog.Build(input, SchemaVersionV3), DefinitionVersionV5);
+                return;
+            }
+
             throw new DocumentWorkException(
                 DocumentWorkException.CallLimitExceeded,
-                gaps
-                    ? $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione gerarchica v5 non è ancora disponibile (T138)."
-                    : $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
+                $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
         }
 
         using var scope = scopes.CreateScope();

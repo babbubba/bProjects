@@ -26,6 +26,12 @@ public class DocumentWorkException(string code, string message) : Exception(mess
     /// <summary>Il payload effettivo del retry informato (T137, AI §13.3) supera il budget di input: nessun invio né taglio; porta la sola diagnostica di misura.</summary>
     public const string ContextBudgetExceeded = "context_budget_exceeded";
 
+    /// <summary>
+    /// Motivo tipizzato (prefisso stabile di <c>ErrorMessage</c>, mai un codice a sé) del fail-fast v5 oltre contesto con almeno un Gap (T143, AI §13.6):
+    /// la valutazione Gap gerarchica non è supportata e nessuna elaborazione è stata eseguita. L'<c>ErrorCode</c> resta <see cref="CallLimitExceeded"/>.
+    /// </summary>
+    public const string HierarchicalGapAssessmentUnsupported = "hierarchical_gap_assessment_unsupported";
+
     /// <summary>Fonte originale non verificabile alla costruzione del catalogo alias (range, citazione, campi di provenienza): permanente (AI §7.9).</summary>
     public const string SourceSnapshotInvalid = "source_snapshot_invalid";
 

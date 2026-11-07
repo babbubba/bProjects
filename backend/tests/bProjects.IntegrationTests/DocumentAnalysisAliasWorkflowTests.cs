@@ -616,7 +616,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 
     // ================================================================ v5: valutazione dei Gap (T136)
 
-    private const string V5Prompts = """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3"}""";
+    private const string V5Prompts = """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
 
     /// <summary>La v5 NON è instradata per le nuove richieste (T141): il test la ottiene riscrivendo la definizione congelata, come per v2.</summary>
     private async Task PinToV5Async(Guid run) => await Execute(

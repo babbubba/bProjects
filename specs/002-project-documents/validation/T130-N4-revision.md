@@ -79,3 +79,31 @@ Implementato in `AI/DocumentBatchPort.cs` (`IInformedRetryPlan`, misura del payl
 Prove (`DocumentAnalysisGuidedRetryTests.cs`, filtro `*V5_*`): rosso comportamentale prima del codice (19 su 50 falliti: nessun retry v5 inviato), poi 51/51 PASS con PostgreSQL + MAF reali e modello finto, nessun DGX. Coperti: protocollo positivo, delimitatori ostili, al limite/oltre il limite di un token, misura non disponibile, errori misti esclusi, secondo errore definitivo senza terzo invio, deadline, tetto chiamate, crash prima/dopo marker, riserva, invio, commit di output e revisione, concorrenza, replay senza inferenza. Il modello finto non dimostra la qualità semantica reale.
 
 Unica modifica a un'asserzione T136 (`A_v5_run_with_a_gap_that_has_no_record...`): `Assert.Single(model.Requests)` diventa `Equal(2, ...)`, perché il commento originale la vincolava a «prima di T137»; il modello finto ripete l'output incompleto e l'esito (coverage_incomplete, nessuna revisione) è invariato.
+
+## T143 — sicurezza del percorso oltre contesto v5, decisione C + D (aggiunto 2026-11-07)
+
+Implementato in `AI/DocumentAnalysisWorkflow.cs` (`RunAliasGraphAsync`, `RunReconcileGraphAsync`, `ContractOf`, costante `ReconcileGapPolicyV1`) e `AI/DocumentWorkStore.cs` (costante `DocumentWorkException.HierarchicalGapAssessmentUnsupported`). Non toccati: Pack, `DocumentReconcilePlan`, `ReconciliationCompletion`, `DocumentReconcileAssembly`, `ReconcileAlias*`, T135/T136/T137.
+
+**Prima (rosso comportamentale, `diagnostics-local/t143-red.log`)**: un v5 oltre contesto falliva con `document_limit_exceeded` e il solo messaggio «… la riconciliazione gerarchica v5 non è ancora disponibile (T138)», senza distinguere Gap/non Gap né motivo tipizzato; un v5 senza Gap non entrava mai nella gerarchia; `ContractOf` accettava un v5 con le sole chiavi single-call. 18 test su 74 falliti (fail-fast Gap, misura e confine, v5 senza Gap = v4, manifest/configHash, `workflow_incompatible` per chiavi gerarchiche/policy mancanti o diverse).
+
+**Dopo**: `ContractOf` restituisce 5 solo con tutte le chiavi single-call v5 **e** `reconcile`/`reconcileAiSchema`/`reconcileAlgorithm`/`reconcileCatalog` della gerarchia v4 **e** `reconcileGapPolicy` = `hierarchical-gap-incomplete-1`. Con `!measure.Fits` e almeno un Gap nel catalogo congelato il run termina `Failed` (`document_limit_exceeded`, `ErrorMessage` che inizia con `hierarchical_gap_assessment_unsupported: ` e riporta token misurati, qualità della misura, budget di input e numero di Gap) prima di piano, port e `RunCallReservation`. Senza Gap entra nella gerarchia v4 con la definizione v5 nel manifest e un secondo catalogo con identità `alias-1`.
+
+Prove (PostgreSQL + MAF reali, modello FINTO, nessun DGX, nessun MafReal):
+
+| Verifica (tasks.md T143) | Test |
+|---|---|
+| 1. Gap oltre contesto: zero invii, nessun WorkOutput/batch/manifest/checkpoint/revisione, `CallCount` 0, motivo tipizzato in testa | `V5_above_context_with_a_gap_fails_fast_...`, `A_v5_run_with_gaps_and_a_regime_classification_...` |
+| 2. Takeover, replay, run già Failed, crash fra misura e `FailAsync` (trigger di test) | `V5_fail_fast_is_deterministic_on_takeover_replay_and_a_crash_...` |
+| 3. Senza Gap: stesse richieste, `inputHash`, batch, completezza e chiamate della v4 equivalente | `V5_above_context_without_a_gap_runs_the_v4_equivalent_hierarchy_...` |
+| 4. Manifest/identità diversi, `configHash` del piano identico, niente `plan["gapPolicy"]`, nessun riuso di WorkOutput v4 | `V5_hierarchy_manifest_differs_from_v4_only_by_the_definition_...` |
+| 5. `ContractOf`: chiavi gerarchiche mancanti, `document-reconcile-v4`/`reconcile-alias-2`/`global-reconcile-v2`, policy diversa ⇒ `workflow_incompatible` | `A_v5_run_without_the_full_hierarchical_versions_...` (DocumentAnalysisWorkflowTests), `A_v5_analysis_with_incomplete_...` (routing) |
+| 6. v2/v3/v4 e single-call v5 invariati, v4 oltre contesto con Gap ancora Completed | `A_v4_run_above_context_with_a_gap_still_completes_as_before` + regressione T136/T137 |
+| 7. Confine con prompt `document-analysis-v4` e schema `alias-2` misurati (la misura è quella riportata dal fail-fast): budget = token ⇒ single-call; token − 1 ⇒ fail-fast con Gap, gerarchia senza Gap | `V5_boundary_with_a_gap_...`, `V5_boundary_without_a_gap_...` |
+| 8. Prefisso in testa e messaggio ≤ 1000 caratteri con 8 Gap su 8 evidenze | `V5_fail_fast_keeps_the_typed_reason_first_...` |
+| 9. Nessun percorso porta un v5 con Gap a Completed o a una chiamata gerarchica | modello «tripwire» (lancia se invocato) in tutti i casi Gap |
+
+Fixture: `V5Prompts` in `DocumentAnalysisAliasWorkflowTests.cs` riceve le chiavi gerarchiche v4 e `reconcileGapPolicy` (nessuna asserzione T136 cambia). `ReconcileRig.RunAsync` accetta un `contextWindow` opzionale per i test di confine.
+
+Esiti completi: vedi la riga di chiusura sotto (suite non MafReal).
+
+Esito T143: filtro mirato 74/74 PASS dopo il codice (18 rossi prima); suite completa non MafReal con PostgreSQL reale e modello finto: 3222 totali, 0 falliti, 3196 superati, 26 ignorati (opt-in DGX/tracce assenti: non eseguiti, non superati). DGX, MafReal e browser NOT RUN.
