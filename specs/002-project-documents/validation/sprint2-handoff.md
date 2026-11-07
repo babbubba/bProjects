@@ -421,3 +421,6 @@ Decisione dell'autore: retry estrazione, corpus/gold/validatori invariati. Diagn
 
 ## Sessione 2026-11-07 (seguito 3) — T082 terza prova: FAILED per troncamento (finish=length)
 Dopo T134 (569bc42) una sola prova T082 su `Qwen3.6-35B-Smart`: l'errore `Other` non si ripresenta, ma una unità di estrazione supera il tetto di output (16384 token, 275 s, `work_output_invalid` troncato, non ritentabile per contratto). Dettagli in `validation/I5-single-real.md`. Stop come da mandato; T083 non eseguito; T082/T083 aperti; I5 NON COMPLETATA. Da decidere: causa del troncamento (contenuto pertinente numeroso vs degenerazione) — richiede visibilità del contenuto dell'output (conservare il DB/output della chiamata in caso di errore nel test) prima di qualunque intervento.
+
+## Sessione 2026-11-07 (seguito 4) — strumentazione diagnostica e quarta prova T082
+Commit d85a205 (cattura diagnostica nell'harness dei test, nessuna modifica di produzione). Quarta prova T082: troncamento riprodotto e correlato al batch `e8c353f2…` (OwnedTokens 1296, previsto 10368, generati ≥16384, 59 evidenze di cui 58 `Other` senza motivazione su frasi di riempitivo). Causa più probabile e interventi minimi (a/b/c) in `validation/I5-single-real.md`: richiedono una decisione dell'autore (prompt v3 vs OutputExpansion vs retry per finish=length). T082/T083 aperti; I5 NON COMPLETATA.
