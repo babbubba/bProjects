@@ -126,6 +126,11 @@ export class ProjectDocumentsComponent implements OnDestroy {
   /** Nuovo job collegato creato dal retry, per versione: resta visibile dopo il refresh. */
   protected readonly retryLinks = signal<Record<string, ParseRetryView>>({});
   protected readonly retryError = signal<{ versionId: string; message: string } | null>(null);
+  /** Promozione/rielaborazione in corso (una per volta: il doppio click non invia due richieste) e relativi errori. */
+  protected readonly promoting = signal<string | null>(null);
+  protected readonly promoteError = signal<{ versionId: string; message: string } | null>(null);
+  protected readonly reprocessing = signal<string | null>(null);
+  protected readonly reprocessError = signal<{ versionId: string; message: string } | null>(null);
   /** true se l'aggiornamento automatico si è fermato con documenti ancora in lavorazione. */
   protected readonly pollStopped = signal(false);
 
@@ -136,6 +141,8 @@ export class ProjectDocumentsComponent implements OnDestroy {
   private pending = new Map<string, PendingUpload>();
   /** Idempotency-Key del retry per job: conservata finché l'esito non è certo, riusata nei replay. */
   private retryKeys = new Map<string, string>();
+  /** Idempotency-Key della rielaborazione per versione: conservata finché l'esito non è certo. */
+  private reprocessKeys = new Map<string, string>();
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private pollCount = 0;
 
@@ -148,6 +155,9 @@ export class ProjectDocumentsComponent implements OnDestroy {
         this.detail.set(null);
         this.pending.clear();
         this.retryKeys.clear();
+        this.reprocessKeys.clear();
+        this.promoteError.set(null);
+        this.reprocessError.set(null);
         this.preparations.set({});
         this.retryLinks.set({});
         this.retryError.set(null);
@@ -273,8 +283,14 @@ export class ProjectDocumentsComponent implements OnDestroy {
   // ---------------------------------------------------------------- aggiornamento automatico (solo lettura)
 
   private hasInProgress(): boolean {
-    return this.documents().some(
-      (d) => !!d.latestVersion && inProgress.has(d.latestVersion.processingStatus),
+    return (
+      this.documents().some(
+        (d) => !!d.latestVersion && inProgress.has(d.latestVersion.processingStatus),
+      ) ||
+      // Una candidata in lavorazione non cambia lo stato della fonte corrente: si osserva dal dettaglio aperto (solo GET).
+      !!this.detail()?.versions.some((v) =>
+        (v.candidatePreparations ?? []).some((c) => inProgress.has(c.processingStatus)),
+      )
     );
   }
 
@@ -358,6 +374,7 @@ export class ProjectDocumentsComponent implements OnDestroy {
       const detail = await this.api.get(this.projectId(), documentId);
       if (this.expanded() !== documentId) return;
       this.detail.set(detail);
+      this.schedulePoll();
       await this.loadTerminalPreparations(detail);
     } catch (e) {
       this.detailError.set(documentFailure(e).message);
@@ -600,6 +617,107 @@ export class ProjectDocumentsComponent implements OnDestroy {
   /** Preparazioni candidate (non correnti): distinte dal bundle corrente, con il loro stato reale. */
   protected candidates(version: DocumentVersionView): CandidatePreparation[] {
     return version.candidatePreparations ?? [];
+  }
+
+  /** Una candidata Ready e promovibile non è ancora la fonte: lo dichiara il server con canPromote. */
+  protected canPromote(c: CandidatePreparation): boolean {
+    return c.canPromote && c.processingStatus === 'Ready';
+  }
+
+  /** Versione pronta con bundle corrente ma non quella in uso come fonte (altra versione fissata o più recente). */
+  protected isNotInUse(version: DocumentVersionView): boolean {
+    return this.isReady(version) && version.applicationStatus === 'NotApplicable';
+  }
+
+  /** Rielaborazione offerta solo per una fonte pronta e senza altre preparazioni in lavorazione. */
+  protected canReprocess(version: DocumentVersionView): boolean {
+    return (
+      version.processingStatus === 'Ready' &&
+      !this.candidates(version).some((c) => inProgress.has(c.processingStatus))
+    );
+  }
+
+  protected promoteErrorFor(version: DocumentVersionView): string {
+    const e = this.promoteError();
+    return e && e.versionId === version.id ? e.message : '';
+  }
+
+  protected reprocessErrorFor(version: DocumentVersionView): string {
+    const e = this.reprocessError();
+    return e && e.versionId === version.id ? e.message : '';
+  }
+
+  /** Promozione CAS: l'unica via per cambiare il bundle corrente; mai da GET, polling o riapertura. */
+  protected async promote(
+    documentId: string,
+    version: DocumentVersionView,
+    c: CandidatePreparation,
+  ): Promise<void> {
+    if (this.promoting() !== null) return;
+    this.promoting.set(version.id);
+    this.promoteError.set(null);
+    this.notice.set('');
+    try {
+      const result = await this.api.promoteBundle(
+        this.projectId(),
+        documentId,
+        version.version,
+        c.generation,
+        version.bundleRevision,
+      );
+      this.notice.set(
+        `La candidata (generazione ${c.generation}) della versione ${version.version} è ora la fonte corrente (revisione ${result.bundleRevision}).`,
+      );
+      this.pollCount = 0;
+      await this.reloadList();
+      this.focusSoon('[data-focus="notice"]');
+    } catch (e) {
+      const failure = documentFailure(e);
+      const rev = failure.currentRevision !== null ? ` (revisione ${failure.currentRevision})` : '';
+      this.promoteError.set({ versionId: version.id, message: failure.message + rev });
+      this.focusSoon('[data-focus="promote-error"]');
+      // Il conflitto indica che il bundle è cambiato: si rilegge (solo GET), senza ripetere la promozione.
+      if (failure.kind === 'promotion_conflict' || failure.kind === 'not_promotable') {
+        await this.reloadList();
+      }
+    } finally {
+      this.promoting.set(null);
+    }
+  }
+
+  protected async reprocess(documentId: string, version: DocumentVersionView): Promise<void> {
+    if (this.reprocessing() !== null) return;
+    let key = this.reprocessKeys.get(version.id);
+    if (!key) {
+      key = newIdempotencyKey();
+      this.reprocessKeys.set(version.id, key);
+    }
+    this.reprocessing.set(version.id);
+    this.reprocessError.set(null);
+    this.notice.set('');
+    try {
+      const result = await this.api.reprocess(this.projectId(), documentId, version.version, key);
+      this.reprocessKeys.delete(version.id);
+      this.notice.set(
+        `Rielaborazione avviata per la versione ${version.version}: nasce una candidata (generazione ${result.generation}). ` +
+          `La versione corrente resta quella in uso finché non la promuovi.`,
+      );
+      this.pollCount = 0;
+      await this.reloadList();
+      this.focusSoon('[data-focus="notice"]');
+    } catch (e) {
+      const failure = documentFailure(e);
+      if (!failure.retrySameKey) this.reprocessKeys.delete(version.id);
+      const message =
+        failure.kind === 'network' || failure.kind === 'unavailable'
+          ? 'Esito della rielaborazione incerto: premi di nuovo «Rielabora», la richiesta viene riconciliata senza creare una seconda candidata.'
+          : failure.message;
+      this.reprocessError.set({ versionId: version.id, message });
+      this.focusSoon('[data-focus="reprocess-error"]');
+      if (failure.kind === 'job_active' || failure.kind === 'conflict') await this.reloadList();
+    } finally {
+      this.reprocessing.set(null);
+    }
   }
 
   /** Il contratto ammette di fissare anche una versione non pronta: resta indisponibile (e blocca Analizza) finché non lo è. */

@@ -257,4 +257,62 @@ describe('DocumentsApiService', () => {
     expect(f.kind).toBe(kind);
     expect(f.retrySameKey).toBe(false);
   });
+
+  it('reprocess: POST preparations con Idempotency-Key e senza corpo (202)', async () => {
+    const call = api.reprocess(P, 'd-1', 2, KEY);
+    const r = http.expectOne(`${BASE}/documents/d-1/versions/2/preparations`);
+    expect(r.request.method).toBe('POST');
+    expect(r.request.headers.get('Idempotency-Key')).toBe(KEY);
+    expect(r.request.body).toBeNull();
+    r.flush(
+      {
+        jobId: 'j-9',
+        preparationId: 'g-9',
+        generation: 3,
+        retryOfJobId: 'j-1',
+        retryOfPreparationId: 'g-1',
+        status: 'Queued',
+        requestedAt: '2030-01-01T11:00:00Z',
+        deadlineAt: '2030-01-01T12:00:00Z',
+      },
+      { status: 202, statusText: 'Accepted' },
+    );
+    expect((await call).generation).toBe(3);
+  });
+
+  it('promoteBundle: POST promote con expectedRevision e reason', async () => {
+    const call = api.promoteBundle(P, 'd-1', 2, 3, 3, 'ok');
+    const r = http.expectOne(`${BASE}/documents/d-1/versions/2/preparations/3/promote`);
+    expect(r.request.method).toBe('POST');
+    expect(r.request.body).toEqual({ expectedRevision: 3, reason: 'ok' });
+    r.flush({
+      documentId: 'd-1',
+      documentVersionId: 'v-2',
+      bundleRevision: 4,
+      currentPreparationId: 'g-3',
+      currentEvidenceVersionId: 'ev-3',
+      generation: 3,
+      promotion: null,
+    });
+    expect((await call).bundleRevision).toBe(4);
+  });
+
+  it.each(['bundle_revision_conflict', 'promotion_conflict'])(
+    'promozione: 409 %s è promotion_conflict con la revisione corrente',
+    (code) => {
+      const f = documentFailure(
+        new HttpErrorResponse({ status: 409, error: { code, currentRevision: 7 } }),
+      );
+      expect(f.kind).toBe('promotion_conflict');
+      expect(f.currentRevision).toBe(7);
+      expect(f.retrySameKey).toBe(false);
+    },
+  );
+
+  it('promozione: 422 preparation_not_promotable è not_promotable', () => {
+    const f = documentFailure(
+      new HttpErrorResponse({ status: 422, error: { code: 'preparation_not_promotable' } }),
+    );
+    expect(f.kind).toBe('not_promotable');
+  });
 });

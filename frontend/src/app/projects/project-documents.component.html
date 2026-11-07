@@ -222,6 +222,60 @@
                           Candidata (generazione {{ c.generation }}):
                           {{ processingLabel(c.processingStatus).toLowerCase() }}, non corrente
                         </span>
+                        @if (canPromote(c)) {
+                          <span class="small text-secondary" data-testid="docs-candidate-note">
+                            Pronta ma non è usata come fonte finché non la promuovi a corrente.
+                          </span>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-primary"
+                            data-testid="docs-promote"
+                            [disabled]="promoting() !== null"
+                            [attr.aria-busy]="promoting() === v.id"
+                            (click)="promote(doc.documentId, v, c)"
+                          >
+                            {{
+                              promoting() === v.id ? 'Promozione in corso…' : 'Promuovi a corrente'
+                            }}
+                          </button>
+                        }
+                      }
+                      @if (promoteErrorFor(v)) {
+                        <span
+                          class="small text-danger"
+                          role="alert"
+                          tabindex="-1"
+                          data-focus="promote-error"
+                          data-testid="docs-promote-error"
+                          >{{ promoteErrorFor(v) }}</span
+                        >
+                      }
+                      @if (isNotInUse(v)) {
+                        <span class="small text-secondary" data-testid="docs-not-in-use">
+                          Pronta, ma non è la versione in uso come fonte.
+                        </span>
+                      }
+                      @if (canReprocess(v)) {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-warning"
+                          data-testid="docs-reprocess"
+                          [disabled]="reprocessing() !== null"
+                          [attr.aria-busy]="reprocessing() === v.id"
+                          (click)="reprocess(doc.documentId, v)"
+                        >
+                          {{ reprocessing() === v.id ? 'Rielaborazione in corso…' : 'Rielabora' }}
+                        </button>
+                      }
+                      @if (reprocessErrorFor(v)) {
+                        <span
+                          class="small text-danger"
+                          role="alert"
+                          tabindex="-1"
+                          data-focus="reprocess-error"
+                          data-testid="docs-reprocess-error"
+                          >{{ reprocessErrorFor(v) }}</span
+                        >
                       }
                       @if (isPinnedTo(doc.documentId, v.id)) {
                         <span class="badge text-bg-info" data-testid="docs-pinned">Fissata</span>

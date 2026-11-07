@@ -363,20 +363,18 @@ describe('ProjectDocumentsComponent', () => {
     await flushLoad();
     q('docs-versions')!.click();
     await settle();
-    http
-      .expectOne(`${BASE}/documents/d-1`)
-      .flush(
-        detail([
-          version({
-            id: 'v-1',
-            version: 1,
-            processingStatus: 'Ready',
-            currentPreparationId: 'prep-1',
-            currentEvidenceVersionId: 'ev-1',
-          }),
-          version({ id: 'v-2', version: 2, processingStatus: 'Queued' }),
-        ]),
-      );
+    http.expectOne(`${BASE}/documents/d-1`).flush(
+      detail([
+        version({
+          id: 'v-1',
+          version: 1,
+          processingStatus: 'Ready',
+          currentPreparationId: 'prep-1',
+          currentEvidenceVersionId: 'ev-1',
+        }),
+        version({ id: 'v-2', version: 2, processingStatus: 'Queued' }),
+      ]),
+    );
     await settle();
 
     const pins = [...el.querySelectorAll<HTMLButtonElement>('[data-testid="docs-pin"]')];
@@ -893,6 +891,238 @@ describe('ProjectDocumentsComponent', () => {
       await wait();
       expect(http.match((r) => r.method !== 'GET').length).toBe(0);
       http.match(() => true);
+    });
+  });
+
+  describe('bundle corrente, candidate e promozione (T101)', () => {
+    const candidate = (over: Record<string, unknown> = {}) => ({
+      preparationId: 'prep-3',
+      generation: 3,
+      processingStatus: 'Ready',
+      evidenceVersionId: 'ev-3',
+      createdAt: '2030-01-02T10:00:00Z',
+      canPromote: true,
+      ...over,
+    });
+    const readyItem = () =>
+      item({
+        latestVersion: {
+          id: 'v-2',
+          version: 2,
+          processingStatus: 'Ready',
+          uploadedAt: '2030-01-01T10:00:00Z',
+        },
+        availability: 'Ready',
+        reason: null,
+        applicableVersionId: 'v-2',
+      });
+    const withBundle = (over: Partial<DocumentVersionView> = {}) =>
+      version({
+        id: 'v-2',
+        version: 2,
+        processingStatus: 'Ready',
+        applicationStatus: 'Applicable',
+        isApplicable: true,
+        currentPreparationId: 'prep-2',
+        currentEvidenceVersionId: 'ev-2',
+        bundleRevision: 2,
+        candidatePreparations: [candidate()],
+        ...over,
+      });
+    const open = async (v: DocumentVersionView) => {
+      await flushLoad([readyItem()]);
+      q('docs-versions')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([v]));
+      await settle();
+    };
+    const PROMOTE = `${BASE}/documents/d-1/versions/2/preparations/3/promote`;
+    const REPREP = `${BASE}/documents/d-1/versions/2/preparations`;
+    const posts = (url: string) => http.match((r) => r.method === 'POST' && r.url === url);
+    const flushReread = async (v: DocumentVersionView) => {
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [readyItem()], nextCursor: null });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([v]));
+      await settle();
+    };
+
+    it('comunica diversamente la fonte corrente e la candidata Ready non ancora promossa', async () => {
+      await open(withBundle());
+      expect(q('docs-version-status')!.textContent!.trim()).toBe('Pronto');
+      const c = q('docs-candidate')!;
+      expect(c.textContent).toContain('Candidata (generazione 3)');
+      expect(c.textContent).toContain('non corrente');
+      expect(q('docs-candidate-note')!.textContent).toContain('non è usata come fonte');
+      expect(q('docs-promote')).not.toBeNull();
+    });
+
+    it('non offre la promozione per una candidata fallita o non promovibile', async () => {
+      await open(
+        withBundle({
+          candidatePreparations: [candidate({ processingStatus: 'Failed', canPromote: false })],
+        }),
+      );
+      expect(q('docs-candidate')).not.toBeNull();
+      expect(q('docs-promote')).toBeNull();
+    });
+
+    it('promuove con expectedRevision del bundle e rilegge lo stato reale', async () => {
+      await open(withBundle());
+      q('docs-promote')!.click();
+      await settle();
+      const [req] = posts(PROMOTE);
+      expect(req.request.body).toEqual({ expectedRevision: 2 });
+      req.flush({
+        documentId: 'd-1',
+        documentVersionId: 'v-2',
+        bundleRevision: 3,
+        currentPreparationId: 'prep-3',
+        currentEvidenceVersionId: 'ev-3',
+        generation: 3,
+        promotion: null,
+      });
+      await settle();
+      await flushReread(withBundle({ bundleRevision: 3, candidatePreparations: [] }));
+      expect(q('docs-notice')!.textContent).toContain('generazione 3');
+      expect(q('docs-candidate')).toBeNull();
+    });
+
+    it('il doppio click sulla promozione invia una sola richiesta', async () => {
+      await open(withBundle());
+      const button = q('docs-promote')!;
+      button.click();
+      button.click();
+      await settle();
+      expect(posts(PROMOTE)).toHaveLength(1);
+    });
+
+    it('409 di conflitto: messaggio esplicito, stato riletto e nessuna ripetizione automatica', async () => {
+      await open(withBundle());
+      q('docs-promote')!.click();
+      await settle();
+      posts(PROMOTE)[0].flush(
+        { code: 'bundle_revision_conflict', currentRevision: 5 },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await settle();
+      await flushReread(withBundle({ bundleRevision: 5, candidatePreparations: [] }));
+      const alert = q('docs-promote-error')!;
+      expect(alert.textContent).toContain('Il bundle corrente è cambiato');
+      expect(alert.textContent).toContain('revisione 5');
+      expect(posts(PROMOTE)).toHaveLength(0);
+    });
+
+    it('422 non promovibile: spiega che la candidata non è completa', async () => {
+      await open(withBundle());
+      q('docs-promote')!.click();
+      await settle();
+      posts(PROMOTE)[0].flush(
+        { code: 'preparation_not_promotable' },
+        { status: 422, statusText: 'Unprocessable' },
+      );
+      await settle();
+      await flushReread(withBundle({ candidatePreparations: [] }));
+      expect(q('docs-promote-error')!.textContent).toContain('non è completa');
+    });
+
+    it('la rielaborazione invia POST con Idempotency-Key e mostra la candidata collegata', async () => {
+      await open(withBundle({ candidatePreparations: [] }));
+      q('docs-reprocess')!.click();
+      await settle();
+      const [req] = posts(REPREP);
+      expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+      req.flush(
+        {
+          jobId: 'j-9',
+          preparationId: 'g-9',
+          generation: 4,
+          retryOfJobId: 'j-1',
+          retryOfPreparationId: 'g-1',
+          status: 'Queued',
+          requestedAt: '2030-01-03T10:00:00Z',
+          deadlineAt: '2030-01-03T11:00:00Z',
+        },
+        { status: 202, statusText: 'Accepted' },
+      );
+      await settle();
+      await flushReread(
+        withBundle({
+          candidatePreparations: [
+            candidate({
+              preparationId: 'g-9',
+              generation: 4,
+              processingStatus: 'Queued',
+              canPromote: false,
+            }),
+          ],
+        }),
+      );
+      expect(q('docs-notice')!.textContent).toContain('candidata');
+      expect(q('docs-notice')!.textContent).toContain('versione corrente resta');
+      expect(q('docs-promote')).toBeNull();
+    });
+
+    it('esito incerto della rielaborazione: stessa chiave nel secondo invio, un solo job', async () => {
+      await open(withBundle({ candidatePreparations: [] }));
+      q('docs-reprocess')!.click();
+      await settle();
+      const first = posts(REPREP)[0];
+      const key = first.request.headers.get('Idempotency-Key');
+      first.error(new ProgressEvent('error'));
+      await settle();
+      expect(q('docs-reprocess-error')!.textContent).toContain('incerto');
+      q('docs-reprocess')!.click();
+      await settle();
+      const second = posts(REPREP)[0];
+      expect(second.request.headers.get('Idempotency-Key')).toBe(key);
+      second.flush({ code: 'preparation_active' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await flushReread(withBundle({ candidatePreparations: [] }));
+      expect(q('docs-reprocess-error')!.textContent).toContain('già una preparazione in corso');
+    });
+
+    it('rielaborazione non offerta mentre la versione è in lavorazione', async () => {
+      await open(withBundle({ processingStatus: 'Parsing', candidatePreparations: [] }));
+      expect(q('docs-reprocess')).toBeNull();
+    });
+
+    it('un refresh o la riapertura rileggono con soli GET, senza comandi automatici', async () => {
+      await open(withBundle());
+      void (fixture.componentInstance as unknown as { refresh(): Promise<void> }).refresh();
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [readyItem()], nextCursor: null });
+      http.expectOne(`${BASE}/source-selection`).flush(selection(), { headers: { ETag: '"1"' } });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([withBundle()]));
+      await settle();
+      expect(http.match((r) => r.method !== 'GET')).toHaveLength(0);
+    });
+
+    it('una candidata in lavorazione tiene attivo il polling in sola lettura anche con la fonte Ready', async () => {
+      pollCfg.intervalMs = 5;
+      await open(
+        withBundle({
+          candidatePreparations: [candidate({ processingStatus: 'Extracting', canPromote: false })],
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 40));
+      const poll = http.match((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+      expect(poll.length).toBeGreaterThan(0);
+      http.match(() => true);
+    });
+
+    it('una versione pronta ma non in uso come fonte è etichettata come tale', async () => {
+      await open(
+        withBundle({
+          applicationStatus: 'NotApplicable',
+          isApplicable: false,
+          candidatePreparations: [],
+        }),
+      );
+      expect(q('docs-not-in-use')!.textContent).toContain('non è la versione in uso');
     });
   });
 

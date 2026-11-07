@@ -147,6 +147,8 @@ export type DocumentFailureKind =
   | 'selection_conflict'
   | 'job_active'
   | 'job_superseded'
+  | 'promotion_conflict'
+  | 'not_promotable'
   | 'conflict'
   | 'too_large'
   | 'unsupported_format'
@@ -213,6 +215,17 @@ export interface ParseRetryView {
   status: string;
   requestedAt: string;
   deadlineAt: string;
+}
+
+/** Esito della promozione (o del replay, 200): puntatori e revisione del bundle corrente sempre insieme. */
+export interface PromotedBundleView {
+  documentId: string;
+  documentVersionId: string;
+  bundleRevision: number;
+  currentPreparationId: string | null;
+  currentEvidenceVersionId: string | null;
+  generation: number;
+  promotion: unknown;
 }
 
 export interface BlockView {
@@ -335,6 +348,18 @@ export function documentFailure(e: unknown): DocumentFailure {
             code,
             'Esiste già una preparazione in corso per questa versione: attendi che termini, non serve ritentare.',
           );
+        case 'bundle_revision_conflict':
+        case 'promotion_conflict':
+          return failure(
+            'promotion_conflict',
+            status,
+            code,
+            'Il bundle corrente è cambiato nel frattempo: la vista è stata riletta, verifica lo stato e ripeti la promozione solo se serve.',
+            {
+              currentRevision:
+                typeof body?.currentRevision === 'number' ? body.currentRevision : null,
+            },
+          );
         case 'job_superseded':
           return failure(
             'job_superseded',
@@ -360,6 +385,14 @@ export function documentFailure(e: unknown): DocumentFailure {
         'Formato non supportato. Sono accettati PDF testuali, DOCX, Markdown e testo semplice.',
       );
     case 422:
+      if (code === 'preparation_not_promotable') {
+        return failure(
+          'not_promotable',
+          status,
+          code,
+          'La preparazione candidata non è completa: non può diventare la fonte corrente.',
+        );
+      }
       return failure(
         'invalid_input',
         status,
@@ -556,6 +589,44 @@ export class DocumentsApiService {
         `${this.base(projectId)}/document-jobs/${enc(jobId)}/retry`,
         null,
         { headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
+    );
+  }
+
+  /**
+   * Rielaborazione candidata della stessa versione (202): non tocca il bundle corrente. `idempotencyKey` va conservata e riusata
+   * dopo un esito incerto; 409 se esiste già una preparazione attiva.
+   */
+  reprocess(
+    projectId: string,
+    documentId: string,
+    version: number | string,
+    idempotencyKey: string,
+  ): Promise<ParseRetryView> {
+    return firstValueFrom(
+      this.http.post<ParseRetryView>(
+        `${this.base(projectId)}/documents/${enc(documentId)}/versions/${enc(String(version))}/preparations`,
+        null,
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
+    );
+  }
+
+  /** Promozione CAS: `expectedRevision` è la `bundleRevision` letta dal client (distinta dall'ETag della selezione). */
+  promoteBundle(
+    projectId: string,
+    documentId: string,
+    version: number | string,
+    generation: number | string,
+    expectedRevision: number,
+    reason?: string,
+  ): Promise<PromotedBundleView> {
+    const body: { expectedRevision: number; reason?: string } = { expectedRevision };
+    if (reason) body.reason = reason;
+    return firstValueFrom(
+      this.http.post<PromotedBundleView>(
+        `${this.preparationUrl(projectId, documentId, version, generation)}/promote`,
+        body,
       ),
     );
   }
