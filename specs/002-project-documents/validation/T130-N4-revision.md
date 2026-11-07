@@ -107,3 +107,9 @@ Fixture: `V5Prompts` in `DocumentAnalysisAliasWorkflowTests.cs` riceve le chiavi
 Esiti completi: vedi la riga di chiusura sotto (suite non MafReal).
 
 Esito T143: filtro mirato 74/74 PASS dopo il codice (18 rossi prima); suite completa non MafReal con PostgreSQL reale e modello finto: 3222 totali, 0 falliti, 3196 superati, 26 ignorati (opt-in DGX/tracce assenti: non eseguiti, non superati). DGX, MafReal e browser NOT RUN.
+
+## T139 — coverage-3 con valutazioni Gap single-call v5 (2026-11-07)
+
+Versione del report scelta dall'origine della revisione AI (`WorkManifest.AlgorithmVersion` + `WorkOutput.SchemaVersion`): `analysis-single-v3` con un solo WorkOutput `document-analysis-alias-2` ⇒ coverage-3; gerarchico `global-reconcile-v1`/`reconcile-alias-1`, storico o senza dati di lavoro ⇒ coverage-2; origini discordanti ⇒ 409 `integrity_conflict`, nessun report. `Find()` per `CheckerVersion` della versione scelta. Valutazioni lette dal WorkOutput committato e verificate (OutputHash, catalogHash, aiOutputHash, gapAssessmentsHash, forma, alias, punti aperti con id `canon-ids-1` nel DTO e nella revisione AI); incoerenza ⇒ 409 `work_output_invalid`. Nessuna tabella/migrazione; AnalysisContent 1.1.0 invariato.
+
+Prove (PostgreSQL reale, nessun modello, nessun DGX/MafReal): `DocumentCoverageCheckerTests` (6 nuovi) e `DocumentCoverageEndpointTests` (11 nuovi/parametrizzati). Rosso comportamentale prima del codice: 18 falliti (coverage-2 restituito per v5, nessun 409 su hash manomesso). Dopo: filtro mirato 38/38; suite non MafReal 3241 totali, 0 falliti, 3215 superati, 26 ignorati (opt-in DGX/tracce assenti). Limite noto: `canonicalHash` del WorkOutput non è ricalcolato dalla proiezione (richiederebbe la ricomposizione dell'input completo). DGX, MafReal, browser NOT RUN.

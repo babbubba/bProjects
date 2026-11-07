@@ -458,14 +458,33 @@ public static class CoverageEndpoints
         AppDbContext db, ProcessingRun run, AnalysisEvidenceSelection selection, AnalysisRevision aiRevision, AnalysisRevision revision, Draft? draft, Guid createdBy, CancellationToken ct)
     {
         var draftId = draft?.Id;
+
+        // La versione si sceglie dal dato discriminante dell'origine della revisione AI (algoritmo del WorkManifest e schema dei WorkOutput), mai dalla sola definizione v5 né dal solo
+        // SchemaVersion di AnalysisContent 1.1.0. Origini discordanti sono un conflitto d'integrità: nessun report e mai un ripiego sul checker più vecchio.
+        CoverageOrigin origin;
+        try
+        {
+            origin = await DocumentCoverageLoader.OriginAsync(db, run.Id, ct);
+        }
+        catch (DocumentWorkException ex)
+        {
+            return EvidenceEndpoints.Problem(StatusCodes.Status409Conflict, ex.Message, ex.Code);
+        }
+
+        var checker = origin.CheckerVersion;
         Task<EvidenceCoverageReport?> Find() => db.EvidenceCoverageReports.AsNoTracking().SingleOrDefaultAsync(r =>
-            r.AnalysisId == run.Id && r.RevisionId == revision.Id && r.DraftId == draftId && r.CheckerVersion == DocumentCoverage.CheckerVersion, ct);
+            r.AnalysisId == run.Id && r.RevisionId == revision.Id && r.DraftId == draftId && r.CheckerVersion == checker, ct);
         if (await Find() is { } existing)
         {
             return Results.Ok(await ToViewAsync(db, existing, ct));
         }
 
         var loaded = await DocumentCoverageLoader.LoadAsync(db, run, selection, aiRevision, revision, draft, ct);
+        if (origin.Output is not null)
+        {
+            return await CreateWithGapsAsync(db, run, revision, aiRevision, draftId, createdBy, loaded, origin.Output, Find, ct);
+        }
+
         var findings = DocumentCoverage.Check(loaded.Input);
         var summary = DocumentCoverage.Summarize(loaded.Input, findings);
         var content = new DocumentCoverageContent(
@@ -500,9 +519,72 @@ public static class CoverageEndpoints
         return Results.Created($"/api/projects/{run.ProjectId}/analyses/{run.Id}/coverage-reports/{report.Id}", await ToViewAsync(db, report, ct));
     }
 
+    /// <summary>coverage-3 (T139): solo revisioni single-call v5. Le valutazioni sono lette dal WorkOutput committato e verificate (hash, forma, riferimenti): un'incoerenza impedisce il report.</summary>
+    private static async Task<IResult> CreateWithGapsAsync(
+        AppDbContext db, ProcessingRun run, AnalysisRevision revision, AnalysisRevision aiRevision, Guid? draftId, Guid createdBy, LoadedDocumentCoverage loaded, WorkOutput output,
+        Func<Task<EvidenceCoverageReport?>> find, CancellationToken ct)
+    {
+        GapAssessmentSet gaps;
+        try
+        {
+            gaps = GapAssessmentProjection.Project(output, loaded.Input);
+        }
+        catch (DocumentWorkException ex)
+        {
+            return EvidenceEndpoints.Problem(StatusCodes.Status409Conflict, ex.Message, ex.Code);
+        }
+
+        var input = loaded.Input with { Gaps = gaps.Records };
+        var findings = DocumentCoverage.Check(input);
+        var summary = DocumentCoverage.SummarizeGaps(input, findings);
+        var content = new DocumentCoverage3Content(
+            DocumentCoverage.CheckerVersionV3, run.Id, aiRevision.Id, revision.Id, draftId, loaded.Hashes, summary, gaps.Hash, gaps.Records, loaded.Preparations, findings,
+            DocumentCoverage.LimitsV3, input.Reconciliation);
+        var report = new EvidenceCoverageReport
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = run.ProjectId,
+            AnalysisId = run.Id,
+            RevisionId = revision.Id,
+            DraftId = draftId,
+            CheckerVersion = DocumentCoverage.CheckerVersionV3,
+            InputHash = DocumentCoverage.InputHash(loaded.Hashes, loaded.Input.Links, gaps.Hash),
+            CreatedBy = createdBy,
+            CreatedAt = (await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").ToListAsync(ct)).Single(),
+            DeterministicErrors = summary.DeterministicErrors,
+            SemanticRisks = summary.SemanticRisks,
+            PmAssessments = summary.PmAssessments,
+            Report = EvidenceJson.Serialize(content),
+        };
+        db.EvidenceCoverageReports.Add(report);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            db.ChangeTracker.Clear();
+            return Results.Ok(await ToViewAsync(db, (await find())!, ct));
+        }
+
+        return Results.Created($"/api/projects/{run.ProjectId}/analyses/{run.Id}/coverage-reports/{report.Id}", await ToViewAsync(db, report, ct));
+    }
+
     private static async Task<object> ToViewAsync(AppDbContext db, EvidenceCoverageReport report, CancellationToken ct)
     {
         var names = await EvidenceEndpoints.UserNames(db, [report.CreatedBy], ct);
+        if (report.CheckerVersion == DocumentCoverage.CheckerVersionV3)
+        {
+            var v3 = EvidenceJson.Deserialize<DocumentCoverage3Content>(report.Report);
+            return new DocumentCoverage3ReportView(
+                report.Id, report.AnalysisId, report.RevisionId, v3.AiRevisionId, report.DraftId, report.CheckerVersion, report.InputHash, report.CreatedAt,
+                names.GetValueOrDefault(report.CreatedBy), new(report.DeterministicErrors, report.SemanticRisks, report.PmAssessments), v3.Summary, v3.Hashes, v3.GapAssessmentsHash,
+                [.. v3.GapAssessments.Select(g => new GapAssessmentView(
+                    g.GapEvidenceId, g.GapEvidenceVersionId, g.SourceSnapshotHash, g.Outcome.ToString(), g.Reason.ToString(), g.Rationale, g.SupportingEvidenceIds, g.OpenItemId,
+                    g.OpenConflictId, g.OriginBatchId))],
+                v3.Preparations, [.. v3.Findings.Select(DocumentCoverageLoader.ToView)], v3.Limits, v3.Reconciliation);
+        }
+
         if (report.CheckerVersion == DocumentCoverage.CheckerVersion)
         {
             var document = EvidenceJson.Deserialize<DocumentCoverageContent>(report.Report);
@@ -538,10 +620,19 @@ public sealed record DocumentCoveragePortion(Guid PortionId, Guid PreparationId,
 
 public sealed record DocumentCoverageRelation(Guid FromEvidenceId, Guid ToEvidenceId, EvidenceRelationType Type);
 
+/// <summary>
+/// Valutazione `gap-assessment-1` di un Gap, risolta dal WorkOutput single-call v5 della revisione AI originaria (002 T139): alias risolti negli id del catalogo congelato,
+/// punto aperto negli id canonici (`canon-ids-1`). Interpretazione AI nello snapshot: non è un supporto di requisito né una conferma del PM, e non viene mai riscritta.
+/// </summary>
+public sealed record GapAssessmentRecord(
+    Guid GapEvidenceId, Guid GapEvidenceVersionId, string SourceSnapshotHash, GapOutcome Outcome, GapReason Reason, string Rationale, IReadOnlyList<Guid> SupportingEvidenceIds,
+    Guid? OpenItemId, Guid? OpenConflictId, string OriginBatchId);
+
+/// <summary>`Gaps` è null per coverage-2 (valutazione Gap «non disponibile», mai «zero Gap») e una lista, anche vuota, solo per coverage-3.</summary>
 public sealed record DocumentCoverageInput(
     IReadOnlyList<DocumentCoverageEvidence> Evidence, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> Links, DocumentAnalysisContent Ai,
     DocumentAnalysisContent Target, string? DraftMarkdown, IReadOnlyDictionary<Guid, string> OriginalTexts, IReadOnlyList<DocumentCoveragePortion> Portions,
-    IReadOnlyList<DocumentCoverageRelation> Relations, ReconciliationCoverageSection? Reconciliation = null);
+    IReadOnlyList<DocumentCoverageRelation> Relations, ReconciliationCoverageSection? Reconciliation = null, IReadOnlyList<GapAssessmentRecord>? Gaps = null);
 
 public sealed record DocumentCoverageFinding(
     FindingCategory Category, string Code, string Message, Guid? EvidenceId, string? Alias, Guid? ItemId, string? Section, string? Confidence, string? Details, bool Blocking);
@@ -550,11 +641,26 @@ public sealed record DocumentCoverageSummary(
     int ExpectedEvidence, int RepresentedEvidence, int PortionsExpected, int PortionsProcessed, int PortionsNoEvidence, int PortionsMissing,
     int DeterministicErrors, int SemanticRisks, int PmAssessments, int BlockingFindings);
 
+/// <summary>
+/// Summary di coverage-3: i campi di coverage-2 più i cinque contatori dei Gap (non negativi; expected = assessed + unassessed, assessed = answered + open). Distinti dal supporto item:
+/// `RepresentedEvidence` conta ancora solo le evidenze collegate a elementi della revisione AI e i Gap rendicontati non vi si sommano.
+/// </summary>
+public sealed record DocumentCoverageSummary3(
+    int ExpectedEvidence, int RepresentedEvidence, int PortionsExpected, int PortionsProcessed, int PortionsNoEvidence, int PortionsMissing,
+    int DeterministicErrors, int SemanticRisks, int PmAssessments, int BlockingFindings,
+    int ExpectedGaps, int AssessedGaps, int AnsweredGaps, int OpenGaps, int UnassessedGaps);
+
 public sealed record DocumentCoverageHashes(string SourceSnapshotHash, string ViewHash, IReadOnlyList<string> ParseHashes, IReadOnlyList<string> ExtractionHashes, string RevisionHash, string? DraftHash);
 
 public sealed record DocumentCoverageContent(
     string CheckerVersion, Guid AnalysisId, Guid AiRevisionId, Guid RevisionId, Guid? DraftId, DocumentCoverageHashes Hashes, DocumentCoverageSummary Summary,
     IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
+
+/// <summary>Contenuto persistito di coverage-3 (JSONB esistente): come coverage-2 più le valutazioni Gap della revisione AI originaria e il loro hash.</summary>
+public sealed record DocumentCoverage3Content(
+    string CheckerVersion, Guid AnalysisId, Guid AiRevisionId, Guid RevisionId, Guid? DraftId, DocumentCoverageHashes Hashes, DocumentCoverageSummary3 Summary,
+    string GapAssessmentsHash, IReadOnlyList<GapAssessmentRecord> GapAssessments, IReadOnlyList<PreparationCoverageRecord> Preparations,
+    IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
 
 /// <summary>Elemento di AnalysisContent 1.1 con la sezione in cui si trova.</summary>
 public sealed record DocumentSectionItem(string Section, DocumentAnalysisItem Item, Guid? ConflictId = null);
@@ -569,11 +675,48 @@ public static class DocumentCoverage
 {
     public const string CheckerVersion = "coverage-2";
 
+    /// <summary>Verifica con le valutazioni dei Gap (002 T139): solo revisioni single-call v5 (`analysis-single-v3`, WorkOutput `document-analysis-alias-2`).</summary>
+    public const string CheckerVersionV3 = "coverage-3";
+
+    /// <summary>
+    /// Summary di coverage-3: i contatori coverage-2 invariati più i cinque dei Gap. Attesi = evidenze Gap della selezione; valutati = Gap con un record (un record su un'evidenza non Gap è ignorato);
+    /// expected = assessed + unassessed e assessed = answered + open per costruzione. Mai sommati alle evidenze rappresentate da elementi.
+    /// </summary>
+    public static DocumentCoverageSummary3 SummarizeGaps(DocumentCoverageInput input, IReadOnlyList<DocumentCoverageFinding> findings)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.Gaps is null)
+        {
+            throw new ArgumentException("coverage-3 richiede la lista delle valutazioni Gap, anche vuota.", nameof(input));
+        }
+
+        var b = Summarize(input, findings);
+        var expected = input.Evidence.Where(e => e.Kind == EvidenceKind.Gap).Select(e => e.EvidenceId).ToHashSet();
+        var assessed = input.Gaps.Where(g => expected.Contains(g.GapEvidenceId)).GroupBy(g => g.GapEvidenceId).Select(g => g.First()).ToList();
+        var answered = assessed.Count(g => g.Outcome == GapOutcome.AnsweredInSnapshot);
+        return new(
+            b.ExpectedEvidence, b.RepresentedEvidence, b.PortionsExpected, b.PortionsProcessed, b.PortionsNoEvidence, b.PortionsMissing, b.DeterministicErrors, b.SemanticRisks,
+            b.PmAssessments, b.BlockingFindings, expected.Count, assessed.Count, answered, assessed.Count - answered, expected.Count - assessed.Count);
+    }
+
+    /// <summary>Identità input di coverage-3: come coverage-2, con il suo checker e con l'hash delle valutazioni Gap (§ai-workflow 13.5); mai uguale a quella di coverage-2.</summary>
+    public static string InputHash(DocumentCoverageHashes hashes, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> links, string gapAssessmentsHash)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(gapAssessmentsHash);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(HashText(CheckerVersionV3, hashes, links) + "|gapAssessments:" + gapAssessmentsHash)));
+    }
+
     public static IReadOnlyList<string> Limits { get; } =
     [
         .. EvidenceCoverage.Limits,
         "La copertura per porzioni misura il trattamento strutturale dell'estrazione: una porzione elaborata senza evidenze dichiara un motivo ma non prova che non vi fosse nulla da estrarre.",
         "Gli ID collegati a un elemento non dimostrano che il testo sia fedele alla fonte: anche con tutte le evidenze rappresentate un gold semanticamente errato è segnalato solo come rischio stimato.",
+    ];
+
+    public static IReadOnlyList<string> LimitsV3 { get; } =
+    [
+        .. Limits,
+        "Le valutazioni dei Gap sono interpretazioni AI nello snapshot congelato: il server verifica forma, riferimenti e hash, non la pertinenza; non sono supporti di requisito né conferme del PM.",
     ];
 
     public static IReadOnlyList<DocumentSectionItem> Items(DocumentAnalysisContent content)
@@ -613,6 +756,8 @@ public static class DocumentCoverage
         var targetItems = ById(Items(input.Target));
         var targetSources = input.Target.Sources.GroupBy(s => s.Id).ToDictionary(g => g.Key, g => g.First());
         var byEvidence = input.Links.GroupBy(l => l.EvidenceId).ToDictionary(g => g.Key, g => g.Select(l => l.ItemId).Distinct().ToList());
+        // coverage-3 (T139): un Gap con valutazione AI valida è rendicontato anche senza un elemento sostantivo; la regola resta per i Gap senza record e per ogni altro tipo.
+        var reportedGaps = (input.Gaps ?? []).Select(g => g.GapEvidenceId).ToHashSet();
 
         foreach (var e in input.Evidence)
         {
@@ -632,8 +777,12 @@ public static class DocumentCoverage
             var inTarget = linked.Where(targetItems.ContainsKey).Select(id => targetItems[id]).ToList();
             if (inAi.Count == 0)
             {
-                findings.Add(Doc(FindingCategory.DeterministicError, "evidence_unrepresented",
-                    $"{e.Alias} ({e.Kind}) non è collegata a nessun elemento dell'analisi: «{EvidenceCoverage.Short(e.Statement)}».", e.EvidenceId, e.Alias));
+                if (!(e.Kind == EvidenceKind.Gap && reportedGaps.Contains(e.EvidenceId)))
+                {
+                    findings.Add(Doc(FindingCategory.DeterministicError, "evidence_unrepresented",
+                        $"{e.Alias} ({e.Kind}) non è collegata a nessun elemento dell'analisi: «{EvidenceCoverage.Short(e.Statement)}».", e.EvidenceId, e.Alias));
+                }
+
                 continue;
             }
 
@@ -643,7 +792,9 @@ public static class DocumentCoverage
                     $"L'elemento collegato a {e.Alias} non cita nessuna fonte di quell'evidenza.", e.EvidenceId, e.Alias, item.Item.Id, item.Section));
             }
 
-            foreach (var item in inAi.Where(i => !targetItems.ContainsKey(i.Item.Id)))
+            // La rimozione della domanda aperta indicata dalla valutazione AI ha il proprio giudizio PM (GapReferenceFindings): qui non si duplica.
+            var openItems = (input.Gaps ?? []).Where(g => g.GapEvidenceId == e.EvidenceId && g.OpenItemId is not null).Select(g => g.OpenItemId!.Value).ToHashSet();
+            foreach (var item in inAi.Where(i => !targetItems.ContainsKey(i.Item.Id) && !openItems.Contains(i.Item.Id)))
             {
                 findings.Add(Doc(FindingCategory.PmAssessment, "item_removed_by_pm",
                     $"L'elemento che rappresentava {e.Alias} non è più nella revisione verificata: rimosso dal PM.", e.EvidenceId, e.Alias, item.Item.Id, item.Section));
@@ -735,6 +886,7 @@ public static class DocumentCoverage
 
         findings.AddRange(PortionFindings(input.Portions));
         findings.AddRange(ReconciliationFindings(input.Reconciliation));
+        findings.AddRange(GapReferenceFindings(input, targetItems));
 
         foreach (var conflict in input.Target.Conflicts.Where(c => c.Status == AnalysisConflictStatus.Resolved))
         {
@@ -800,6 +952,29 @@ public static class DocumentCoverage
         ];
     }
 
+    /// <summary>
+    /// Un edit del PM che rimuove il punto aperto (domanda o conflitto) indicato da una valutazione AI è un giudizio PM distinto: la valutazione della revisione AI originaria
+    /// non è mai riscritta né rivalutata. Un conflitto ancora presente ma risolto è già «conflict_resolved_by_pm».
+    /// </summary>
+    private static IEnumerable<DocumentCoverageFinding> GapReferenceFindings(DocumentCoverageInput input, Dictionary<Guid, DocumentSectionItem> targetItems)
+    {
+        foreach (var record in input.Gaps ?? [])
+        {
+            var alias = input.Evidence.FirstOrDefault(e => e.EvidenceId == record.GapEvidenceId)?.Alias;
+            if (record.OpenItemId is { } item && !targetItems.ContainsKey(item))
+            {
+                yield return Doc(FindingCategory.PmAssessment, "gap_open_reference_removed_by_pm",
+                    $"{alias}: la domanda aperta indicata dalla valutazione AI non è più nella revisione verificata: rimossa dal PM.", record.GapEvidenceId, alias, item, "openQuestions", null, item.ToString());
+            }
+
+            if (record.OpenConflictId is { } conflict && input.Target.Conflicts.All(c => c.Id != conflict))
+            {
+                yield return Doc(FindingCategory.PmAssessment, "gap_open_reference_removed_by_pm",
+                    $"{alias}: il conflitto aperto indicato dalla valutazione AI non è più nella revisione verificata: rimosso dal PM.", record.GapEvidenceId, alias, null, "conflicts", null, conflict.ToString());
+            }
+        }
+    }
+
     private static HashSet<Guid> ItemsOf(Guid evidenceId, DocumentCoverageInput input, Dictionary<Guid, DocumentSectionItem> targetItems) =>
         input.Links.Where(l => l.EvidenceId == evidenceId && targetItems.ContainsKey(l.ItemId)).Select(l => l.ItemId).ToHashSet();
 
@@ -820,16 +995,17 @@ public static class DocumentCoverage
             findings.Count(f => f.Category == FindingCategory.PmAssessment), findings.Count(f => f.Blocking));
     }
 
-    public static string InputHash(DocumentCoverageHashes hashes, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> links)
-    {
-        var text = new StringBuilder()
-            .Append(CheckerVersion).Append('|').Append(hashes.SourceSnapshotHash).Append('|').Append(hashes.ViewHash)
+    public static string InputHash(DocumentCoverageHashes hashes, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> links) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(HashText(CheckerVersion, hashes, links))));
+
+    private static string HashText(string checker, DocumentCoverageHashes hashes, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> links) =>
+        new StringBuilder()
+            .Append(checker).Append('|').Append(hashes.SourceSnapshotHash).Append('|').Append(hashes.ViewHash)
             .Append('|').Append(string.Join(",", hashes.ParseHashes.Order(StringComparer.Ordinal)))
             .Append('|').Append(string.Join(",", hashes.ExtractionHashes.Order(StringComparer.Ordinal)))
             .Append('|').Append(hashes.RevisionHash).Append('|').Append(hashes.DraftHash)
-            .Append('|').Append(string.Join(",", links.OrderBy(l => l.ItemId).ThenBy(l => l.EvidenceId).Select(l => $"{l.ItemId}:{l.EvidenceId}")));
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
-    }
+            .Append('|').Append(string.Join(",", links.OrderBy(l => l.ItemId).ThenBy(l => l.EvidenceId).Select(l => $"{l.ItemId}:{l.EvidenceId}")))
+            .ToString();
 }
 
 // ---- viste e caricamento di coverage-2 (002 T062)
@@ -848,6 +1024,19 @@ public sealed record DocumentCoverageReportView(
     Guid Id, Guid AnalysisId, Guid? RevisionId, Guid? DraftId, string CheckerVersion, string InputHash, DateTimeOffset CreatedAt, string? CreatedBy,
     CoverageCountsView Counts, DocumentCoverageSummary Summary, DocumentCoverageHashes Hashes, IReadOnlyList<PreparationCoverageRecord> Preparations,
     IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
+
+public sealed record GapAssessmentView(
+    Guid GapEvidenceId, Guid GapEvidenceVersionId, string SourceSnapshotHash, string Outcome, string Reason, string Rationale, IReadOnlyList<Guid> SupportingEvidenceIds,
+    Guid? OpenItemId, Guid? OpenConflictId, string OriginBatchId);
+
+/// <summary>
+/// Vista di coverage-3 (T139): i campi di coverage-2 più `aiRevisionId` (la revisione AI originaria cui appartengono le valutazioni, distinta da `revisionId` corrente),
+/// `gapAssessments` e `gapAssessmentsHash`. Un client discrimina dalla versione del report, mai dalla presenza dei campi.
+/// </summary>
+public sealed record DocumentCoverage3ReportView(
+    Guid Id, Guid AnalysisId, Guid? RevisionId, Guid AiRevisionId, Guid? DraftId, string CheckerVersion, string InputHash, DateTimeOffset CreatedAt, string? CreatedBy,
+    CoverageCountsView Counts, DocumentCoverageSummary3 Summary, DocumentCoverageHashes Hashes, string GapAssessmentsHash, IReadOnlyList<GapAssessmentView> GapAssessments,
+    IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
 
 /// <summary>GET di preparazione/coverage: stato strutturale della preparazione prima dell'analisi. Non avvia lavori e non persiste report.</summary>
 public sealed record PreparationCoverageView(
@@ -876,8 +1065,154 @@ public sealed record ReconciliationCoverageSection(
 
 internal sealed record LoadedDocumentCoverage(DocumentCoverageInput Input, DocumentCoverageHashes Hashes, IReadOnlyList<PreparationCoverageRecord> Preparations);
 
+/// <summary>Versione del report scelta dall'origine della revisione AI; <see cref="Output"/> è il WorkOutput single-call v5 solo per coverage-3.</summary>
+internal sealed record CoverageOrigin(string CheckerVersion, WorkOutput? Output);
+
+internal sealed record GapAssessmentSet(IReadOnlyList<GapAssessmentRecord> Records, string Hash);
+
+/// <summary>
+/// Proiezione read-only delle valutazioni `gap-assessment-1` dal WorkOutput single-call v5 committato (T139). Verifica hash del payload, del catalogo, del DTO e delle valutazioni, forma e riferimenti
+/// (alias nel catalogo congelato, Gap come tipo Gap, supporti non Gap, punti aperti presenti nel DTO e nella revisione AI con gli id canonici `canon-ids-1`). Nessuna valutazione è sintetizzata
+/// dal server e nessuna è corretta: un'incoerenza è <c>work_output_invalid</c> e impedisce il report, mai una lista vuota apparentemente valida.
+/// </summary>
+internal static class GapAssessmentProjection
+{
+    private static DocumentWorkException Invalid(string message) => new(DocumentWorkException.WorkOutputInvalid, message);
+
+    public static GapAssessmentSet Project(WorkOutput output, DocumentCoverageInput input)
+    {
+        try
+        {
+            return ProjectCore(output, input);
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw Invalid("Il payload del WorkOutput single-call v5 non è nel formato con valutazioni dei Gap.");
+        }
+    }
+
+    private static GapAssessmentSet ProjectCore(WorkOutput output, DocumentCoverageInput input)
+    {
+        var payload = output.PayloadJson ?? throw Invalid("Payload inline del WorkOutput mancante.");
+        if (CanonicalJson.Sha256Hex(payload) != output.OutputHash)
+        {
+            throw Invalid("Il payload del WorkOutput ha un hash diverso da OutputHash.");
+        }
+
+        using var document = JsonDocument.Parse(payload);
+        var root = document.RootElement;
+        if (root.GetProperty("schemaVersion").GetString() != DocumentAnalysisWorkflow.SchemaVersionV5
+            || root.GetProperty("gapAssessmentsVersion").GetString() != GapAssessmentRules.Version)
+        {
+            throw Invalid("Il WorkOutput non è del contratto con valutazioni dei Gap.");
+        }
+
+        var catalog = AnalysisAliasCatalog.Decode(root.GetProperty("catalog").GetRawText(), root.GetProperty("catalogHash").GetString()!);
+        if (catalog.Data.ContractVersion != DocumentAnalysisWorkflow.SchemaVersionV5 || catalog.Data.RunId != output.OwnerId)
+        {
+            throw Invalid("Il catalogo del WorkOutput non è del contratto o del run della revisione.");
+        }
+
+        var dto = AnalysisAliasContracts.DecodeV2(root.GetProperty("ai").GetRawText());
+        if (AnalysisAliasContracts.Hash(dto) != root.GetProperty("aiOutputHash").GetString())
+        {
+            throw Invalid("Il DTO committato ha un hash diverso da aiOutputHash.");
+        }
+
+        var recordsRaw = root.GetProperty("gapAssessments").GetRawText();
+        var records = JsonSerializer.Deserialize<List<AiGapAssessment>>(recordsRaw, AnalysisAliasContracts.Options) ?? throw Invalid("Valutazioni dei Gap nulle.");
+        GapAssessmentRules.ValidateShape(records);
+        var canonical = GapAssessmentRules.Canonical(records);
+        var hash = root.GetProperty("gapAssessmentsHash").GetString();
+        if (hash != GapAssessmentRules.Hash(records) || CanonicalJson.Canonicalize(recordsRaw) != canonical || GapAssessmentRules.Canonical(dto.GapAssessments) != canonical)
+        {
+            throw Invalid("Le valutazioni dei Gap committate hanno un hash o una forma diversi da gapAssessmentsHash o dal DTO.");
+        }
+
+        var gapKinds = input.Evidence.Where(e => e.Kind == EvidenceKind.Gap).Select(e => e.EvidenceId).ToHashSet();
+        var questionKeys = dto.Items.OpenQuestions.Select(q => q.Key).ToHashSet(StringComparer.Ordinal);
+        var conflictKeys = dto.Conflicts.Select(c => c.Key).ToHashSet(StringComparer.Ordinal);
+        var questionIds = input.Ai.OpenQuestions.Select(q => q.Id).ToHashSet();
+        var conflictIds = input.Ai.Conflicts.Select(c => c.Id).ToHashSet();
+        var projected = new List<GapAssessmentRecord>(records.Count);
+        foreach (var r in records.OrderBy(r => AnalysisAliasPattern.Number(r.Gap)))
+        {
+            var gap = catalog.Evidence(r.Gap);
+            if (gap is null || gap.Kind != EvidenceKind.Gap || !gapKinds.Contains(gap.EvidenceId))
+            {
+                throw Invalid($"La valutazione {r.Gap} non riguarda un Gap dello snapshot congelato.");
+            }
+
+            var support = new List<Guid>(r.SupportingEvidence.Count);
+            foreach (var alias in r.SupportingEvidence)
+            {
+                var entry = catalog.Evidence(alias);
+                if (entry is null || entry.Kind == EvidenceKind.Gap)
+                {
+                    throw Invalid($"Il supporto {alias} della valutazione {r.Gap} non è un'evidenza non Gap dello snapshot.");
+                }
+
+                support.Add(entry.EvidenceId);
+            }
+
+            Guid? openItem = null;
+            if (r.OpenItem is not null)
+            {
+                openItem = AnalysisAliasComposer.CanonicalId("item", catalog.Data.RunId, catalog.Data.SourceHash, r.OpenItem);
+                if (!questionKeys.Contains(r.OpenItem) || !questionIds.Contains(openItem.Value))
+                {
+                    throw Invalid($"La domanda aperta {r.OpenItem} della valutazione {r.Gap} non è nel DTO e nella revisione AI.");
+                }
+            }
+
+            Guid? openConflict = null;
+            if (r.OpenConflict is not null)
+            {
+                openConflict = AnalysisAliasComposer.CanonicalId("conflict", catalog.Data.RunId, catalog.Data.SourceHash, r.OpenConflict);
+                if (!conflictKeys.Contains(r.OpenConflict) || !conflictIds.Contains(openConflict.Value))
+                {
+                    throw Invalid($"Il conflitto aperto {r.OpenConflict} della valutazione {r.Gap} non è nel DTO e nella revisione AI.");
+                }
+            }
+
+            projected.Add(new GapAssessmentRecord(
+                gap.EvidenceId, gap.EvidenceVersionId, catalog.Data.SourceHash, r.Outcome, r.Reason, r.Rationale, support, openItem, openConflict, output.BatchId));
+        }
+
+        return new(projected, hash!);
+    }
+}
+
 internal static class DocumentCoverageLoader
 {
+    /// <summary>
+    /// Versione del report dal dato discriminante dell'origine della revisione AI (AI §13.6): algoritmo del WorkManifest e schema dei WorkOutput.
+    /// `analysis-single-v3` con un solo WorkOutput `document-analysis-alias-2` ⇒ coverage-3; ogni altra origine coerente (gerarchica `global-reconcile-v1`/`reconcile-alias-1`, storica, senza dati di lavoro) ⇒ coverage-2.
+    /// Origine discordante (algoritmo e schema non concordano) è <c>integrity_conflict</c>: nessun ripiego.
+    /// </summary>
+    public static async Task<CoverageOrigin> OriginAsync(AppDbContext db, Guid runId, CancellationToken ct)
+    {
+        var algorithm = await db.WorkManifests.AsNoTracking()
+            .Where(m => m.OwnerKind == WorkOwnerKind.ProcessingRun && m.OwnerId == runId).Select(m => m.AlgorithmVersion).SingleOrDefaultAsync(ct);
+        var outputs = await db.WorkOutputs.AsNoTracking()
+            .Where(o => o.OwnerKind == WorkOwnerKind.ProcessingRun && o.OwnerId == runId).Select(o => new { o.Id, o.SchemaVersion }).ToListAsync(ct);
+        var singleCallOutputs = outputs.Where(o => o.SchemaVersion == DocumentAnalysisWorkflow.SchemaVersionV5).ToList();
+        if (algorithm == DocumentAnalysisWorkflow.AlgorithmVersionV5)
+        {
+            if (outputs.Count != 1 || singleCallOutputs.Count != 1)
+            {
+                throw new DocumentWorkException(
+                    DocumentWorkException.IntegrityConflict, "L'algoritmo single-call v5 della revisione AI non corrisponde a un solo WorkOutput document-analysis-alias-2.");
+            }
+
+            return new(DocumentCoverage.CheckerVersionV3, await db.WorkOutputs.AsNoTracking().SingleAsync(o => o.Id == singleCallOutputs[0].Id, ct));
+        }
+
+        return singleCallOutputs.Count > 0
+            ? throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Un WorkOutput single-call v5 appartiene a una revisione AI di un altro algoritmo.")
+            : new(DocumentCoverage.CheckerVersion, null);
+    }
+
     public static DocumentCoverageFindingView ToView(DocumentCoverageFinding f) =>
         new(f.Category.ToString(), f.Code, f.Message, f.EvidenceId, f.Alias, f.ItemId, f.Section, f.Confidence, f.Details, f.Blocking);
 
