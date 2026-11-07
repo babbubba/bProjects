@@ -163,6 +163,7 @@ public sealed class DocumentReconcileGapGateTests : ReconcileRig
         var response = await client.SendAsync(request, Ct);
         Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
         var run = (await Json(response)).GetProperty("id").GetGuid();
+        await Execute(HistoricalAnalysisV4.Sql, ("v", HistoricalAnalysisV4.Versions), ("r", run));   // T141: il gate caratterizza il grafo gerarchico v4 esistente; il POST ora congela la v5 (fail-fast con Gap, T143)
         return (run, await ClaimAsync(run), gapDoc!, findDoc!);
     }
 

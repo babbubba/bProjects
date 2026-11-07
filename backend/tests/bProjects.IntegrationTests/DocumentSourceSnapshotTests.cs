@@ -21,8 +21,8 @@ namespace bProjects.IntegrationTests;
 [Trait("Category", TestCategories.Integration)]
 public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
 {
-    // T131: le NUOVE richieste di Analizza congelano la v4 (alias v3 più riconciliazione gerarchica con alias); v2 e v3 restano storiche (run già richiesti).
-    private const string AnalysisDocumentsV4 = "project-analysis-documents-v4";
+    // T141 (AI §13.1/§13.6): le NUOVE richieste di Analizza congelano la v5 (single-call v5 + gerarchia v4 + reconcileGapPolicy); v2, v3 e v4 restano storiche (run già richiesti).
+    private const string AnalysisDocumentsV5 = "project-analysis-documents-v5";
     // T127: le NUOVE richieste di Genera congelano la v3 con alias; la v2 resta storica (run già richiesti).
     private const string DocumentDocumentsV3 = "project-document-documents-v3";
 
@@ -131,20 +131,17 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         Assert.Equal(1, await Count(
             "SELECT count(*) FROM \"SourceSnapshotItems\" WHERE \"SnapshotId\" = @s AND \"Availability\" = 'Ready' AND \"Included\" AND \"DocumentVersionId\" = @v AND \"PreparationId\" = @p AND \"EvidenceVersionId\" = @e",
             ("s", snapshot), ("v", doc.Version), ("p", preparation), ("e", evidence)));
-        // Persistita la definizione documentale v4 con prompt/schema/catalogo/id canonici/algoritmo/validazione e versioni della riconciliazione coerenti; nessun run 001 convertito.
-        Assert.Equal(AnalysisDocumentsV4, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
+        // Persistita la definizione documentale v5 con TUTTE le chiavi di versione di AI Â§13.1 e Â§13.6: single-call v5 (prompt v4, schema alias-2, algoritmo single-v3, validazione v3),
+        // gerarchia v4 invariata (reconcile-v3, reconcile-alias-1, global-reconcile-v1, catalogo) e la sola policy Gap temporanea; nessun run 001 convertito, nessuna chiave in piÃ¹ o in meno.
+        Assert.Equal(AnalysisDocumentsV5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
         var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId))).RootElement;
-        Assert.Equal("document-analysis-v3", prompts.GetProperty("analysis").GetString());
-        Assert.Equal("1.1.0", prompts.GetProperty("analysisSchema").GetString());
-        Assert.Equal("document-analysis-alias-1", prompts.GetProperty("analysisAiSchema").GetString());
-        Assert.Equal("alias-catalog-1", prompts.GetProperty("aliasCatalog").GetString());
-        Assert.Equal("canon-ids-1", prompts.GetProperty("canonIds").GetString());
-        Assert.Equal("analysis-single-v2", prompts.GetProperty("algorithm").GetString());
-        Assert.Equal("document-analysis-validation-v2", prompts.GetProperty("validation").GetString());
-        Assert.Equal("document-reconcile-v3", prompts.GetProperty("reconcile").GetString());
-        Assert.Equal("reconcile-alias-1", prompts.GetProperty("reconcileAiSchema").GetString());
-        Assert.Equal("global-reconcile-v1", prompts.GetProperty("reconcileAlgorithm").GetString());
-        Assert.Equal("reconcile-alias-catalog-1", prompts.GetProperty("reconcileCatalog").GetString());
+        var frozen = prompts.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => $"{p.Name}={p.Value.GetString()}").ToList();
+        Assert.Equal(
+        [
+            "algorithm=analysis-single-v3", "aliasCatalog=alias-catalog-1", "analysis=document-analysis-v4", "analysisAiSchema=document-analysis-alias-2", "analysisSchema=1.1.0",
+            "canonIds=canon-ids-1", "reconcile=document-reconcile-v3", "reconcileAiSchema=reconcile-alias-1", "reconcileAlgorithm=global-reconcile-v1",
+            "reconcileCatalog=reconcile-alias-catalog-1", "reconcileGapPolicy=hierarchical-gap-incomplete-1", "validation=document-analysis-validation-v3",
+        ], frozen);
     }
 
     private async Task<(Guid Preparation, Guid Evidence)> GetReady(Doc doc) => (
@@ -163,7 +160,7 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         var run = await AnalyzeAccepted(client, project);
 
         Assert.Equal(2, run.GetProperty("sourceCutoffSequence").GetInt64());   // solo il dialogo PM definisce il cutoff
-        Assert.Equal(AnalysisDocumentsV4, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run.GetProperty("id").GetGuid())));
+        Assert.Equal(AnalysisDocumentsV5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run.GetProperty("id").GetGuid())));
         // Il gate Evidence PM resta: un lavoro di estrazione per ciascun messaggio PM entro il cutoff, nessuno per il documento.
         Assert.Equal(2, await Count("SELECT count(*) FROM \"EvidenceExtractionJobs\" WHERE \"OriginKind\" = 'Message'"));
     }

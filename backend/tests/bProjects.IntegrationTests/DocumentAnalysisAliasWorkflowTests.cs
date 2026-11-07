@@ -122,23 +122,33 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
     // ================================================================ freeze alla richiesta
 
     [Fact]
-    public async Task A_new_analyze_request_freezes_the_v4_definition_with_the_v3_alias_prompt_schema_catalog_and_canonical_id_versions()
+    public async Task A_new_analyze_request_freezes_the_v5_definition_with_the_v4_prompt_alias_2_schema_catalog_canonical_id_and_hierarchy_versions()
     {
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         await NewDocument(client, project, "regole", Statement1);
 
-        var run = await StartRunAsync(client, project);
+        // POST reale senza riscritture (StartRunAsync riporta il run alle chiavi storiche v4): dal T141 le nuove richieste sono v5 (AI §13.1 e §13.6).
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var response = await client.SendAsync(request, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var run = (await Json(response)).GetProperty("id").GetGuid();
 
-        Assert.Equal("project-analysis-documents-v4", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // T131: le nuove richieste sono v4
+        Assert.Equal("project-analysis-documents-v5", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))).RootElement;
-        Assert.Equal("document-analysis-v3", prompts.GetProperty("analysis").GetString());
+        Assert.Equal("document-analysis-v4", prompts.GetProperty("analysis").GetString());
         Assert.Equal("1.1.0", prompts.GetProperty("analysisSchema").GetString());
-        Assert.Equal("document-analysis-alias-1", prompts.GetProperty("analysisAiSchema").GetString());
+        Assert.Equal("document-analysis-alias-2", prompts.GetProperty("analysisAiSchema").GetString());
         Assert.Equal("alias-catalog-1", prompts.GetProperty("aliasCatalog").GetString());
         Assert.Equal("canon-ids-1", prompts.GetProperty("canonIds").GetString());
-        Assert.Equal("analysis-single-v2", prompts.GetProperty("algorithm").GetString());
-        Assert.Equal("document-analysis-validation-v2", prompts.GetProperty("validation").GetString());
+        Assert.Equal("analysis-single-v3", prompts.GetProperty("algorithm").GetString());
+        Assert.Equal("document-analysis-validation-v3", prompts.GetProperty("validation").GetString());
+        Assert.Equal("document-reconcile-v3", prompts.GetProperty("reconcile").GetString());
+        Assert.Equal("reconcile-alias-1", prompts.GetProperty("reconcileAiSchema").GetString());
+        Assert.Equal("global-reconcile-v1", prompts.GetProperty("reconcileAlgorithm").GetString());
+        Assert.Equal("reconcile-alias-catalog-1", prompts.GetProperty("reconcileCatalog").GetString());
+        Assert.Equal("hierarchical-gap-incomplete-1", prompts.GetProperty("reconcileGapPolicy").GetString());
     }
 
     // ================================================================ analisi completa
@@ -618,7 +628,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 
     private const string V5Prompts = """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
 
-    /// <summary>La v5 NON è instradata per le nuove richieste (T141): il test la ottiene riscrivendo la definizione congelata, come per v2.</summary>
+    /// <summary>Dal T141 il POST reale congela la v5 nativamente; qui il run (creato da StartRunAsync, che lo riporta a v2) è riportato esplicitamente alle chiavi v5 per fissare ogni versione.</summary>
     private async Task PinToV5Async(Guid run) => await Execute(
         "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v5', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", V5Prompts), ("r", run));
 
@@ -1104,7 +1114,9 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
         var response = await client.SendAsync(request, Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        return (await Json(response)).GetProperty("id").GetGuid();
+        var run = (await Json(response)).GetProperty("id").GetGuid();
+        await Execute(HistoricalAnalysisV4.Sql, ("v", HistoricalAnalysisV4.Versions), ("r", run));   // T141: run v4 STORICO (alias-1): l'endpoint ora congela la v5, qui riportato alle chiavi che congelava prima
+        return run;
     }
 
     /// <summary>Presa in carico come il dispatcher: Running con owner, fence e lease validi (idempotente).</summary>

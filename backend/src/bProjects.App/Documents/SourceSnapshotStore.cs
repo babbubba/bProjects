@@ -11,14 +11,14 @@ namespace bProjects.App.Documents;
 /// <summary>
 /// Snapshot di selezione fissati al comando (002 T057; data-model «SourceSnapshot / Item», contracts/http-api.md §Selezione). Unico punto che
 /// scrive snapshot: chat e Analizza ne creano uno sotto il lock di progetto, la generazione ne eredita uno dalla revisione, mai quello corrente.
-/// Definizioni e versioni di prompt/schema documentali sono persistite sul root alla richiesta: le NUOVE richieste di Analizza (T131, AI §11: v4, percorso alias v3 più riconciliazione gerarchica con alias) e di
-/// Genera (T127, AI §7.11) e di Chat documentale (T128, AI §8) congelano la v3 con alias; un run già congelato con la v2 o la v3 (storiche) resta tale e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
+/// Definizioni e versioni di prompt/schema documentali sono persistite sul root alla richiesta: le NUOVE richieste di Analizza (T141, AI §13.1/§13.6: v5, single-call con valutazione dei Gap più gerarchia v4 e policy Gap temporanea) e di
+/// Genera (T127, AI §7.11) e di Chat documentale (T128, AI §8) congelano la v3 con alias; un run già congelato con la v2, v3 o v4 di Analizza (storiche) resta tale e il suo instradamento è del dispatch (T123). Nessuna conversione di run.
 /// </summary>
 public sealed class SourceSnapshotStore(AppDbContext db)
 {
-    public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV4;
+    public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
-    public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV3;
+    public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV4;
     public const string AnalysisSchemaVersion = "1.1.0";
     public const string DocumentPromptVersion = DocumentSourceDraftWorkflow.PromptVersionV3;
 
@@ -104,17 +104,19 @@ public sealed class SourceSnapshotStore(AppDbContext db)
         await db.SourceSnapshotItems.AsNoTracking().AnyAsync(i => i.SnapshotId == snapshotId && i.Availability == SourceAvailability.Ready, ct);
 
     /// <summary>
-    /// Versioni congelate di una nuova richiesta di Analizza v4 (T131): quelle del percorso alias v3 (prompt, schema del canonico, schema AI, catalogo, id canonici, algoritmo e
-    /// validazione) più quelle della riconciliazione gerarchica con alias (prompt, schema AI del batch, algoritmo del motore, catalogo del batch).
+    /// Versioni congelate di una nuova richiesta di Analizza v5 (T141, AI §13.1 e §13.6): quelle del single-call con valutazione dei Gap (prompt document-analysis-v4, schema del canonico, schema AI alias-2, catalogo, id canonici, algoritmo e
+    /// validazione) più quelle della gerarchia v4 invariata (prompt, schema AI del batch, algoritmo del motore, catalogo del batch) e la sola policy Gap temporanea <c>reconcileGapPolicy</c>.
+    /// La scelta single-call/gerarchico e la presenza di Gap si decidono a runtime dal catalogo congelato e dalla misura: nessuna decisione al POST.
     /// </summary>
     public static string AnalysisPromptVersions() =>
         JsonSerializer.Serialize(new
         {
-            analysis = AnalysisPromptVersion, analysisSchema = AnalysisSchemaVersion, analysisAiSchema = DocumentAnalysisWorkflow.SchemaVersionV3,
+            analysis = AnalysisPromptVersion, analysisSchema = AnalysisSchemaVersion, analysisAiSchema = DocumentAnalysisWorkflow.SchemaVersionV5,
             aliasCatalog = AnalysisAliasCatalog.Version, canonIds = AnalysisAliasCatalog.CanonIdsVersion,
-            algorithm = DocumentAnalysisWorkflow.AlgorithmVersionV3, validation = DocumentAnalysisWorkflow.ValidationVersionV3,
+            algorithm = DocumentAnalysisWorkflow.AlgorithmVersionV5, validation = DocumentAnalysisWorkflow.ValidationVersionV5,
             reconcile = ReconcileAliasContracts.PromptVersion, reconcileAiSchema = ReconcileAliasContracts.SchemaVersion,
             reconcileAlgorithm = DocumentReconcilePlan.AlgorithmVersion, reconcileCatalog = ReconcileAliasContracts.CatalogVersion,
+            reconcileGapPolicy = DocumentAnalysisWorkflow.ReconcileGapPolicyV1,
         });
 
     /// <summary>Versioni congelate di una nuova richiesta di Genera v3 (T127): prompt, schema del canonico 1.1.0, schema AI della bozza, catalogo, algoritmo e validazione.</summary>

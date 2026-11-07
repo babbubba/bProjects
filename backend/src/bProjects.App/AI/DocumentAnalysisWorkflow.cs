@@ -333,8 +333,8 @@ public sealed class DocumentAnalysisWorkflow(
     public static string InstructionsV3 => PromptV3.Value;
 
     // v5 (T136, contracts/ai-workflow.md §13.1): percorso a chiamata singola con valutazione dei Gap (prompt document-analysis-v4, schema document-analysis-alias-2, contract
-    // alias-2, algoritmo analysis-single-v3, validazione document-analysis-validation-v3). La definizione esiste ed è riconosciuta da ContractOf, ma NON è instradata per nuove
-    // richieste né congelata da SourceSnapshotStore: l'attivazione (routing e freeze) è T141. Oltre una chiamata (T143, decisione C + D, §13.6): con almeno un Gap fail-fast
+    // alias-2, algoritmo analysis-single-v3, validazione document-analysis-validation-v3). La definizione è riconosciuta da ContractOf, instradata da AnalysisWorkflow e congelata dalle NUOVE richieste di Analizza da
+    // SourceSnapshotStore (T141). Oltre una chiamata (T143, decisione C + D, §13.6): con almeno un Gap fail-fast
     // senza alcuna invocazione del modello, senza Gap la gerarchia v4 invariata con la sola definizione v5 nel manifest.
     public const string DefinitionVersionV5 = "project-analysis-documents-v5";
 
@@ -357,7 +357,7 @@ public sealed class DocumentAnalysisWorkflow(
     // (prompt document-reconcile-v3, DTO reconcile-alias-1). Le nuove richieste di Analizza congelano la v4; v2 e v3 storici o in volo restano invariati.
     public const string DefinitionVersionV4 = "project-analysis-documents-v4";
 
-    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata) o v4 (alias con gerarchia); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
+    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata), v4 (alias con gerarchia) o v5 (single-call con Gap + gerarchia v4 + policy Gap, T141); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
     internal static int? ContractOf(ProcessingRun run)
     {
         if (run.MafVersion != Conversation.CurrentMafVersion)
@@ -382,7 +382,9 @@ public sealed class DocumentAnalysisWorkflow(
 
         // v5 (T136 + T143): ogni versione del single-call con valutazione dei Gap deve coincidere E ogni versione della gerarchia v4 più la policy Gap temporanea (C + D, §13.6).
         // Chiavi gerarchiche mancanti o diverse (es. document-reconcile-v4, reconcile-alias-2, global-reconcile-v2 della futura gerarchia nominale) ⇒ workflow_incompatible, mai reinterpretate.
+        // Anche la versione dello schema del canonico (AnalysisContent 1.1.0, chiave `analysisSchema`) è una chiave di freeze della v5 (T141: «TUTTE le chiavi», AI §13.1): ignota ⇒ incompatibile.
         if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && run.PromptVersionMatches("analysis", PromptVersionV4)
+            && run.PromptVersionMatches("analysisSchema", DocumentAnalysisContent.SchemaVersionValue)
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
             && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run)

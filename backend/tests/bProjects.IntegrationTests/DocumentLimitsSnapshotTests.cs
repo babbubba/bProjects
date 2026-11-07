@@ -41,7 +41,7 @@ public sealed class DocumentLimitsSnapshotTests : ReconcileRig
         return (await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(Ct)).Snapshot;
     }
 
-    /// <summary>Run creato dal vero endpoint Analizza (v4); <paramref name="documents"/> = 1 entra in una chiamata, 8 richiedono la gerarchia.</summary>
+    /// <summary>Run creato dal vero endpoint Analizza (v5, T141: senza Gap la gerarchia oltre contesto è quella v4); <paramref name="documents"/> = 1 entra in una chiamata, 8 richiedono la gerarchia.</summary>
     private async Task<(Guid Run, AnalysisRunClaim Claim)> ArrangeAsync(int documents = Documents)
     {
         using var client = await App.LoginAsync();
@@ -67,7 +67,7 @@ public sealed class DocumentLimitsSnapshotTests : ReconcileRig
 
     private static DocumentChatWorkflowTests.FakeChatModel Healthy() => new() { Responder = r => Dto(ParseAlias(r.AllText)) };
 
-    private static DocumentChatWorkflowTests.FakeChatModel HealthySingle() => new() { Responder = r => AliasModelReplies.Reply(r.AllText) };
+    private static DocumentChatWorkflowTests.FakeChatModel HealthySingle() => new() { Responder = r => AliasModelRepliesV5.Reply(r.AllText) };   // POST reale = v5: DTO alias-2
 
     private async Task<string> SnapshotTextAsync(Guid run) => await Scalar<string>($"SELECT \"{Column}\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run));
 
@@ -116,6 +116,9 @@ public sealed class DocumentLimitsSnapshotTests : ReconcileRig
         Assert.Equal(RunLimitsSnapshot.ComputeHash(1, policy.Revision, policy.Limits), parsed.Hash);
         // Non è il PolicyHash del root (solo timer): due fotografie diverse con scopi diversi.
         Assert.NotEqual(await Scalar<string>("SELECT \"PolicyHash\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)), parsed.Hash);
+        // T141: il run creato dal POST reale è v5 e snapshot dei limiti e versioni congelate nascono insieme nella stessa transazione del run.
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal("hierarchical-gap-incomplete-1", await Scalar<string>("SELECT \"PromptVersions\"->>'reconcileGapPolicy' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
     }
 
     [Fact]
@@ -445,7 +448,7 @@ public sealed class DocumentLimitsSnapshotTests : ReconcileRig
         await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = 'Failed', \"ErrorCode\" = 'x' WHERE \"ProjectId\" = @p", ("p", project));   // gli UPDATE operativi restano liberi
 
         // Run documentale senza snapshot: rifiutato dal vincolo, sia per definizione documentale sia per root classificato.
-        foreach (var (definition, classified) in new[] { ("project-analysis-documents-v4", false), ("project-analysis-documents-v2", false), ("project-analysis-v3", true) })
+        foreach (var (definition, classified) in new[] { ("project-analysis-documents-v5", false), ("project-analysis-documents-v4", false), ("project-analysis-documents-v2", false), ("project-analysis-v3", true) })
         {
             var failure = await Assert.ThrowsAsync<PostgresException>(() => InsertAsync(definition, classified));
             Assert.Equal(("23514", "CK_ProcessingRuns_DocumentLimitsSnapshot"), (failure.SqlState, failure.ConstraintName));

@@ -170,7 +170,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         await DrainAsync();
         var run = await Row("ProcessingRuns", analysis);
         Assert.Equal(("Completed", (string?)null), Pair(run, "Status", "ErrorCode"));
-        Assert.Contains(Graph.DocAnalysisV3, _model.Graphs);   // T125: le nuove richieste di Analizza seguono il contratto con alias
+        Assert.Contains(Graph.DocAnalysisV5, _model.Graphs);   // T141: le nuove richieste di Analizza sono v5 (prompt document-analysis-v4, DTO alias-2)
         await AssertStartedAfterClassification("ProcessingRuns", analysis);
         var analysisRunView = await Json(await client.GetAsync($"/api/projects/{project}/processing-runs/{analysis}", Ct));
         var analysisUsage = await Json(await client.GetAsync($"/api/projects/{project}/context-usage", Ct));
@@ -185,7 +185,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         Assert.All(passageSources, s => Assert.Contains(evidences.SelectMany(e => e.Sources), x => x.SourceId.ToString() == s!["id"]!.GetValue<string>() && x.Quote == s["quote"]!.GetValue<string>()));
         Assert.Contains(content["requirements"]!.AsArray(), i => i!["classification"]!.GetValue<string>() == "Documented");
         Assert.All(content["requirements"]!.AsArray(), i => Assert.NotEmpty(i!["evidenceRefs"]!.AsArray()));
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV4, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis)));
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis)));
         var linked = await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\" WHERE \"RunId\" = @r", ("r", analysis));
         Assert.True(linked >= passageSources.Count);
 
@@ -239,21 +239,22 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         Assert.All(draftSources, id => Assert.Contains(id, confirmedSources.Keys));          // ogni fonte citata appartiene alla revisione confermata
         Assert.Contains(draftSources, id => confirmedSources[id] == "DocumentPassage");     // e almeno una e un passaggio documentale storico
 
-        // --- Coverage-2 della revisione confermata e della bozza (deterministica, nessun errore bloccante).
+        // --- Coverage-3 della revisione confermata e della bozza (T141: la revisione AI nasce dal single-call v5; deterministica, nessun errore bloccante; nessun Gap nelle fonti ⇒ contatori a 0).
         var coverage = await client.PostAsJsonAsync($"/api/projects/{project}/analyses/{analysis}/coverage-reports", new { revisionId = revision2, draftId = draft.GetProperty("id").GetGuid() }, Ct);
         Assert.Contains(coverage.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Created });
         var report = await Json(coverage);
-        Assert.Equal("coverage-2", report.GetProperty("checkerVersion").GetString());
+        Assert.Equal("coverage-3", report.GetProperty("checkerVersion").GetString());
         Assert.Equal(0, report.GetProperty("counts").GetProperty("deterministicErrors").GetInt32());
         var summary = report.GetProperty("summary");
         Assert.Equal(0, summary.GetProperty("blockingFindings").GetInt32());
+        Assert.All(new[] { "expectedGaps", "assessedGaps", "answeredGaps", "openGaps", "unassessedGaps" }, c => Assert.Equal(0, summary.GetProperty(c).GetInt32()));   // coverage-3: nessun Gap nelle fonti, nessuna valutazione attesa
         Assert.Equal(0, summary.GetProperty("portionsMissing").GetInt32());
         Assert.True(summary.GetProperty("expectedEvidence").GetInt32() > 0);
         Assert.Equal(summary.GetProperty("expectedEvidence").GetInt32(), summary.GetProperty("representedEvidence").GetInt32());   // ogni evidenza documentale e rappresentata
 
         // --- Nessun falso Completed: un solo workflow per root, una sola chiamata, nessuna chiamata del grafo 001.
         Assert.DoesNotContain(_model.Graphs, g => g is Graph.Chat001 or Graph.Analysis001 or Graph.Draft001);
-        Assert.Equal([Graph.DocChatV3, Graph.DocAnalysisV3, Graph.DocDraftV3], _model.Graphs.Where(g => g != Graph.Extract));
+        Assert.Equal([Graph.DocChatV3, Graph.DocAnalysisV5, Graph.DocDraftV3], _model.Graphs.Where(g => g != Graph.Extract));
     }
 
     // ================================================================ 2. attesa oltre la deadline ordinaria: mai un invio, mai Completed
@@ -357,19 +358,19 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ChatTurn' AND \"OwnerId\" = @t AND \"Status\" = 'Committed'", ("t", turn)));
 
         // Analisi: alias di evidenza sconosciuto (la mappa item→evidenze è composta dal server dagli alias) => run Failed, nessuna revisione, nessuna analisi corrente.
-        _model.Rewrite = (graph, _, reply) => graph == Graph.DocAnalysisV3 ? Mutate(reply, n => n["items"]!["requirements"]![0]!["evidence"]![0] = "E99") : reply;
+        _model.Rewrite = (graph, _, reply) => graph == Graph.DocAnalysisV5 ? Mutate(reply, n => n["items"]!["requirements"]![0]!["evidence"]![0] = "E99") : reply;
         var unknown = await StartAnalysis(client, project);
         await DrainAsync();
         await AssertNotCompleted(project, unknown, "work_output_invalid");
 
         // Analisi: il modello tenta di fornire fonti/citazioni proprie (il canonico le ricostruisce solo dal catalogo) => proprietà estranea, Failed.
-        _model.Rewrite = (graph, _, reply) => graph == Graph.DocAnalysisV3 ? Mutate(reply, n => n["sources"] = new JsonArray(new JsonObject { ["quote"] = "testo mai scritto nel documento" })) : reply;
+        _model.Rewrite = (graph, _, reply) => graph == Graph.DocAnalysisV5 ? Mutate(reply, n => n["sources"] = new JsonArray(new JsonObject { ["quote"] = "testo mai scritto nel documento" })) : reply;
         var invented = await StartAnalysis(client, project);
         await DrainAsync();
         await AssertNotCompleted(project, invented, "work_output_invalid");
 
         // Analisi: evidenza documentale non rappresentata (copertura incompleta) => Failed, mai una revisione parziale.
-        _model.Rewrite = (graph, _, reply) => graph == Graph.DocAnalysisV3 ? Mutate(reply, n => n["items"]!["requirements"]!.AsArray().RemoveAt(0)) : reply;
+        _model.Rewrite = (graph, _, reply) => graph == Graph.DocAnalysisV5 ? Mutate(reply, n => n["items"]!["requirements"]!.AsArray().RemoveAt(0)) : reply;
         var partial = await StartAnalysis(client, project);
         await DrainAsync();
         await AssertNotCompleted(project, partial, "coverage_incomplete");
@@ -839,7 +840,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { Extract, DocChat, DocChatV3, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
+    internal enum Graph { Extract, DocChat, DocChatV3, Chat001, DocAnalysis, DocAnalysisV3, DocAnalysisV5, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -851,6 +852,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
             : s.Contains(Norm(DocumentChatWorkflow.InstructionsV3)) ? Graph.DocChatV3
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
+            : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV4)) ? Graph.DocAnalysisV5
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
             : s.Contains(Norm(DocumentSourceDraftWorkflow.InstructionsV3)) ? Graph.DocDraftV3
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001
@@ -876,7 +878,8 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
             Graph.DocChat or Graph.DocChatV3 => ChatReply(request.Text),   // v3: il messaggio espone alias F<n> e il modello cita [fonte:F<n>]
             Graph.Chat001 => "Quali utenti userebbero il portale?",
             Graph.DocAnalysis => DocumentAnalysisReply(request.Text),
-            Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO semantico nella risposta
+            Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // storico v3/v4: alias nel messaggio, DTO semantico alias-1
+            Graph.DocAnalysisV5 => AliasModelRepliesV5.Reply(request.Text),   // v5 (T141): DTO alias-2 con le valutazioni dei Gap
             Graph.Analysis001 => LegacyAnalysisReply(request.Text),
             Graph.DocDraft => DocumentDraftReply(request.Text),
             Graph.DocDraftV3 => DraftAliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO con alias nella risposta

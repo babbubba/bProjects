@@ -176,3 +176,18 @@ public abstract class ReconcileRig : ArchiveTestBase
         return await workflow.ExecuteAsync(claim, Ct);
     }
 }
+
+/// <summary>
+/// Definizione e versioni congelate dalle nuove richieste di Analizza v4 (T131) fino a prima di T141. Dal T141 il POST reale congela la v5: i test che caratterizzano il
+/// comportamento STORICO v4 (single-call alias-1 o gerarchia senza policy Gap) riportano il run creato dall'endpoint a queste chiavi, come un run richiesto allora.
+/// Solo fixture: nessun codice di produzione e nessuna asserzione dei test sul comportamento cambia.
+/// </summary>
+internal static class HistoricalAnalysisV4
+{
+    public const string Definition = "project-analysis-documents-v4";
+
+    public const string Versions =
+        """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v2","validation":"document-analysis-validation-v2","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1"}""";
+
+    public static string Sql => "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = '" + Definition + "', \"PromptVersions\" = @v::jsonb WHERE \"Id\" = @r";
+}

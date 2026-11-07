@@ -32,6 +32,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     private readonly RoutingModel _model;
     private Func<Req, string>? _chatOverride;   // risposta del modello per il grafo chat v3 (T128): default = cita il primo alias
+    private Func<Req, string>? _analysisV5;       // risposta del modello per il grafo Analizza v5: default = AliasModelRepliesV5 (T141)
 
     public DocumentWorkflowRoutingTests() => _model = new RoutingModel(Reply);
 
@@ -145,10 +146,10 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(run);
         Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
-        Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV5], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV4], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV5], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
 
         // T124 (invariato per v3): il payload dell'analisi non e determinabile prima del claim (selezione evidenze congelata sotto lease): T unavailable => Extended workload_unknown.
         await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", run, expectedPayloadMeasured: false);
@@ -193,7 +194,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(generation);
         Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
-        Assert.Equal([Graph.DocAnalysisV3, Graph.DocDraftV3], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV5, Graph.DocDraftV3], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProcessingRunId\" = @r AND \"AnalysisRevisionId\" = @v", ("r", generation), ("v", revision)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", generation)));
         Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
@@ -218,7 +219,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(generation);
         Assert.Equal(("Completed", null), (row.Status, row.ErrorCode));
-        Assert.Equal([Graph.DocAnalysisV3, Graph.DocDraft], _model.Graphs);   // il run v2 usa il prompt e il messaggio con UUID della v2, mai l'alias
+        Assert.Equal([Graph.DocAnalysisV5, Graph.DocDraft], _model.Graphs);   // il run v2 usa il prompt e il messaggio con UUID della v2, mai l'alias
         Assert.Equal([DocumentSourceDraftWorkflow.DefinitionVersion], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", generation)));
         Assert.Equal(1, await Count("SELECT count(*) FROM \"Drafts\" WHERE \"ProcessingRunId\" = @r", ("r", generation)));
     }
@@ -397,7 +398,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         await DrainAsync();
 
         Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
-        Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV5], _model.Graphs);
         Assert.Contains(Statement, string.Concat(_model.Texts));                                        // fonti dello snapshot congelato
     }
 
@@ -429,7 +430,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         var project = await NewProject(first);
         await NewReadyDocument(first, project, "regole", Statement);
         var run = await StartAnalysis(first, project);
-        _model.FailNext(Graph.DocAnalysisV3);
+        _model.FailNext(Graph.DocAnalysisV5);
 
         await DrainAsync();
         Assert.Equal("Queued", (await RunRow(run)).Status);
@@ -442,9 +443,9 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         var row = await RunRow(run);
         Assert.Equal(("Completed", null), row.Pair());
         Assert.Equal(2, row.Attempts);
-        Assert.Equal([Graph.DocAnalysisV3, Graph.DocAnalysisV3], _model.Graphs);
+        Assert.Equal([Graph.DocAnalysisV5, Graph.DocAnalysisV5], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV4], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV5], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
 
         // Replay: un run terminale non si rielabora e non invia nulla.
         Assert.False(await Dispatcher().RunOnceAsync(Ct));
@@ -513,7 +514,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]  // v3 con prompt v2: mai un downgrade
     [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0"}""")]  // v3 senza schema AI, catalogo e id canonici congelati
     [InlineData("project-analysis-documents-v2", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // v2 con prompt v3: mai un upgrade
-    [InlineData("project-analysis-documents-v5", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // definizione futura ignota
+    [InlineData("project-analysis-documents-v5", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // v5 con le sole chiavi v3: mai una v3 promossa (T141: ora rifiutata da ContractOf, non più dal solo fallthrough 001)
     [InlineData("project-analysis-documents-v4", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]   // v4 senza le versioni della riconciliazione: mai una v3 promossa
     public async Task An_unknown_or_incompatible_analysis_definition_fails_explicitly_and_never_reaches_the_model(string definition, string prompts)
     {
@@ -531,7 +532,8 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
     }
 
-    // T143: la v5 e riconosciuta solo con tutte le chiavi single-call e le chiavi gerarchiche v4 + policy Gap; il routing di nuove richieste v5 resta T141.
+    // T143/T141: la v5 e riconosciuta solo con tutte le chiavi single-call e le chiavi gerarchiche v4 + policy Gap. Con T141 la v5 e instradata al workflow documentale: questi casi restano NEGATIVI
+    // e ora sono rifiutati da ContractOf (prima lo erano dal fallthrough 001 perché la definizione non era instradata); il gemello positivo con tutte le chiavi e il test sul POST reale più sotto.
     [Theory]
     [InlineData("""{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3"}""")]   // gerarchia e policy mancanti
     [InlineData("""{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v4","reconcileAiSchema":"reconcile-alias-2","reconcileAlgorithm":"global-reconcile-v2","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""")]   // gerarchia nominale futura
@@ -548,8 +550,254 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         var row = await RunRow(run);
         Assert.Equal(("Failed", "workflow_incompatible"), (row.Status, row.ErrorCode));
+        Assert.Contains("documentale", await Scalar<string>("SELECT \"ErrorMessage\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // T141: rifiutata dal guard del workflow documentale (ContractOf), non dal fallthrough 001
         Assert.Empty(_model.Graphs);
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+    }
+
+    // ================================================================ T141: routing positivo v5 e storico v2/v3/v4 invariato
+
+    /// <summary>Le dodici chiavi di versione di una nuova richiesta v5 (AI §13.1 + §13.6), nell'ordine di congelamento.</summary>
+    private static readonly (string Key, string Value)[] V5Keys =
+    [
+        ("analysis", "document-analysis-v4"), ("analysisSchema", "1.1.0"), ("analysisAiSchema", "document-analysis-alias-2"), ("aliasCatalog", "alias-catalog-1"),
+        ("canonIds", "canon-ids-1"), ("algorithm", "analysis-single-v3"), ("validation", "document-analysis-validation-v3"), ("reconcile", "document-reconcile-v3"),
+        ("reconcileAiSchema", "reconcile-alias-1"), ("reconcileAlgorithm", "global-reconcile-v1"), ("reconcileCatalog", "reconcile-alias-catalog-1"), ("reconcileGapPolicy", "hierarchical-gap-incomplete-1"),
+    ];
+
+    private static string PromptsJson(IEnumerable<(string Key, string Value)> keys) =>
+        JsonSerializer.Serialize(keys.ToDictionary(k => k.Key, k => k.Value));
+
+    [Fact]
+    public async Task A_new_analyze_request_is_frozen_as_v5_with_all_the_version_keys_and_the_dispatcher_routes_it_to_the_documentary_workflow()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+
+        var run = await StartAnalysis(client, project);
+
+        // Freeze al POST: definizione v5 e TUTTE le chiavi (single-call v5 + gerarchia v4 + policy Gap), nessuna decisione single-call/gerarchico alla richiesta.
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, (await RunRow(run)).Definition);
+        var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
+        Assert.Equal(V5Keys.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
+        Assert.Equal(0, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Empty(_model.Graphs);
+
+        await DrainAsync();
+
+        Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
+        Assert.Equal([Graph.DocAnalysisV5], _model.Graphs);   // prompt document-analysis-v4, mai il prompt v3 (nessun fallback semantico a v4)
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV5], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed' AND \"SchemaVersion\" = 'document-analysis-alias-2'", ("r", run)));
+    }
+
+    [Fact]
+    public void The_regime_preflight_measures_the_alias_2_dto_schema_for_v5_roots()
+    {
+        var analysis = App.Services.GetRequiredService<DocumentAnalysisWorkflow>();
+
+        var v5 = analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersionV5);
+
+        Assert.Equal(AnalysisAliasContracts.JsonSchemaV2().GetRawText(), v5.SchemaJson);
+        Assert.Contains("\"alias-2\"", v5.SchemaJson);
+        Assert.NotEqual(analysis.BuildRegimePayload(DocumentAnalysisWorkflow.DefinitionVersionV4).SchemaJson, v5.SchemaJson);
+        Assert.Equal((AiPhase.Analysis, (DocumentPayload?)null), (v5.Phase, v5.Payload));
+    }
+
+    /// <summary>Chiave per chiave: una sola versione ignota o mancante rende la v5 incompatibile, senza invio e senza ripiego su v4 o sul single-call.</summary>
+    public static IEnumerable<object?[]> V5KeyMutations()
+    {
+        foreach (var (key, _) in V5Keys)
+        {
+            yield return [key, "altra-versione"];   // valore ignoto
+            yield return [key, null];                // chiave mancante
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(V5KeyMutations))]
+    public async Task A_v5_run_with_any_version_key_missing_or_unknown_fails_as_incompatible_and_never_falls_back_to_v4(string key, string? value)
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        var mutated = V5Keys.Where(k => k.Key != key || value is not null).Select(k => k.Key == key ? (k.Key, value!) : k);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v5', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", PromptsJson(mutated)), ("r", run));
+
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.Equal(("Failed", "workflow_incompatible"), (row.Status, row.ErrorCode));
+        Assert.Contains("documentale", await Scalar<string>("SELECT \"ErrorMessage\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // T141: rifiutata dal guard del workflow documentale (ContractOf), non dal fallthrough 001
+        Assert.Empty(_model.Graphs);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task A_run_with_an_unknown_future_definition_but_the_complete_v5_keys_fails_as_incompatible()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v6', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", PromptsJson(V5Keys)), ("r", run));
+
+        await DrainAsync();
+
+        Assert.Equal(("Failed", "workflow_incompatible"), (await RunRow(run)).Pair());
+        Assert.Empty(_model.Graphs);
+    }
+
+    private const string GapQuestion = "Quanti ordini al giorno puo emettere il cliente B?";
+
+    /// <summary>Un solo Gap e un requisito, run creato dal POST reale e instradato dal dispatcher reale (nessun pin, nessun richiamo diretto del workflow).</summary>
+    private async Task<(HttpClient Client, Guid Project, Guid Run)> GapRunAsync()
+    {
+        var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        await NewReadyDocument(client, project, "domanda", GapQuestion, EvidenceKind.Gap);
+        return (client, project, await StartAnalysis(client, project));
+    }
+
+    [Fact]
+    public async Task A_routed_v5_run_with_a_gap_completes_in_one_call_and_exposes_coverage_3_with_the_persisted_assessment()
+    {
+        var (client, project, run) = await GapRunAsync();
+        using var _ = client;
+
+        await DrainAsync();
+
+        Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
+        Assert.Equal([Graph.DocAnalysisV5], _model.Graphs);                       // caso (a): single-call con Gap, una sola chiamata
+        Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        var payload = JsonNode.Parse(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", run)))!.AsObject();
+        Assert.Single(payload["gapAssessments"]!.AsArray());
+        var report = await CoverageAsync(client, project, run);
+        Assert.Equal("coverage-3", report.GetProperty("checkerVersion").GetString());
+        var summary = report.GetProperty("summary");
+        Assert.Equal((1, 1, 0, 1, 0), (summary.GetProperty("expectedGaps").GetInt32(), summary.GetProperty("assessedGaps").GetInt32(), summary.GetProperty("answeredGaps").GetInt32(),
+            summary.GetProperty("openGaps").GetInt32(), summary.GetProperty("unassessedGaps").GetInt32()));
+    }
+
+    [Fact]
+    public async Task A_routed_v5_run_whose_first_output_omits_the_gap_assessment_gets_the_informed_retry_and_then_coverage_3_counts_the_assessment()
+    {
+        var (client, project, run) = await GapRunAsync();
+        using var _ = client;
+        var sent = 0;
+        _analysisV5 = r => Interlocked.Increment(ref sent) == 1
+            ? AliasModelRepliesV5.Reply(r.Text, d => d with { GapAssessments = [] })    // Gap mappato ma non valutato: gap_not_assessed, classe ammessa al retry (T137)
+            : AliasModelRepliesV5.Reply(r.Text);
+
+        await DrainAsync();
+
+        Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
+        Assert.Equal([Graph.DocAnalysisV5, Graph.DocAnalysisV5], _model.Graphs);   // invio + UN retry informato sul percorso instradato
+        Assert.Equal(2, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Contains("gap_senza_valutazione", _model.Texts[1]);                  // motivo tipizzato nella correzione
+        Assert.DoesNotContain("gap_senza_valutazione", _model.Texts[0]);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'analysis_retry'", ("r", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", run)));   // solo il secondo output è committato
+        var report = await CoverageAsync(client, project, run);
+        Assert.Equal("coverage-3", report.GetProperty("checkerVersion").GetString());
+        var summary = report.GetProperty("summary");
+        Assert.Equal((1, 1, 0), (summary.GetProperty("expectedGaps").GetInt32(), summary.GetProperty("assessedGaps").GetInt32(), summary.GetProperty("unassessedGaps").GetInt32()));
+    }
+
+    [Fact]
+    public async Task A_routed_v5_run_whose_retry_still_omits_the_assessment_never_completes_and_is_not_retried_again()
+    {
+        var (client, _, run) = await GapRunAsync();
+        using var _c = client;
+        _analysisV5 = r => AliasModelRepliesV5.Reply(r.Text, d => d with { GapAssessments = [] });
+
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.Equal("Failed", row.Status);
+        Assert.Equal([Graph.DocAnalysisV5, Graph.DocAnalysisV5], _model.Graphs);   // un solo retry, mai un terzo invio
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));   // mai un falso Completed né una revisione
+    }
+
+    [Fact]
+    public async Task A_v5_run_never_reuses_the_work_of_a_v4_run_over_the_same_sources_and_each_keeps_its_own_manifest_hashes_and_replay()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var v4 = await StartAnalysis(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v4', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", V4HistoricalPrompts), ("r", v4));
+        await DrainAsync();
+        Assert.Equal(("Completed", null), (await RunRow(v4)).Pair());
+
+        var v5 = await StartAnalysis(client, project);                                  // stesse fonti, richiesta nuova: v5
+        await DrainAsync();
+
+        Assert.Equal(("Completed", null), (await RunRow(v5)).Pair());
+        Assert.Equal([Graph.DocAnalysisV3, Graph.DocAnalysisV5], _model.Graphs);         // il v5 ha inviato la propria chiamata: nessun riuso di WorkOutput per sola uguaglianza di fonti
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV4, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4)));
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5)));
+        Assert.NotEqual(await Scalar<string>("SELECT \"Hash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4)), await Scalar<string>("SELECT \"Hash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5)));
+        Assert.Equal("document-analysis-alias-1", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v4)));
+        Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v5)));
+        Assert.NotEqual(await Scalar<string>("SELECT \"OutputHash\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v4)), await Scalar<string>("SELECT \"OutputHash\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v5)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", v4)));   // il run storico resta intatto
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", v5)));
+
+        // Replay: nessun run attivo né da riprendere, nessun nuovo invio; i terminali restano immutati.
+        var before = (await RunRow(v4), await RunRow(v5));
+        Assert.False(await Dispatcher().RunOnceAsync(Ct));
+        Assert.Equal(2, _model.Graphs.Count);
+        Assert.Equal(before, (await RunRow(v4), await RunRow(v5)));
+    }
+
+    private async Task<JsonElement> CoverageAsync(HttpClient client, Guid project, Guid analysis)
+    {
+        var response = await client.PostAsJsonAsync($"/api/projects/{project}/analyses/{analysis}/coverage-reports", new { }, Ct);
+        Assert.Contains(response.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Created });
+        return await Json(response);
+    }
+
+    /// <summary>Versioni congelate dalle nuove richieste v4 di T131 (storico, prima di T141): alias v3 più riconciliazione gerarchica, nessuna chiave Gap.</summary>
+    private const string V4HistoricalPrompts = HistoricalAnalysisV4.Versions;
+
+    [Fact]
+    public async Task A_historical_v4_run_still_runs_the_alias_1_graph_with_the_v3_prompt_and_completes_without_gap_assessments()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v4', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", V4HistoricalPrompts), ("r", run));
+
+        await DrainAsync();
+
+        Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
+        Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);   // prompt v3, mai promosso a v5
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV4], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'document-analysis-alias-1'", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'document-analysis-alias-2'", ("r", run)));
+    }
+
+    [Fact]
+    public async Task A_historical_v3_run_still_runs_the_alias_1_graph_with_the_v3_prompt_and_completes()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        const string v3 = """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v2","validation":"document-analysis-validation-v2"}""";
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v3', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", v3), ("r", run));
+
+        await DrainAsync();
+
+        Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
+        Assert.Equal([Graph.DocAnalysisV3], _model.Graphs);
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV3], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
     }
 
     [Theory]
@@ -702,11 +950,11 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         return new Doc(created.GetProperty("documentId").GetGuid(), created.GetProperty("id").GetGuid(), Guid.NewGuid());
     }
 
-    private async Task<Doc> NewReadyDocument(HttpClient client, Guid project, string name, string statement) =>
-        await MakeReady(await NewPendingDocument(client, project, name), statement);
+    private async Task<Doc> NewReadyDocument(HttpClient client, Guid project, string name, string statement, EvidenceKind kind = EvidenceKind.Requirement) =>
+        await MakeReady(await NewPendingDocument(client, project, name), statement, kind);
 
     /// <summary>Rende pronta una versione con una evidenza e una fonte (stessa scrittura dei test dei workflow documentali).</summary>
-    private async Task<Doc> MakeReady(Doc doc, string statement)
+    private async Task<Doc> MakeReady(Doc doc, string statement, EvidenceKind kind = EvidenceKind.Requirement)
     {
         using var scope = App.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -743,7 +991,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         db.Evidences.Add(new EvidenceItem
         {
             Id = Guid.NewGuid(), VersionId = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Ordinal = 1,
-            Key = "e1", Kind = EvidenceKind.Requirement, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = statement,
+            Key = "e1", Kind = kind, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = statement,
             Content = DocumentEvidenceCodec.EncodeContent(content),
         });
         db.EvidenceDocumentStates.Add(new EvidenceDocumentState
@@ -760,7 +1008,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     // ================================================================ supporto: modello finto (HTTP, llama.cpp simulato)
 
-    internal enum Graph { DocChat, DocChatV3, Chat001, DocAnalysis, DocAnalysisV3, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
+    internal enum Graph { DocChat, DocChatV3, Chat001, DocAnalysis, DocAnalysisV3, DocAnalysisV5, Analysis001, DocDraft, DocDraftV3, Draft001, Other }
 
     private sealed record Req(Graph Graph, string System, string Text);
 
@@ -773,6 +1021,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
             : s.Contains(Norm(DocumentChatWorkflow.InstructionsV3)) ? Graph.DocChatV3
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
+            : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV4)) ? Graph.DocAnalysisV5
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
             : s.Contains(Norm(DocumentSourceDraftWorkflow.InstructionsV3)) ? Graph.DocDraftV3
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001
@@ -789,7 +1038,8 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
             ?? JsonSerializer.Serialize(new { mode = "documented", answer = $"Massimo 5 ordini al giorno [fonte:{Regex.Match(request.Text, "fonte:(F[0-9]+) ").Groups[1].Value}]." }),   // alias, mai UUID
         Graph.Chat001 => "Quali utenti userebbero il portale?",
         Graph.DocAnalysis => DocumentAnalysisReply(request.Text),
-        Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // il modello vede solo alias e produce il DTO semantico
+        Graph.DocAnalysisV3 => AliasModelReplies.Reply(request.Text),   // storico v3/v4: il modello vede solo alias e produce il DTO semantico alias-1
+        Graph.DocAnalysisV5 => _analysisV5?.Invoke(request) ?? AliasModelRepliesV5.Reply(request.Text),   // v5 (T141): DTO alias-2 con le valutazioni dei Gap
         Graph.Analysis001 => LegacyAnalysisReply(request.Text),
         Graph.DocDraft => DocumentDraftReply(request.Text),
         Graph.DocDraftV3 => DraftAliasModelReplies.Reply(request.Text),   // alias nel messaggio, DTO con alias nella risposta

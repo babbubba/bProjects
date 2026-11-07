@@ -680,9 +680,6 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     /// <summary>Modello che fallisce se invocato: i percorsi fail-fast non devono mai arrivare al modello.</summary>
     private static DocumentChatWorkflowTests.FakeChatModel Tripwire() => new() { Responder = _ => throw new InvalidOperationException("il fail-fast non deve invocare il modello") };
 
-    /// <summary>La v5 NON è instradata per le nuove richieste (T141): il test riscrive la definizione congelata, come per la v5 single-call.</summary>
-    private async Task PinToV5Async(Guid run, string prompts = V5Hierarchical) => await FreezeHistoricalAsync(run, V5, prompts);
-
     /// <summary>Corpus con <paramref name="gaps"/> documenti di tipo Gap (i primi) e gli altri Requirement; run creato dal vero endpoint e poi congelato v5 (o lasciato v4).</summary>
     private async Task<(Guid Run, AnalysisRunClaim Claim, Guid Project)> ArrangeV5Async(int documents = Documents, int gaps = 0, int words = 120, bool v5 = true, HttpClient? existing = null, Guid? existingProject = null)
     {
@@ -698,12 +695,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
             }
         }
 
-        var run = await StartV4Async(client, project);
-        if (v5)
-        {
-            await PinToV5Async(run);
-        }
-
+        var run = v5 ? await StartNativeAsync(client, project) : await StartV4Async(client, project);   // v5: run nativo del POST (T141); v4: riportato alla definizione storica
         return (run, await ClaimAsync(run), project);
     }
 
@@ -918,8 +910,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     /// </summary>
     private async Task<int> ProbeV5TokensAsync(HttpClient client, Guid project)
     {
-        var run = await StartV4Async(client, project);
-        await PinToV5Async(run);
+        var run = await StartNativeAsync(client, project);
         var model = Tripwire();
         var result = await RunAsync(await ClaimAsync(run), model, contextWindow: BoundaryOutput + BoundaryMargin + 80);
         Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
@@ -950,8 +941,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         using var client = await App.LoginAsync();
         var project = await CorpusAsync(client, gaps: 1);
         var tokens = await ProbeV5TokensAsync(client, project);
-        var run = await StartV4Async(client, project);
-        await PinToV5Async(run);
+        var run = await StartNativeAsync(client, project);
         var claim = await ClaimAsync(run);
         var model = singleCall ? new DocumentChatWorkflowTests.FakeChatModel { Responder = r => AliasModelRepliesV5.Reply(r.AllText) } : Tripwire();
 
@@ -984,8 +974,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         using var client = await App.LoginAsync();
         var tokens = await ProbeV5TokensAsync(client, await CorpusAsync(client, gaps: 1));   // gemello con un Gap: stesso numero di parole (tipo=Gap / tipo=Requirement)
         var project = await CorpusAsync(client, gaps: 0);
-        var run = await StartV4Async(client, project);
-        await PinToV5Async(run);
+        var run = await StartNativeAsync(client, project);
         var claim = await ClaimAsync(run);
         var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => r.AllText.Contains("Tipo di batch:", StringComparison.Ordinal) ? Dto(ParseAlias(r.AllText)) : AliasModelRepliesV5.Reply(r.AllText) };
 
@@ -1041,14 +1030,35 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     private async Task FreezeHistoricalAsync(Guid run, string definition, string versions) =>
         await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = @v::jsonb WHERE \"Id\" = @r", ("d", definition), ("v", versions), ("r", run));
 
-    /// <summary>Run creato dal vero endpoint Analizza (POST): la definizione e le versioni sono quelle congelate dall'endpoint, mai riscritte dal test.</summary>
+    /// <summary>Run creato dal vero endpoint Analizza (POST): dal T141 è v5 con le sue chiavi, mai riscritte dal test (nessun pin).</summary>
+    private async Task<Guid> StartNativeAsync(HttpClient client, Guid project)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var response = await client.SendAsync(request, Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
+        var run = (await Json(response)).GetProperty("id").GetGuid();
+        Assert.Equal(V5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
+        Assert.Equal(
+            JsonSerializer.Deserialize<Dictionary<string, string>>(V5Hierarchical)!.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"),
+            frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));   // tutte le chiavi di AI §13.1 e §13.6, né più né meno
+        return run;
+    }
+
+    /// <summary>Versioni congelate dalle nuove richieste v4 di T131 (storico, prima di T141): alias v3 più riconciliazione gerarchica con alias, nessuna chiave Gap.</summary>
+    private const string V4Versions = HistoricalAnalysisV4.Versions;
+
+    /// <summary>Run v4 STORICO: creato dal vero endpoint (oggi v5) e riportato alla definizione e alle versioni che l'endpoint congelava prima di T141, come un run richiesto allora.</summary>
     private async Task<Guid> StartV4Async(HttpClient client, Guid project)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
         var response = await client.SendAsync(request, Ct);
         Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
-        return (await Json(response)).GetProperty("id").GetGuid();
+        var run = (await Json(response)).GetProperty("id").GetGuid();
+        await FreezeHistoricalAsync(run, V4, V4Versions);
+        return run;
     }
 
     private async Task<List<string>> Strings(string sql, params (string Name, object Value)[] args)
