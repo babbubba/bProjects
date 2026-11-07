@@ -355,26 +355,23 @@ public sealed class DocumentChatWorkflow(
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var (turn, conversation, sources, messages, instructions, structured, catalog) = await LoadInputAsync(db, claim.TurnId, ct);
+        var (turn, conversation, sources, messages, instructions, structured, catalog, history, question) = await LoadInputAsync(db, claim.TurnId, ct);
         var measure = await factory.Preflight.MeasureAsync(PayloadOf(instructions, messages, structured), ct);
         if (measure.Quality == TokenCountQuality.Unavailable)
         {
             throw new RuntimeUnverifiedException("conteggio del payload della chat non disponibile (nessun tokenizer o calibrazione identificata)");
         }
 
-        if (!measure.Fits)
-        {
-            throw new DocumentWorkException(
-                DocumentWorkException.CallLimitExceeded,
-                $"Le fonti selezionate e il dialogo ({measure.Tokens} token) superano la capacità della chat documentale piccola ({measure.InputBudgetTokens} token): la scansione di più unità non è ancora disponibile.");
-        }
-
         var definition = catalog is null ? DefinitionVersion : DefinitionVersionV3;
         var writer = CheckpointWriter.ForChatTurn(claim.TurnId, claim.LeaseOwner, claim.FencingToken, definition);
         var store = new DocumentWorkStore(db, writer);
         var committer = scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>();
-        var plan = new DocumentChatPlan(
-            claim, turn, conversation, sources, messages, instructions, measure, structured, factory, client, AnswerSchema, committer, onDelta, ct, catalog);
+        IChatResultPlan plan = measure.Fits
+            ? new DocumentChatPlan(
+                claim, turn, conversation, sources, messages, instructions, measure, structured, factory, client, AnswerSchema, committer, onDelta, ct, catalog)
+            : new DocumentLongChatPlan(
+                claim, turn, conversation, sources, history, question, instructions, measure.Profile, structured, factory, client, AnswerSchema, committer, onDelta, catalog,
+                documents.Value.MaxReconciliationLevels);   // oltre la capacità di una chiamata: scansione di tutte le evidenze e riduzione gerarchica (T084)
         var port = new DocumentBatchPort(store, db, writer, factory, plan, new ChatCallReservation(db, writer, documents.Value.MaxAiCallsPerRun));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(db, writer));
         try
@@ -399,7 +396,7 @@ public sealed class DocumentChatWorkflow(
     /// Il contratto è quello congelato sul turno (<see cref="ContractOf"/>): per la v3 (catalogo valorizzato) messaggio con alias e prompt v3, per la v2 messaggio UUID
     /// e prompt v2; un turno con definizione o versioni non supportate è <c>workflow_incompatible</c> prima di ogni misura o invio.
     /// </summary>
-    private async Task<(ChatTurn Turn, Conversation Conversation, ChatSnapshotSources Sources, IReadOnlyList<ChatMessage> Messages, string Instructions, bool Structured, ChatAliasCatalog? Catalog)> LoadInputAsync(
+    private async Task<(ChatTurn Turn, Conversation Conversation, ChatSnapshotSources Sources, IReadOnlyList<ChatMessage> Messages, string Instructions, bool Structured, ChatAliasCatalog? Catalog, IReadOnlyList<ConversationMessage> History, string Question)> LoadInputAsync(
         AppDbContext db, Guid turnId, CancellationToken ct)
     {
         var turn = await db.ChatTurns.AsNoTracking().SingleAsync(t => t.Id == turnId, ct);
@@ -425,7 +422,7 @@ public sealed class DocumentChatWorkflow(
         var instructions = sources.Unavailable > 0 ? baseInstructions + "\n\n" + ChatSourceNotice.ModelGuard(sources.Unavailable) : baseInstructions;
         var messages = catalog is null ? BuildMessages(history, sources, trigger.Body) : BuildAliasMessages(history, sources, catalog, trigger.Body);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
-        return (turn, conversation, sources, messages, instructions, structured, catalog);
+        return (turn, conversation, sources, messages, instructions, structured, catalog, history, trigger.Body);
     }
 
     private static DocumentPayload PayloadOf(string instructions, IReadOnlyList<ChatMessage> messages, bool structured) =>
@@ -435,7 +432,7 @@ public sealed class DocumentChatWorkflow(
     public async Task<RegimePayload> BuildRegimePayloadAsync(Guid turnId, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
-        var (_, _, _, messages, instructions, structured, _) = await LoadInputAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), turnId, ct);
+        var (_, _, _, messages, instructions, structured, _, _, _) = await LoadInputAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), turnId, ct);
         return new RegimePayload(AiPhase.Chat, PayloadOf(instructions, messages, structured), AnswerSchema.GetRawText(), factory.Preflight);
     }
 
@@ -467,14 +464,7 @@ public sealed class DocumentChatWorkflow(
 
         foreach (var evidence in sources.Evidence)
         {
-            text.Append($"<<<EVIDENZA tipo={evidence.Kind} polarita={evidence.Polarity} certezza={evidence.Certainty}>>>\n")
-                .Append(evidence.Statement).Append('\n');
-            foreach (var source in evidence.Sources)
-            {
-                text.Append($"<<<FONTE {label(source)} ruolo={source.Role}>>>\n").Append(source.Quote).Append("\n<<<FINE FONTE>>>\n");
-            }
-
-            text.Append("<<<FINE EVIDENZA>>>\n");
+            AppendEvidence(text, evidence, label);
         }
 
         // Fino a qui il testo è composto solo dal server a partire dalle evidenze documentali congelate e dalle loro fonti (T064: attribuzione document_sources);
@@ -487,6 +477,21 @@ public sealed class DocumentChatWorkflow(
         messages.Add(new ChatMessage(ChatRole.User, text.ToString()) { AdditionalProperties = new() { [ContextComposition.DocumentSpansProperty] = new[] { 0, documentLength } } });
         return messages;
     }
+
+    /// <summary>Blocco di una evidenza con enunciato e fonti letterali: unico formato di lettura, condiviso dalla chat piccola e dalle fasi della chat oltre contesto (T084).</summary>
+    internal static void AppendEvidence(StringBuilder text, ChatEvidence evidence, Func<PersistedSource, string> label)
+    {
+        text.Append($"<<<EVIDENZA tipo={evidence.Kind} polarita={evidence.Polarity} certezza={evidence.Certainty}>>>\n")
+            .Append(evidence.Statement).Append('\n');
+        foreach (var source in evidence.Sources)
+        {
+            text.Append($"<<<FONTE {label(source)} ruolo={source.Role}>>>\n").Append(source.Quote).Append("\n<<<FINE FONTE>>>\n");
+        }
+
+        text.Append("<<<FINE EVIDENZA>>>\n");
+    }
+
+    internal static bool IsLeaseLostException(Exception exception) => IsLeaseLost(exception);
 
     private static bool IsLeaseLost(Exception exception)
     {
@@ -509,7 +514,7 @@ public sealed class DocumentChatWorkflow(
 /// risposta, composizione del risultato dall'output Committed e commit atomico del turno. Deterministico nel replay: identità dei batch = hash di
 /// owner, manifesto, definizione, stadio, ordinale e payload completo.
 /// </summary>
-internal sealed class DocumentChatPlan : IDocumentBatchPlan
+internal sealed class DocumentChatPlan : IChatResultPlan
 {
     private readonly ChatTurnClaim _claim;
     private readonly ChatTurn _turn;
@@ -733,22 +738,30 @@ internal sealed class DocumentChatPlan : IDocumentBatchPlan
     public async ValueTask<int> CommitAsync(IBatchOutputs outputs, CancellationToken ct)
     {
         var answer = await DecodeAsync(outputs, ct);
-        var text = ChatSourceNotice.Append(answer.Answer, _sources.Unavailable);
-        var agent = _factory.CreateBatchAgent(_agent.Name, _agent.Id, _instructions, _agent.ChatOptions, _agent.Phase, _agent.ExpectedFingerprint);
+        Result = await CommitReplyAsync(
+            _committer, _claim, _factory, _agent, _instructions, _conversation, _turn, _sources,
+            DocumentChatWorkflow.ChatConfigVersionFor(_sources.SnapshotHash, _configHash, aliasContract: _catalog is not null), answer, ct);
+        return 1;
+    }
+
+    /// <summary>
+    /// Commit atomico della risposta validata (comune alla chat piccola e a quella oltre contesto): un rifiuto per lease perso non è un errore del modello né un turno
+    /// concluso (come il dialogo 001) e decidono lo sweep o il reclaim.
+    /// </summary>
+    internal static async ValueTask<ChatTurnCommitResult> CommitReplyAsync(
+        IChatTurnCommitter committer, ChatTurnClaim claim, AgentFactory factory, BatchAgentSpec spec, string instructions, Conversation conversation, ChatTurn turn,
+        ChatSnapshotSources sources, string configVersion, DocumentChatAnswer answer, CancellationToken ct)
+    {
+        var text = ChatSourceNotice.Append(answer.Answer, sources.Unavailable);
+        var agent = factory.CreateBatchAgent(spec.Name, spec.Id, instructions, spec.ChatOptions, spec.Phase, spec.ExpectedFingerprint);
         var session = await agent.CreateSessionAsync(ct);
         var reply = new ConversationalReply(
-            text, agent, session, new RestoredChatSession(session, false, "document_chat"), _conversation, _turn,
-            DocumentChatWorkflow.ChatConfigVersionFor(_sources.SnapshotHash, _configHash, aliasContract: _catalog is not null), _sources.SnapshotHash, answer);
+            text, agent, session, new RestoredChatSession(session, false, "document_chat"), conversation, turn, configVersion, sources.SnapshotHash, answer);
 
-        var result = await _committer.CommitAsync(_claim, reply, ct);
-        if (result is { Outcome: ChatTurnCommitOutcome.Rejected, Reason: "lease_lost" })
-        {
-            // Come il dialogo 001: non è un errore del modello né un turno concluso; decidono lo sweep o il reclaim.
-            throw new LeaseLostException("Commit della risposta rifiutato (lease_lost): il lease non è più valido.");
-        }
-
-        Result = result;
-        return 1;
+        var result = await committer.CommitAsync(claim, reply, ct);
+        return result is { Outcome: ChatTurnCommitOutcome.Rejected, Reason: "lease_lost" }
+            ? throw new LeaseLostException("Commit della risposta rifiutato (lease_lost): il lease non è più valido.")
+            : result;
     }
 }
 
@@ -766,4 +779,15 @@ public sealed class DocumentChatTurnExecutor(DocumentChatWorkflow workflow, Chat
             await events.PublishStateAsync(claim.TurnId); // post-commit: Completed rimanda al resultMessageId persistito
         }
     }
+}
+
+/// <summary>Istruzioni delle fasi della chat oltre contesto (AI/Prompts/document-chat-scan.md, document-chat-reduce.md), incorporate nell'assembly.</summary>
+public static class DocumentLongChat
+{
+    private static readonly Lazy<string> Scan = new(() => ConversationalAgent.LoadPrompt("document-chat-scan.md"));
+    private static readonly Lazy<string> Reduce = new(() => ConversationalAgent.LoadPrompt("document-chat-reduce.md"));
+
+    public static string ScanInstructions => Scan.Value;
+
+    public static string ReduceInstructions => Reduce.Value;
 }

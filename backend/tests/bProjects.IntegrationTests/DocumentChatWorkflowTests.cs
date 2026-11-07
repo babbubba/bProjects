@@ -346,8 +346,10 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
     }
 
     [Fact]
-    public async Task A_payload_beyond_the_chat_capacity_fails_explicitly_before_any_model_call()
+    public async Task A_single_evidence_beyond_the_chat_capacity_is_an_explicit_irreducible_unit_before_any_model_call()
     {
+        // Dalla T084 un payload oltre la capacita' passa dalla scansione multi-unita' (DocumentLongChatTests); un'unica evidenza che da sola non entra resta
+        // irriducibile: errore esplicito con ID, nessun invio parziale.
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         await NewDocument(client, project, "grande", string.Join(' ', Enumerable.Range(0, 3500).Select(i => $"parola{i}")));
@@ -356,7 +358,7 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
 
         var failure = await Assert.ThrowsAnyAsync<Exception>(() => RunAsync(turn, model));
 
-        Assert.Equal(DocumentWorkException.CallLimitExceeded, ModelFailure.Classify(Unwrap(failure)).Code);
+        Assert.Equal(DocumentWorkException.DocumentIncomplete, ModelFailure.Classify(Unwrap(failure)).Code);
         Assert.Empty(model.Requests);
         Assert.Equal(0, await Count("SELECT count(*) FROM \"ConversationMessages\" WHERE \"Role\" = 'Assistant'"));
     }
