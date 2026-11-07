@@ -313,6 +313,7 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"POST {p}/document-jobs/{{jobId:guid}}/retry",
             $"GET {p}/source-selection",
             $"PUT {p}/source-selection",
+            $"GET {p}/source-snapshots/{{snapshotId:guid}}",   // manifest storico (T097)
             // Limiti dei documenti (slice 002, contracts/http-api.md): unico endpoint di amministrazione, ruolo Admin (T005).
             "GET /api/admin/document-limits",
             "PUT /api/admin/document-limits",
@@ -321,7 +322,7 @@ public sealed class ContentSecurityTests : IAsyncLifetime
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(51, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, rielaborazione e promozione del bundle, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin)
+        Assert.Equal(52, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, rielaborazione e promozione del bundle, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin)
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {

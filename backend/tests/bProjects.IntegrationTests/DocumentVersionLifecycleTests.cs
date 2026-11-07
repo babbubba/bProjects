@@ -729,6 +729,63 @@ public sealed class DocumentVersionLifecycleTests : LifecycleTestBase
         await UploadNextVersionAsync(client, t, "Terza");
         Assert.False((await SelectionItemAsync(client, t)).GetProperty("included").GetBoolean());
     }
+
+    // ================================================================ T097: consultazione e confronto storico
+
+    private const string ViewQuery = "?viewVersion=1.1.0";
+
+    [Fact]
+    public async Task A_superseded_bundle_original_and_evidence_stay_consultable_after_a_new_file_version_and_a_promotion()
+    {
+        using var client = await App.LoginAsync();
+        var (t, g) = await CurrentWithCandidatesAsync(client, PreparationStatus.Ready);
+        var original = await client.GetByteArrayAsync($"/api/projects/{t.Project}/documents/{t.Document}/versions/1/download", Ct);
+        var v2 = await UploadNextVersionAsync(client, t, "Seconda versione diversa");
+        var secondReady = await SeedGenerationAsync(v2, 1, PreparationStatus.Ready);
+        await MakeCurrentAsync(v2, secondReady);
+        Assert.Equal(HttpStatusCode.OK, (await Promote(client, t, "2", Expect(1))).StatusCode);   // g1 diventa Superseded
+
+        // L'originale della v1 non cambia dopo v2/g2/promozione e il download della v2 è un altro file.
+        Assert.Equal(original, await client.GetByteArrayAsync($"/api/projects/{t.Project}/documents/{t.Document}/versions/1/download", Ct));
+        Assert.NotEqual(original, await client.GetByteArrayAsync($"/api/projects/{t.Project}/documents/{t.Document}/versions/2/download", Ct));
+
+        // Il bundle sostituito è ancora risolto per id (citazioni storiche) e dichiarato non corrente; il corrente è g2.
+        var superseded = await Json(await client.GetAsync($"/api/projects/{t.Project}/evidence/versions/{g[0].EvidenceVersion}{ViewQuery}", Ct));
+        Assert.Equal(g[0].EvidenceVersion, superseded.GetProperty("version").GetProperty("id").GetGuid());
+        Assert.False(superseded.GetProperty("version").GetProperty("isCurrent").GetBoolean());
+        Assert.Equal(t.Version, superseded.GetProperty("documentVersionId").GetGuid());
+        var versions = await Json(await client.GetAsync($"/api/projects/{t.Project}/documents/{t.Document}/versions/1/evidence/versions{ViewQuery}", Ct));
+        Assert.Equal(g[1].EvidenceVersion, versions.GetProperty("currentEvidenceVersionId").GetGuid());
+        Assert.Equal(2, versions.GetProperty("versions").GetArrayLength());
+
+    }
+
+    [Fact]
+    public async Task Evidence_versions_compare_only_on_the_same_original_and_parse_never_across_files_by_words_or_filename()
+    {
+        using var client = await App.LoginAsync();
+        var (t, g) = await CurrentWithCandidatesAsync(client, PreparationStatus.Ready);
+        // Altro file con lo stesso nome, lo stesso contenuto e lo stesso manifest: mai fuso per parole o filename.
+        var twin = await NewTarget(client, t.Project, "nota.txt");
+        var twinGeneration = await SeedGenerationAsync(twin, 1, PreparationStatus.Ready);
+        var v2 = await UploadNextVersionAsync(client, t, "Contenuto");
+        var secondReady = await SeedGenerationAsync(v2, 1, PreparationStatus.Ready);
+        await Execute("UPDATE \"EvidenceExtractionVersions\" SET \"ManifestHash\" = @h", ("h", new string('7', 64)));   // stesso manifest ovunque
+        string Compare(Guid a, Guid b) => $"/api/projects/{t.Project}/evidence/versions/{a}/compare/{b}{ViewQuery}";
+
+        // Stessa versione file e stesso manifest (stesso originale/parse): confrontabili.
+        var same = await client.GetAsync(Compare(g[0].EvidenceVersion!.Value, g[1].EvidenceVersion!.Value), Ct);
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+        Assert.Equal(t.Version, (await Json(same)).GetProperty("documentVersionId").GetGuid());
+
+        // Altro file (stesso nome/contenuto) o altra versione file: 422, anche con manifest identico.
+        await AssertProblem(await client.GetAsync(Compare(g[0].EvidenceVersion!.Value, twinGeneration.EvidenceVersion!.Value), Ct), (HttpStatusCode)422, "versions_not_comparable");
+        await AssertProblem(await client.GetAsync(Compare(g[0].EvidenceVersion!.Value, secondReady.EvidenceVersion!.Value), Ct), (HttpStatusCode)422, "versions_not_comparable");
+
+        // Manifest strutturale diverso sulla stessa versione file: non verificabile.
+        await Execute("UPDATE \"EvidenceExtractionVersions\" SET \"ManifestHash\" = @h WHERE \"Id\" = @e", ("h", new string('8', 64)), ("e", g[1].EvidenceVersion!.Value));
+        await AssertProblem(await client.GetAsync(Compare(g[0].EvidenceVersion!.Value, g[1].EvidenceVersion!.Value), Ct), (HttpStatusCode)422, "versions_not_comparable");
+    }
 }
 
 /// <summary>

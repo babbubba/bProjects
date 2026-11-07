@@ -43,6 +43,7 @@ public static class ProjectDocumentEndpoints
         group.MapPost("/documents/{documentId:guid}/versions/{version}/preparations", Reprocess);
         group.MapPost("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/promote", PromoteBundle);
         group.MapPost("/document-jobs/{jobId:guid}/retry", RetryParse);
+        group.MapGet("/source-snapshots/{snapshotId:guid}", GetSourceSnapshot);
         return app;
     }
 
@@ -326,6 +327,19 @@ public static class ProjectDocumentEndpoints
         return Results.Ok(new DocumentBundleVersionsView(
             DocumentEvidenceViews.ViewVersion, documentId, found.Id, state?.Revision ?? 0, state?.CurrentPreparationId, state?.CurrentEvidenceVersionId,
             [.. rows.Select(x => DocumentEvidenceViews.Summary(x.v, x.Generation, x.v.Id == state?.CurrentEvidenceVersionId))]));
+    }
+
+    /// <summary>Manifest di una selezione storica (T097): solo nel progetto, con il confronto di sola lettura rispetto alla risoluzione attuale. Nessun lavoro, nessuna scrittura.</summary>
+    private static async Task<IResult> GetSourceSnapshot(Guid projectId, Guid snapshotId, SourceSnapshotStore snapshots, HttpContext http, CancellationToken ct)
+    {
+        var manifest = await snapshots.ManifestAsync(projectId, snapshotId, ct);
+        if (manifest is null)
+        {
+            return Results.NotFound();
+        }
+
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new { manifest.Id, manifest.ProjectId, manifest.SelectionRevision, manifest.Hash, manifest.CreatedAt, HasSourceChanges = (await snapshots.ChangedAsync(projectId, [snapshotId], ct)).Contains(snapshotId), manifest.Items });
     }
 
     private static async Task<IResult> Download(

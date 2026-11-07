@@ -34,7 +34,9 @@ public sealed record ProcessingRunView(
     Guid? DraftId,
     RunError? Error,
     InferenceMetricsView? Metrics = null,
-    ExecutionView? Execution = null);
+    ExecutionView? Execution = null,
+    Guid? SourceSnapshotId = null,
+    bool? HasSourceChanges = null);
 
 /// <summary>Revisione dell'anteprima con provenienza e conferma (GET .../revisions/{v}).</summary>
 public sealed record RevisionView(
@@ -72,7 +74,9 @@ public sealed record AnalysisView(
     bool CanEdit,
     bool CanConfirm,
     bool CanGenerate,
-    InferenceMetricsView? Metrics = null);
+    InferenceMetricsView? Metrics = null,
+    Guid? SourceSnapshotId = null,
+    bool? HasSourceChanges = null);
 
 /// <summary>
 /// Comando Analizza e letture di run e anteprima (contracts/http-api.md, «Richiesta di analisi formale»).
@@ -260,6 +264,10 @@ public static class AnalysisEndpoints
         return run is null ? Results.NotFound() : Results.Ok(await ViewAsync(db, run, ct));
     }
 
+    /// <summary>Avviso di sola lettura «fonti cambiate»: null senza snapshot (record 001 o progetto senza documenti), altrimenti il confronto fra il manifest fissato e la risoluzione attuale (T097).</summary>
+    internal static async Task<bool?> SourceChangesAsync(AppDbContext db, Guid projectId, Guid? snapshotId, CancellationToken ct) =>
+        snapshotId is { } id ? (await new SourceSnapshotStore(db).ChangedAsync(projectId, [id], ct)).Contains(id) : null;
+
     /// <summary>ProcessingRunView con le metriche del risultato logico: solo per un run Completed (un Failed non ha metriche).</summary>
     public static async Task<ProcessingRunView> ViewAsync(AppDbContext db, ProcessingRun run, CancellationToken ct) =>
         ToView(run, run.Status == ProcessingRunStatus.Completed ? await InferenceMetrics.ForRunAsync(db, run.ProjectId, run.Id, ct) : null) with
@@ -268,6 +276,7 @@ public static class AnalysisEndpoints
             Execution = run.InitialRegime is null
                 ? null
                 : (await ExecutionTelemetry.ForRootAsync(db, run.ProjectId, ClassificationOwnerKind.ProcessingRun, run.Id, ct))?.Execution,
+            HasSourceChanges = await SourceChangesAsync(db, run.ProjectId, run.SourceSnapshotId, ct),
         };
 
     private static async Task<IResult> GetAnalysis(Guid projectId, Guid analysisId, HttpContext http, AppDbContext db, CancellationToken ct)
@@ -345,7 +354,9 @@ public static class AnalysisEndpoints
             CanConfirm: canEdit && isLatest && revision.ValidationState == AnalysisValidationState.Unvalidated,
             CanGenerate: canEdit && isLatest && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed,
             // Metriche del run che ha prodotto l'analisi (non della revisione): rilette dopo il reload insieme al risultato.
-            await InferenceMetrics.ForRunAsync(db, projectId, analysisId, ct)), run);
+            await InferenceMetrics.ForRunAsync(db, projectId, analysisId, ct),
+            run.SourceSnapshotId,
+            await SourceChangesAsync(db, projectId, run.SourceSnapshotId, ct)), run);
     }
 
     private static async Task<IResult> GetRevision(Guid projectId, Guid analysisId, string version, HttpContext http, AppDbContext db, CancellationToken ct)
@@ -415,7 +426,8 @@ public static class AnalysisEndpoints
         run.ResultRevisionId,
         run.DraftId,
         run.ErrorCode is null ? null : new RunError(run.ErrorCode, run.ErrorMessage),
-        metrics);
+        metrics,
+        SourceSnapshotId: run.SourceSnapshotId);
 
     private static string LocationOf(Guid projectId, Guid runId) => $"/api/projects/{projectId}/processing-runs/{runId}";
 

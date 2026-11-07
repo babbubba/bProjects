@@ -26,7 +26,9 @@ public sealed record DraftView(
     bool HasNewRevision,
     string Label,
     InferenceMetricsView? Metrics = null,
-    IReadOnlyList<DraftSourceMapEntry>? SourceMap = null);
+    IReadOnlyList<DraftSourceMapEntry>? SourceMap = null,
+    Guid? SourceSnapshotId = null,
+    bool? HasSourceChanges = null);
 
 /// <summary>
 /// Generazione esplicita del documento e lettura dell'ultima bozza (contracts/http-api.md, «Generazione esplicita del documento»).
@@ -221,6 +223,7 @@ public static class DocumentEndpoints
         var draft = await db.Drafts.AsNoTracking().SingleAsync(d => d.Id == draftId && d.ProjectId == projectId, ct);
         var source = await db.AnalysisRevisions.AsNoTracking().SingleAsync(r => r.Id == draft.AnalysisRevisionId, ct);
         var analysis = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == source.AnalysisId, ct);
+        var draftRun = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == draft.ProcessingRunId, ct);
 
         // Solo i messaggi PM contano: una risposta dell'assistente oltre il cutoff non rende la bozza «vecchia».
         var hasNewNotes = await db.ConversationMessages.AsNoTracking()
@@ -260,7 +263,9 @@ public static class DocumentEndpoints
             DraftLabel,
             // Metriche del run Document che ha generato la bozza, rilette dopo il reload insieme al Markdown.
             await InferenceMetrics.ForRunAsync(db, projectId, draft.ProcessingRunId, ct),
-            sourceMap));
+            sourceMap,
+            draftRun.SourceSnapshotId,
+            await AnalysisEndpoints.SourceChangesAsync(db, projectId, draftRun.SourceSnapshotId, ct)));
     }
 
     private static async Task<Guid?> ActiveRunAsync(AppDbContext db, Guid projectId, CancellationToken ct) =>

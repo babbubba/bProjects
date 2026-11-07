@@ -362,4 +362,130 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         Assert.Equal(ProcessingRun.DocumentWorkflowVersion, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", runId)));
         Assert.Equal(0, await Count("SELECT count(*) FROM \"SourceSnapshots\""));
     }
+
+    // ================================================================ T097: consultazione storica e hasSourceChanges
+
+    private async Task<JsonElement> GetJson(HttpClient client, string url)
+    {
+        var response = await client.GetAsync(url, Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await Json(response);
+    }
+
+    [Fact]
+    public async Task Chat_and_run_views_expose_the_frozen_snapshot_and_report_source_changes_without_changing_the_manifest()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var ready = await NewDocument(client, project, "pronto", ready: true);
+        var (preparation, evidence) = (await Scalar<Guid>("SELECT \"Id\" FROM \"DocumentPreparations\" WHERE \"DocumentVersionId\" = @v", ("v", ready.Version)),
+            await Scalar<Guid>("SELECT \"CurrentEvidenceVersionId\" FROM \"EvidenceDocumentStates\" WHERE \"DocumentVersionId\" = @v", ("v", ready.Version)));
+        var turn = (await Json(await Message(client, project))).GetProperty("chatTurnId").GetGuid();
+        var run = (await AnalyzeAccepted(client, project)).GetProperty("id").GetGuid();
+        var turnSnapshot = await SnapshotOf("ChatTurns", turn);
+        var runSnapshot = await SnapshotOf("ProcessingRuns", run);
+
+        var turnView = await GetJson(client, $"/api/projects/{project}/chat-turns/{turn}");
+        var runView = await GetJson(client, $"/api/projects/{project}/processing-runs/{run}");
+        Assert.Equal(turnSnapshot, turnView.GetProperty("sourceSnapshotId").GetGuid());
+        Assert.False(turnView.GetProperty("hasSourceChanges").GetBoolean());
+        Assert.Equal(runSnapshot, runView.GetProperty("sourceSnapshotId").GetGuid());
+        Assert.False(runView.GetProperty("hasSourceChanges").GetBoolean());
+
+        // Una v2 pronta dopo la richiesta cambia la risoluzione attuale, non lo snapshot: l'avviso è acceso, il manifest storico no.
+        var second = await NewDocument(client, project, "pronto-v2", ready: true, documentId: ready.Document);
+        Assert.Equal(second.Document, ready.Document);
+        Assert.True((await GetJson(client, $"/api/projects/{project}/chat-turns/{turn}")).GetProperty("hasSourceChanges").GetBoolean());
+        var changedRun = await GetJson(client, $"/api/projects/{project}/processing-runs/{run}");
+        Assert.True(changedRun.GetProperty("hasSourceChanges").GetBoolean());
+        Assert.Equal(runSnapshot, changedRun.GetProperty("sourceSnapshotId").GetGuid());
+
+        var manifest = await GetJson(client, $"/api/projects/{project}/source-snapshots/{runSnapshot}");
+        Assert.Equal(runSnapshot, manifest.GetProperty("id").GetGuid());
+        var item = Assert.Single(manifest.GetProperty("items").EnumerateArray());
+        Assert.Equal(ready.Document, item.GetProperty("documentId").GetGuid());
+        Assert.Equal(ready.Version, item.GetProperty("documentVersionId").GetGuid());
+        Assert.Equal(1, item.GetProperty("version").GetInt32());
+        Assert.Equal(preparation, item.GetProperty("preparationId").GetGuid());
+        Assert.Equal(evidence, item.GetProperty("evidenceVersionId").GetGuid());
+        Assert.Equal("Ready", item.GetProperty("availability").GetString());
+
+        // Solo nel progetto: id ignoto o di un altro progetto è 404.
+        var other = await NewProject(client);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/projects/{other}/source-snapshots/{runSnapshot}", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/projects/{project}/source-snapshots/{Guid.NewGuid()}", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Source_changes_never_alter_the_confirmed_revision_validation_state_or_can_generate()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var ready = await NewDocument(client, project, "pronto", ready: true);
+        var run = (await AnalyzeAccepted(client, project)).GetProperty("id").GetGuid();
+        using (var scope = App.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var runRow = await db.ProcessingRuns.SingleAsync(r => r.Id == run, Ct);
+            var revision = new AnalysisRevision
+            {
+                Id = Guid.NewGuid(), AnalysisId = run, Version = 1, Origin = AnalysisRevisionOrigin.Ai, CreatedBy = runRow.RequestedBy, CreatedAt = DateTimeOffset.UtcNow,
+                SchemaVersion = "1.1.0", ContentJson = "{}", ValidationState = AnalysisValidationState.PmConfirmed, ConfirmedBy = runRow.RequestedBy, ConfirmedAt = DateTimeOffset.UtcNow,
+            };
+            db.AnalysisRevisions.Add(revision);
+            runRow.Status = ProcessingRunStatus.Completed;
+            runRow.ResultRevisionId = revision.Id;
+            runRow.CompletedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(Ct);
+            await db.Projects.Where(p => p.Id == project).ExecuteUpdateAsync(x => x.SetProperty(p => p.CurrentAnalysisId, run), Ct);
+        }
+
+        var before = await GetJson(client, $"/api/projects/{project}/analyses/{run}");
+        Assert.False(before.GetProperty("hasSourceChanges").GetBoolean());
+        Assert.Equal(await SnapshotOf("ProcessingRuns", run), before.GetProperty("sourceSnapshotId").GetGuid());
+
+        await NewDocument(client, project, "pronto-v2", ready: true, documentId: ready.Document);
+        await NewDocument(client, project, "nuovo-documento", ready: false);
+
+        var after = await GetJson(client, $"/api/projects/{project}/analyses/{run}");
+        Assert.True(after.GetProperty("hasSourceChanges").GetBoolean());
+        Assert.Equal(before.GetProperty("validationState").GetString(), after.GetProperty("validationState").GetString());
+        Assert.Equal(before.GetProperty("canGenerate").GetBoolean(), after.GetProperty("canGenerate").GetBoolean());
+        Assert.Equal(before.GetProperty("canConfirm").GetBoolean(), after.GetProperty("canConfirm").GetBoolean());
+
+        // La bozza eredita lo snapshot dell'analisi: il suo avviso segue la stessa risoluzione, senza toccare la conferma.
+        var revisionId = Guid.Parse(after.GetProperty("currentRevisionId").GetString()!);
+        var generateRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses/{run}/document-generations") { Content = JsonContent.Create(new { revisionId }) };
+        generateRequest.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var generate = await client.SendAsync(generateRequest, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, generate.StatusCode);
+        var draftRun = (await Json(generate)).GetProperty("id").GetGuid();
+        using (var scope = App.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var draft = new Draft { Id = Guid.NewGuid(), ProjectId = project, ProcessingRunId = draftRun, AnalysisRevisionId = revisionId, Markdown = "# Bozza", CreatedAt = DateTimeOffset.UtcNow };
+            db.Drafts.Add(draft);
+            await db.SaveChangesAsync(Ct);
+            await db.ProcessingRuns.Where(r => r.Id == draftRun).ExecuteUpdateAsync(x => x.SetProperty(r => r.Status, ProcessingRunStatus.Completed).SetProperty(r => r.DraftId, draft.Id).SetProperty(r => r.CompletedAt, DateTimeOffset.UtcNow), Ct);
+            await db.Projects.Where(p => p.Id == project).ExecuteUpdateAsync(x => x.SetProperty(p => p.LatestDraftId, draft.Id), Ct);
+        }
+
+        var draftView = await GetJson(client, $"/api/projects/{project}/draft");
+        Assert.Equal(await SnapshotOf("ProcessingRuns", draftRun), draftView.GetProperty("sourceSnapshotId").GetGuid());
+        Assert.Equal(await SnapshotOf("ProcessingRuns", run), draftView.GetProperty("sourceSnapshotId").GetGuid());
+        Assert.True(draftView.GetProperty("hasSourceChanges").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Legacy_records_without_a_snapshot_expose_a_null_snapshot_and_no_source_change_flag()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var turn = (await Json(await Message(client, project))).GetProperty("chatTurnId").GetGuid();
+
+        var view = await GetJson(client, $"/api/projects/{project}/chat-turns/{turn}");
+
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, view.GetProperty("sourceSnapshotId").ValueKind);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, view.GetProperty("hasSourceChanges").ValueKind);
+    }
 }

@@ -55,19 +55,21 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     public SourceSnapshot Add(Guid projectId, SourceEvaluation evaluation, DateTimeOffset now)
     {
         var snapshotId = Guid.NewGuid();
-        var rows = evaluation.Entries.Select(e => new SourceSnapshotItem
+        var rows = evaluation.Entries.Select(e =>
         {
-            Id = Guid.NewGuid(),
-            SnapshotId = snapshotId,
-            ProjectId = projectId,
-            DocumentId = e.Document.Id,
-            Included = e.Included,
-            Availability = e.Availability,
-            // Identità della versione selezionata, ove determinabile: una Pinned non pronta la conserva (senza preparazione né evidenza),
-            // così una v2 successiva non cambia retroattivamente cosa il PM aveva scelto. Esclusa o senza versione risolta: nessuna.
-            DocumentVersionId = e.Availability == SourceAvailability.Excluded ? null : e.Resolved?.Id,
-            PreparationId = e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.Id : null,
-            EvidenceVersionId = e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.CurrentEvidenceVersionId : null,
+            var d = Describe(e);
+            return new SourceSnapshotItem
+            {
+                Id = Guid.NewGuid(),
+                SnapshotId = snapshotId,
+                ProjectId = projectId,
+                DocumentId = e.Document.Id,
+                Included = d.Included,
+                Availability = d.Availability,
+                DocumentVersionId = d.VersionId,
+                PreparationId = d.PreparationId,
+                EvidenceVersionId = d.EvidenceVersionId,
+            };
         }).ToList();
 
         var canonical = new StringBuilder().Append("snapshot-v1;").Append(evaluation.Revision);
@@ -90,6 +92,74 @@ public sealed class SourceSnapshotStore(AppDbContext db)
         return snapshot;
     }
 
+    /// <summary>Come una voce di selezione compare in uno snapshot: la stessa chiave per scrivere le righe e per confrontare lo snapshot con la risoluzione attuale.</summary>
+    private static (bool Included, SourceAvailability Availability, Guid? VersionId, Guid? PreparationId, Guid? EvidenceVersionId) Describe(SourceEntry e) => (
+        e.Included,
+        e.Availability,
+        // Identità della versione selezionata, ove determinabile: una Pinned non pronta la conserva (senza preparazione né evidenza),
+        // così una v2 successiva non cambia retroattivamente cosa il PM aveva scelto. Esclusa o senza versione risolta: nessuna.
+        e.Availability == SourceAvailability.Excluded ? null : e.Resolved?.Id,
+        e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.Id : null,
+        e.Availability == SourceAvailability.Ready ? e.ReadyPreparation!.CurrentEvidenceVersionId : null);
+
+    /// <summary>
+    /// Snapshot con fonti cambiate (T097): la risoluzione attuale del progetto (bundle correnti, inclusioni, nuovi documenti) differisce dal manifest
+    /// fissato alla richiesta. È solo un avviso di lettura: nessuna revisione, conferma, bozza o <c>canGenerate</c> ne dipende e nulla viene scritto.
+    /// </summary>
+    public async Task<HashSet<Guid>> ChangedAsync(Guid projectId, IReadOnlyCollection<Guid> snapshotIds, CancellationToken ct)
+    {
+        var changed = new HashSet<Guid>();
+        if (snapshotIds.Count == 0)
+        {
+            return changed;
+        }
+
+        var rows = await db.SourceSnapshotItems.AsNoTracking().Where(i => i.ProjectId == projectId && snapshotIds.Contains(i.SnapshotId)).ToListAsync(ct);
+        var current = (await new SourceSelectionService(db).EvaluateAsync(projectId, ct)).Entries.ToDictionary(e => e.Document.Id, Describe);
+        foreach (var snapshotId in snapshotIds.Distinct())
+        {
+            var items = rows.Where(i => i.SnapshotId == snapshotId).ToList();
+            var same = items.Count == current.Count && items.All(i =>
+                current.TryGetValue(i.DocumentId, out var now)
+                && now == (i.Included, i.Availability, i.DocumentVersionId, i.PreparationId, i.EvidenceVersionId));
+            if (!same)
+            {
+                changed.Add(snapshotId);
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>Manifest storico (GET /source-snapshots/{s}): le righe fissate alla richiesta, con nome/numero di versione e se il bundle fissato è ancora quello corrente. Solo lettura.</summary>
+    public async Task<SourceSnapshotManifest?> ManifestAsync(Guid projectId, Guid snapshotId, CancellationToken ct)
+    {
+        var snapshot = await db.SourceSnapshots.AsNoTracking().SingleOrDefaultAsync(s => s.Id == snapshotId && s.ProjectId == projectId, ct);
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        var items = await db.SourceSnapshotItems.AsNoTracking().Where(i => i.SnapshotId == snapshotId).ToListAsync(ct);
+        var documents = await db.ProjectDocuments.AsNoTracking().Where(d => d.ProjectId == projectId && db.SourceSnapshotItems.Any(i => i.SnapshotId == snapshotId && i.DocumentId == d.Id))
+            .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id).ToListAsync(ct);
+        var versionIds = items.Where(i => i.DocumentVersionId is not null).Select(i => i.DocumentVersionId!.Value).Distinct().ToList();
+        var versions = await db.DocumentVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
+        var preparationIds = items.Where(i => i.PreparationId is not null).Select(i => i.PreparationId!.Value).Distinct().ToList();
+        var generations = await db.DocumentPreparations.AsNoTracking().Where(p => preparationIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Generation, ct);
+        var currents = await db.EvidenceDocumentStates.AsNoTracking().Where(s => versionIds.Contains(s.DocumentVersionId)).ToDictionaryAsync(s => s.DocumentVersionId, s => s.CurrentPreparationId, ct);
+        var byDocument = items.ToDictionary(i => i.DocumentId);
+        var rows = documents.Select(d =>
+        {
+            var i = byDocument[d.Id];
+            var version = i.DocumentVersionId is { } v ? versions.GetValueOrDefault(v) : null;
+            var bundle = i.PreparationId is { } p ? (currents.GetValueOrDefault(i.DocumentVersionId!.Value) == p ? "Current" : "Superseded") : null;
+            return new SourceSnapshotManifestItem(
+                d.Id, d.DisplayName, i.Included, i.Availability.ToString(), i.DocumentVersionId, version?.Version, version?.OriginalName,
+                i.PreparationId, i.PreparationId is { } prep ? generations.GetValueOrDefault(prep) : null, i.EvidenceVersionId, bundle);
+        }).ToList();
+        return new(snapshot.Id, snapshot.ProjectId, snapshot.SelectionRevision, snapshot.Hash, snapshot.CreatedAt, rows);
+    }
     /// <summary>
     /// Snapshot della generazione: quello dell'analisi da cui nasce la revisione (le revisioni di un'analisi ne condividono il root), mai la
     /// selezione corrente. Null per le analisi legacy e per i progetti senza documenti.
@@ -127,3 +197,11 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             draftCatalog = DraftAliasCatalog.Version, algorithm = DocumentSourceDraftWorkflow.AlgorithmVersionV3, validation = DocumentSourceDraftWorkflow.ValidationVersionV3,
         });
 }
+
+/// <summary>Riga del manifest storico: <c>BundleState</c> è Current o Superseded per le righe Ready (il bundle fissato può non essere più quello corrente della versione file), altrimenti null.</summary>
+public sealed record SourceSnapshotManifestItem(
+    Guid DocumentId, string DisplayName, bool Included, string Availability, Guid? DocumentVersionId, int? Version, string? OriginalName,
+    Guid? PreparationId, int? Generation, Guid? EvidenceVersionId, string? BundleState);
+
+public sealed record SourceSnapshotManifest(
+    Guid Id, Guid ProjectId, long SelectionRevision, string Hash, DateTimeOffset CreatedAt, IReadOnlyList<SourceSnapshotManifestItem> Items);

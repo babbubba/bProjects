@@ -52,7 +52,9 @@ public static class ConversationEndpoints
         DateTimeOffset? NextAttemptAt,
         Guid? ResultMessageId,
         TurnError? Error,
-        ExecutionView? Execution = null);
+        ExecutionView? Execution = null,
+        Guid? SourceSnapshotId = null,
+        bool? HasSourceChanges = null);
 
     public static IEndpointRouteBuilder MapConversationEndpoints(this IEndpointRouteBuilder app)
     {
@@ -272,7 +274,8 @@ public static class ConversationEndpoints
         var execution = turn.InitialRegime is null
             ? null
             : (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.ChatTurn, turn.Id, ct))?.Execution;
-        return Results.Ok(ToView(turn) with { Execution = execution });
+        var changed = turn.SourceSnapshotId is { } snapshotId && (await new SourceSnapshotStore(db).ChangedAsync(projectId, [snapshotId], ct)).Contains(snapshotId);
+        return Results.Ok(ToView(turn) with { Execution = execution, HasSourceChanges = turn.SourceSnapshotId is null ? null : changed });
     }
 
     private static async Task<Guid?> LockConversation(AppDbContext db, Guid projectId, CancellationToken ct)
@@ -324,5 +327,6 @@ public static class ConversationEndpoints
         t.MaxAttempts,
         t.NextAttemptAt,
         t.ResultMessageId,
-        t.ErrorCode is null ? null : new TurnError(t.ErrorCode, t.ErrorMessage));
+        t.ErrorCode is null ? null : new TurnError(t.ErrorCode, t.ErrorMessage),
+        SourceSnapshotId: t.SourceSnapshotId);
 }
