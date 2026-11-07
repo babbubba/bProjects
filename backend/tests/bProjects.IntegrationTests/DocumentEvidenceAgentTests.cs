@@ -327,9 +327,9 @@ public sealed partial class DocumentEvidenceAgentTests
 
     // ------------------------------------------------------------------ infrastruttura
 
-    private static string Words(int count, string prefix) => string.Join(' ', Enumerable.Range(0, count).Select(i => $"{prefix}{i}"));
+    internal static string Words(int count, string prefix) => string.Join(' ', Enumerable.Range(0, count).Select(i => $"{prefix}{i}"));
 
-    private static IEnumerable<Exception> Chain(Exception e)
+    internal static IEnumerable<Exception> Chain(Exception e)
     {
         for (var current = e; current is not null; current = current.InnerException!)
         {
@@ -350,10 +350,10 @@ public sealed partial class DocumentEvidenceAgentTests
     }
 
     /// <summary>La causa applicativa (DocumentWorkException/Runtime*/Timeout) sotto l'eventuale involucro dei workflow.</summary>
-    private static Exception Unwrap(Exception e) =>
+    internal static Exception Unwrap(Exception e) =>
         Chain(e).FirstOrDefault(x => x is DocumentWorkException or RuntimeUnverifiedException or TaskCanceledException or LeaseLostException) ?? e;
 
-    private sealed class UnitRig : IAsyncDisposable
+    internal sealed class UnitRig : IAsyncDisposable
     {
         private readonly ServiceProvider _services;
         private readonly ExecutionOptions _execution = new();
@@ -421,7 +421,7 @@ public sealed partial class DocumentEvidenceAgentTests
             return new UnitRig(db, seed, job, configJson);
         }
 
-        public async Task RunAsync(FakeUnitModel model, long fence = 5, int attempt = 1, string lease = "worker-a")
+        public async Task RunAsync(FakeUnitModel model, long fence = 5, int attempt = 1, string lease = "worker-a", Func<Microsoft.Extensions.AI.IChatClient, Microsoft.Extensions.AI.IChatClient>? wrap = null)
         {
             var options = new AiOptions
             {
@@ -430,13 +430,13 @@ public sealed partial class DocumentEvidenceAgentTests
             };
             using var client = new InternalModelClient(options, model);
             var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
-            var factory = new AgentFactory(options, client.ChatClient, (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
+            var factory = new AgentFactory(options, wrap is null ? client.ChatClient : wrap(client.ChatClient), (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
             var agent = new DocumentEvidenceAgent(_services.GetRequiredService<IServiceScopeFactory>(), factory, client, Options.Create(new DocumentOptions()));
             await agent.ExecuteAsync(new DocumentUnitClaim(Job, Seed.Preparation, Seed.Project, null, lease, fence, attempt, 3, ConfigJson), Ct);
         }
 
         /// <summary>Esegue UN ciclo del dispatcher esistente (claim, heartbeat, esecuzione, rilascio) con l'agente reale e il modello finto.</summary>
-        public async Task<bool> DispatchOnceAsync(FakeUnitModel model)
+        public async Task<bool> DispatchOnceAsync(FakeUnitModel model, Func<Microsoft.Extensions.AI.IChatClient, Microsoft.Extensions.AI.IChatClient>? wrap = null)
         {
             var options = new AiOptions
             {
@@ -445,7 +445,7 @@ public sealed partial class DocumentEvidenceAgentTests
             };
             using var client = new InternalModelClient(options, model);
             var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
-            var factory = new AgentFactory(options, client.ChatClient, (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
+            var factory = new AgentFactory(options, wrap is null ? client.ChatClient : wrap(client.ChatClient), (text, ct) => new(client.CountTokensAsync(text, ct)), null, monitor, client);
             var scopes = _services.GetRequiredService<IServiceScopeFactory>();
             var agent = new DocumentEvidenceAgent(scopes, factory, client, Options.Create(new DocumentOptions()));
             var dispatcher = new AiDispatchService(scopes, Options.Create(_execution), NullLogger<AiDispatchService>.Instance, unitExecutor: agent);

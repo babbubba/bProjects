@@ -35,6 +35,9 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     protected static readonly TimeSpan ChatTimeout = TimeSpan.FromMinutes(8);
     protected static readonly TimeSpan RunTimeout = TimeSpan.FromHours(4);
 
+    /// <summary>Diagnostica locale delle chiamate di estrazione (solo harness): cattura la risposta grezza del modello prima di BatchSender e la correla ai batch a fine run.</summary>
+    private ExtractionDiagnosticsRecorder? _diag;
+
     protected override void Tune(DocumentOptions options)
     {
         options.MaxFileBytes = 2_000_000;
@@ -67,6 +70,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
 
         var ai = RealOptions();
         var parser = RealParser.Options();
+        var diag = _diag = new ExtractionDiagnosticsRecorder(secrets: ExtractionDiagnosticsRecorder.EnvironmentSecrets(ai.ApiKey));
         services.PostConfigure<AiOptions>(o => CopyOptions(ai, o));
         services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
         services.Configure<ParserOptions>(o =>
@@ -91,7 +95,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
             var documents = sp.GetRequiredService<IOptions<DocumentOptions>>();
             return new DocumentEvidenceAgent(
                 sp.GetRequiredService<IServiceScopeFactory>(),
-                AgentFactory.Create(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>(), documents.Value.Calibration.ToCalibration()),
+                diag.CreateFactory(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>(), documents.Value.Calibration.ToCalibration()),
                 model, documents);
         });
     }
@@ -168,6 +172,53 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     // ================================================================ scenario
 
     protected async Task RunScenarioAsync(string label, Func<int, Corpus> build)
+    {
+        try
+        {
+            await RunScenarioCoreAsync(label, build);
+        }
+        finally
+        {
+            // Anche a run fallito e PRIMA che il database di test venga eliminato (DisposeAsync del fixture): correlazione chiamata -> batch e file diagnostici.
+            await FinalizeDiagnosticsAsync();
+        }
+    }
+
+    private async Task FinalizeDiagnosticsAsync()
+    {
+        if (_diag is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var connection = await OpenConnection();
+            Func<string, CancellationToken, Task<int?>>? measure = null;
+            try
+            {
+                var sp = App.Services;
+                var factory = AgentFactory.Create(
+                    sp.GetRequiredService<IOptions<AiOptions>>().Value, sp.GetRequiredService<InternalModelClient>(), sp.GetRequiredService<ModelRuntimeMonitor>(),
+                    sp.GetRequiredService<IOptions<DocumentOptions>>().Value.Calibration.ToCalibration());
+                using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                measure = await ExtractionDiagnosticsRecorder.OwnedMeasurerAsync(factory, timeout.Token);
+            }
+            catch (Exception)
+            {
+                // tokenizer non raggiungibile: i token proprietari restano null nel riepilogo
+            }
+
+            var lines = await _diag.FinalizeAsync(connection, measure);
+            TestContext.Current.SendDiagnosticMessage(string.Join('\n', lines));
+        }
+        catch (Exception e)
+        {
+            TestContext.Current.SendDiagnosticMessage($"diag: finalizzazione non riuscita ({e.GetType().Name}); calls.jsonl in {_diag.Directory}");
+        }
+    }
+
+    private async Task RunScenarioCoreAsync(string label, Func<int, Corpus> build)
     {
         var v = new Verdicts(label);
         var (corpus, profile, generatedTokens) = await BuildSizedAsync(build);
