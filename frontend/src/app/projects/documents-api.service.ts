@@ -348,7 +348,6 @@ export function documentFailure(e: unknown): DocumentFailure {
             code,
             'Esiste già una preparazione in corso per questa versione: attendi che termini, non serve ritentare.',
           );
-        case 'bundle_revision_conflict':
         case 'promotion_conflict':
           return failure(
             'promotion_conflict',

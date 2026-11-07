@@ -375,7 +375,7 @@ public sealed class DocumentVersionLifecycleTests : LifecycleTestBase
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = await Json(response);
-        Assert.Equal("bundle_revision_conflict", body.GetProperty("code").GetString());
+        Assert.Equal("promotion_conflict", body.GetProperty("code").GetString());
         Assert.Equal(2, body.GetProperty("currentRevision").GetInt32());
         Assert.Equal(g[1].Preparation, body.GetProperty("currentPreparationId").GetGuid());
         Assert.Equal((g[1].Preparation, g[1].EvidenceVersion, 2), await State(t));

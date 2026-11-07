@@ -297,7 +297,7 @@ describe('DocumentsApiService', () => {
     expect((await call).bundleRevision).toBe(4);
   });
 
-  it.each(['bundle_revision_conflict', 'promotion_conflict'])(
+  it.each(['promotion_conflict'])(
     'promozione: 409 %s è promotion_conflict con la revisione corrente',
     (code) => {
       const f = documentFailure(

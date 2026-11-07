@@ -1003,7 +1003,7 @@ describe('ProjectDocumentsComponent', () => {
       q('docs-promote')!.click();
       await settle();
       posts(PROMOTE)[0].flush(
-        { code: 'bundle_revision_conflict', currentRevision: 5 },
+        { code: 'promotion_conflict', currentRevision: 5 },
         { status: 409, statusText: 'Conflict' },
       );
       await settle();

@@ -448,7 +448,7 @@ public static class ProjectDocumentEndpoints
 
     /// <summary>
     /// Promozione esplicita di una preparazione Ready a bundle corrente della versione file (T095): solo POST. expectedRevision (intero ≥ 0, la
-    /// Revision letta dal client) è obbligatoria. 200 con il bundle corrente (anche in replay), 409 bundle_revision_conflict se un altro comando ha
+    /// Revision letta dal client) è obbligatoria. 200 con il bundle corrente (anche in replay), 409 promotion_conflict se un altro comando ha
     /// vinto, 422 preparation_not_promotable se la preparazione non è Ready con copertura completa, 404 fuori da progetto/documento/versione.
     /// </summary>
     private static async Task<IResult> PromoteBundle(
@@ -490,7 +490,7 @@ public static class ProjectDocumentEndpoints
                     statusCode: StatusCodes.Status409Conflict, title: "Il bundle corrente della versione è cambiato",
                     extensions: new Dictionary<string, object?>
                     {
-                        ["code"] = "bundle_revision_conflict",
+                        ["code"] = "promotion_conflict",
                         ["currentRevision"] = result.State?.Revision ?? 0,
                         ["currentPreparationId"] = result.State?.CurrentPreparationId,
                     });
