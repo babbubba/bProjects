@@ -1,3 +1,4 @@
+using System.Text.Json;
 using bProjects.App.Persistence;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
@@ -110,6 +111,23 @@ public sealed class AnalysisRetryException(string code, string message, Analysis
 }
 
 /// <summary>
+/// Analisi single-call v5 rifiutata per una sola classe ammessa dal retry informato (T137, AI §13.3): chiavi locali duplicate come unico difetto, oppure soli
+/// <c>evidence_not_mapped</c>/<c>gap_not_assessed</c> (anche insieme). Porta SOLO chiavi e alias esatti e l'hash del primo output: mai il testo della risposta respinta.
+/// </summary>
+public sealed class InformedAnalysisRetryException(
+    string code, string message, IReadOnlyList<string> duplicateKeys, IReadOnlyList<string> unmappedEvidence, IReadOnlyList<string> unassessedGaps, string? outputHash)
+    : GuidedRetryTrigger(code, message, outputHash)
+{
+    public IReadOnlyList<string> DuplicateKeys { get; } = duplicateKeys;
+
+    /// <summary>Alias <c>E&lt;n&gt;</c> non-Gap che nessun item cita.</summary>
+    public IReadOnlyList<string> UnmappedEvidence { get; } = unmappedEvidence;
+
+    /// <summary>Alias <c>E&lt;n&gt;</c> dei Gap senza valutazione finale.</summary>
+    public IReadOnlyList<string> UnassessedGaps { get; } = unassessedGaps;
+}
+
+/// <summary>
 /// Estrazione rifiutata SOLO perché tutte le violazioni sono <c>kind Other</c> senza <c>kindRationale</c> (T134, contracts/ai-workflow.md §2.3): segnale tipizzato del
 /// validatore (mai da stringhe). <see cref="EvidenceKeys"/> sono le chiavi locali <c>eN</c> delle evidenze coinvolte; codice originale <c>work_output_invalid</c>.
 /// </summary>
@@ -136,6 +154,22 @@ public interface IGuidedRetryPlan
     /// non è ammesso (deadline, budget, già consumato): vale il motivo originale, e un output valido ma incompleto resta persistito e riutilizzabile come prima di T130.
     /// </summary>
     ValidatedBatch ValidateFinal(BatchRef batch, string responseText);
+}
+
+/// <summary>
+/// Retry informato (T137, AI §13.3): estensione opzionale di <see cref="IGuidedRetryPlan"/> per i piani che passano al secondo invio la prima risposta come dato esplicito
+/// (mai nelle exception, nei marker o nei log) e vogliono il payload effettivo MISURATO prima del marker e della riserva. Con <see cref="InformedRetry"/> falso il port segue il
+/// protocollo storico (T129/T130/T134), invariato.
+/// </summary>
+public interface IInformedRetryPlan : IGuidedRetryPlan
+{
+    bool InformedRetry { get; }
+
+    /// <summary>Messaggi del secondo invio: originali integrali, motivi tipizzati, prima risposta come dato non fidato delimitato e istruzione di riesame integrale.</summary>
+    IReadOnlyList<ChatMessage> ComposeInformedRetry(BatchRef batch, GuidedRetryTrigger trigger, string firstResponse);
+
+    /// <summary>Marcatore del retry consumato: classi, hash del primo output e della richiesta correttiva (<paramref name="measure"/>.PayloadHash), misura; mai testo.</summary>
+    DerivedBatchInput InformedRetryMarker(BatchRef batch, GuidedRetryTrigger trigger, string firstResponse, PayloadPreflight measure);
 }
 
 /// <summary>
@@ -281,16 +315,14 @@ public sealed class DocumentBatchPort(
     /// </summary>
     private async ValueTask<ValidatedBatch> GuidedRetryOnceAsync(BatchRef batch, IGuidedRetryPlan retryPlan, GuidedRetryTrigger trigger, string firstResponse, CancellationToken ct)
     {
-        var authority = await DocumentDeadlineGuard.EvaluateAsync(db, writer.OwnerKind, writer.OwnerId, writer.LeaseOwner, writer.FencingToken, lockRow: false, ct);
-        if (!authority.Allowed && authority.Denial != DeadlineDenial.DeadlineExceeded)
-        {
-            throw new CheckpointFencedException(writer.OwnerId);   // nessuna autorità (fence, lease, stato): decide il chiamante, come per ogni scrittura
-        }
-
-        var seconds = factory.Options.ForPhase(plan.Agent.Phase).RequestTimeoutSeconds;
-        if (!authority.Allowed || authority.Remaining < (seconds > 0 ? TimeSpan.FromSeconds(seconds) : TimeSpan.FromSeconds(1)))
+        if (!await HasRoomForOneFullCallAsync(ct))
         {
             return retryPlan.ValidateFinal(batch, firstResponse);
+        }
+
+        if (retryPlan is IInformedRetryPlan { InformedRetry: true } informed)
+        {
+            return await InformedRetryOnceAsync(batch, informed, trigger, firstResponse, ct);
         }
 
         if (!await store.TryClaimGuidedRetryAsync(retryPlan.GuidedRetryMarker(batch, trigger), ct))
@@ -309,6 +341,80 @@ public sealed class DocumentBatchPort(
 
         counter?.Increment();
         var text = await BatchSender.SendAsync(this, batch, retryPlan.ComposeGuidedRetry(batch, trigger), ct);
+        return retryPlan.ValidateFinal(batch, text);
+    }
+
+    /// <summary>
+    /// Autorità e residuo della deadline originale: falso se non basta il timeout pieno di una chiamata (la rinuncia mantiene il motivo originale); senza autorità
+    /// (fence, lease, stato) lancia <see cref="CheckpointFencedException"/>, come per ogni scrittura.
+    /// </summary>
+    private async ValueTask<bool> HasRoomForOneFullCallAsync(CancellationToken ct)
+    {
+        var authority = await DocumentDeadlineGuard.EvaluateAsync(db, writer.OwnerKind, writer.OwnerId, writer.LeaseOwner, writer.FencingToken, lockRow: false, ct);
+        if (!authority.Allowed && authority.Denial != DeadlineDenial.DeadlineExceeded)
+        {
+            throw new CheckpointFencedException(writer.OwnerId);
+        }
+
+        var seconds = factory.Options.ForPhase(plan.Agent.Phase).RequestTimeoutSeconds;
+        return authority.Allowed && authority.Remaining >= (seconds > 0 ? TimeSpan.FromSeconds(seconds) : TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// Retry informato (T137, AI §13.3). Ordine: (1) l'autorità e il residuo sono già stati verificati dal chiamante; (2) composizione e MISURA del payload effettivo completo, con lo stesso
+    /// profilo/runtime congelato e le stesse regole dell'invio: overflow = <c>context_budget_exceeded</c> senza marker, riserva né invio (nessun taglio); misura non affidabile = gli errori del
+    /// preflight; (3) nuovo controllo di autorità/deadline (il costo della misura non azzera il tempo trascorso); (4) corrispondenza fra la richiesta misurata e il marcatore; (5) consumo del
+    /// marcatore fenced; (6) riserva; (7) invio del payload misurato; (8) validazione definitiva. Ogni rinuncia dopo il rifiuto mantiene il motivo ORIGINALE.
+    /// </summary>
+    private async ValueTask<ValidatedBatch> InformedRetryOnceAsync(BatchRef batch, IInformedRetryPlan retryPlan, GuidedRetryTrigger trigger, string firstResponse, CancellationToken ct)
+    {
+        var messages = retryPlan.ComposeInformedRetry(batch, trigger, firstResponse);
+        var spec = plan.AgentFor(batch);
+        var options = spec.ChatOptions.Clone();
+        options.Instructions = spec.Instructions;
+        var measure = await factory.Preflight.MeasureAsync(DocumentPayloadChatClient.BuildPayload(spec.Phase, messages, options), ct, spec.ExpectedFingerprint);
+        if (measure.Quality == TokenCountQuality.Unavailable)
+        {
+            throw new RuntimeUnverifiedException("conteggio del payload del retry informato non disponibile (nessun tokenizer o calibrazione identificata)");
+        }
+
+        if (!measure.Fits)
+        {
+            throw new DocumentWorkException(
+                DocumentWorkException.ContextBudgetExceeded,
+                $"Il payload effettivo del retry informato è di {measure.Tokens} token ({(measure.Quality == TokenCountQuality.Measured ? "misurato" : "limite superiore calibrato")}), oltre il budget di input di {measure.InputBudgetTokens} token: nessun invio, nessun taglio.");
+        }
+
+        if (!await HasRoomForOneFullCallAsync(ct))
+        {
+            return retryPlan.ValidateFinal(batch, firstResponse);
+        }
+
+        var marker = retryPlan.InformedRetryMarker(batch, trigger, firstResponse, measure);
+        using (var recorded = JsonDocument.Parse(marker.InputIdsJson))
+        {
+            if (!recorded.RootElement.TryGetProperty("retryPayloadHash", out var hash) || hash.GetString() != measure.PayloadHash)
+            {
+                throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Il marcatore del retry non corrisponde alla richiesta correttiva misurata.");
+            }
+        }
+
+        if (!await store.TryClaimGuidedRetryAsync(marker, ct))
+        {
+            return retryPlan.ValidateFinal(batch, firstResponse);
+        }
+
+        try
+        {
+            await calls.ReserveAsync(batch, ct);
+        }
+        catch (DocumentWorkException ex) when (ex.Code == DocumentWorkException.CallLimitExceeded)
+        {
+            return retryPlan.ValidateFinal(batch, firstResponse);
+        }
+
+        counter?.Increment();
+        var text = await BatchSender.SendAsync(this, batch, messages, ct);
         return retryPlan.ValidateFinal(batch, text);
     }
 

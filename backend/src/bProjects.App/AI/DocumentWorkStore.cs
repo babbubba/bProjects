@@ -23,6 +23,9 @@ public class DocumentWorkException(string code, string message) : Exception(mess
     public const string InvalidInput = "invalid_work_input";
     public const string CallLimitExceeded = "document_limit_exceeded";
 
+    /// <summary>Il payload effettivo del retry informato (T137, AI §13.3) supera il budget di input: nessun invio né taglio; porta la sola diagnostica di misura.</summary>
+    public const string ContextBudgetExceeded = "context_budget_exceeded";
+
     /// <summary>Fonte originale non verificabile alla costruzione del catalogo alias (range, citazione, campi di provenienza): permanente (AI §7.9).</summary>
     public const string SourceSnapshotInvalid = "source_snapshot_invalid";
 

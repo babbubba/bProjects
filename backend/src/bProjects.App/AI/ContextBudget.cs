@@ -597,14 +597,22 @@ internal sealed class DocumentPayloadChatClient(IChatClient inner, DocumentPrefl
     private async ValueTask<List<ChatMessage>> CheckAsync(IEnumerable<ChatMessage> messages, ChatOptions? options, CancellationToken ct)
     {
         var list = messages.ToList();
+        await preflight.EnsureAsync(BuildPayload(phase, list, options), ct, expectedFingerprint);
+        return list;
+    }
+
+    /// <summary>
+    /// Payload effettivo di una chiamata (istruzioni di opzioni e di sistema, messaggi, schema della risposta, strumenti): UNICA composizione, usata dal controllo all'invio e da
+    /// chi deve misurare lo stesso payload PRIMA di consumare un'autorizzazione o una riserva (retry informato, T137), così misura e invio non possono divergere.
+    /// </summary>
+    internal static DocumentPayload BuildPayload(AiPhase phase, IReadOnlyList<ChatMessage> list, ChatOptions? options)
+    {
         var system = list.Where(m => m.Role == ChatRole.System).Select(m => m.Text);
         var instructions = string.Join("\n", new[] { options?.Instructions }.Concat(system).Where(t => !string.IsNullOrEmpty(t)));
         var schema = options?.ResponseFormat is ChatResponseFormatJson { Schema: { } element } ? element.GetRawText() : null;
         var tools = options?.Tools is { Count: > 0 } t
             ? string.Join("\n", t.Select(tool => $"{tool.Name}:{tool.Description}"))
             : null;
-        var payload = new DocumentPayload(phase, instructions, list.Where(m => m.Role != ChatRole.System).ToList(), schema, tools);
-        await preflight.EnsureAsync(payload, ct, expectedFingerprint);
-        return list;
+        return new DocumentPayload(phase, instructions, list.Where(m => m.Role != ChatRole.System).ToList(), schema, tools);
     }
 }

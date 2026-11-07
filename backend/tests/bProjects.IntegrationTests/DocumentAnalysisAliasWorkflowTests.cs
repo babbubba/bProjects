@@ -737,7 +737,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.Contains(payload["gaps"]!.AsArray().Select(g => g!.GetValue<string>()), g => g.StartsWith("gap_not_assessed:", StringComparison.Ordinal));
         Assert.Empty(payload["gapAssessments"]!.AsArray());
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
-        Assert.Single(model.Requests);                                                                                         // nessun retry guidato in v5 prima di T137
+        Assert.Equal(2, model.Requests.Count);                                                                                 // T137: il solo Gap senza record ha il retry informato; il modello finto ripete l'output incompleto e vale il motivo originale
     }
 
     [Theory]

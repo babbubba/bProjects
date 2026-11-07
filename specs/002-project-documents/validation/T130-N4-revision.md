@@ -71,3 +71,11 @@ Le prove di caratterizzazione sono etichettate `Characterization_LIMIT_*`: docum
 ## Decisione successiva (aggiunta 2026-11-07, il report sopra resta invariato)
 
 Il committente ha approvato come soluzione temporanea C + D, recepita in `contracts/ai-workflow.md` §13.6 e nel task T143: valutazione Gap solo single-call, oltre contesto con Gap fail-fast: run `Failed` con `document_limit_exceeded` e motivo `hierarchical_gap_assessment_unsupported`, zero chiamate LLM, senza revisione né WorkOutput. T138 resta aperto e bloccato in attesa di una nuova decisione tra A e B; il gate non è dichiarato superato.
+
+## T137 — retry informato single-call v5 (aggiunto 2026-11-07)
+
+Implementato in `AI/DocumentBatchPort.cs` (`IInformedRetryPlan`, misura del payload effettivo PRIMA di marker e riserva, ricontrollo di autorità/deadline dopo la misura), `DocumentAnalysisAliasPlan.cs` (trigger v5, messaggio con la prima risposta come stringa JSON delimitata non fidata, marker con `firstOutputHash`/`retryPayloadHash`/misura) e `ContextBudget.cs` (composizione unica del payload, condivisa con il controllo all'invio). Nuovo codice `context_budget_exceeded` (solo diagnostica di misura). v3/v4 (T130) e T129/T134 restano sul protocollo storico.
+
+Prove (`DocumentAnalysisGuidedRetryTests.cs`, filtro `*V5_*`): rosso comportamentale prima del codice (19 su 50 falliti: nessun retry v5 inviato), poi 51/51 PASS con PostgreSQL + MAF reali e modello finto, nessun DGX. Coperti: protocollo positivo, delimitatori ostili, al limite/oltre il limite di un token, misura non disponibile, errori misti esclusi, secondo errore definitivo senza terzo invio, deadline, tetto chiamate, crash prima/dopo marker, riserva, invio, commit di output e revisione, concorrenza, replay senza inferenza. Il modello finto non dimostra la qualità semantica reale.
+
+Unica modifica a un'asserzione T136 (`A_v5_run_with_a_gap_that_has_no_record...`): `Assert.Single(model.Requests)` diventa `Equal(2, ...)`, perché il commento originale la vincolava a «prima di T137»; il modello finto ripete l'output incompleto e l'esito (coverage_incomplete, nessuna revisione) è invariato.
