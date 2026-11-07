@@ -534,4 +534,172 @@ public sealed class ReconcileAliasComposerTests
         Assert.DoesNotContain("reconcile-alias-1", ReconciliationHierarchy.Instructions);   // v2 non è stato toccato
         Assert.Contains("reconcile-1", ReconciliationHierarchy.Instructions);
     }
+
+    // ================================================================ T135: reconcile-alias-2 e gap-assessment-1 (contracts/ai-workflow.md §13.1-§13.2)
+
+    private static JsonObject DtoV2(Action<JsonObject>? change = null, params JsonNode[] gaps)
+    {
+        var o = Dto();
+        o["contract"] = "reconcile-alias-2";
+        o["gapAssessments"] = new JsonArray(gaps);
+        change?.Invoke(o);
+        return o;
+    }
+
+    private static JsonNode GapRecord(string gap = "E2", string outcome = "AnsweredInSnapshot", string reason = "Answered", string[]? support = null, string? item = null, string? conflict = null) =>
+        JsonNode.Parse(JsonSerializer.Serialize(new { gap, outcome, reason, rationale = "La scheda risponde.", supportingEvidence = support ?? ["E3"], openItem = item, openConflict = conflict }))!;
+
+    private static void AssertRejectedV2(JsonNode node) => Assert.ThrowsAny<JsonException>(() => ReconcileAliasContracts.DecodeV2(node.ToJsonString()));
+
+    [Fact]
+    public void The_reconcile_alias_2_dto_round_trips_and_its_hash_covers_the_gap_assessments()
+    {
+        var json = DtoV2(null, GapRecord(), GapRecord("E5", "Open", "Partial", ["E3"], item: "i1")).ToJsonString();
+        var dto = ReconcileAliasContracts.DecodeV2(json);
+
+        Assert.Equal("reconcile-alias-2", dto.Contract);
+        Assert.Equal("reconcile-alias-2", ReconcileAliasContracts.SchemaVersionV2);
+        Assert.Equal(2, dto.GapAssessments.Count);
+        Assert.Equal(ReconcileAliasContracts.Canonical(dto), ReconcileAliasContracts.Canonical(ReconcileAliasContracts.DecodeV2(ReconcileAliasContracts.Encode(dto))));
+        Assert.NotEqual(ReconcileAliasContracts.Hash(dto), ReconcileAliasContracts.Hash(dto with { GapAssessments = [dto.GapAssessments[0]] }));
+        Assert.NotEqual(ReconcileAliasContracts.Hash(dto), ReconcileAliasContracts.Hash(ReconcileAliasContracts.DecodeV2(DtoV2().ToJsonString())));
+        Assert.Empty(ReconcileAliasContracts.DecodeV2(DtoV2().ToJsonString()).GapAssessments);
+    }
+
+    [Fact]
+    public void The_gap_assessments_list_is_required_and_the_two_reconcile_contracts_do_not_cross()
+    {
+        var missing = DtoV2();
+        missing.Remove("gapAssessments");
+        AssertRejectedV2(missing);
+        AssertRejectedV2(DtoV2(o => o["gapAssessments"] = null));
+        AssertRejectedV2(DtoV2(o => o["contract"] = "reconcile-alias-1"));
+        AssertRejectedV2(DtoV2(o => o["contract"] = "alias-2"));
+        AssertRejectedV2(Dto());                                                                  // un output v1 senza lista non è v2
+        Assert.ThrowsAny<JsonException>(() => ReconcileAliasContracts.Decode(DtoV2().ToJsonString()));
+        Assert.ThrowsAny<JsonException>(() => ReconcileAliasContracts.Decode(Dto(o => o["gapAssessments"] = new JsonArray()).ToJsonString()));
+    }
+
+    [Fact]
+    public void Reconcile_alias_2_applies_the_same_assessment_matrix_and_rejects_everything_else()
+    {
+        AssertRejectedV2(DtoV2(null, GapRecord(reason: "NoAnswer")));
+        AssertRejectedV2(DtoV2(null, GapRecord(support: [])));
+        AssertRejectedV2(DtoV2(null, GapRecord(item: "i1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "Open", reason: "Answered", item: "i1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "Open", reason: "NoAnswer", support: [])));                       // nessun riferimento aperto
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "Open", reason: "NoAnswer", support: [], item: "i1", conflict: "c1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "Open", reason: "Ambiguous", support: [], item: "i1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(support: ["E3", "E3"])));
+        AssertRejectedV2(DtoV2(null, GapRecord(support: ["E3", "E2"])));
+        AssertRejectedV2(DtoV2(null, GapRecord(), GapRecord()));                                                             // gap duplicato
+        AssertRejectedV2(DtoV2(null, GapRecord("S1")));
+        AssertRejectedV2(DtoV2(null, GapRecord("N1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(support: ["N1"])));
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "Open", reason: "NoAnswer", support: [], item: "c1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "Open", reason: "NoAnswer", support: [], conflict: "i1")));
+        AssertRejectedV2(DtoV2(null, GapRecord(outcome: "open")));
+        AssertRejectedV2(DtoV2(null, GapRecord(reason: "answered")));
+        AssertRejectedV2(DtoV2(o => o["extra"] = 1, GapRecord()));
+
+        var extra = GapRecord();
+        extra["id"] = Guid.NewGuid().ToString();
+        AssertRejectedV2(DtoV2(null, extra));
+        var missingMember = GapRecord();
+        missingMember.AsObject().Remove("openConflict");
+        AssertRejectedV2(DtoV2(null, missingMember));
+
+        Assert.Single(ReconcileAliasContracts.DecodeV2(DtoV2(null, GapRecord(outcome: "Open", reason: "NoAnswer", support: [], conflict: "c4")).ToJsonString()).GapAssessments);
+    }
+
+    [Fact]
+    public void The_reconcile_alias_2_schema_is_closed_requires_gap_assessments_and_the_alias_1_schema_is_unchanged()
+    {
+        using var v2 = JsonDocument.Parse(ReconcileAliasContracts.JsonSchemaV2().GetRawText());
+        var root = v2.RootElement;
+
+        Assert.False(root.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(
+            ["contract", "descriptor", "noFindings", "items", "candidates", "focus", "patches", "gapAssessments"],
+            root.GetProperty("required").EnumerateArray().Select(x => x.GetString()!).ToArray());
+        Assert.Equal("reconcile-alias-2", root.GetProperty("properties").GetProperty("contract").GetProperty("enum")[0].GetString());
+        var gap = root.GetProperty("properties").GetProperty("gapAssessments").GetProperty("items");
+        Assert.False(gap.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(
+            ["gap", "outcome", "reason", "rationale", "supportingEvidence", "openItem", "openConflict"],
+            gap.GetProperty("required").EnumerateArray().Select(x => x.GetString()!).ToArray());
+        Assert.DoesNotContain("uuid", root.GetRawText(), StringComparison.OrdinalIgnoreCase);
+
+        var v1 = ReconcileAliasContracts.JsonSchema().GetRawText();
+        Assert.DoesNotContain("gapAssessments", v1);
+        Assert.DoesNotContain("reconcile-alias-2", v1);
+        Assert.True(PinnedReconcileSchemaHash == CanonicalJson.HashText(CanonicalJson.Canonicalize(v1)), CanonicalJson.HashText(CanonicalJson.Canonicalize(v1)));
+    }
+
+    private static AnalysisAliasCatalog GapRunCatalog(string contract) =>
+        AnalysisAliasCatalog.Build(AliasFixtures.Input(
+            relations: [AliasFixtures.Relation(3, 5, EvidenceRelationType.Contradicts)],
+            evidence: [.. AliasFixtures.Evidences().Select((e, i) => i is 1 or 4 ? e with { Kind = EvidenceKind.Gap } : e)]), contract);
+
+    [Fact]
+    public void The_reconcile_alias_2_catalog_keeps_its_shape_with_a_new_contract_version_and_a_different_stable_hash()
+    {
+        var request = LeafA(2, 3, 5);
+        var v1 = Catalog(request);
+        var v2 = ReconcileAliasCatalog.Build(RunCatalog, request, [], ReconcileAliasContracts.SchemaVersionV2);
+
+        Assert.Equal("reconcile-alias-catalog-1", v2.Data.CatalogVersion);
+        Assert.Equal("reconcile-alias-1", v1.Data.ContractVersion);
+        Assert.Equal("reconcile-alias-2", v2.Data.ContractVersion);
+        Assert.NotEqual(v1.CatalogHash, v2.CatalogHash);
+        Assert.Equal(v2.CatalogHash, ReconcileAliasCatalog.Build(RunCatalog, request, [], ReconcileAliasContracts.SchemaVersionV2).CatalogHash);
+        Assert.Equal(v1.Data.Entries, v2.Data.Entries);
+        Assert.Equal(v1.Data.Nodes, v2.Data.Nodes);
+        Assert.Equal(v1.Data.Relations, v2.Data.Relations);
+        Assert.Equal(v1.Data.BatchId, v2.Data.BatchId);
+        Assert.Throws<ArgumentException>(() => ReconcileAliasCatalog.Build(RunCatalog, request, [], "reconcile-alias-3"));
+        Assert.Throws<ArgumentException>(() => ReconcileAliasCatalog.Build(RunCatalog, request, [], "alias-2"));
+    }
+
+    [Fact]
+    public void The_assigned_input_of_a_batch_is_the_batch_entries_with_their_kinds_taken_from_the_run_catalog()
+    {
+        var run = GapRunCatalog(AnalysisAliasContracts.SchemaVersionV2);
+        var batch = ReconcileAliasCatalog.Build(run, LeafA(2, 3), [], ReconcileAliasContracts.SchemaVersionV2);
+
+        var assigned = GapAssessmentRules.Assigned(run, batch);
+
+        Assert.Equal(2, assigned.Count);                                // E5 è Gap nel run ma non è assegnato a questo batch
+        Assert.Equal(EvidenceKind.Gap, assigned["E2"]);
+        Assert.Equal(EvidenceKind.Requirement, assigned["E3"]);
+        Assert.False(assigned.ContainsKey("E5"));
+
+        Assert.Empty(GapAssessmentRules.Check([GapAssessment("E2", "E3")], assigned, [], []));
+        Assert.NotEmpty(GapAssessmentRules.Check([GapAssessment("E2", "E3"), GapAssessment("E5", "E3")], assigned, [], []));   // E5 fuori dal batch
+        Assert.NotEmpty(GapAssessmentRules.Check([GapAssessment("E2", "E5")], assigned, [], []));                              // riscontro fuori dal batch
+        Assert.NotEmpty(GapAssessmentRules.Check([], assigned, [], []));                                                       // Gap assegnato senza record
+    }
+
+    private static AiGapAssessment GapAssessment(string gap, string support) => new()
+    {
+        Gap = gap, Outcome = GapOutcome.AnsweredInSnapshot, Reason = GapReason.Answered, Rationale = "Risponde.", SupportingEvidence = [support], OpenItem = null, OpenConflict = null,
+    };
+
+    [Fact]
+    public void The_reconcile_alias_1_vectors_hashes_catalog_and_decoder_are_unchanged()
+    {
+        Assert.Equal("reconcile-alias-1", ReconcileAliasContracts.SchemaVersion);
+        Assert.Equal("document-reconcile-v3", ReconcileAliasContracts.PromptVersion);
+        Assert.Equal("reconcile-alias-catalog-1", ReconcileAliasContracts.CatalogVersion);
+        var dto = ReconcileAliasContracts.Decode(Dto(o => o["items"] = new JsonArray(Item("i1", "requirements", "Documented", "E2"))).ToJsonString());
+        Assert.True(PinnedReconcileDtoHash == ReconcileAliasContracts.Hash(dto), ReconcileAliasContracts.Hash(dto));
+        var catalogHash = Catalog(LeafA()).CatalogHash;
+        Assert.True(PinnedReconcileCatalogHash == catalogHash, catalogHash);
+        Assert.Equal(catalogHash, ReconcileAliasCatalog.Build(RunCatalog, LeafA(), [], ReconcileAliasContracts.SchemaVersion).CatalogHash);
+    }
+
+    // Valori calcolati sul codice di HEAD 240fa18 (prima di T135).
+    private const string PinnedReconcileDtoHash = "a8bd564c4802da685adcd2a5db15e46edf2e1139656aefd47d25819bd1fabde2";
+    private const string PinnedReconcileCatalogHash = "8b58bab0ae1c662d3aff58ac13a90989ddee989843b5a38d622808077808a9c3";
+    private const string PinnedReconcileSchemaHash = "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54";
 }

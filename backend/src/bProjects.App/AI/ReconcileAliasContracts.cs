@@ -55,6 +55,17 @@ public sealed class ReconcileAliasContractConverter : JsonConverter<string>
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) => writer.WriteStringValue(value);
 }
 
+/// <summary>`contract` è la costante «reconcile-alias-2» (T135).</summary>
+public sealed class ReconcileAliasContractV2Converter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType == JsonTokenType.String && reader.GetString() == ReconcileAliasContracts.SchemaVersionV2
+            ? ReconcileAliasContracts.SchemaVersionV2
+            : throw new JsonException($"contract deve essere \"{ReconcileAliasContracts.SchemaVersionV2}\".");
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) => writer.WriteStringValue(value);
+}
+
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record AiReconcileItem
 {
@@ -111,10 +122,27 @@ public sealed record AiReconcileOutput
     public required IReadOnlyList<AiPatch> Patches { get; init; }
 }
 
-/// <summary>Codec strict, JSON Schema e prompt di `reconcile-alias-1` (T131).</summary>
+/// <summary>Output AI di un batch `reconcile-alias-2` (T135, §13.2): i campi di reconcile-alias-1 più <c>gapAssessments</c>, obbligatoria anche vuota.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record AiReconcileOutputV2
+{
+    [JsonConverter(typeof(ReconcileAliasContractV2Converter))]
+    public required string Contract { get; init; }
+
+    public required string? Descriptor { get; init; }
+    public required string? NoFindings { get; init; }
+    public required IReadOnlyList<AiReconcileItem> Items { get; init; }
+    public required IReadOnlyList<AiReconcileCandidate> Candidates { get; init; }
+    public required AiReconcileFocus? Focus { get; init; }
+    public required IReadOnlyList<AiPatch> Patches { get; init; }
+    public required IReadOnlyList<AiGapAssessment> GapAssessments { get; init; }
+}
+
+/// <summary>Codec strict, JSON Schema e prompt di `reconcile-alias-1` (T131); codec e schema di `reconcile-alias-2` (T135).</summary>
 public static class ReconcileAliasContracts
 {
     public const string SchemaVersion = "reconcile-alias-1";
+    public const string SchemaVersionV2 = "reconcile-alias-2";
     public const string SchemaName = "reconcile_alias";
     public const string PromptVersion = "document-reconcile-v3";
     public const string CatalogVersion = "reconcile-alias-catalog-1";
@@ -154,12 +182,46 @@ public static class ReconcileAliasContracts
     /// <summary>`aiOutputHash`: SHA-256 della forma canonica del DTO.</summary>
     public static string Hash(AiReconcileOutput output) => CanonicalJson.HashText(Canonical(output));
 
-    private static readonly Lazy<JsonElement> Schema = new(BuildSchema);
+    /// <summary>Codec strict di `reconcile-alias-2`: regole di <see cref="Decode"/> più la forma dei record `gap-assessment-1`.</summary>
+    public static AiReconcileOutputV2 DecodeV2(string json)
+    {
+        try
+        {
+            using (JsonDocument.Parse(json, new JsonDocumentOptions { AllowDuplicateProperties = false }))
+            {
+            }
+
+            var output = JsonSerializer.Deserialize<AiReconcileOutputV2>(json, AnalysisAliasContracts.Options) ?? throw new JsonException("Valore nullo.");
+            GapAssessmentRules.ValidateShape(output.GapAssessments);
+            return output;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception e) when (e is InvalidOperationException or FormatException or ArgumentException)
+        {
+            throw new JsonException(e.Message, e);
+        }
+    }
+
+    public static string Encode(AiReconcileOutputV2 output) => JsonSerializer.Serialize(output, AnalysisAliasContracts.Options);
+
+    public static string Canonical(AiReconcileOutputV2 output) => CanonicalJson.Canonicalize(Encode(output));
+
+    /// <summary>`aiOutputHash` del DTO reconcile-alias-2: copre anche <c>gapAssessments</c>.</summary>
+    public static string Hash(AiReconcileOutputV2 output) => CanonicalJson.HashText(Canonical(output));
+
+    private static readonly Lazy<JsonElement> SchemaV2 = new(() => BuildSchema(SchemaVersionV2, gapAssessments: true));
+
+    public static JsonElement JsonSchemaV2() => SchemaV2.Value;
+
+    private static readonly Lazy<JsonElement> Schema = new(() => BuildSchema(SchemaVersion, gapAssessments: false));
 
     /// <summary>JSON Schema strict del DTO (stesso criterio di <see cref="AnalysisAliasContracts.JsonSchema"/>): vincola la forma, la risoluzione degli alias è del compositore.</summary>
     public static JsonElement JsonSchema() => Schema.Value;
 
-    private static JsonElement BuildSchema()
+    private static JsonElement BuildSchema(string contract, bool gapAssessments)
     {
         var evidenceList = AnalysisAliasContracts.ArraySchema(AnalysisAliasContracts.AliasSchema(AnalysisAliasPattern.Evidence));
         var sections = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray([.. new[] { "goals", "scopeOverview", "scopeIncluded", "scopeExcluded", "requirements", "flows", "constraints", "dependencies", "assumptions", "openQuestions" }.Select(n => (JsonNode)JsonValue.Create(n)!)]) };
@@ -185,10 +247,15 @@ public static class ReconcileAliasContracts
             ("evidence", evidenceList.DeepClone()),
             ("value", new JsonObject { ["anyOf"] = new JsonArray(AnalysisAliasContracts.ObjectSchema(), relationValue, alternativeValue) }));
         var schema = AnalysisAliasContracts.ObjectSchema(
-            ("contract", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(SchemaVersion) }),
+            ("contract", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(contract) }),
             ("descriptor", AnalysisAliasContracts.NullableTextSchema()), ("noFindings", AnalysisAliasContracts.NullableTextSchema()),
             ("items", AnalysisAliasContracts.ArraySchema(item)), ("candidates", AnalysisAliasContracts.ArraySchema(candidate)), ("focus", focus),
             ("patches", AnalysisAliasContracts.ArraySchema(patch)));
+        if (gapAssessments)
+        {
+            schema["properties"]!["gapAssessments"] = AnalysisAliasContracts.ArraySchema(AnalysisAliasContracts.GapAssessmentSchema());
+            schema["required"]!.AsArray().Add("gapAssessments");
+        }
 
         using var document = JsonDocument.Parse(schema.ToJsonString());
         return document.RootElement.Clone();

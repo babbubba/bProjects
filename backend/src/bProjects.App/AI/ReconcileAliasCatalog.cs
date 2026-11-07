@@ -94,11 +94,16 @@ public sealed class ReconcileAliasCatalog
         : Data.Nodes.FirstOrDefault(n => n.Kind == endpoint.Kind && n.Id == endpoint.Id)?.Alias;
 
     /// <summary>Ricostruisce il catalogo di un batch dalla richiesta del motore (voci in ordine di richiesta, nodi N1.., estremi di gruppo del candidato in esame di seguito).</summary>
-    public static ReconcileAliasCatalog Build(AnalysisAliasCatalog run, ReconcileBatchRequest request, IReadOnlyList<ReconcileItemRef> priorItems)
+    public static ReconcileAliasCatalog Build(
+        AnalysisAliasCatalog run, ReconcileBatchRequest request, IReadOnlyList<ReconcileItemRef> priorItems, string contractVersion = ReconcileAliasContracts.SchemaVersion)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(priorItems);
+        if (contractVersion is not (ReconcileAliasContracts.SchemaVersion or ReconcileAliasContracts.SchemaVersionV2))
+        {
+            throw new ArgumentException($"Versione di contratto sconosciuta per il catalogo del batch: {contractVersion}.", nameof(contractVersion));
+        }
 
         var entries = new List<ReconcileCatalogEntry>(request.Entries.Count);
         foreach (var entry in request.Entries)
@@ -150,7 +155,7 @@ public sealed class ReconcileAliasCatalog
         return new ReconcileAliasCatalog(
             new ReconcileAliasCatalogData
             {
-                CatalogVersion = Version, ContractVersion = ReconcileAliasContracts.SchemaVersion, RunId = run.Data.RunId, SourceHash = run.Data.SourceHash, RunCatalogHash = run.CatalogHash,
+                CatalogVersion = Version, ContractVersion = contractVersion, RunId = run.Data.RunId, SourceHash = run.Data.SourceHash, RunCatalogHash = run.CatalogHash,
                 BatchId = request.Batch.BatchId, Stage = request.Batch.Stage, View = request.View, Level = request.Level, Entries = entries, Nodes = nodes, Items = items,
                 Relations = relations, FocusCandidateId = focus?.CandidateId,
             },

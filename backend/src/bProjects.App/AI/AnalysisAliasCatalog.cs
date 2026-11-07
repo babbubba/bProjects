@@ -126,9 +126,17 @@ public sealed class AnalysisAliasCatalog
     /// ordinale, poi documenti nell'ordine dello snapshot e per ordinale); le fonti sono numerate al primo incontro, per gruppo di citazione e parte.
     /// Una fonte originale non verificabile è <see cref="DocumentWorkException.SourceSnapshotInvalid"/>.
     /// </summary>
-    public static AnalysisAliasCatalog Build(DocumentAnalysisInput input)
+    public static AnalysisAliasCatalog Build(DocumentAnalysisInput input) => Build(input, AnalysisAliasContracts.SchemaVersion);
+
+    /// <summary>Come <see cref="Build(DocumentAnalysisInput)"/>, con la versione del contratto AI nell'identità del catalogo (T135: alias-1 o alias-2); la forma <c>alias-catalog-1</c> non cambia.</summary>
+    public static AnalysisAliasCatalog Build(DocumentAnalysisInput input, string contractVersion)
     {
         ArgumentNullException.ThrowIfNull(input);
+        if (contractVersion is not (AnalysisAliasContracts.SchemaVersion or AnalysisAliasContracts.SchemaVersionV2))
+        {
+            throw new ArgumentException($"Versione di contratto sconosciuta per il catalogo alias: {contractVersion}.", nameof(contractVersion));
+        }
+
         var evidence = input.Evidence;
         var snapshot = input.Snapshot;
         if (evidence.Count != snapshot.Evidence.Count)
@@ -248,7 +256,7 @@ public sealed class AnalysisAliasCatalog
 
         return new AnalysisAliasCatalog(new AnalysisAliasCatalogData
         {
-            CatalogVersion = Version, ContractVersion = AnalysisAliasContracts.SchemaVersion, CanonIdsVersion = CanonIdsVersion, RunId = input.AnalysisId,
+            CatalogVersion = Version, ContractVersion = contractVersion, CanonIdsVersion = CanonIdsVersion, RunId = input.AnalysisId,
             ProjectId = input.ProjectId, SourceHash = snapshot.SourceHash, Evidence = evidenceEntries, Sources = sourceEntries, Relations = ordered,
         });
     }
