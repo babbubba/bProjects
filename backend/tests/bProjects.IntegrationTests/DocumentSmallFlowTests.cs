@@ -703,7 +703,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
         Assert.NotEqual(JsonValueKind.Null, execution.GetProperty("queueMs").ValueKind);
         Assert.True(execution.GetProperty("queueMs").GetInt64() >= (waited ? 1_000 : 0));     // t0 -> inizio preflight: l'attesa Pending non e persa
         Assert.True(Part("queueMs") + Part("preflightMs") + Part("backoffMs") + Part("processingMs") <= elapsed + 50);
-        Assert.Equal(JsonValueKind.Null, execution.GetProperty("recoveryMs").ValueKind);       // nessun produttore (T102): unavailable, mai zero
+        Assert.Equal(0, execution.GetProperty("recoveryMs").GetInt64());                            // nessun tentativo raggiunto per recupero
 
         // context-usage: la chiamata finale e quella di questo root, con lo stesso execution e una composizione che attribuisce le fonti documentali.
         var last = usage.GetProperty("last");

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace bProjects.App.Analysis;
 
 /// <summary>Esecuzione di Document presa in carico: owner e fencing token del lease del ProcessingRun.</summary>
-public sealed record DocumentRunClaim(Guid RunId, string LeaseOwner, long FencingToken, int AttemptCount = 0);
+public sealed record DocumentRunClaim(Guid RunId, string LeaseOwner, long FencingToken, int AttemptCount = 0, LeaseRecovery? Recovery = null);
 
 public enum DocumentCommitOutcome
 {

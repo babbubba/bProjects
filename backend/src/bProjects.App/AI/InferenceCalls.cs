@@ -187,7 +187,7 @@ public enum ExecutionIntervalKind
 
 /// <summary>
 /// Intervallo di attesa (append-only) di un root documentale, mutuamente esclusivo con gli altri e con l'elaborazione: Preflight (misura, scritto dalla classificazione),
-/// Queue (fine preflight o fine backoff -> claim) e Backoff (rilascio con retry -> NextAttemptAt). Recovery non ha ancora un produttore (T102); un intervallo non scritto resta unavailable, mai dedotto.
+/// Queue (fine preflight o fine backoff -> claim) e Backoff (rilascio con retry -> NextAttemptAt). Recovery (T102) va dalla scadenza del lease del tentativo precedente al claim che lo riprende; un intervallo non scritto resta unavailable, mai dedotto.
 /// </summary>
 public sealed class ExecutionInterval
 {
@@ -247,5 +247,25 @@ public static class ExecutionIntervalStore
             + "FROM " + from + " WHERE x.\"Id\" = {0} AND x.\"Status\" = 'Queued' AND x.\"AttemptCount\" = {1} AND x.\"InitialRegime\" IS NOT NULL "
             + "ON CONFLICT (\"RootKind\",\"RootId\",\"Kind\",\"Attempt\") DO NOTHING";
         await db.Database.ExecuteSqlRawAsync(sql, [rootId, attempt, nextAttemptAt, delay.TotalSeconds], ct);
+    }
+
+    /// <summary>
+    /// Recupero del tentativo <paramref name="attempt"/> (quello il cui lease è scaduto), dal clock del database: [scadenza del lease, claim del tentativo successivo].
+    /// Scritto dal dispatcher DOPO il claim, mai dentro la sua transazione: un guasto della telemetria non blocca il lavoro; il recupero mancante lascia
+    /// non disponibili recupero, backoff e coda (mai dedotti). Solo root documentali (regime valorizzato); idempotente.
+    /// </summary>
+    public static async Task RecordRecoveryAsync(AppDbContext db, ClassificationOwnerKind kind, Guid rootId, int attempt, LeaseRecovery recovery, CancellationToken ct)
+    {
+        var (from, project) = kind switch
+        {
+            ClassificationOwnerKind.ChatTurn => ("\"ChatTurns\" x JOIN \"Conversations\" c ON c.\"Id\" = x.\"ConversationId\"", "c.\"ProjectId\""),
+            ClassificationOwnerKind.ProcessingRun => ("\"ProcessingRuns\" x", "x.\"ProjectId\""),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), "Il recupero riguarda un turno o un run."),
+        };
+        var sql = "INSERT INTO \"ExecutionIntervals\" (\"Id\",\"ProjectId\",\"RootKind\",\"RootId\",\"Kind\",\"Attempt\",\"StartedAt\",\"EndedAt\") "
+            + "SELECT gen_random_uuid(), " + project + ", '" + kind + "', x.\"Id\", 'Recovery', {1}, {2}, {3} "
+            + "FROM " + from + " WHERE x.\"Id\" = {0} AND x.\"InitialRegime\" IS NOT NULL AND {3} >= {2} "
+            + "ON CONFLICT (\"RootKind\",\"RootId\",\"Kind\",\"Attempt\") DO NOTHING";
+        await db.Database.ExecuteSqlRawAsync(sql, [rootId, attempt, recovery.From, recovery.To], ct);
     }
 }

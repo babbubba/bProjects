@@ -208,7 +208,19 @@ describe('InferenceMetricsComponent', () => {
       expect(timing('elapsed')).toBe('Totale trascorso 9,0 s');
     });
 
-    it('un intervallo null è «indisponibile» e non zero; il recupero senza produttore resta indisponibile', () => {
+    it('il recupero osservato è mostrato come tempo distinto dalla coda; zero osservato non è indisponibile', () => {
+      render({ metrics: metrics(), execution: execution({ recoveryMs: 7000, queueMs: 1200 }) });
+      expect(timing('recovery')).toBe('Recupero 7,0 s');
+      expect(timing('queue')).toBe('Coda 1,2 s');
+
+      render({ metrics: metrics(), execution: execution({ recoveryMs: 0 }) });
+      expect(timing('recovery')).toBe('Recupero 0 ms');
+      expect(
+        el.querySelector('[data-testid=timing-recovery]')!.getAttribute('data-available'),
+      ).toBe('true');
+    });
+
+    it('un intervallo null è «indisponibile» e non zero; un recupero non registrato resta indisponibile', () => {
       render({
         metrics: metrics(),
         execution: execution({

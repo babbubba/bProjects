@@ -458,6 +458,8 @@ public sealed class AiDispatchService(
             return; // unità/estrazioni: non sono root del regime
         }
 
+        await RecordRecoveryAsync(work, target, ct);
+
         try
         {
             using var scope = scopes.CreateScope();
@@ -466,6 +468,29 @@ public sealed class AiDispatchService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning("Intervallo di coda non registrato: {ExceptionType}", ex.GetType().Name);
+        }
+    }
+
+    /// <summary>Telemetria (T102): il recupero di un lease scaduto, dal suo termine al claim che riprende il root. Un guasto di scrittura non blocca mai il lavoro.</summary>
+    private async Task RecordRecoveryAsync(WorkClaim work, (ClassificationOwnerKind Kind, Guid Id) target, CancellationToken ct)
+    {
+        var (recovery, attempt) = work.Turn is { } t ? (t.Recovery, t.AttemptCount)
+            : work.Run is { } r ? (r.Recovery, r.AttemptCount)
+            : work.Document is { } d ? (d.Recovery, d.AttemptCount)
+            : default;
+        if (recovery is not { } interval)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await ExecutionIntervalStore.RecordRecoveryAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), target.Kind, target.Id, attempt - 1, interval, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Intervallo di recupero non registrato: {ExceptionType}", ex.GetType().Name);
         }
     }
 

@@ -213,7 +213,7 @@ public sealed class DocumentExecutionIntervalsTests
         Assert.InRange(view.Execution.QueueMs!.Value, expectedQueueMs - 2, expectedQueueMs + 2);
         Assert.InRange(view.Execution.PreflightMs!.Value, 350, 5_000);
         Assert.True(view.Execution.QueueMs.Value + view.Execution.PreflightMs.Value <= view.Execution.ElapsedMs);   // nessun doppio conteggio
-        Assert.Null(view.Execution.RecoveryMs);                                                                    // produttore = T102: unavailable, mai zero
+        Assert.Equal(0, view.Execution.RecoveryMs);                                                                // nessun tentativo raggiunto per recupero: zero osservato
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public sealed class DocumentExecutionIntervalsTests
         Assert.InRange(view.Execution.BackoffMs!.Value, 1_900, 2_100);
         Assert.NotNull(view.Execution.QueueMs);   // ogni tentativo ha la sua coda e il backoff che lo precede: il totale è completo
         Assert.True(view.Execution.QueueMs.Value + view.Execution.PreflightMs!.Value + view.Execution.BackoffMs.Value <= view.Execution.ElapsedMs);
-        Assert.Null(view.Execution.RecoveryMs);
+        Assert.Equal(0, view.Execution.RecoveryMs);
     }
 
     [Fact]
@@ -344,6 +344,140 @@ public sealed class DocumentExecutionIntervalsTests
         Assert.Equal(TurnTransition.Failed, (await ReleaseAsync(database, exhausted, Transient, 3)).Outcome);
 
         Assert.Equal(0L, await database.ScalarAsync<long>("""SELECT count(*) FROM "ExecutionIntervals" """));
+    }
+
+    // ================================================================ Recupero del lease (T102)
+
+    private static string LeaseExpiredSql => "clock_timestamp() - interval '3 seconds'";
+
+    private sealed class NoopExecutor : IChatTurnExecutor
+    {
+        public Task ExecuteAsync(ChatTurnClaim claim, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private static async Task<WorkClaim?> ClaimAsync(ParsingDatabase database)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<AppDbContext>(o => o.UseNpgsql(database.ConnectionString));
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var store = new ExecutionLeaseStore(scope.ServiceProvider.GetRequiredService<AppDbContext>(), Options.Create(new ExecutionOptions()));
+        return await store.ClaimNextWorkAsync("worker-b", turns: true, runs: true, documents: true, Ct);
+    }
+
+    private static LeaseRecovery? RecoveryOf(WorkClaim claim) => claim.Turn?.Recovery ?? claim.Run?.Recovery ?? claim.Document?.Recovery;
+
+    [Theory]
+    [InlineData(RootKind.Turn)]
+    [InlineData(RootKind.Run)]
+    public async Task Reclaiming_an_expired_lease_reports_the_recovery_from_the_lease_expiry_to_the_claim_and_a_queued_claim_reports_none(RootKind kind)
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var expired = await DocumentRegimeRoots.SeedAsync(database, kind, new RootSpec { ElapsedSeconds = 10, AttemptCount = 1, LeaseUntilSql = LeaseExpiredSql });
+        var oldLease = new DateTimeOffset(DateTime.SpecifyKind(await database.ScalarAsync<DateTime>($"""SELECT "LeaseUntil" FROM "{expired.Table}" WHERE "Id" = '{expired.Id}'"""), DateTimeKind.Utc));
+
+        var recovery = RecoveryOf((await ClaimAsync(database))!);
+
+        Assert.NotNull(recovery);
+        Assert.Equal(oldLease, recovery.Value.From);
+        Assert.True(recovery.Value.To > recovery.Value.From);
+
+        await using var other = await ParsingDatabase.CreateAsync();
+        await DocumentRegimeRoots.SeedAsync(other, kind, new RootSpec { ElapsedSeconds = 10, AttemptCount = 0, Status = "Queued", LeaseOwner = null, Fence = 0 });
+        Assert.Null(RecoveryOf((await ClaimAsync(other))!));
+    }
+
+    [Fact]
+    public async Task The_dispatcher_records_exactly_one_recovery_interval_for_the_crashed_attempt_without_overlapping_the_other_intervals()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        await using var rig = Rig.Create(database, new SlowProbe(Fit, 10), new NoopExecutor());
+        var root = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { ElapsedSeconds = 20, AttemptCount = 1, LeaseUntilSql = LeaseExpiredSql });
+        await SeedIntervalAsync(database, root, "Preflight", 1, 1, 2);
+        await SeedIntervalAsync(database, root, "Queue", 1, 2, 3);
+
+        Assert.True(await rig.Dispatcher.RunOnceAsync(Ct));
+
+        Assert.Equal(1L, await Count(database, root, "Recovery"));
+        Assert.True(await database.ScalarAsync<bool>($"""
+            SELECT i."Attempt" = 1 AND i."EndedAt" > i."StartedAt" AND i."StartedAt" > x."RequestedAt" + interval '3 seconds'
+            FROM "ExecutionIntervals" i JOIN "ChatTurns" x ON x."Id" = i."RootId" WHERE i."RootId" = '{root.Id}' AND i."Kind" = 'Recovery'
+            """));
+        Assert.Equal(0L, await database.ScalarAsync<long>($"""
+            SELECT count(*) FROM "ExecutionIntervals" a JOIN "ExecutionIntervals" b ON a."RootId" = b."RootId" AND a."Id" < b."Id"
+            WHERE a."RootId" = '{root.Id}' AND a."StartedAt" < b."EndedAt" AND b."StartedAt" < a."EndedAt"
+            """));
+        Assert.Equal(1L, await Count(database, root, "Queue"));   // nessuna coda inventata per il tentativo raggiunto per recupero
+
+        var view = await ViewAsync(database, root);
+        Assert.True(view.Execution.RecoveryMs > 0);
+        Assert.NotNull(view.Execution.QueueMs);     // il tentativo recuperato non ha coda: l'attesa è recupero
+        Assert.NotNull(view.Execution.BackoffMs);
+    }
+
+    [Fact]
+    public async Task A_failure_writing_the_recovery_never_blocks_the_reclaim_and_is_logged_without_the_exception()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var logger = new CapturingLogger();
+        await using var rig = Rig.Create(database, new SlowProbe(Fit, 10), new NoopExecutor(), logger);
+        var root = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { ElapsedSeconds = 20, AttemptCount = 1, LeaseUntilSql = LeaseExpiredSql });
+        await database.ExecuteAsync("""DROP TABLE "ExecutionIntervals" """);
+
+        Assert.True(await rig.Dispatcher.RunOnceAsync(Ct));
+
+        Assert.Equal(2, await database.ScalarAsync<int>($"""SELECT "AttemptCount" FROM "ChatTurns" WHERE "Id" = '{root.Id}'"""));
+        Assert.Contains(logger.Entries, e => e.Message.Contains("Intervallo di recupero non registrato", StringComparison.Ordinal));
+        Assert.All(logger.Entries, e => Assert.Null(e.Exception));
+    }
+
+    [Fact]
+    public async Task Recovery_time_is_the_union_of_recovery_intervals_and_explains_the_attempts_without_backoff_or_queue()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var root = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { ElapsedSeconds = 60, AttemptCount = 3 });
+        await SeedIntervalAsync(database, root, "Preflight", 1, 1, 2);
+        await SeedIntervalAsync(database, root, "Queue", 1, 2, 5);
+        await SeedIntervalAsync(database, root, "Backoff", 1, 6, 8);
+        await SeedIntervalAsync(database, root, "Queue", 2, 8, 9);
+        await SeedIntervalAsync(database, root, "Recovery", 2, 20, 27);   // attempt 3 raggiunto per scadenza del lease: nessun backoff, nessuna coda
+
+        var view = await ViewAsync(database, root);
+
+        Assert.Equal(7_000, view.Execution.RecoveryMs);
+        Assert.Equal(2_000, view.Execution.BackoffMs);
+        Assert.Equal(1_000 + 3_000 + 1_000, view.Execution.QueueMs);
+        Assert.True(view.Execution.QueueMs!.Value + view.Execution.PreflightMs!.Value + view.Execution.BackoffMs!.Value + view.Execution.RecoveryMs!.Value <= view.Execution.ElapsedMs);
+    }
+
+    [Fact]
+    public async Task Without_a_recorded_recovery_for_an_attempt_reached_without_backoff_the_recovery_stays_unavailable_never_zero()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var root = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { ElapsedSeconds = 60, AttemptCount = 2 });
+        await SeedIntervalAsync(database, root, "Preflight", 1, 1, 2);
+        await SeedIntervalAsync(database, root, "Queue", 1, 2, 5);
+
+        var view = await ViewAsync(database, root);
+
+        Assert.Null(view.Execution.RecoveryMs);
+        Assert.Null(view.Execution.BackoffMs);
+        Assert.Null(view.Execution.QueueMs);
+    }
+
+    [Fact]
+    public async Task Legacy_roots_have_no_recovery_intervals()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var legacy = await DocumentRegimeRoots.SeedAsync(database, RootKind.Turn, new RootSpec { Legacy = true, AttemptCount = 1, LeaseUntilSql = LeaseExpiredSql });
+        var recovery = RecoveryOf((await ClaimAsync(database))!)!.Value;
+
+        await using (var db = database.NewContext())
+        {
+            await ExecutionIntervalStore.RecordRecoveryAsync(db, ClassificationOwnerKind.ChatTurn, legacy.Id, 1, recovery, Ct);
+        }
+
+        Assert.Equal(0L, await Count(database, legacy, "Recovery"));
     }
 
     // ================================================================ Log

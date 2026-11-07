@@ -162,7 +162,7 @@ public sealed class DocumentTelemetryApiTests
         Assert.Equal(1_000, execution.GetProperty("preflightMs").GetInt64());
         Assert.Equal(1_000 + 6_000, execution.GetProperty("queueMs").GetInt64());
         Assert.Equal(0, execution.GetProperty("backoffMs").GetInt64());                            // un solo tentativo: nessun retry
-        Assert.Equal(JsonValueKind.Null, execution.GetProperty("recoveryMs").ValueKind);           // nessun produttore (T102): unavailable, mai zero
+        Assert.Equal(0, execution.GetProperty("recoveryMs").GetInt64());                                // un solo tentativo: nessun recupero
         Assert.Equal(JsonValueKind.Null, execution.GetProperty("processingMs").ValueKind);         // nessuna chiamata osservata
         string[] forbidden = ["target", "nominal", "certif", "within", "respect", "complian", "sla", "met", "ok"];
         Assert.DoesNotContain(execution.EnumerateObject().Select(p => p.Name), name => forbidden.Any(f => string.Equals(name, f, StringComparison.OrdinalIgnoreCase) || (f.Length > 3 && name.Contains(f, StringComparison.OrdinalIgnoreCase))));

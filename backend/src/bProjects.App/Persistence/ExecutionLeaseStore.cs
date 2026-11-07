@@ -9,6 +9,12 @@ using System.Text.RegularExpressions;
 
 namespace bProjects.App.Persistence;
 
+/// <summary>
+/// Recupero di un lease scaduto (T102): intervallo fra la scadenza del lease del tentativo precedente (crash o perdita del worker) e il claim che lo
+/// riprende, entrambi sul clock del database. Assente per un claim da Queued (primo claim o retry con backoff).
+/// </summary>
+public readonly record struct LeaseRecovery(DateTimeOffset From, DateTimeOffset To);
+
 /// <summary>Turno preso in carico: owner e fencing token identificano in modo esclusivo questo tentativo.</summary>
 public sealed record ChatTurnClaim(
     Guid TurnId,
@@ -19,7 +25,8 @@ public sealed record ChatTurnClaim(
     long FencingToken,
     int AttemptCount,
     DateTimeOffset LeaseUntil,
-    DateTimeOffset DeadlineAt);
+    DateTimeOffset DeadlineAt,
+    LeaseRecovery? Recovery = null);
 
 public enum TurnTransition
 {
@@ -414,7 +421,8 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
               AND {DocumentDeadlineGuard.RootAlive("t", "clk.t")}
               AND {DocumentDeadlineGuard.NotPending("t")}
             RETURNING t."Id", t."ConversationId", t."TriggerMessageId", t."SourceCutoffSequence",
-                      t."FencingToken", t."AttemptCount", t."LeaseUntil", t."DeadlineAt"
+                      t."FencingToken", t."AttemptCount", t."LeaseUntil", t."DeadlineAt",
+                      (SELECT o."LeaseUntil" FROM "ChatTurns" o WHERE o."Id" = t."Id" AND o."Status" = 'Running'), clk.t
             """,
             ct,
             ("id", id), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
@@ -429,7 +437,8 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
                 reader.GetInt64(4),
                 reader.GetInt32(5),
                 reader.GetFieldValue<DateTimeOffset>(6),
-                reader.GetFieldValue<DateTimeOffset>(7))
+                reader.GetFieldValue<DateTimeOffset>(7),
+                RecoveryOf(reader, 8, 9))
             : null;
     }
 
@@ -456,7 +465,8 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
               AND t."AttemptCount" < t."MaxAttempts"
               AND {DocumentDeadlineGuard.RootAlive("t", "clk.t")}
               AND {DocumentDeadlineGuard.NotPending("t")}
-            RETURNING t."Id", t."FencingToken", t."AttemptCount"
+            RETURNING t."Id", t."FencingToken", t."AttemptCount",
+                      (SELECT o."LeaseUntil" FROM "ProcessingRuns" o WHERE o."Id" = t."Id" AND o."Status" = 'Running'), clk.t
             """,
             ct,
             ("id", id), ("kind", kind), ("owner", owner), ("lease", _policy.LeaseDuration.TotalSeconds));
@@ -466,11 +476,15 @@ public sealed partial class ExecutionLeaseStore(AppDbContext db, IOptions<Execut
             return null;
         }
 
-        var (runId, fence, attempt) = (reader.GetGuid(0), reader.GetInt64(1), reader.GetInt32(2));
+        var (runId, fence, attempt, recovery) = (reader.GetGuid(0), reader.GetInt64(1), reader.GetInt32(2), RecoveryOf(reader, 3, 4));
         return kind == nameof(ProcessingRunKind.Document)
-            ? new WorkClaim(null, null, new DocumentRunClaim(runId, owner, fence, attempt))
-            : new WorkClaim(null, new AnalysisRunClaim(runId, owner, fence, attempt));
+            ? new WorkClaim(null, null, new DocumentRunClaim(runId, owner, fence, attempt, recovery))
+            : new WorkClaim(null, new AnalysisRunClaim(runId, owner, fence, attempt, recovery));
     }
+
+    /// <summary>Lease del tentativo precedente (subquery della RETURNING: snapshot prima della UPDATE) e istante del claim; null se il claim viene da Queued.</summary>
+    private static LeaseRecovery? RecoveryOf(NpgsqlDataReader reader, int previousLease, int claimedAt) =>
+        reader.IsDBNull(previousLease) ? null : new LeaseRecovery(reader.GetFieldValue<DateTimeOffset>(previousLease), reader.GetFieldValue<DateTimeOffset>(claimedAt));
 
     /// <summary>Un'estrazione non prende il posto di un turno o run il cui retry scade entro questo intervallo (il backoff massimo è 10 s).</summary>
     public static readonly TimeSpan ExtractionBackoffHold = TimeSpan.FromSeconds(30);
