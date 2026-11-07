@@ -39,6 +39,22 @@ public sealed record DocumentDraftPackage(IReadOnlyDictionary<Guid, IReadOnlyLis
 
         return new(map, new HashSet<Guid>(content.Sources.Select(s => s.Id)));
     }
+
+    /// <summary>
+    /// Pacchetto di una unità editoriale (002 T086): i soli item principali dell'unità e le sole fonti che li sostengono. Gli altri item della revisione (contesto, altre
+    /// unità) e le loro fonti diventano estranei per costruzione: <see cref="DocumentDraftValidator.ValidateBlocks"/> li rifiuta senza regole nuove. Un item ignoto è un errore.
+    /// </summary>
+    public DocumentDraftPackage ForItems(IEnumerable<Guid> itemIds)
+    {
+        ArgumentNullException.ThrowIfNull(itemIds);
+        var map = new Dictionary<Guid, IReadOnlyList<Guid>>();
+        foreach (var id in itemIds)
+        {
+            map[id] = ItemSources.TryGetValue(id, out var sources) ? sources : throw new ArgumentException($"L'item {id:D} non appartiene al pacchetto.", nameof(itemIds));
+        }
+
+        return new(map, new HashSet<Guid>(map.Values.SelectMany(s => s)));
+    }
 }
 
 /// <summary>

@@ -267,7 +267,7 @@ public sealed partial class DocumentDraftAliasWorkflowTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_confirmed_revision_beyond_the_capacity_of_one_call_fails_explicitly_before_any_model_call()
+    public async Task A_confirmed_revision_with_one_irreducible_item_beyond_the_capacity_of_one_call_fails_explicitly_before_any_model_call()
     {
         using var client = await App.LoginAsync();
         var s = await SeedAsync(client, string.Join(' ', Enumerable.Repeat("parola", 3_000)));
@@ -276,7 +276,7 @@ public sealed partial class DocumentDraftAliasWorkflowTests : IAsyncLifetime
         var result = await RunAsync(await ClaimAsync(s.Run), model);
 
         Assert.Equal(ProcessingRunStatus.Failed, result.Status);
-        Assert.Equal(DocumentWorkException.CallLimitExceeded, result.ErrorCode);
+        Assert.Equal(DocumentWorkException.DocumentIncomplete, result.ErrorCode);   // T086: oltre una chiamata si pianificano unita editoriali; un item che da solo non entra e irriducibile
         Assert.Empty(model.Requests);
         Assert.Equal(0, await Count("SELECT count(*) FROM \"Drafts\""));
     }

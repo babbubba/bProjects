@@ -22,7 +22,8 @@ namespace bProjects.App.AI;
 /// <c>{sectionKey,blocks:[{itemIds,markdown,sourceIds}]}</c>. La risposta e validata contro il pacchetto fidato della revisione
 /// (<see cref="DocumentDraftValidator.ValidateBlocks"/>) PRIMA del WorkOutput; un output invalido e errore permanente senza riparazione. Il commit
 /// finale e atomico (<see cref="DocumentRunCompletion.CommitAsync"/>): Draft Proposed/NotApproved + Completed + LatestDraftId, legato alla
-/// revisione congelata all'avvio del run, mai a una successiva. Oltre la capacita di una chiamata: errore esplicito (unita editoriali = T085).
+/// revisione congelata all'avvio del run, mai a una successiva. Oltre la capacita di una chiamata: il contratto v2 (storico) resta un errore esplicito, il v3 genera per
+/// unita editoriali (T086, <see cref="DocumentDraftEditorialPlan"/>).
 /// Registrazione DI e instradamento sulla definizione congelata sono di T123.
 /// </summary>
 public sealed class DocumentSourceDraftWorkflow(
@@ -186,10 +187,9 @@ public sealed class DocumentSourceDraftWorkflow(
 
         if (!measure.Fits)
         {
-            // Mai una compattazione della revisione confermata: oltre la capacita di una chiamata servono le unita editoriali (T085).
-            throw new DocumentWorkException(
-                DocumentWorkException.CallLimitExceeded,
-                $"La revisione confermata ({measure.Tokens} token) supera la capacita della generazione a singola chiamata ({measure.InputBudgetTokens} token): la generazione per unita editoriali non e ancora disponibile.");
+            // Mai una compattazione della revisione confermata: oltre la capacita di una chiamata si generano unita editoriali misurate (T085/T086).
+            await RunEditorialGraphAsync(db, claim, input, catalog, measure, structured, schema, ct);
+            return;
         }
 
         using var scope = scopes.CreateScope();
@@ -197,6 +197,38 @@ public sealed class DocumentSourceDraftWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentDraftAliasPlan(claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes);
+        var counter = new BatchInvocationCounter();
+        var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun), counter);
+        var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
+        try
+        {
+            await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, counter), checkpoints, SessionId(claim.RunId), null, ct);
+        }
+        catch (Exception ex) when (Find<LeaseLostException>(ex) is not null)
+        {
+            // Il dominio prevale sul checkpoint: se il commit atomico ha gia completato il run, la scrittura del checkpoint finale e stata rifiutata.
+            if (!plan.Committed)
+            {
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Grafo v3 oltre la capacita di una chiamata (002 T086): stesso grafo fisso T043 e stesso port T044, un batch per unita editoriale del planner T085 (item principali,
+    /// contesto, conflitti e fonti misurati sul payload completo), assemblaggio deterministico senza LLM e commit unico di Draft + Completed a copertura completa. Un item
+    /// irriducibile e <c>document_incomplete</c> con il suo ID prima di ogni chiamata; la revisione confermata non si compatta mai e la finestra non si aumenta.
+    /// </summary>
+    private async Task RunEditorialGraphAsync(
+        AppDbContext db, DocumentRunClaim claim, DocumentRunInputV11 input, DraftAliasCatalog catalog, PayloadPreflight measure, bool structured, JsonElement schema, CancellationToken ct)
+    {
+        var ledger = await DraftSourceLedger.LoadAsync(db, input.AnalysisId, ct);
+        using var scope = scopes.CreateScope();
+        var planDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
+        var store = new DocumentWorkStore(planDb, writer);
+        var plan = new DocumentDraftEditorialPlan(claim, input, catalog, ledger, measure, structured, factory, client, schema, scopes);
+        await plan.PreflightAsync(ct);
         var counter = new BatchInvocationCounter();
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, documents.Value.MaxAiCallsPerRun), counter);
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
