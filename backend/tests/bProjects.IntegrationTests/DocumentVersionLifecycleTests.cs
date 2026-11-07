@@ -641,29 +641,6 @@ public sealed class DocumentVersionLifecycleTests : LifecycleTestBase
 
     // ================================================================ T096: risoluzione della selezione sul bundle corrente
 
-    private async Task<Target> UploadNextVersionAsync(HttpClient client, Target t, string text)
-    {
-        var created = await Json(await Upload(client, t.Project, Text(text), "nota.txt", "text/plain", documentId: t.Document));
-        var version = created.GetProperty("id").GetGuid();
-        var preparation = await Scalar<Guid>("SELECT \"Id\" FROM \"DocumentPreparations\" WHERE \"DocumentVersionId\" = @v", ("v", version));
-        var job = await Scalar<Guid>("SELECT \"ParseJobId\" FROM \"DocumentPreparations\" WHERE \"Id\" = @p", ("p", preparation));
-        return new(t.Project, t.Document, version, preparation, job);
-    }
-
-    private async Task<JsonElement> SelectionItemAsync(HttpClient client, Target t)
-    {
-        var selection = await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct));
-        return selection.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("documentId").GetGuid() == t.Document).Clone();
-    }
-
-    private async Task<HttpResponseMessage> PutSelectionAsync(HttpClient client, Target t, object item)
-    {
-        var revision = (await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct))).GetProperty("revision").GetInt64();
-        var put = new HttpRequestMessage(HttpMethod.Put, $"/api/projects/{t.Project}/source-selection") { Content = JsonContent.Create(new { items = new[] { item } }) };
-        put.Headers.TryAddWithoutValidation("If-Match", $"\"{revision}\"");
-        return await client.SendAsync(put, Ct);
-    }
-
     [Fact]
     public async Task Selection_and_snapshot_resolve_the_current_bundle_never_the_highest_ready_generation()
     {

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -179,4 +180,27 @@ public abstract class LifecycleTestBase : ParseRetryTestBase
     protected Task<long> Preparations(Target t) => Count("SELECT count(*) FROM \"DocumentPreparations\" WHERE \"DocumentVersionId\" = @v", ("v", t.Version));
 
     protected Task<long> Jobs(Target t) => Count("SELECT count(*) FROM \"DocumentJobs\" WHERE \"ProjectId\" = @p", ("p", t.Project));
+
+    protected async Task<Target> UploadNextVersionAsync(HttpClient client, Target t, string text)
+    {
+        var created = await Json(await Upload(client, t.Project, Text(text), "nota.txt", "text/plain", documentId: t.Document));
+        var version = created.GetProperty("id").GetGuid();
+        var preparation = await Scalar<Guid>("SELECT \"Id\" FROM \"DocumentPreparations\" WHERE \"DocumentVersionId\" = @v", ("v", version));
+        var job = await Scalar<Guid>("SELECT \"ParseJobId\" FROM \"DocumentPreparations\" WHERE \"Id\" = @p", ("p", preparation));
+        return new(t.Project, t.Document, version, preparation, job);
+    }
+
+    protected async Task<JsonElement> SelectionItemAsync(HttpClient client, Target t)
+    {
+        var selection = await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct));
+        return selection.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("documentId").GetGuid() == t.Document).Clone();
+    }
+
+    protected async Task<HttpResponseMessage> PutSelectionAsync(HttpClient client, Target t, object item)
+    {
+        var revision = (await Json(await client.GetAsync($"/api/projects/{t.Project}/source-selection", Ct))).GetProperty("revision").GetInt64();
+        var put = new HttpRequestMessage(HttpMethod.Put, $"/api/projects/{t.Project}/source-selection") { Content = JsonContent.Create(new { items = new[] { item } }) };
+        put.Headers.TryAddWithoutValidation("If-Match", $"\"{revision}\"");
+        return await client.SendAsync(put, Ct);
+    }
 }
