@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
   DestroyRef,
+  ElementRef,
   InjectionToken,
   computed,
   effect,
@@ -21,6 +22,7 @@ import {
   EvidenceApiService,
   EvidenceEnvelope,
   FindingCategory,
+  GapAssessmentView,
   MessageVersionsView,
   VersionDiffView,
 } from './evidence-api.service';
@@ -58,6 +60,34 @@ import { ProjectApiService } from './project-api.service';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 
 /** Intervallo (ms) di riconciliazione mentre ci sono lavori aperti; 0 disattiva il polling. */
+export type GapView =
+  | { available: false }
+  | {
+      available: true;
+      expected: number;
+      assessed: number;
+      answered: number;
+      open: number;
+      unassessed: number;
+      items: GapAssessmentView[];
+      aiRevisionChanged: boolean;
+    };
+
+const gapOutcomes = ['AnsweredInSnapshot', 'Open'];
+const gapReasons = ['Answered', 'NoAnswer', 'Partial', 'Ambiguous'];
+
+function validGapAssessment(g: GapAssessmentView): boolean {
+  return (
+    !!g &&
+    typeof g.gapEvidenceId === 'string' &&
+    gapOutcomes.includes(g.outcome) &&
+    gapReasons.includes(g.reason) &&
+    typeof g.rationale === 'string' &&
+    Array.isArray(g.supportingEvidenceIds) &&
+    g.supportingEvidenceIds.every((id) => typeof id === 'string')
+  );
+}
+
 export const EVIDENCE_POLL_MS = new InjectionToken<number>('EVIDENCE_POLL_MS', {
   providedIn: 'root',
   factory: () => 2000,
@@ -92,6 +122,7 @@ export class EvidenceViewComponent {
   private readonly events = inject(ProjectEventsService);
   private readonly auth = inject(AuthService);
   private readonly pollMs = inject(EVIDENCE_POLL_MS);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly projectId = input.required<string>();
   /** Analisi e revisione correnti (null = nessuna analisi: la copertura non è disponibile). */
@@ -235,6 +266,35 @@ export class EvidenceViewComponent {
   protected readonly openCandidates = computed(() =>
     (this.reconciliation()?.candidates ?? []).filter((c) => c.terminal && c.state === 'Open'),
   );
+  /**
+   * Valutazioni dei Gap: lette SOLO se il report è «coverage-3» (versione, mai presenza di campi). Per ogni altra versione, o se i campi di un
+   * coverage-3 mancano o sono incoerenti, la valutazione è «non disponibile»: non è mai «zero Gap».
+   */
+  protected readonly gapView = computed<GapView>(() => {
+    const r = this.report();
+    if (!r || r.checkerVersion !== 'coverage-3') return { available: false };
+    const s = r.summary;
+    const list = r.gapAssessments;
+    if (!s || !Array.isArray(list)) return { available: false };
+    const counters = [s.expectedGaps, s.assessedGaps, s.answeredGaps, s.openGaps, s.unassessedGaps];
+    if (!counters.every((n) => Number.isInteger(n) && (n as number) >= 0)) {
+      return { available: false };
+    }
+    if (!list.every(validGapAssessment) || s.assessedGaps !== list.length) {
+      return { available: false };
+    }
+    return {
+      available: true,
+      expected: s.expectedGaps!,
+      assessed: s.assessedGaps!,
+      answered: s.answeredGaps!,
+      open: s.openGaps!,
+      unassessed: s.unassessedGaps!,
+      items: list,
+      aiRevisionChanged: !!r.aiRevisionId && !!r.revisionId && r.aiRevisionId !== r.revisionId,
+    };
+  });
+  private readonly listedIds = computed(() => new Set(this.list().rows.map((row) => row.id)));
   protected readonly groups = computed(() => {
     const findings = this.report()?.findings ?? [];
     return categories.map((category) => ({
@@ -613,6 +673,39 @@ export class EvidenceViewComponent {
       for (const p of group.parts) if (p.resolved) next.add(p.source.sourceId);
       return next;
     });
+  }
+
+  protected isListed(evidenceId: string): boolean {
+    return this.listedIds().has(evidenceId);
+  }
+
+  /** Apre il dettaglio dell'evidenza nell'elenco esistente (nessun nuovo comando) e porta il focus sulla sua riga. */
+  protected async openEvidenceRef(evidenceId: string): Promise<void> {
+    if (this.selectedId() !== evidenceId) await this.toggleDetail(evidenceId);
+    const row = this.host.nativeElement.querySelector<HTMLElement>(
+      `[data-testid="evidence-${CSS.escape(evidenceId)}"]`,
+    );
+    if (!row) return;
+    row.setAttribute('tabindex', '-1');
+    row.scrollIntoView?.({ block: 'nearest' });
+    row.focus();
+  }
+
+  protected gapOutcomeLabel(g: GapAssessmentView): string {
+    return g.outcome === 'AnsweredInSnapshot' ? 'Risolto nello snapshot' : 'Ancora aperto';
+  }
+
+  protected gapReasonLabel(reason: GapAssessmentView['reason']): string {
+    switch (reason) {
+      case 'Answered':
+        return 'Risposta presente';
+      case 'NoAnswer':
+        return 'Nessuna risposta';
+      case 'Partial':
+        return 'Risposta parziale';
+      default:
+        return 'Risposta ambigua';
+    }
   }
 
   protected async toggleDetail(evidenceId: string): Promise<void> {

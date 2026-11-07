@@ -375,6 +375,29 @@ export interface CoverageDocumentSummary {
   portionsNoEvidence: number;
   portionsMissing: number;
   blockingFindings: number;
+  /** Solo coverage-3 (letti solo se checkerVersion è «coverage-3»): contatori dei Gap, distinti dal supporto agli elementi. */
+  expectedGaps?: number;
+  assessedGaps?: number;
+  answeredGaps?: number;
+  openGaps?: number;
+  unassessedGaps?: number;
+}
+
+export type GapOutcome = 'AnsweredInSnapshot' | 'Open';
+export type GapReason = 'Answered' | 'NoAnswer' | 'Partial' | 'Ambiguous';
+
+/** Solo coverage-3: valutazione AI di un Gap nello snapshot congelato. Non è un supporto di requisito né una conferma del PM. */
+export interface GapAssessmentView {
+  gapEvidenceId: string;
+  gapEvidenceVersionId: string;
+  sourceSnapshotHash: string;
+  outcome: GapOutcome;
+  reason: GapReason;
+  rationale: string;
+  supportingEvidenceIds: string[];
+  openItemId: string | null;
+  openConflictId: string | null;
+  originBatchId: string;
 }
 
 export interface ReconciliationLevel {
@@ -427,6 +450,11 @@ export interface CoverageReportView extends CoverageReportSummary {
   limits: string[];
   summary?: CoverageDocumentSummary;
   reconciliation?: ReconciliationCoverage;
+  /** Solo coverage-3: revisione AI originaria cui appartengono le valutazioni (distinta da `revisionId`, la corrente). */
+  aiRevisionId?: string;
+  /** Solo coverage-3. Mai letti per altre versioni: un campo assente o ostile non è «zero Gap». */
+  gapAssessmentsHash?: string;
+  gapAssessments?: GapAssessmentView[];
 }
 
 const enc = encodeURIComponent;

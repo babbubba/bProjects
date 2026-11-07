@@ -737,8 +737,11 @@ describe('EvidenceViewComponent', () => {
       ...over,
     });
 
-    const open = async (report: Partial<CoverageReportView>) => {
-      await setup({ analysisId: 'a-1' });
+    const open = async (
+      report: Partial<CoverageReportView>,
+      setupOpts: { items?: EvidenceView[] } = {},
+    ) => {
+      await setup({ analysisId: 'a-1', ...setupOpts });
       await click('verify-coverage');
       http
         .expectOne(`${BASE}/draft`)
@@ -917,6 +920,210 @@ describe('EvidenceViewComponent', () => {
       expect(q('id-coverage')).toBeNull();
       expect(q('reconciliation')).toBeNull();
       expect(q('report')).not.toBeNull();
+      expect(text('gap-unavailable')).toContain('non disponibile');
+    });
+
+    describe('coverage-3 Gap assessments (T140)', () => {
+      const gap = (over: Record<string, unknown> = {}) => ({
+        gapEvidenceId: 'e-1',
+        gapEvidenceVersionId: 'v-1',
+        sourceSnapshotHash: 'sh',
+        outcome: 'Open',
+        reason: 'Partial',
+        rationale: 'La fonte copre solo il caso feriale.',
+        supportingEvidenceIds: [],
+        openItemId: null,
+        openConflictId: null,
+        originBatchId: 'b-1',
+        ...over,
+      });
+      const gapSummary = (over: Record<string, number> = {}) =>
+        summary({
+          expectedGaps: 2,
+          assessedGaps: 2,
+          answeredGaps: 1,
+          openGaps: 1,
+          unassessedGaps: 0,
+          ...over,
+        });
+      const v3 = (over: Record<string, unknown> = {}) =>
+        ({
+          checkerVersion: 'coverage-3',
+          aiRevisionId: 'rev-1',
+          gapAssessmentsHash: 'gh',
+          summary: gapSummary(),
+          gapAssessments: [
+            gap({
+              gapEvidenceId: 'e-1',
+              outcome: 'AnsweredInSnapshot',
+              reason: 'Answered',
+              rationale: 'Risolto dalla fonte.',
+              supportingEvidenceIds: ['e-2'],
+            }),
+            gap({ gapEvidenceId: 'e-9', reason: 'NoAnswer', openItemId: 'q-1' }),
+          ],
+          ...over,
+        }) as unknown as Partial<CoverageReportView>;
+      const oneOpen = () =>
+        gapSummary({ expectedGaps: 1, assessedGaps: 1, answeredGaps: 0, openGaps: 1 });
+      const noGap = () => q('gap-assessments')?.querySelectorAll('[data-testid=gap-item]') ?? [];
+
+      it.each([
+        ['without gap fields', {}],
+        [
+          'with hostile empty gap fields',
+          {
+            gapAssessments: [],
+            gapAssessmentsHash: 'x',
+            summary: summary({
+              expectedGaps: 0,
+              assessedGaps: 0,
+              answeredGaps: 0,
+              openGaps: 0,
+              unassessedGaps: 0,
+            }),
+          },
+        ],
+        [
+          'with hostile populated gap fields',
+          { gapAssessments: [gap()], aiRevisionId: 'rev-1', summary: gapSummary() },
+        ],
+      ])(
+        'treats coverage-2 %s as Gap assessment unavailable, never as zero Gap',
+        async (_n, over) => {
+          await open({ summary: summary(), ...(over as Partial<CoverageReportView>) });
+          const t = text('gap-assessments');
+          expect(t).toContain('non disponibile');
+          expect(t).toContain('non significa che non ci siano Gap');
+          expect(noGap()).toHaveLength(0);
+          expect(q('gap-counters')).toBeNull();
+          expect(t.toLowerCase()).not.toContain('nessun gap');
+        },
+      );
+
+      it('treats a coverage-3 report whose gap fields are missing or malformed as unavailable', async () => {
+        await open({
+          checkerVersion: 'coverage-3',
+          summary: summary(),
+          gapAssessments: undefined,
+        } as Partial<CoverageReportView>);
+        expect(text('gap-assessments')).toContain('non disponibile');
+        expect(noGap()).toHaveLength(0);
+        expect(q('gap-counters')).toBeNull();
+      });
+
+      it('shows answered and open Gap with textual outcome, reason, rationale and counters', async () => {
+        await open(v3());
+        const t = text('gap-assessments');
+        expect(t).toContain('valutazione AI nello snapshot');
+        expect(t).toContain('non è un supporto di requisito né una conferma del PM');
+        expect(text('gap-counters')).toContain('Attesi 2');
+        expect(text('gap-counters')).toContain('Valutati 2');
+        expect(text('gap-counters')).toContain('Risolti nello snapshot 1');
+        expect(text('gap-counters')).toContain('Aperti 1');
+        expect(text('gap-counters')).toContain('Non valutati 0');
+        const items = qa('gap-item');
+        expect(items).toHaveLength(2);
+        expect(items[0].textContent).toContain('Risolto nello snapshot');
+        expect(items[0].textContent).toContain('Risposta presente');
+        expect(items[0].textContent).toContain('Risolto dalla fonte.');
+        expect(items[1].textContent).toContain('Ancora aperto');
+        expect(items[1].textContent).toContain('Nessuna risposta');
+        expect(items[1].textContent).toContain('Domanda aperta');
+      });
+
+      it.each([
+        ['Partial', 'Risposta parziale'],
+        ['Ambiguous', 'Risposta ambigua'],
+        ['NoAnswer', 'Nessuna risposta'],
+      ])('labels the open reason %s in words', async (reason, label) => {
+        await open(v3({ gapAssessments: [gap({ reason })], summary: oneOpen() }));
+        expect(text('gap-item')).toContain('Ancora aperto');
+        expect(text('gap-item')).toContain(label);
+      });
+
+      it('shows a valid empty coverage-3 list as no Gap in the snapshot, not as a failed check', async () => {
+        await open(
+          v3({
+            gapAssessments: [],
+            summary: gapSummary({
+              expectedGaps: 0,
+              assessedGaps: 0,
+              answeredGaps: 0,
+              openGaps: 0,
+            }),
+          }),
+        );
+        expect(text('gap-assessments')).toContain('Nessun Gap');
+        expect(noGap()).toHaveLength(0);
+      });
+
+      it('reports unassessed Gap explicitly', async () => {
+        await open(
+          v3({
+            summary: gapSummary({ expectedGaps: 3, unassessedGaps: 1 }),
+          }),
+        );
+        expect(text('gap-counters')).toContain('Non valutati 1');
+        expect(text('gap-unassessed')).toContain('senza valutazione');
+      });
+
+      it('opens a referenced evidence through the existing detail command, with keyboard-reachable buttons', async () => {
+        await open(v3(), {
+          items: [evidence(), evidence({ id: 'e-2', statement: 'Supporto' })],
+        });
+        const refs = qa('gap-ref');
+        expect(refs.length).toBeGreaterThanOrEqual(2);
+        expect(refs.every((b) => b.tagName === 'BUTTON')).toBe(true);
+        refs[0].click();
+        await settle();
+        http.expectOne(detailUrl).flush({
+          evidence: evidence(),
+          evidenceViewVersion: '1.1.0',
+          sourceDocuments: [],
+          sourceMessages: [{ id: 'm-1', sequence: 1, role: 'user', text: TEXT }],
+          relations: [],
+        });
+        await settle();
+        expect(q('detail')).not.toBeNull();
+      });
+
+      it('does not offer a button for a referenced evidence outside the current list', async () => {
+        await open(v3({ gapAssessments: [gap({ gapEvidenceId: 'e-404' })], summary: oneOpen() }));
+        const item = q('gap-item')!;
+        expect(item.querySelector('[data-testid=gap-ref]')).toBeNull();
+        expect(item.textContent).toContain('non nell’elenco corrente');
+      });
+
+      it('separates the original AI revision from the current one and labels the PM removal', async () => {
+        await open(
+          v3({
+            aiRevisionId: 'rev-ai',
+            findings: [
+              finding({
+                category: 'PmAssessment',
+                code: 'gap_open_reference_removed_by_pm',
+                message: 'Il PM ha rimosso il riferimento aperto',
+              }),
+            ],
+          }),
+        );
+        expect(text('gap-assessments')).toContain('revisione AI originaria');
+        expect(text('gap-assessments')).toContain('non cambia la valutazione AI');
+        expect(text('gap-assessments')).toContain('né chiude un Gap o un conflitto');
+        expect(text('group-PmAssessment')).toContain('Modifica del PM');
+      });
+
+      it('never renders rationale as HTML', async () => {
+        await open(
+          v3({
+            gapAssessments: [gap({ rationale: '<b id="inj">x</b>' })],
+            summary: oneOpen(),
+          }),
+        );
+        expect(el.querySelector('#inj')).toBeNull();
+        expect(text('gap-item')).toContain('<b id="inj">x</b>');
+      });
     });
   });
 

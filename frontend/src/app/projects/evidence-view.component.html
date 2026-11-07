@@ -739,6 +739,116 @@
             }
           </div>
         }
+        <section class="mb-2" aria-labelledby="ev-gap-title" data-testid="gap-assessments">
+          <h4 id="ev-gap-title" class="h6 mb-1">Valutazione dei Gap</h4>
+          @if (gapView(); as gv) {
+            @if (!gv.available) {
+              <p class="small mb-1" data-testid="gap-unavailable">
+                Valutazione dei Gap non disponibile per questo report ({{ r.checkerVersion }}): non
+                significa che non ci siano Gap.
+              </p>
+            } @else {
+              <p class="small text-secondary mb-1" data-testid="gap-note">
+                Ogni esito è una valutazione AI nello snapshot congelato: non è un supporto di
+                requisito né una conferma del PM. Modificare o confermare l'analisi non cambia la
+                valutazione AI né chiude un Gap o un conflitto.
+              </p>
+              @if (gv.aiRevisionChanged) {
+                <p class="small mb-1" data-testid="gap-revision-note">
+                  Le valutazioni appartengono alla revisione AI originaria; la revisione corrente è
+                  diversa perché modificata dal PM.
+                </p>
+              }
+              <p class="small mb-1" data-testid="gap-counters">
+                Attesi {{ gv.expected }} · Valutati {{ gv.assessed }} · Risolti nello snapshot
+                {{ gv.answered }} · Aperti {{ gv.open }} · Non valutati {{ gv.unassessed }}
+              </p>
+              @if (gv.unassessed > 0) {
+                <p class="alert alert-warning py-1 mb-1 small" data-testid="gap-unassessed">
+                  {{ plural(gv.unassessed, 'Gap', 'Gap') }} senza valutazione: non è una risposta,
+                  resta da verificare.
+                </p>
+              }
+              @if (gv.expected === 0 && gv.items.length === 0) {
+                <p class="small mb-1" data-testid="gap-none">
+                  Nessun Gap nello snapshot di questa analisi.
+                </p>
+              }
+              @if (gv.items.length > 0) {
+                <ul class="list-unstyled small mb-1 gap-list">
+                  @for (g of gv.items; track g.gapEvidenceId) {
+                    <li class="gap-item" data-testid="gap-item">
+                      <div class="gap-head">
+                        <span
+                          class="badge border"
+                          [class.text-bg-success]="g.outcome === 'AnsweredInSnapshot'"
+                          [class.text-bg-warning]="g.outcome === 'Open'"
+                          data-testid="gap-outcome"
+                          >{{ g.outcome === 'Open' ? '⚠ ' : '✓ ' }}{{ gapOutcomeLabel(g) }}</span
+                        >
+                        <span class="badge text-bg-light border" data-testid="gap-reason">{{
+                          gapReasonLabel(g.reason)
+                        }}</span>
+                        <span class="badge text-bg-light border">Valutazione AI</span>
+                      </div>
+                      <p class="mb-1" data-testid="gap-rationale">{{ g.rationale }}</p>
+                      <p class="mb-1">
+                        Gap:
+                        @if (isListed(g.gapEvidenceId)) {
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-link p-0 align-baseline"
+                            data-testid="gap-ref"
+                            (click)="openEvidenceRef(g.gapEvidenceId)"
+                          >
+                            Apri l'evidenza del Gap <code>{{ g.gapEvidenceId }}</code>
+                          </button>
+                        } @else {
+                          <code>{{ g.gapEvidenceId }}</code>
+                          <span class="text-secondary"> · non nell’elenco corrente</span>
+                        }
+                      </p>
+                      @if (g.supportingEvidenceIds.length > 0) {
+                        <p class="mb-1">
+                          Evidenze della risposta:
+                          @for (id of g.supportingEvidenceIds; track id) {
+                            @if (isListed(id)) {
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-link p-0 align-baseline me-2"
+                                data-testid="gap-ref"
+                                (click)="openEvidenceRef(id)"
+                              >
+                                Apri <code>{{ id }}</code>
+                              </button>
+                            } @else {
+                              <span class="me-2"
+                                ><code>{{ id }}</code>
+                                <span class="text-secondary">
+                                  · non nell’elenco corrente</span
+                                ></span
+                              >
+                            }
+                          }
+                        </p>
+                      }
+                      @if (g.openItemId) {
+                        <p class="mb-1 text-secondary">
+                          Domanda aperta collegata: <code>{{ g.openItemId }}</code>
+                        </p>
+                      }
+                      @if (g.openConflictId) {
+                        <p class="mb-1 text-secondary">
+                          Conflitto aperto collegato: <code>{{ g.openConflictId }}</code>
+                        </p>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            }
+          }
+        </section>
         @if (reconciliation(); as rec) {
           <section
             class="mb-2"
@@ -855,6 +965,11 @@
               <ul class="small ps-3 mb-2">
                 @for (f of g.findings; track $index) {
                   <li data-testid="finding">
+                    @if (f.code === 'gap_open_reference_removed_by_pm') {
+                      <span class="badge text-bg-light border me-1" data-testid="pm-gap-removal"
+                        >Modifica del PM</span
+                      >
+                    }
                     {{ f.message }}
                     @if (f.alias) {
                       <span class="text-secondary"> · {{ f.alias }}</span>
