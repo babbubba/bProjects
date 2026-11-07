@@ -642,8 +642,10 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         }
 
         var view = await Json(await client.GetAsync($"/api/projects/{project}/analyses/{run}", Ct));
-        v.Check($"{label}: revisione 1.1.0 (workflow documentale v3 con alias)", view.GetProperty("schemaVersion").GetString() == "1.1.0"
-            && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersionV3);
+        // Dal T131 (157c1fe) le nuove richieste di Analizza congelano la definizione v4 (alias con riconciliazione gerarchica; DocumentSmallFlowTests
+        // asserisce già V4 sullo stesso percorso): l'attesa V3 era un falso negativo del test, non un criterio di accettazione.
+        v.Check($"{label}: revisione 1.1.0 (workflow documentale v4 con alias)", view.GetProperty("schemaVersion").GetString() == "1.1.0"
+            && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersionV4);
         return new AnalysisOutcome(run, view.GetProperty("currentRevisionId").GetGuid(), JsonNode.Parse(view.GetProperty("content").GetRawText())!);
     }
 

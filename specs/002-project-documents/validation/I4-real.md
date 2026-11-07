@@ -106,3 +106,43 @@ Oggi, a modello scaricato, il preflight dà `runtime_unverified` senza retry (T1
 
 ### Proposta separata: contratto alternativo (non implementato, serve decisione)
 Alias brevi per Evidence e Source assegnati dal server nel prompt; id canonici UUID/hash generati dal server; `sources` ed `evidenceMap` ricostruiti deterministicamente dal server dagli alias; relazioni semantiche dichiarate esplicitamente dall'LLM; validazione e coverage invariati. Nessuna ADR; richiede modifica di T059/T120/T121 e relativi test.
+
+---
+
+## Chiusura I4 — sessione 2026-11-07 (HEAD 63dfde0): T126 reale e prima prova N4
+
+**Stato: I4 NON COMPLETATA.** T126 verificato con il router reale nello stato naturale; N4 FAIL; N1/N2/N3/N5 e browser reale NON eseguiti (gate N4 non soddisfatto, regola «una prova N4»). Una sola inferenza DGX in questa sessione (il test N4).
+
+### Preflight offline (variabili `BPROJECTS_TEST_DGX_*` rimosse, PG reale 15432 + parser Docling reale 58300)
+12 classi pertinenti (readiness, classificazione, deadline, routing, retry bozza/analisi, alias chat/analisi/bozza, small flow con fake, DgxGuard): 251 test, 251 superati, 0 falliti, 0 ignorati. Build 0 errori. Un primo giro senza PostgreSQL aveva 72 ignorati su 103: non conta come verifica.
+
+### T126 — verifica reale in sola lettura
+Router `http://192.168.253.18:8080`, `GET /v1/models`: `Qwen3.6-35B-Smart` = `sleeping` (tutti gli altri `unloaded`). Con il vero `ModelRuntimeMonitor` e il vero `InternalModelClient` (harness fuori dal repository, contesto 131072, nessuna modifica al router):
+- `GetSnapshotAsync`: `Status=Unverified`, `Readiness=ModelUnloaded`, `ModelStatus=sleeping`, 192 ms; finestra non dedotta (nessuna sonda `/props`).
+- `WaitUntilReadyAsync` con residuo 8 s: `ModelUnloaded`, `DeadlineReached=true` dopo 8,0 s (rispetta il residuo della deadline originale).
+- `WaitUntilReadyAsync` con residuo 60 s: `ModelUnloaded`, `DeadlineReached=false` dopo 7,3 s (il giro di backoff ha tetto fisso, non attende oltre).
+- Richieste HTTP complessive: **5 × `GET /v1/models`**; nessun `POST`, nessuna inferenza, nessun `/props?model=` né `/slots?model=` (che in router mode possono avviare il caricamento). Il modello è rimasto `sleeping` durante la prova.
+Esito T126: **VERIFIED per gli stati `sleeping`/`unloaded` (deterministici + reale)**. Non verificati dal vero: `loading`, `unreachable`, modello assente, finestra diversa (coperti solo dai test deterministici). Il caso «caricamento che termina entro la deadline» non è provabile in sicurezza senza richiesta di inferenza. T126 resta NON spuntato in `tasks.md`: la sua riga lega la chiusura alla prova a modello scaricato con motivi e tempi registrati; l'autore decida se questa evidenza basta.
+
+### N4 — una prova reale (Qwen3.6-35B-Smart, W=131072, reasoning OFF, output 16384, margine 1024)
+Test: `DocumentSmallFlowMafRealTests.N4_…` (filtro verificato: 1 test). Durata 1 m 13 s. **FAIL: 36 PASS / 5 FAIL.** Sei chiamate al modello, tutte `finish=stop` (nessun troncamento): 2 estrazioni, 1 chat, 2 analisi, 1 bozza.
+Catture complete per chiamata (richiesta, risposta, esito) dall'harness già esistente, solo locali in `diagnostics-local/I4-N4/` (non versionate).
+
+I 5 FAIL hanno **due cause diverse**:
+1. **Falso negativo del test (difetto di test, corretto).** `analisi: revisione 1.1.0 (workflow documentale v3 con alias)` confrontava `WorkflowDefinitionVersion` con `DefinitionVersionV3`, ma dal T131 (157c1fe) le nuove richieste congelano `project-analysis-documents-v4` (`SourceSnapshotStore.AnalysisDefinition`); `DocumentSmallFlowTests.cs:188` asserisce già V4 sullo stesso percorso ed è PASS. Prima: FAIL con run v4 valido. Dopo: attesa V4 (stesso criterio funzionale: schema 1.1.0 e definizione alias congelata). Vale per tutti i nominali N1–N5, non solo N4. Non ho rieseguito il DGX per provarlo: il «dopo» è la verità già verde del test offline.
+2. **Conflitto perso nel retry T130 (4 FAIL: conflitti=0, alternative 30/45, stato Open).**
+   - Chiamata 005 (prima analisi, 3107 token prompt): **semanticamente corretta**. `Declared` 45 giorni (E1) e `Documented` 30 giorni (E3) come alternative di un conflitto `c1`, nessuna scelta automatica. Scartata dal validatore perché l'evidenza **E2** non è citata da nessun elemento (`evidence_not_mapped`). E2 è un'evidenza `Gap` derivata dalla domanda del PM («Non è noto cosa dica la scheda A…»).
+   - Chiamata 006 (unico retry guidato T130, 3225 token): il messaggio ripete il primo e aggiunge `CORREZIONE… queste evidenze non sono citate: [E2]… Produci di nuovo l'analisi COMPLETA… sia quelle già citate nella risposta precedente…`. Il modello ha **rigenerato da zero** e ha prodotto `conflicts: []`: 30 e 45 come voci separate (`Documented`/`Declared`) più una `openQuestion` `Inferred` che cita E1, E2, E3. Valido per il validatore, copertura completa, provenienza 100% corretta, ma conflitto assente.
+   - Il retry T130 funziona come da contratto (AI §10): un solo retry, messaggio con alias E2, nessun merge, nessuna chiamata oltre. Conferma reale, per la prima volta, di un retry T130 con la telemetria delle catture (prima «NOT VERIFIED»).
+   - Causa effettiva del fallimento: **non** l'incapacità del modello di riconoscere il conflitto, **ma** la rigenerazione completa del retry, che non mostra al modello la risposta precedente: il secondo output cambia struttura. Variabilità di rigenerazione + messaggio di correzione che non chiede di preservare i conflitti già dichiarati.
+   - La bozza (007) è stata prodotta e superata (30 e 45 presenti, 2 marcatori validi): quindi anche la parte a valle non è da imputare.
+
+### Perimetro: perché mi fermo
+Rimediare al punto 2 richiederebbe modificare il contratto del retry T130 (AI §10): per esempio includere nel retry la risposta precedente o chiedere esplicitamente di preservare i conflitti, o trattare E2 diversamente. Il mandato vieta nuovi retry, merge server-side e modifiche arbitrarie ai contratti e chiede di fermarsi sulla decisione semantica. Nessun prompt, contratto, validatore, gold o asserzione semantica è stato toccato. Nessuna seconda prova N4 e nessuna prova N1/N2/N3/N5.
+
+### Classificazione
+- **Funzionante e verificato**: preflight offline 251/251; T126 su stati `sleeping`/`unloaded` reale; chat documentale, estrazione, alias chat, classificazione Declared/Documented, citazioni 100%, conferma, bozza; retry T130 singolo reale.
+- **Implementato ma non verificato**: N1, N2, N3, N5 e il browser reale a v4 (mai eseguiti dopo T131/T133); T126 per `loading`/`unreachable` dal vero.
+- **Fallito**: N4 (conflitto doc-PM non dichiarato dopo il retry).
+- **Bloccato per limiti del modello**: variabilità della rigenerazione dell'analisi (stesso input, stessa risposta valida solo al primo tentativo).
+- **Bloccato per decisione funzionale/architetturale**: contenuto del messaggio di retry T130 (preservare i conflitti) e trattamento delle evidenze `Gap` da domanda del PM.
