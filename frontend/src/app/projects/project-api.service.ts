@@ -306,6 +306,15 @@ export interface AnalysisView {
   hasSourceChanges?: boolean;
 }
 
+/** Voce della mappa storica delle fonti di una bozza (002 T087): campi di gruppo null se il registro Evidence non li conosce. */
+export interface DraftSourceMapEntry {
+  itemId: string;
+  evidenceId: string | null;
+  citationGroupId: string | null;
+  part: number | null;
+  sourceId: string;
+}
+
 /** DraftView del contratto HTTP: bozza Markdown proposta, mai approvata, con la revisione usata. */
 export interface DraftView {
   id: string;
@@ -325,6 +334,8 @@ export interface DraftView {
   metrics?: InferenceMetrics | null;
   sourceSnapshotId?: string | null;
   hasSourceChanges?: boolean;
+  /** Mappa persistita dal run che ha prodotto la bozza; assente o null = bozza storica: i gruppi non si ricostruiscono mai. */
+  sourceMap?: DraftSourceMapEntry[] | null;
 }
 
 /** RevisionView del contratto HTTP (sottoinsieme): revisione specifica con le fonti del suo contenuto. */

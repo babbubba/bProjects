@@ -499,7 +499,10 @@ describe('DocumentViewComponent', () => {
     const prepUrl = `${BASE}/documents/doc-1/versions/ver-1/preparations/prep-1`;
     const docRevision = (): RevisionView => ({
       ...revision(),
-      content: { schemaVersion: '1.1.0', sources: [docSource] } as unknown as RevisionView['content'],
+      content: {
+        schemaVersion: '1.1.0',
+        sources: [docSource],
+      } as unknown as RevisionView['content'],
     });
 
     it('una citazione DocumentPassage apre il passaggio nel documento e la citazione resta testo', async () => {
@@ -518,9 +521,164 @@ describe('DocumentViewComponent', () => {
       http.expectOne(prepUrl);
     });
 
+    describe('mappa storica delle fonti (002 T087)', () => {
+      const part = (id: string, label: string) => ({
+        ...docSource,
+        id,
+        blockId: `b-${id}`,
+        quote: `quota ${label}`,
+      });
+      const multiRevision = (): RevisionView => ({
+        ...revision(),
+        content: {
+          schemaVersion: '1.1.0',
+          sources: [
+            part('hdr', 'intestazione'),
+            part('pg2', 'pagina 2'),
+            part('pg3', 'pagina 3'),
+            {
+              id: 'pm-1',
+              kind: 'PmRevision',
+              messageId: null,
+              messageRole: null,
+              revisionId: 'rev-0',
+            },
+          ],
+        } as unknown as RevisionView['content'],
+      });
+      const entry = (
+        item: string,
+        ev: string | null,
+        group: string | null,
+        p: number | null,
+        source: string,
+      ) => ({
+        itemId: item,
+        evidenceId: ev,
+        citationGroupId: group,
+        part: p,
+        sourceId: source,
+      });
+      // Due gruppi con lo stesso header: g-1 (hdr, pg2) e g-2 (hdr, pg3); la sequenza globale dei sourceIds non ne e' la prova.
+      const sourceMap = [
+        entry('i-1', 'e-1', 'g-1', 1, 'pg2'),
+        entry('i-1', 'e-1', 'g-1', 0, 'hdr'),
+        entry('i-2', 'e-2', 'g-2', 0, 'hdr'),
+        entry('i-2', 'e-2', 'g-2', 1, 'pg3'),
+        entry('i-3', null, null, null, 'pm-1'),
+      ];
+      const parts = () => [
+        ...el.querySelectorAll<HTMLElement>(
+          '[data-testid=focused-source] [data-testid=source-part]',
+        ),
+      ];
+
+      // I passaggi aperti leggono la preparazione dall'API (riuso T030): qui interessa solo quali parti si aprono.
+      afterEach(() => http.match((r) => r.url.includes('/preparations/')));
+
+      it("i marcatori atomici restano nell'ordine richiesto, uno per fonte, senza fonderli in una citazione", async () => {
+        await setup({
+          draft: draft({
+            markdown: '- Req [fonte:pg2] [fonte:hdr]\n- Altro [fonte:hdr] [fonte:pg3]',
+            sourceMap,
+          }),
+          revision: multiRevision(),
+        });
+        const chips = [...el.querySelectorAll<HTMLElement>('[data-testid=source-chip]')].map((c) =>
+          c.textContent!.trim(),
+        );
+        expect(chips).toEqual(['F2', 'F1', 'F1', 'F3']);
+      });
+
+      it("una fonte condivisa da due gruppi li apre come due citazioni distinte, ciascuna con le proprie parti nell'ordine della mappa", async () => {
+        await setup({
+          draft: draft({ markdown: 'Req [fonte:hdr].', sourceMap }),
+          revision: multiRevision(),
+        });
+        q('source-chip')!.click();
+        await settle();
+        const groups = el.querySelectorAll('[data-testid=focused-source]');
+        expect(groups.length).toBe(2);
+        expect(
+          [...groups].map((g) =>
+            [...g.querySelectorAll('[data-testid=part-quote]')].map((x) => x.textContent),
+          ),
+        ).toEqual([
+          ['«quota intestazione»', '«quota pagina 2»'],
+          ['«quota intestazione»', '«quota pagina 3»'],
+        ]);
+        expect(q('source-notice')!.textContent).toContain('2 citazioni distinte');
+      });
+
+      it("una pagina cita il proprio gruppo: header e pagina, non le parti dell'altro gruppo", async () => {
+        await setup({
+          draft: draft({ markdown: 'Req [fonte:pg3].', sourceMap }),
+          revision: multiRevision(),
+        });
+        q('source-chip')!.click();
+        await settle();
+        expect(
+          parts().map((p) => p.querySelector('[data-testid=part-quote]')!.textContent),
+        ).toEqual(['«quota intestazione»', '«quota pagina 3»']);
+      });
+
+      it('senza mappa (bozza storica) non ricostruisce gruppi: si apre la sola parte della fonte', async () => {
+        await setup({
+          draft: draft({ markdown: 'Req [fonte:pg2] [fonte:hdr].', sourceMap: null }),
+          revision: multiRevision(),
+        });
+        q('source-chip')!.click();
+        await settle();
+        expect(el.querySelectorAll('[data-testid=focused-source]').length).toBe(1);
+        expect(parts().length).toBe(1);
+        expect(parts()[0].textContent).toContain('quota pagina 2');
+      });
+
+      it('una voce senza evidenza (PmRevision) non ha gruppo: nessuna parte documentale inventata e la fonte storica resta apribile', async () => {
+        await setup({
+          draft: draft({ markdown: 'Nuovo [fonte:pm-1].', sourceMap }),
+          revision: multiRevision(),
+        });
+        q('source-chip')!.click();
+        await settle();
+        expect(q('focused-source')).toBeNull();
+        expect(q('source-notice')!.textContent).toContain('anteprima della revisione');
+      });
+
+      it('dopo un edit PM (revisione corrente diversa) i gruppi storici della bozza restano apribili con le parti della sua revisione', async () => {
+        await setup({
+          draft: draft({ markdown: 'Req [fonte:hdr].', sourceMap }),
+          revision: multiRevision(),
+          current: { analysisId: 'a-1', revisionId: 'rev-9', confirmed: true },
+        });
+        expect(q('stale-banner')).not.toBeNull();
+        q('source-chip')!.click();
+        await settle();
+        expect(el.querySelectorAll('[data-testid=focused-source]').length).toBe(2);
+        expect(parts().length).toBe(4);
+      });
+
+      it('le voci della mappa con fonti non più presenti nella revisione non producono parti', async () => {
+        const map = [
+          entry('i-1', 'e-1', 'g-1', 0, 'hdr'),
+          entry('i-1', 'e-1', 'g-1', 1, 'rimossa'),
+        ];
+        await setup({
+          draft: draft({ markdown: 'Req [fonte:hdr].', sourceMap: map }),
+          revision: multiRevision(),
+        });
+        q('source-chip')!.click();
+        await settle();
+        expect(parts().length).toBe(1);
+        expect(parts()[0].textContent).toContain('quota intestazione');
+      });
+    });
+
     it('il Markdown non carica risorse remote: nessuna richiesta oltre alle API del progetto', async () => {
       await setup({
-        draft: draft({ markdown: '![logo](https://evil.example/p.png)\n\n<img src="https://evil.example/x">' }),
+        draft: draft({
+          markdown: '![logo](https://evil.example/p.png)\n\n<img src="https://evil.example/x">',
+        }),
       });
       expect(el.querySelector('img')).toBeNull();
       expect(http.match(() => true).length).toBe(0);

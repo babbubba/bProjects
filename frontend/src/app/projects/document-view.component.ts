@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
 import { ANALYSIS_POLL_MS } from './analysis-preview.component';
-import { MdBlock, parseMarkdown } from './markdown';
+import { citationGroupsOf, MdBlock, parseMarkdown } from './markdown';
 import {
   AnalysisSource,
   DraftView,
@@ -88,7 +88,7 @@ export class DocumentViewComponent {
   protected readonly sources = signal<AnalysisSource[]>([]);
   protected readonly sourceNotice = signal('');
   /** Parte documentale scelta da una citazione della bozza: il passaggio si apre nel documento (riuso T030). */
-  protected readonly focusedPart = signal<SourcePart | null>(null);
+  protected readonly focusedGroups = signal<SourcePart[][]>([]);
 
   /** Vero mentre un comando è in invio o un run di generazione è attivo (l'anteprima disabilita Genera). */
   readonly active = computed(() => {
@@ -202,6 +202,13 @@ export class DocumentViewComponent {
     return `F${index + 1} · messaggio ${source.messageRole === 'assistant' ? "dell'assistente (solo contesto)" : 'del PM'}`;
   }
 
+  /** Parte documentale della fonte con la sua etichetta; vuota per fonti non documentali, incomplete o non più presenti nella revisione. */
+  private partOf(sourceId: string): SourcePart[] {
+    const entry = this.sourceIndex().get(sourceId);
+    const part = entry ? partOfSource(entry.source, `F${entry.index + 1}`) : null;
+    return part ? [part] : [];
+  }
+
   /** Apre la fonte citata: messaggio evidenziato nel dialogo oppure l'anteprima/revisione del PM. */
   protected openSource(id: string): void {
     const entry = this.sourceIndex().get(id);
@@ -212,12 +219,19 @@ export class DocumentViewComponent {
     }
     const { source } = entry;
     if (source.kind === 'DocumentPassage') {
-      const part = partOfSource(source, `F${entry.index + 1}`);
-      this.focusedPart.set(part);
+      // I gruppi vengono solo dalla mappa persistita della bozza (mai dalla sequenza dei sourceIds); senza mappa o senza gruppo si apre la sola parte della fonte.
+      const groups = citationGroupsOf(this.draft()?.sourceMap, id)
+        .map((g) => g.sourceIds.flatMap((sid) => this.partOf(sid)))
+        .filter((parts) => parts.length > 0);
+      const single = this.partOf(id);
+      const shown = groups.length ? groups : single.length ? [single] : [];
+      this.focusedGroups.set(shown);
       this.sourceNotice.set(
-        part
-          ? `Passaggio del documento della fonte ${this.sourceLabel(id)} mostrato sotto.`
-          : 'Il passaggio citato non è consultabile: la fonte è incompleta.',
+        shown.length > 1
+          ? `La fonte ${this.sourceLabel(id)} appartiene a ${shown.length} citazioni distinte: mostrate sotto, ciascuna con le proprie parti.`
+          : shown.length
+            ? `Passaggio del documento della fonte ${this.sourceLabel(id)} mostrato sotto.`
+            : 'Il passaggio citato non è consultabile: la fonte è incompleta.',
       );
       return;
     }
@@ -340,7 +354,7 @@ export class DocumentViewComponent {
     this.run.set(null);
     this.sources.set([]);
     this.sourceNotice.set('');
-    this.focusedPart.set(null);
+    this.focusedGroups.set([]);
     this.idempotencyKey = null;
     this.pendingRevisionId = null;
     this.generateState.set('idle');

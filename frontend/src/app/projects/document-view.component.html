@@ -228,9 +228,14 @@
           {{ sourceNotice() }}
         </p>
       }
-      @if (focusedPart(); as part) {
+      @for (group of focusedGroups(); track $index) {
         <section data-testid="focused-source" aria-label="Passaggio citato">
-          <app-source-parts [projectId]="projectId()" [parts]="[part]" [expanded]="true" />
+          @if (focusedGroups().length > 1) {
+            <p class="small fw-semibold mb-1" data-testid="focused-group-label">
+              Citazione {{ $index + 1 }} di {{ focusedGroups().length }}
+            </p>
+          }
+          <app-source-parts [projectId]="projectId()" [parts]="group" [expanded]="true" />
         </section>
       }
       @if (docParts().length) {
