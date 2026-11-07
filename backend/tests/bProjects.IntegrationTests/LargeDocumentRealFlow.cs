@@ -214,7 +214,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
             var detail = status;
             if (status != "Ready")
             {
-                detail = $"{status}: {Short((await Json(await client.GetAsync($"/api/projects/{project}/documents/{id}/versions/1/preparations/latest", Ct))).GetRawText(), 500)}";
+                detail = $"{status}: {Short((await Json(await client.GetAsync($"/api/projects/{project}/documents/{id}/versions/1/preparations/latest", Ct))).GetRawText(), 500)} | {await PreparationDiagnosticsAsync()}";
             }
 
             v.Check($"[COMPLETAMENTO] {doc.FileName}: preparazione Ready (parser reale + estrazione reale su tutte le porzioni)", status == "Ready", detail);
@@ -470,6 +470,32 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         }
 
         v.Check("[COMPLETAMENTO] nessuna chiamata troncata (finish=length)", truncated == 0, $"{truncated} troncate");
+    }
+
+    /// <summary>Solo osservabilita: errori dei job documentali falliti e riepilogo delle chiamate di inferenza (il database di test viene eliminato a fine prova).</summary>
+    private async Task<string> PreparationDiagnosticsAsync()
+    {
+        var parts = new List<string>();
+        await using var connection = await OpenConnection();
+        await using (var jobs = new Npgsql.NpgsqlCommand("SELECT \"Kind\"::text, \"Status\"::text, \"ErrorCode\", \"ErrorMessage\" FROM \"DocumentJobs\" WHERE \"ErrorCode\" IS NOT NULL OR \"Status\"::text = 'Failed' LIMIT 5", connection))
+        await using (var reader = await jobs.ExecuteReaderAsync(Ct))
+        {
+            while (await reader.ReadAsync(Ct))
+            {
+                parts.Add($"job {reader.GetString(0)}/{reader.GetString(1)} {(reader.IsDBNull(2) ? "-" : reader.GetString(2))}: {(reader.IsDBNull(3) ? "-" : Short(reader.GetString(3), 600))}");
+            }
+        }
+
+        await using (var calls = new Npgsql.NpgsqlCommand("SELECT \"Phase\"::text, \"State\"::text, \"FinishReason\", \"PromptTokens\", \"CompletionTokens\", \"MaxOutputTokensRequested\", \"DurationMs\" FROM \"InferenceCalls\" ORDER BY \"StartedAt\" DESC LIMIT 6", connection))
+        await using (var reader = await calls.ExecuteReaderAsync(Ct))
+        {
+            while (await reader.ReadAsync(Ct))
+            {
+                parts.Add($"call {reader.GetString(0)}/{reader.GetString(1)} finish={(reader.IsDBNull(2) ? "-" : reader.GetString(2))} prompt={(reader.IsDBNull(3) ? "-" : reader.GetValue(3))} completion={(reader.IsDBNull(4) ? "-" : reader.GetValue(4))} maxOut={(reader.IsDBNull(5) ? "-" : reader.GetValue(5))} ms={(reader.IsDBNull(6) ? "-" : reader.GetValue(6))}");
+            }
+        }
+
+        return string.Join(" ; ", parts);
     }
 
     private async Task<string> Failure(Guid run)
