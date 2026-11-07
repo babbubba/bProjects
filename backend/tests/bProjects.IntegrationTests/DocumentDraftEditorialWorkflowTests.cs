@@ -364,6 +364,108 @@ public sealed class DocumentDraftEditorialWorkflowTests : IAsyncLifetime
         Assert.All(entries.Where(e => e["itemId"]!.GetValue<string>() == "b2000000-0000-4000-8000-000000000001"), e => Assert.Null(e["citationGroupId"]));
     }
 
+    private static readonly (Guid Item, Guid Page) Req0 = (Guid.Parse("b2000000-0000-4000-8000-000000000010"), Guid.Parse("a3000000-0000-4000-8000-000000000001"));
+    private static readonly (Guid Item, Guid Page) Req1 = (Guid.Parse("b2000000-0000-4000-8000-000000000011"), Guid.Parse("a3000000-0000-4000-8000-000000000002"));
+
+    private static string Flat(JsonObject e) =>
+        string.Join("|", new[] { "itemId", "evidenceId", "citationGroupId", "part", "sourceId" }.Select(k => e[k]?.ToJsonString() ?? "null"));
+
+    private async Task<(Seeded S, Guid EvA, Guid EvB, Guid GroupA, Guid GroupB)> CompletedWithLedgerAsync(HttpClient client)
+    {
+        var s = await SeedAsync(client);
+        var (evA, evB, groupA, groupB) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await SeedLedgerAsync(s, (Req0.Item, evA, groupA, [Hdr, Req0.Page]), (Req1.Item, evB, groupB, [Hdr, Req1.Page]));
+        var result = await RunAsync(await ClaimAsync(s.Run), Model());
+        Assert.True(result.Status == ProcessingRunStatus.Completed, "Failed: " + result.ErrorCode + " " + await ErrorMessage(s.Run));
+        return (s, evA, evB, groupA, groupB);
+    }
+
+    [Fact]
+    public async Task The_draft_view_exposes_the_persisted_source_map_of_its_own_run_and_revision_keeping_two_groups_that_share_the_header_distinct()
+    {
+        using var client = await App.LoginAsync();
+        var (s, evA, evB, groupA, groupB) = await CompletedWithLedgerAsync(client);
+
+        var response = await client.GetAsync($"/api/projects/{s.Project}/draft", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var view = await Json(response);
+        var map = view.GetProperty("sourceMap").EnumerateArray().Select(e => e.Clone()).ToList();
+        // Esattamente la mappa persistita nei WorkOutput del run, nell'ordine delle unita', senza campi aggiunti ne' dedotti.
+        var persisted = (await Rows("SELECT \"PayloadJson\"->>'ordinal', (\"PayloadJson\"->'sourceMap')::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r ORDER BY (\"PayloadJson\"->>'ordinal')::int", ("r", s.Run)))
+            .SelectMany(r => JsonNode.Parse((string)r[1]!)!.AsArray()).Select(n => Flat(n!.AsObject())).ToList();
+        Assert.Equal(persisted, map.Select(e => Flat(JsonNode.Parse(e.GetRawText())!.AsObject())));
+        Assert.All(map, e => Assert.Equal(
+            ["citationGroupId", "evidenceId", "itemId", "part", "sourceId"], e.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal)));
+
+        JsonElement Entry(Guid item, Guid source) => Assert.Single(map, e => e.GetProperty("itemId").GetGuid() == item && e.GetProperty("sourceId").GetGuid() == source);
+        var (a, b) = (Entry(Req0.Item, Hdr), Entry(Req1.Item, Hdr));
+        Assert.Equal((evA, groupA, 0), (a.GetProperty("evidenceId").GetGuid(), a.GetProperty("citationGroupId").GetGuid(), a.GetProperty("part").GetInt32()));
+        Assert.Equal((evB, groupB, 0), (b.GetProperty("evidenceId").GetGuid(), b.GetProperty("citationGroupId").GetGuid(), b.GetProperty("part").GetInt32()));
+        Assert.Equal(1, Entry(Req0.Item, Req0.Page).GetProperty("part").GetInt32());
+        // Una fonte senza evidenza nel registro e' una voce con i campi di gruppo null, mai inventati.
+        var goal = Assert.Single(map, e => e.GetProperty("itemId").GetGuid() == Guid.Parse("b2000000-0000-4000-8000-000000000001"));
+        Assert.Equal(JsonValueKind.Null, goal.GetProperty("citationGroupId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, goal.GetProperty("part").ValueKind);
+    }
+
+    [Fact]
+    public async Task A_historical_draft_without_editorial_unit_outputs_has_no_source_map_and_it_is_never_reconstructed()
+    {
+        using var client = await App.LoginAsync();
+        var (s, _, _, _, _) = await CompletedWithLedgerAsync(client);
+        await Execute("ALTER TABLE \"WorkOutputs\" DISABLE TRIGGER USER; DELETE FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r; ALTER TABLE \"WorkOutputs\" ENABLE TRIGGER USER;", ("r", s.Run));
+
+        var response = await client.GetAsync($"/api/projects/{s.Project}/draft", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var view = await Json(response);
+        Assert.True(!view.TryGetProperty("sourceMap", out var map) || map.ValueKind == JsonValueKind.Null);
+        Assert.False(string.IsNullOrWhiteSpace(view.GetProperty("markdown").GetString()));
+    }
+
+    [Theory]
+    [InlineData("missing_map")]
+    [InlineData("other_revision")]
+    [InlineData("foreign_item")]
+    [InlineData("foreign_source")]
+    [InlineData("forged_group")]
+    [InlineData("dropped_entry")]
+    [InlineData("missing_ordinal")]
+    public async Task A_draft_whose_persisted_source_map_is_missing_or_inconsistent_is_not_valid_and_is_never_silently_accepted(string kind)
+    {
+        using var client = await App.LoginAsync();
+        var (s, _, _, _, _) = await CompletedWithLedgerAsync(client);
+
+        if (kind == "missing_ordinal")
+        {
+            await Execute(
+                "ALTER TABLE \"WorkOutputs\" DISABLE TRIGGER USER; DELETE FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND (\"PayloadJson\"->>'ordinal')::int = 1; ALTER TABLE \"WorkOutputs\" ENABLE TRIGGER USER;",
+                ("r", s.Run));
+        }
+        else
+        {
+            await TamperPayloadAsync(s.Run, first: true, payload =>
+            {
+                var map = payload["sourceMap"]?.AsArray();
+                switch (kind)
+                {
+                    case "missing_map": payload.Remove("sourceMap"); break;
+                    case "other_revision": payload["revisionId"] = Guid.NewGuid().ToString("D"); break;
+                    case "foreign_item": map![0]!["itemId"] = Guid.NewGuid().ToString("D"); break;
+                    case "foreign_source": map![0]!["sourceId"] = Guid.NewGuid().ToString("D"); break;
+                    case "forged_group": map!.First(n => n!["citationGroupId"] is not null)!["citationGroupId"] = Guid.NewGuid().ToString("D"); break;
+                    case "dropped_entry": map!.RemoveAt(map.Count - 1); break;
+                }
+            });
+        }
+
+        var response = await client.GetAsync($"/api/projects/{s.Project}/draft", Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("draft_source_map_inconsistent", (await Json(response)).GetProperty("code").GetString());
+    }
+
     private async Task SeedLedgerAsync(Seeded s, params (Guid Item, Guid Evidence, Guid Group, Guid[] Sources)[] evidences)
     {
         await using var connection = new NpgsqlConnection(_database.ConnectionString);
@@ -605,9 +707,12 @@ public sealed class DocumentDraftEditorialWorkflowTests : IAsyncLifetime
         """,
         ("r", s.Run));
 
-    private async Task TamperLastPayloadAsync(Guid run, Action<JsonObject> change)
+    private Task TamperLastPayloadAsync(Guid run, Action<JsonObject> change) => TamperPayloadAsync(run, first: false, change);
+
+    private async Task TamperPayloadAsync(Guid run, bool first, Action<JsonObject> change)
     {
-        var batchId = await Scalar<string>("SELECT \"BatchId\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed' ORDER BY \"CommittedAt\" DESC LIMIT 1", ("r", run));
+        var batchId = await Scalar<string>(
+            $"SELECT \"BatchId\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed' ORDER BY \"CommittedAt\" {(first ? "ASC" : "DESC")} LIMIT 1", ("r", run));
         var payload = JsonNode.Parse(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"BatchId\" = @b", ("r", run), ("b", batchId)))!.AsObject();
         change(payload);
         var text = payload.ToJsonString();

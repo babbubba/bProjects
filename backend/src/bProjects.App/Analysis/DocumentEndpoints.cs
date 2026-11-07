@@ -25,7 +25,8 @@ public sealed record DraftView(
     bool HasNewNotes,
     bool HasNewRevision,
     string Label,
-    InferenceMetricsView? Metrics = null);
+    InferenceMetricsView? Metrics = null,
+    IReadOnlyList<DraftSourceMapEntry>? SourceMap = null);
 
 /// <summary>
 /// Generazione esplicita del documento e lettura dell'ultima bozza (contracts/http-api.md, «Generazione esplicita del documento»).
@@ -232,6 +233,17 @@ public static class DocumentEndpoints
                 .FirstOrDefaultAsync(ct)
             : null;
 
+        // Mappa storica delle fonti (T087): solo quella persistita dal run che ha prodotto la bozza; assente per le bozze storiche, mai ricostruita.
+        IReadOnlyList<DraftSourceMapEntry>? sourceMap;
+        try
+        {
+            sourceMap = await DraftSourceMapReader.ReadAsync(db, draft, source, ct);
+        }
+        catch (DraftSourceMapInconsistentException)
+        {
+            return Problem(StatusCodes.Status500InternalServerError, "Mappa delle fonti della bozza incoerente", "draft_source_map_inconsistent");
+        }
+
         return Results.Ok(new DraftView(
             draft.Id,
             draft.ProjectId,
@@ -247,7 +259,8 @@ public static class DocumentEndpoints
             HasNewRevision: latestRevisionId != source.Id,
             DraftLabel,
             // Metriche del run Document che ha generato la bozza, rilette dopo il reload insieme al Markdown.
-            await InferenceMetrics.ForRunAsync(db, projectId, draft.ProcessingRunId, ct)));
+            await InferenceMetrics.ForRunAsync(db, projectId, draft.ProcessingRunId, ct),
+            sourceMap));
     }
 
     private static async Task<Guid?> ActiveRunAsync(AppDbContext db, Guid projectId, CancellationToken ct) =>

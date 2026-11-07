@@ -57,6 +57,15 @@ Viste Evidence aggiungono origin.kind e fonte documentale solo nel payload docum
 
 Report `/analyses/{a}/coverage-reports` riusato: coverage-2 contiene sourceSnapshotHash, preparation manifest, range mancanti, collegamenti e categorie deterministico/stimato/PM; report coverage-v1 storici restano leggibili. Aggiungere GET `/documents/{d}/versions/{v}/preparations/{g}/coverage` per lo stato di preparazione prima dell'analisi; nessun nuovo checker concorrente. GET non avvia lavori.
 
+### Delta T087 — sourceMap in DraftView (2026-11-07)
+
+GET `/api/projects/{p}/draft` aggiunge il campo **opzionale e additivo** `sourceMap`: `[{itemId, evidenceId|null, citationGroupId|null, part|null, sourceId}]` (UUID in forma "D"; `part` intero). È la mappa storica già persistita dal run che ha prodotto la bozza ([AI §4.5](ai-workflow.md#45-avanzamento-e-completamento-verificabili), raccordo W1), concatenata nell'ordine delle unità editoriali del run e, dentro l'unità, nell'ordine di blocco, item e marcatore. Nessun endpoint, tabella, migrazione o persistenza nuovi: sola lettura dei WorkOutput Committed del run della bozza, nello stesso progetto e con l'autorizzazione già esistente della rotta.
+
+- Legame esatto: la mappa è quella delle unità del `ProcessingRunId` della bozza e della sua `AnalysisRevisionId`; il server ne verifica integrità dell'output, manifesto, ordinali consecutivi, appartenenza di item e fonti alla revisione e coincidenza con quanto ricalcolabile da blocchi, fonti e registro Evidence. Una voce senza evidenza nel registro (es. PmRevision) ha `evidenceId`, `citationGroupId` e `part` null, mai inventati; due gruppi che condividono lo stesso header restano voci distinte.
+- Bozze storiche o senza output per unità editoriali (singola chiamata, precedenti a T086): `sourceMap` assente o null. Il client non ricostruisce mai gruppi euristicamente né dall'ordine dei `sourceIds`.
+- Bozza che richiede la mappa (run con output per unità editoriali) con mappa mancante o incoerente: **non valida**, risposta 500 problem+json `code: draft_source_map_inconsistent` e nessun payload della bozza; mai accettata in silenzio.
+- Gli altri campi di DraftView e i client precedenti restano invariati.
+
 ## Stato, sicurezza e monitor
 
 Evento `document.state` sullo stream progetto esistente, payload job/versionId/preparationId e stato. Best-effort, riconciliazione GET e polling 2s; niente replay token promesso, percentuali inventate o nuovi comandi alla riconnessione. `chat.delta` rimane provvisorio; citazioni della risposta definitiva validate prima del commit, frammenti streaming non sono evidenze.
