@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;
+using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -140,7 +141,9 @@ public sealed class DocumentCatalog(AppDbContext db, SourceSelectionService sele
         return Guid.TryParse(version, out var id) ? await query.SingleOrDefaultAsync(v => v.Id == id, ct) : null;
     }
 
-    private sealed record Context(SourceEntry Entry, IReadOnlyList<DocumentVersion> Versions, ILookup<Guid, DocumentPreparation> Preparations);
+    private sealed record Context(
+        SourceEntry Entry, IReadOnlyList<DocumentVersion> Versions, ILookup<Guid, DocumentPreparation> Preparations, IReadOnlyDictionary<Guid, EvidenceDocumentState> States,
+        IReadOnlySet<Guid> FormerlyCurrent);
 
     private async Task<Context?> LoadAsync(Guid projectId, Guid documentId, CancellationToken ct)
     {
@@ -155,7 +158,10 @@ public sealed class DocumentCatalog(AppDbContext db, SourceSelectionService sele
         var versionIds = versions.Select(v => v.Id).ToList();
         var preparations = (await db.DocumentPreparations.AsNoTracking().Where(p => versionIds.Contains(p.DocumentVersionId)).ToListAsync(ct))
             .OrderByDescending(p => p.Generation).ToLookup(p => p.DocumentVersionId);
-        return new(entry, versions, preparations);
+        var states = await db.EvidenceDocumentStates.AsNoTracking().Where(s => versionIds.Contains(s.DocumentVersionId)).ToDictionaryAsync(s => s.DocumentVersionId, ct);
+        // Superseded = è stata corrente e un'altra promozione l'ha sostituita: resta nello storico e promovibile, ma non è più una candidata.
+        var formerly = (await db.DocumentPromotions.AsNoTracking().Where(p => versionIds.Contains(p.DocumentVersionId)).Select(p => p.ToPreparationId).ToListAsync(ct)).ToHashSet();
+        return new(entry, versions, preparations, states, formerly);
     }
 
     private static DocumentDetailView Detail(Context c) => new(
@@ -173,16 +179,20 @@ public sealed class DocumentCatalog(AppDbContext db, SourceSelectionService sele
     {
         var prepared = c.Preparations[v.Id].ToList();
         var latest = prepared.FirstOrDefault();
-        var ready = prepared.FirstOrDefault(p => p.Status == PreparationStatus.Ready && p.CurrentEvidenceVersionId is not null);
+        // Bundle corrente = i puntatori dello stato della versione file (mai la massima generazione Ready); le Ready mai state correnti sono candidate, quelle sostituite sono Superseded.
+        var state = c.States.GetValueOrDefault(v.Id);
+        var candidates = prepared.Where(p => p.Status == PreparationStatus.Ready && p.CurrentEvidenceVersionId is not null && p.Id != state?.CurrentPreparationId
+                && !c.FormerlyCurrent.Contains(p.Id))
+            .OrderBy(p => p.Generation).Select(p => p.Id).ToList();
         var applicable = c.Entry.Availability == SourceAvailability.Ready && c.Entry.Resolved?.Id == v.Id;
         return new(
             v.Id, v.DocumentId, v.ProjectId, v.Version, v.OriginalName, v.MediaType, v.ByteLength, v.Sha256, v.UploadedBy, v.UploadedAt,
             latest is null ? "NotPrepared" : latest.Status.ToString(),
             applicable ? "Applicable" : c.Entry.Included ? "NotApplicable" : "Excluded",
-            ready?.Id,
-            ready?.CurrentEvidenceVersionId,
-            BundleRevision: 0,
-            [],
+            state?.CurrentPreparationId,
+            state?.CurrentEvidenceVersionId,
+            BundleRevision: state?.Revision ?? 0,
+            candidates,
             latest?.ParseJobId,
             c.Entry.Included,
             c.Entry.Mode.ToString(),

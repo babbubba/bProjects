@@ -31,6 +31,29 @@ public enum AggregationOutcome
 public sealed record AggregationResult(
     AggregationOutcome Outcome, Guid? EvidenceVersionId = null, bool BecameCurrent = false, string? ErrorCode = null, PreparationStatus? PreparationStatus = null);
 
+public enum BundlePromotionOutcome
+{
+    /// <summary>Preparazione inesistente per questa versione file.</summary>
+    NotFound,
+
+    /// <summary>Bundle cambiato: puntatori e revisione si sono mossi insieme, promozione tracciata.</summary>
+    Promoted,
+
+    /// <summary>La preparazione è già il bundle corrente: replay, nulla scritto.</summary>
+    AlreadyCurrent,
+
+    /// <summary>expectedRevision non è più la revisione dello stato: un altro comando ha vinto.</summary>
+    Conflict,
+
+    /// <summary>La preparazione non è Ready con copertura completa e versione Evidence coerente: nessuna promozione dell'incompleto.</summary>
+    NotPromotable,
+}
+
+/// <param name="State">Stato corrente della versione file dopo la chiamata (null solo se non è mai stato creato).</param>
+/// <param name="Promotion">Promozione che ha reso corrente la preparazione (la più recente verso di essa, in caso di replay).</param>
+public sealed record BundlePromotionResult(
+    BundlePromotionOutcome Outcome, EvidenceDocumentState? State = null, DocumentPromotion? Promotion = null, int Generation = 0);
+
 /// <summary>Notifica best-effort di uno stato definitivo della preparazione, emessa SOLO dopo il commit e solo da chi l'ha prodotto (mai da un owner stale o da un replay).</summary>
 public interface IDocumentPreparationEvents
 {
@@ -300,15 +323,7 @@ public sealed class DocumentBundleStore(AppDbContext db, IOptions<ExecutionOptio
             if (becameCurrent)
             {
                 // Cache transazionale derivata dai puntatori correnti (mai dal massimo di tutte le preparazioni Ready).
-                await using var latest = await CommandAsync(
-                    """
-                    UPDATE "ProjectDocuments" d SET "LatestReadyVersionId" = (
-                        SELECT v."Id" FROM "DocumentVersions" v JOIN "EvidenceDocumentStates" s ON s."DocumentVersionId" = v."Id"
-                        WHERE v."DocumentId" = d."Id" AND s."CurrentEvidenceVersionId" IS NOT NULL ORDER BY v."Version" DESC LIMIT 1)
-                    WHERE d."Id" = (SELECT "DocumentId" FROM "DocumentVersions" WHERE "Id" = @v)
-                    """,
-                    ct, ("v", documentVersionId.Value));
-                await latest.ExecuteNonQueryAsync(ct);
+                await RefreshLatestReadyAsync(documentVersionId.Value, ct);
             }
 
             await transaction.CommitAsync(ct);
@@ -318,6 +333,104 @@ public sealed class DocumentBundleStore(AppDbContext db, IOptions<ExecutionOptio
         {
             db.ChangeTracker.Clear();
         }
+    }
+
+    private const int MaxReasonLength = 1_000;
+
+    /// <summary>
+    /// Promozione esplicita del PM (T095): rende corrente una preparazione Ready della versione file, con puntatori, Revision e traccia nella stessa
+    /// transazione sotto il lock di progetto. Il replay sul bundle già corrente risponde AlreadyCurrent anche con una revisione ormai vecchia; altrimenti
+    /// serve una preparazione Ready con versione Evidence propria e nessuna issue di copertura, e expectedRevision uguale alla revisione dello stato
+    /// (un solo vincitore fra promozioni concorrenti). Non esiste promozione del solo estratto: il bundle è sempre preparazione + versione Evidence insieme.
+    /// Dati storici e vecchio bundle restano immutati (Superseded è una proiezione).
+    /// </summary>
+    public async Task<BundlePromotionResult> PromoteAsync(
+        Guid projectId, Guid documentVersionId, Guid preparationId, int expectedRevision, Guid promotedBy, string? reason, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await ProjectLock.AcquireAsync(db, projectId, ct);   // ordine uniforme: progetto → Preparation → DocumentVersion/stato
+
+            if (await ScalarAsync<Guid>(
+                    """SELECT "Id" FROM "DocumentPreparations" WHERE "Id" = @p AND "ProjectId" = @project AND "DocumentVersionId" = @v FOR UPDATE""", ct,
+                    ("p", preparationId), ("project", projectId), ("v", documentVersionId)) is null)
+            {
+                return new(BundlePromotionOutcome.NotFound);
+            }
+
+            _ = await ScalarAsync<Guid>("""SELECT "Id" FROM "DocumentVersions" WHERE "Id" = @v FOR UPDATE""", ct, ("v", documentVersionId));
+            var preparation = await db.DocumentPreparations.AsNoTracking().SingleAsync(p => p.Id == preparationId, ct);
+            var state = await db.EvidenceDocumentStates.AsTracking().SingleOrDefaultAsync(s => s.DocumentVersionId == documentVersionId, ct);
+
+            if (state?.CurrentPreparationId == preparationId)
+            {
+                var existing = await db.DocumentPromotions.AsNoTracking().Where(p => p.DocumentVersionId == documentVersionId && p.ToPreparationId == preparationId)
+                    .OrderByDescending(p => p.PromotedAt).FirstOrDefaultAsync(ct);
+                return new(BundlePromotionOutcome.AlreadyCurrent, state, existing, preparation.Generation);
+            }
+
+            var promotable = preparation.Status == PreparationStatus.Ready && preparation.CurrentEvidenceVersionId is { } evidenceVersionId
+                && await db.EvidenceExtractionVersions.AsNoTracking().AnyAsync(
+                    v => v.Id == evidenceVersionId && v.ProjectId == projectId && v.PreparationId == preparationId && v.OriginKind == EvidenceOriginKind.Document, ct)
+                && !await db.PreparationIssues.AsNoTracking().AnyAsync(i => i.PreparationId == preparationId && i.AffectsCompleteness, ct);
+            if (!promotable)
+            {
+                return new(BundlePromotionOutcome.NotPromotable, state, null, preparation.Generation);
+            }
+
+            if ((state?.Revision ?? 0) != expectedRevision)
+            {
+                return new(BundlePromotionOutcome.Conflict, state, null, preparation.Generation);
+            }
+
+            var now = await ProjectLock.NowAsync(db, ct);
+            var trimmed = reason?.Trim();
+            var promotion = new DocumentPromotion
+            {
+                Id = Guid.NewGuid(), ProjectId = projectId, DocumentVersionId = documentVersionId,
+                FromPreparationId = state?.CurrentPreparationId, FromEvidenceVersionId = state?.CurrentEvidenceVersionId,
+                ToPreparationId = preparationId, ToEvidenceVersionId = preparation.CurrentEvidenceVersionId!.Value, PromotedBy = promotedBy, PromotedAt = now,
+                Reason = string.IsNullOrEmpty(trimmed) ? null : trimmed.Length > MaxReasonLength ? trimmed[..MaxReasonLength] : trimmed,
+            };
+            if (state is null)
+            {
+                state = new EvidenceDocumentState { DocumentVersionId = documentVersionId, ProjectId = projectId, Revision = 0, UpdatedAt = now };
+                db.EvidenceDocumentStates.Add(state);
+            }
+
+            state.CurrentPreparationId = promotion.ToPreparationId;   // i due puntatori e la revisione si muovono insieme, o niente
+            state.CurrentEvidenceVersionId = promotion.ToEvidenceVersionId;
+            state.Revision += 1;
+            state.UpdatedAt = now;
+            db.DocumentPromotions.Add(promotion);
+            await db.SaveChangesAsync(ct);
+            await RefreshLatestReadyAsync(documentVersionId, ct);
+            await transaction.CommitAsync(ct);
+            return new(BundlePromotionOutcome.Promoted, state, promotion, preparation.Generation);
+        }
+        finally
+        {
+            db.ChangeTracker.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Cache transazionale LatestReadyVersionId del documento: la versione file con numero più alto che ha un bundle corrente completo, derivata dai
+    /// puntatori correnti e mai dalla massima generazione Ready. Va chiamata nella transazione che cambia i puntatori.
+    /// </summary>
+    private async Task RefreshLatestReadyAsync(Guid documentVersionId, CancellationToken ct)
+    {
+        await using var latest = await CommandAsync(
+            """
+            UPDATE "ProjectDocuments" d SET "LatestReadyVersionId" = (
+                SELECT v."Id" FROM "DocumentVersions" v JOIN "EvidenceDocumentStates" s ON s."DocumentVersionId" = v."Id"
+                WHERE v."DocumentId" = d."Id" AND s."CurrentEvidenceVersionId" IS NOT NULL ORDER BY v."Version" DESC LIMIT 1)
+            WHERE d."Id" = (SELECT "DocumentId" FROM "DocumentVersions" WHERE "Id" = @v)
+            """,
+            ct, ("v", documentVersionId));
+        await latest.ExecuteNonQueryAsync(ct);
     }
 
     private async Task<T?> ScalarAsync<T>(string sql, CancellationToken ct, params (string Name, object Value)[] parameters)

@@ -542,8 +542,9 @@ public sealed class DocumentVersionLifecycleTests : ParseRetryTestBase
 
         var response = await Promote(client, t, "3", Expect(1));
 
-        await AssertProblem(response, HttpStatusCode.Conflict, "bundle_revision_conflict");
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = await Json(response);
+        Assert.Equal("bundle_revision_conflict", body.GetProperty("code").GetString());
         Assert.Equal(2, body.GetProperty("currentRevision").GetInt32());
         Assert.Equal(g[1].Preparation, body.GetProperty("currentPreparationId").GetGuid());
         Assert.Equal((g[1].Preparation, g[1].EvidenceVersion, 2), await State(t));
@@ -708,6 +709,24 @@ public sealed class DocumentVersionLifecycleTests : ParseRetryTestBase
 
         Assert.Equal((g[0].Preparation, g[0].EvidenceVersion, 1), await State(t));
         Assert.Equal(-1, (await State(v2Target)).Revision);   // nessuno stato creato per la versione 2
+    }
+
+    [Fact]
+    public async Task A_reason_over_the_limit_is_rejected_and_a_superseded_bundle_can_be_promoted_back_without_becoming_a_candidate_again()
+    {
+        using var client = await App.LoginAsync();
+        var (t, g) = await CurrentWithCandidatesAsync(client, PreparationStatus.Ready);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Promote(client, t, "2", Expect(1, new string('x', 1_001)))).StatusCode);
+        Assert.Equal((g[0].Preparation, g[0].EvidenceVersion, 1), await State(t));
+
+        Assert.Equal(HttpStatusCode.OK, (await Promote(client, t, "2", Expect(1, new string('x', 1_000)))).StatusCode);
+        var view = await Json(await client.GetAsync($"/api/projects/{t.Project}/documents/{t.Document}/versions/1", Ct));
+        Assert.Empty(view.GetProperty("candidatePreparations").EnumerateArray());   // g1 è Superseded: storico, non candidata
+
+        Assert.Equal(HttpStatusCode.OK, (await Promote(client, t, "1", Expect(2, "ripristino"))).StatusCode);   // ritorno esplicito al bundle precedente
+        Assert.Equal((g[0].Preparation, g[0].EvidenceVersion, 3), await State(t));
+        Assert.Equal(3L, await Promotions(t));
+        Assert.Equal(1L, await Count("SELECT count(*) FROM \"EvidenceExtractionVersions\" WHERE \"Id\" = @e", ("e", g[1].EvidenceVersion!.Value)));   // nulla di storico cancellato
     }
 
     // ================================================================ lifecycle: current/candidate, LatestReady, esclusione

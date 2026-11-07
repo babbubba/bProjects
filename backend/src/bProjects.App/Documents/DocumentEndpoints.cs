@@ -41,6 +41,7 @@ public static class ProjectDocumentEndpoints
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/passages/{blockId:guid}", GetPassage);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/evidence/versions", EvidenceVersions);
         group.MapPost("/documents/{documentId:guid}/versions/{version}/preparations", Reprocess);
+        group.MapPost("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/promote", PromoteBundle);
         group.MapPost("/document-jobs/{jobId:guid}/retry", RetryParse);
         return app;
     }
@@ -429,6 +430,66 @@ public static class ProjectDocumentEndpoints
         return PreparationCommandResult(http, await preparations.ReprocessAsync(projectId, found.Id, requestKey, requestedBy, ct));
     }
 
+    private const int MaxPromotionReason = 1_000;
+
+    /// <summary>
+    /// Promozione esplicita di una preparazione Ready a bundle corrente della versione file (T095): solo POST. expectedRevision (intero ≥ 0, la
+    /// Revision letta dal client) è obbligatoria. 200 con il bundle corrente (anche in replay), 409 bundle_revision_conflict se un altro comando ha
+    /// vinto, 422 preparation_not_promotable se la preparazione non è Ready con copertura completa, 404 fuori da progetto/documento/versione.
+    /// </summary>
+    private static async Task<IResult> PromoteBundle(
+        Guid projectId, Guid documentId, string version, string generation, DocumentPromoteRequest? request, HttpContext http, ClaimsPrincipal user,
+        DocumentCatalog catalog, AppDbContext db, DocumentBundleStore bundles, CancellationToken ct)
+    {
+        if (!Guid.TryParse(user.FindFirstValue("sub"), out var promotedBy))
+        {
+            return Results.Unauthorized();
+        }
+
+        var found = await FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (request?.ExpectedRevision is not { } expected || expected < 0)
+        {
+            return Problem(StatusCodes.Status400BadRequest, "invalid_expected_revision", "expectedRevision è obbligatorio: la revisione del bundle letta dal client");
+        }
+
+        if (request.Reason is { } reason && reason.Trim().Length > MaxPromotionReason)
+        {
+            return Problem(StatusCodes.Status422UnprocessableEntity, "invalid_reason", "Motivo troppo lungo");
+        }
+
+        var (v, p) = found.Value;
+        var result = await bundles.PromoteAsync(projectId, v.Id, p.Id, expected, promotedBy, request.Reason, ct);
+        http.Response.Headers.CacheControl = "no-store";
+        switch (result.Outcome)
+        {
+            case BundlePromotionOutcome.NotFound:
+                return Results.NotFound();
+            case BundlePromotionOutcome.NotPromotable:
+                return Problem(StatusCodes.Status422UnprocessableEntity, "preparation_not_promotable", "La preparazione non è pronta con copertura completa: non può diventare il bundle corrente");
+            case BundlePromotionOutcome.Conflict:
+                return Results.Problem(
+                    statusCode: StatusCodes.Status409Conflict, title: "Il bundle corrente della versione è cambiato",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "bundle_revision_conflict",
+                        ["currentRevision"] = result.State?.Revision ?? 0,
+                        ["currentPreparationId"] = result.State?.CurrentPreparationId,
+                    });
+            default:
+                var state = result.State!;
+                return Results.Ok(new PromotedBundleView(
+                    documentId, v.Id, state.Revision, state.CurrentPreparationId, state.CurrentEvidenceVersionId, result.Generation,
+                    result.Promotion is null ? null : new BundlePromotionView(
+                        result.Promotion.Id, result.Promotion.FromPreparationId, result.Promotion.FromEvidenceVersionId, result.Promotion.ToPreparationId,
+                        result.Promotion.ToEvidenceVersionId, result.Promotion.PromotedBy, result.Promotion.PromotedAt, result.Promotion.Reason)));
+        }
+    }
+
     private static IResult PreparationCommandResult(HttpContext http, PreparationRetryResult result)
     {
         http.Response.Headers.CacheControl = "no-store";
@@ -597,6 +658,16 @@ public sealed record PreparationView(
 /// <summary>Esito del retry manuale: job e preparazione nuovi, collegati ai precedenti; mai testo del documento né percorsi.</summary>
 public sealed record ParseRetryView(
     Guid JobId, Guid PreparationId, int Generation, Guid RetryOfJobId, Guid RetryOfPreparationId, string Status, DateTimeOffset RequestedAt, DateTimeOffset DeadlineAt);
+
+/// <summary>Corpo della promozione del bundle: revisione letta dal client (obbligatoria) e motivo facoltativo.</summary>
+public sealed record DocumentPromoteRequest(int? ExpectedRevision, string? Reason);
+
+public sealed record BundlePromotionView(
+    Guid Id, Guid? FromPreparationId, Guid? FromEvidenceVersionId, Guid ToPreparationId, Guid ToEvidenceVersionId, Guid? PromotedBy, DateTimeOffset PromotedAt, string? Reason);
+
+/// <summary>Bundle corrente della versione file dopo la promozione (o il replay): puntatori e revisione sempre insieme.</summary>
+public sealed record PromotedBundleView(
+    Guid DocumentId, Guid DocumentVersionId, int BundleRevision, Guid? CurrentPreparationId, Guid? CurrentEvidenceVersionId, int Generation, BundlePromotionView? Promotion);
 
 public sealed record BboxView(double[] Values, string? CoordinateSystem);
 

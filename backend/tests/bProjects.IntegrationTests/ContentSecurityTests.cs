@@ -308,6 +308,8 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/blocks",
             $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/coverage",
             $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/passages/{{blockId:guid}}",
+            $"POST {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations",
+            $"POST {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/promote",
             $"POST {p}/document-jobs/{{jobId:guid}}/retry",
             $"GET {p}/source-selection",
             $"PUT {p}/source-selection",
@@ -319,7 +321,7 @@ public sealed class ContentSecurityTests : IAsyncLifetime
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(49, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin)
+        Assert.Equal(51, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, rielaborazione e promozione del bundle, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin)
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {
