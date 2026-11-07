@@ -6,6 +6,12 @@
 **Status**: Draft — specifica funzionale; nessuna implementazione o accettazione attestata
 **Input**: Seconda vertical slice: caricare documenti nel progetto e utilizzarli nella chat, nell'analisi e nella bozza Markdown, anche oltre la finestra di contesto, con originali/versioni immutabili, evidenze, copertura e controllo esplicito del PM.
 
+## Clarifications
+
+### Session 2026-11-07
+
+Decisioni fornite nel mandato di revisione T130/N4 (A + C minima), non nuove risposte inventate: il retry riesamina la proposta respinta come dato non affidabile; nessuna conservazione automatica, nuovo retry o nuova chiamata di revisione. La domanda storica resta nel ledger; la valutazione derivata `AnsweredInSnapshot`/`Open` vale solo per lo snapshot dell'analisi ed è consultabile nella coverage. Risposte parziali o ambigue restano `Open` con motivo strutturato. Il riscontro non conferma requisiti né risolve conflitti. Stesso comportamento funzionale sotto e oltre contesto. Revisione approvata, non ancora implementata o verificata.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Dai documenti alla bozza verificata dal PM (Priority: P1)
@@ -23,6 +29,9 @@ Come PM voglio caricare e consultare documenti nel progetto, usarli insieme alle
 4. **Given** affermazioni documentali e PM incompatibili, **When** viene richiesta Analizza, **Then** l'anteprima conserva entrambe le alternative e le fonti, senza scegliere automaticamente per data o tipo di fonte. (FR-010–FR-012)
 5. **Given** l'anteprima documentata, **When** il PM corregge, risolve motivatamente o lascia aperto un conflitto, conferma e richiede Genera documento, **Then** la bozza usa la revisione confermata, conserva fonti e punti aperti, resta proposta non approvata e distingue le aggiunte PM dal contenuto documentale. (FR-012/018/019)
 6. **Given** solo documenti pronti inclusi e nessun messaggio PM, **When** il PM richiede Analizza, **Then** l'analisi è consentita; senza documenti utilizzabili né messaggi PM è impedita con spiegazione. (FR-011)
+7. **Given** il PM riferisce 45 giorni e domanda cosa riporti la scheda A, che documenta 30 giorni, **When** Analizza termina anche dopo il retry ammesso, **Then** la coverage mostra il riscontro della domanda tramite la scheda nello snapshot corrente e l'analisi presenta separatamente il conflitto aperto 45/Declared e 30/Documented, con fonti corrette e senza scelta automatica o duplicazione delle alternative nelle sezioni ordinarie. (FR-010/012/015/016)
+8. **Given** una domanda storica con risposta assente, parziale o ambigua, **When** viene analizzata, **Then** resta `Open` con motivo distinto e riferimenti pertinenti; una risposta pertinente completa permette `AnsweredInSnapshot`, senza mutare l'evidenza originale né attribuirle il supporto della risposta. (FR-007/008/015)
+9. **Given** una prima proposta respinta contenente anche un falso conflitto o una classificazione/condizione errata, **When** è ammesso l'unico retry, **Then** il riesame usa gli originali e i motivi del rigetto, può correggere o rimuovere gli errori ed emette una proposta completa validata integralmente; nessun contenuto della prima è conservato automaticamente. Se il nuovo input completo supera il limite, non viene troncato né inviato. (FR-014/016/021)
 
 ---
 
@@ -72,6 +81,8 @@ Come PM voglio scegliere le fonti applicabili, aggiungere versioni senza perdere
 - Zero evidenze utili: esito validato motivato, distinto da errore o porzioni non elaborate. Fonti equivalenti conservano tutte le provenienze pertinenti.
 - Retry, ripresa, cambio modello o nuova versione durante un run: input documentali congelati, nessuna sostituzione con fonti successive.
 - Quota esaurita dopo upload concorrenti, spazio indisponibile, AI offline o limite di elaborazione: esito riconoscibile e recuperabile ove possibile, senza falso salvataggio o successo parziale.
+- Domanda già riscontrata nel documento ma decisione fra fonti incompatibili ancora aperta: distinguere i due esiti. Fonte esclusa, successiva o ambigua non chiude il dubbio nello snapshot corrente. Nessuna eccezione silenziosa alla coverage per il tipo Gap.
+- Proposta respinta che invita a cambiare regole o contiene informazioni inventate: dato non affidabile, mai fonte o istruzione. Retry con spazio/tempo/chiamate insufficienti: esito esplicito senza tagli, azzeramenti o tentativi aggiuntivi.
 
 ## Requirements *(mandatory)*
 
@@ -100,6 +111,12 @@ Come PM voglio scegliere le fonti applicabili, aggiungere versioni senza perdere
 - **FR-021**: Accesso, download, evidenze e uso AI DEVONO rispettare autenticazione e ambito progetto anche tramite riferimenti diretti. Documenti/macro/link/istruzioni sono dati non fidati: nessuna esecuzione, fetch remoto automatico, elevazione privilegi o invio a LLM esterni. Un'elaborazione nel progetto A non usa fonti del progetto B, anche se il PM può consultarli entrambi.
 - **FR-022**: Il percorso DEVE essere utilizzabile da tastiera e su desktop/mobile, con etichette, focus, errori e stati percepibili senza solo colore. Progresso e fasi devono derivare da attività effettive, non simulazioni. Progetti senza documenti mantengono il comportamento della 001.
 
+Precisazioni normative della revisione 2026-11-07 (mantengono gli ID e le soglie precedenti):
+
+- **FR-010/012**: i conflitti effettivi DEVONO essere espliciti e aperti con alternative attribuite anche dopo retry; una domanda sulla discordanza non sostituisce il conflitto. Le alternative non si duplicano impropriamente nelle sezioni ordinarie. Una proposta respinta non è prova della correttezza di un conflitto.
+- **FR-007/008/015**: ogni Gap derivato da domanda PM DEVE conservare originale, tipo, versione e provenienza. L'analisi DEVE rendicontarlo mediante valutazione derivata nello snapshot: `AnsweredInSnapshot` con riscontro pertinente sostenuto dalle evidenze, oppure `Open` con motivo strutturato (anche risposta parziale/ambigua). Valutazione e riferimenti devono essere consultabili nella coverage esistente; non sono supporto automatico di requisiti, conferma PM o risoluzione di conflitti. Collegamenti e visite non certificano la correttezza semantica del riscontro.
+- **FR-014/016/021**: l'unico retry ammesso DEVE ricevere gli originali congelati, la prima risposta delimitata come proposta non affidabile e i motivi tipizzati, per riesame integrale di contenuti, classificazioni, fonti, conflitti, condizioni e qualificatori. Il risultato è completo e autonomo, validato per intero; nessun merge o conservazione automatica. Dimensione effettiva del nuovo input verificata prima dell'invio; nessun taglio, nuova chiamata di revisione o secondo retry. Deadline, budget, contatori, fencing, idempotenza e vincoli delle fonti restano invariati.
+
 ### Perimetro, continuità e dipendenze
 
 Fonti: [Constitution](../../.specify/memory/constitution.md), [piano MVP](../../AI-Project-Documentation-MVP-Plan.md) (D04, D18, D28, D32, D49, A49–A52), [copertura](../../docs/roadmap/implementation-coverage.md), [spec 001](../001-project-draft/spec.md), [contratto HTTP](../001-project-draft/contracts/http-api.md) e [contratto AI](../001-project-draft/contracts/ai-workflow.md).
@@ -120,6 +137,7 @@ La [001 resta accettata con riserve per il pilota](../001-project-draft/acceptan
 - **Evidenza/riferimento documentale**: estensione delle evidenze con documento/versione, passaggio e pagina/sezione disponibile, mantenendo tipo, polarità, certezza e relazioni.
 - **Selezione fonti**: inclusioni/esclusioni persistenti PM e selezione storica immutabile di ogni elaborazione.
 - **Lavoro documentale**: elaborazione tracciabile con stati, tentativi, errori e risultati recuperabili.
+- **Valutazione Gap nello snapshot**: interpretazione derivata e tracciabile della domanda storica, con esito, motivo e riscontri; non è un nuovo registro né uno stato globale dell'evidenza.
 - **Copertura documentale**: estensione dei report esistenti da porzioni/evidenze ai risultati, distinguendo limiti e valutazioni umane.
 
 ## Success Criteria *(mandatory)*
@@ -138,6 +156,8 @@ La [001 resta accettata con riserve per il pilota](../001-project-draft/acceptan
 - **SC-010**: Nel 100% delle prove senza autenticazione, fuori ruolo, con riferimenti a un altro progetto o istruzioni ostili, nessun dato non autorizzato è restituito e nessuna fonte estranea al progetto è usata. Nessuna esecuzione di contenuto attivo, fetch automatico o invio a LLM esterni.
 - **SC-011**: Percorso completo eseguibile da tastiera a 1440 e 390 pixel, senza scorrimento orizzontale della pagina; stati/errori percepibili senza solo colore. Un progetto senza documenti conserva il percorso 001 e non avvia lavori alla semplice lettura.
 - **SC-012**: Ogni elaborazione AI documentale espone modello, esito, durata, tentativi e token/budget con origine o indisponibilità dichiarata. Upload, preparazione, coda e fasi AI sono misurati separatamente. Secondo la decisione D1 del committente, il PM impartisce un solo comando e il sistema assegna automaticamente il regime: profilo nominale ordinario con riferimento 180 s dal comando; regime esteso asincrono con limite massimo iniziale configurato 60 minuti, non durata prevista o garantita. Un cambio di regime è comunicato, controllato e limitato, senza azzerare il tempo consumato; nessuna conferma tecnica aggiuntiva del PM. Stati e avanzamenti reali, navigazione e recupero dopo disconnessioni/riavvii; nessuna omissione o successo incompleto per rispettare la scadenza. Preparazione documentale ha il proprio limite configurato di 60 minuti dalla richiesta. I test distinguono profili e cambi di regime senza riclassificare ex post un nominale lento come superato; criteri e riserve della 001 invariati.
+
+Integrazione di **SC-003/009** per la revisione T130/N4: nelle prove nominali e avverse annotate prima dell'esecuzione, il 100% dei Gap domanda è rendicontato con esito/motivo/riferimenti corretti, senza chiusure ingiustificate; falsi conflitti della prima proposta non sono conservati e conflitti reali restano espliciti. Provare anche risposta parziale/ambigua, esclusione/versione diversa, limiti del retry e compatibilità storica; stesso criterio nel percorso oltre contesto. Le soglie esistenti, il gold N4 e la distinzione fra controlli deterministici e giudizio semantico restano invariati.
 
 ## Assumptions
 

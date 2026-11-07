@@ -39,6 +39,16 @@ GET `/source-snapshots/{s}` → manifest di selezione storica; accesso soltanto 
 
 ## Contratti esistenti ed Evidence
 
+### Delta pianificato T130/N4 — coverage-3 (2026-11-07)
+
+La nuova Summary aggiunge cinque contatori non negativi `expectedGaps`, `assessedGaps`, `answeredGaps`, `openGaps`, `unassessedGaps` con expected=assessed+unassessed e assessed=answered+open. Sono distinti dai conteggi di evidenze a supporto di item. Per Gap validamente rendicontati non emettere evidence_unrepresented per sola assenza di item; per non-Gap il controllo originario rimane. Rimozione PM del riferimento aperto segnalata come modifica PM, non mutazione della valutazione AI.
+
+Solo analisi v5 dopo implementazione: [AI §13](ai-workflow.md#13-revisione-approvata-t130n4--a--c-minima-2026-11-07). Riutilizzare GET/POST `/analyses/{a}/coverage-reports` e dettaglio esistente; checkerVersion `coverage-3`, nuovi decoder/client, auth/progetto invariati. Report sempre su comando esplicito; GET non avvia lavori. Nessun endpoint nuovo e nessuna modifica ai comandi Analizza/edit/confirm/Genera.
+
+Coverage-3 conserva i campi coverage-2 e aggiunge `gapAssessments` (record canonici data-model: gapEvidenceId/versionId, outcome/reason/rationale, supportingEvidenceIds, openItemId/openConflictId, sourceSnapshotHash, originBatchId) e `gapAssessmentsHash`. Riferimenti apribili nelle viste Evidence/fonti esistenti; nessuna risposta respinta integrale o informazione riservata. UI: «valutazione AI nello snapshot», distinta da supporto requisiti/conferma PM; Open con NoAnswer/Partial/Ambiguous accessibile anche senza colore, da tastiera e mobile; revisione AI originaria distinta dalla corrente dopo edit/conferma.
+
+Coverage-v1/coverage-2 usano decoder storici senza ricalcolo retroattivo: campo assente significa valutazione non disponibile, mai zero Gap aperti. Coverage della preparazione rimane coverage-2. Nessun endpoint per modificare/chiudere Gap né lifecycle globale. Hash WorkOutput incoerente impedisce il nuovo report, non produce una lista vuota apparentemente valida. La sezione seguente descrive la baseline coverage-2, non la nuova risposta v5.
+
 Endpoint edit/confirm/document-generations invariati nei comandi e negli If-Match; `content.schemaVersion` guida 1.0/1.1. PUT deve mantenere la versione di schema della revisione base; non convertire una vecchia analisi per aggiungere un documento, richiedere nuova Analizza. Versione ignota → 422 unsupported_schema_version. Client aggiornato supporta entrambe, nessuna promessa di supporto 1.1 nel vecchio frontend.
 
 Viste Evidence aggiungono origin.kind e fonte documentale solo nel payload documentale versionato; percorsi legacy `/messages/{m}/evidence/...` mantengono significato. GET `/evidence` aggiunge filtri originKind/documentId/documentVersionId; dettaglio espone origin e sources discriminate. Per nuove versioni di estrazione documentale, confronto/promozione restano nella vista Evidence: route `/documents/{d}/versions/{v}/evidence/versions` e `/evidence/versions/{a}/compare/{b}`, confronto ammesso solo sulla stessa Preparation o mapping strutturale verificabile, altrimenti 422 versions_not_comparable. Nessun matching semantico automatico fra file diversi.

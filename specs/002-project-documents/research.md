@@ -1,5 +1,15 @@
 # Research — 002-project-documents
 
+## Decisione di revisione T130/N4 (2026-11-07)
+
+**Decisione**: A + C minima approvata dal committente. Retry unico informato dalla proposta respinta come dato; valutazione Gap derivata per snapshot e consultabile nella coverage. Disegno esatto/versioni [AI §13](contracts/ai-workflow.md#13-revisione-approvata-t130n4--a--c-minima-2026-11-07). Nessuna nuova dipendenza, primitiva MAF o scelta infrastrutturale da ricercare; riuso dei batch e JSONB esistenti.
+
+**Motivazione**: 005 individua il conflitto 45/30 ma duplica le alternative nelle sezioni ordinarie e non rendiconta E2; non è integralmente corretta. 006 rende E2 mappata ma perde il conflitto strutturato. Una domanda storica riscontrata non è un fatto né una lacuna sempre aperta. Copertura tecnica non certifica fedeltà. I report e le catture storiche restano immutati; N4 è FAIL, non risolto da questa pianificazione.
+
+**Alternative considerate**: patch puntuale congela errori non validati e richiede merge/precondizioni; sola istruzione di preservare conflitti conserva anche quelli falsi; ignorare Gap nasconde omissioni. Respinte. Valutazione nel WorkOutput e proiezione in coverage evitano un lifecycle globale e una migrazione. Risposte parziali/ambigue restano Open con motivo, come da mandato.
+
+**Impatto I5**: necessario adeguamento di contratto, metadati e assembly nei batch esistenti per non mantenere due semantiche. Nessun nuovo stadio/chiamata dedicata; limiti e frontiera restano espliciti. Gate con riscontri fra porzioni diverse; se la capacità nominale non riesce, FAIL, non chiusura artificiale. Versioni storiche congelate e nuove versioni AI §13.1. Nessuna ambiguità funzionale residua individuata da Clarify; fattibilità eseguibile e qualità LLM da provare successivamente.
+
 Data: 2026-11-01. Ricerca statica e documentazione ufficiale; nessuna installazione, PoC, inferenza o test reale eseguito. Le decisioni sono di progetto; la compatibilità eseguibile dei nuovi percorsi è un gate dell'implementazione.
 
 ## R1 — Riuso invece di una seconda piattaforma

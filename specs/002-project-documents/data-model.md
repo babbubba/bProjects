@@ -4,6 +4,22 @@ Disegno futuro, nessuna migrazione eseguita. PostgreSQL/EF Core esistenti; UUID,
 
 ## Documenti, storage e preparazione
 
+> Il delta T130/N4 seguente è pianificato, non presente nel codice a 65a9204. Non muta le entità storiche qui sotto.
+
+### Delta derivato T130/N4 (2026-11-07)
+
+Summary coverage-3 aggiunge expectedGaps/assessedGaps/answeredGaps/openGaps/unassessedGaps, non negativi; expected=assessed+unassessed e assessed=answered+open. Distinti da supporto item. Nessun Gap validamente valutato è evidence_unrepresented soltanto perché privo di item sostantivo; per non-Gap la regola precedente resta invariata.
+
+Normativa [AI §13](contracts/ai-workflow.md#13-revisione-approvata-t130n4--a--c-minima-2026-11-07), solo run v5. Nessuna nuova tabella/migrazione: JSONB WorkOutput e CoverageReport esistenti, schemi e decoder versionati. Ledger, messaggi e AnalysisContent 1.1.0 invariati.
+
+**GapAssessment `gap-assessment-1`**: `gapEvidenceId`, `gapEvidenceVersionId`, `sourceSnapshotHash`, `outcome` (`AnsweredInSnapshot|Open`), `reason` (`Answered|NoAnswer|Partial|Ambiguous`), `rationale` stringa non vuota, `supportingEvidenceIds` distinti, `openItemId`/`openConflictId` nullable, `originBatchId`. Liste `gapAssessments` obbligatorie nei nuovi DTO; server risolve alias/versioni dal catalogo. Vincoli AI §13.2: Answered ⇒ reason Answered, almeno un supporto non-Gap dello snapshot, riferimenti aperti null; Open ⇒ reason NoAnswer/Partial/Ambiguous, esattamente un riferimento aperto finale, supporti obbligatori salvo NoAnswer. Missing ⇒ gap_not_assessed; record/riferimenti invalidi ⇒ work_output_invalid. La pertinenza resta giudizio semantico.
+
+**WorkOutput v5**: DTO/catalogo/canonico più valutazioni canoniche e `gapAssessmentsHash`. Hash output/composizione/coverage comprendono i campi nuovi. Nei nodi gerarchici valutazioni e provenienza batch secondo AI §13.4, mai union implicita dei supporti; divergenze ⇒ gap_assessment_unresolved. Assembly esige un esito finale per Gap e riferimenti finali validi. Niente archivio parallelo o mutazione di output Committed.
+
+**Marker retry v5**: DerivedBatch analysis_retry unico/fenced senza WorkOutput; metadati tipizzati, firstOutputHash, retryPayloadHash, misura/qualità, nessun testo respinto. Marker solo dopo preflight valido, non riabilitato dal crash. InputHash originario distinto dal retryPayloadHash.
+
+**CoverageReport coverage-3**: proietta i record dalla revisione AI originaria (AiRevisionId), distinguendo snapshot/versioni/batch, supporti item, revisione PM corrente e categorie deterministiche/semantiche/PM. Include gapAssessmentsHash nell'identità input. Edit/conferma non mutano valutazioni o vecchi report. Coverage-v1/coverage-2 restano leggibili senza retrocompilazione.
+
 `DocumentPolicy` conserva la configurazione Admin non segreta con Revision,
 UpdatedBy/At e limiti validati, una sola riga globale. I default iniziali provengono
 dalla configurazione server; gli aggiornamenti Admin sono persistenti, atomici e
