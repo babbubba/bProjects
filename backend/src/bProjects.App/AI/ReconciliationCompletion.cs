@@ -33,9 +33,17 @@ public sealed record ReconciliationCoverage(
     public bool IsComplete => Report.IsComplete;
 }
 
+/// <summary>
+/// Esito delle valutazioni dei Gap (`gap-assessment-1`, §13.2) come input della completezza v5 (T136): quali evidenze dello snapshot sono Gap, per quali esiste un record valido
+/// e l'hash della loro forma canonica. Calcolato dal compositore, mai dichiarato dal modello. Con il contesto la completezza v5 (a) non pretende che un Gap sia mappato su un
+/// item (lo pretende una valutazione), (b) segnala <c>gap_not_assessed</c> per ogni Gap senza record, anche se mappato, (c) include le valutazioni nel coverageHash.
+/// Senza contesto (v2/v3/v4) il comportamento e l'hash storici restano identici.
+/// </summary>
+public sealed record GapAssessmentContext(IReadOnlySet<Guid> GapEvidenceIds, IReadOnlySet<Guid> AssessedGapEvidenceIds, string AssessmentsHash);
+
 public static class ReconciliationCompletion
 {
-    public static CompletionReport EvaluateSingleCall(ReconciliationSnapshot snapshot, SingleCallOutput output, PatchComposition composition)
+    public static CompletionReport EvaluateSingleCall(ReconciliationSnapshot snapshot, SingleCallOutput output, PatchComposition composition, GapAssessmentContext? gapAssessments = null)
     {
         var gaps = new List<CompletionGap>();
         var entries = snapshot.Evidence.Select(e => (e.EvidenceId, EntryId: ReconciliationIds.EntryId(snapshot.SourceHash, e.EvidenceId, e.ContentHash))).ToList();
@@ -83,14 +91,44 @@ public static class ReconciliationCompletion
         }
 
         var mapped = output.EvidenceMap.SelectMany(e => e.EvidenceIds).ToHashSet();
-        foreach (var evidence in snapshot.Evidence.OrderBy(e => e.EvidenceId.ToString("D"), StringComparer.Ordinal).Where(e => !mapped.Contains(e.EvidenceId)))
+        // v5: un Gap non si mappa su un item per essere rendicontato (lo fa la valutazione); ogni altra evidenza resta mappata come prima.
+        foreach (var evidence in snapshot.Evidence.OrderBy(e => e.EvidenceId.ToString("D"), StringComparer.Ordinal)
+            .Where(e => !mapped.Contains(e.EvidenceId) && gapAssessments?.GapEvidenceIds.Contains(e.EvidenceId) != true))
         {
             gaps.Add(new("evidence_not_mapped", $"evidenza {evidence.EvidenceId:D} non mappata su alcun item."));
         }
 
-        var hash = CanonicalJson.HashText(ReconciliationCodec.Canonical(new { expected, visitedA, visitedB, missing = missing.ToList(), gaps }));
+        if (gapAssessments is not null)
+        {
+            foreach (var gap in gapAssessments.GapEvidenceIds.Except(gapAssessments.AssessedGapEvidenceIds).OrderBy(g => g.ToString("D"), StringComparer.Ordinal))
+            {
+                gaps.Add(new("gap_not_assessed", $"evidenza {gap:D}: Gap senza valutazione finale (gap-assessment-1)."));
+            }
+        }
+
+        var hash = CoverageHash(expected, visitedA, visitedB, missing.ToList(), gaps, gapAssessments);
         return new(gaps.Count == 0, gaps, expected, visitedA, visitedB, [.. missing], hash);
     }
+
+    /// <summary>
+    /// coverageHash del percorso a chiamata singola: insiemi attesi/visitati/mancanti e obbligazioni residue; con le valutazioni dei Gap (v5) anche l'insieme dei Gap attesi e valutati
+    /// e l'hash delle valutazioni. Senza contesto la forma è quella storica (hash invariati per v2/v3/v4).
+    /// </summary>
+    internal static string CoverageHash(
+        IReadOnlyList<string> expected, IReadOnlyList<string> visitedA, IReadOnlyList<string> visitedB, IReadOnlyList<string> missing, IReadOnlyList<CompletionGap> gaps,
+        GapAssessmentContext? gapAssessments) =>
+        gapAssessments is null
+            ? CanonicalJson.HashText(ReconciliationCodec.Canonical(new { expected, visitedA, visitedB, missing, gaps }))
+            : CanonicalJson.HashText(ReconciliationCodec.Canonical(new
+            {
+                expected, visitedA, visitedB, missing, gaps,
+                gapAssessments = new
+                {
+                    version = GapAssessmentRules.Version, hash = gapAssessments.AssessmentsHash,
+                    expectedGaps = gapAssessments.GapEvidenceIds.Select(g => g.ToString("D")).Order(StringComparer.Ordinal).ToList(),
+                    assessedGaps = gapAssessments.AssessedGapEvidenceIds.Select(g => g.ToString("D")).Order(StringComparer.Ordinal).ToList(),
+                },
+            }));
 
     /// <summary>Voci attese non visitate nella vista A o B (stesso controllo per singola chiamata e gerarchico).</summary>
     private static SortedSet<string> MissingVisits(IReadOnlyList<string> expected, IReadOnlyList<string> visitedA, IReadOnlyList<string> visitedB, List<CompletionGap> gaps)

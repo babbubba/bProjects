@@ -33,7 +33,8 @@ public static class ReconciliationValidator
     /// Percorso singola chiamata: decodifica strict, regole strutturali, riferimenti allo snapshot, regole di AnalysisContent 1.1, composizione di
     /// tutte le patch contro la stessa base e completezza. Testo troncato o riferimenti non validi sono errore permanente.
     /// </summary>
-    public static ReconciliationValidation ValidateSingleCall(string responseText, ReconciliationSnapshot snapshot, ReconciliationBase baseState, DocumentAnalysisFacts facts)
+    public static ReconciliationValidation ValidateSingleCall(
+        string responseText, ReconciliationSnapshot snapshot, ReconciliationBase baseState, DocumentAnalysisFacts facts, GapAssessmentContext? gapAssessments = null)
     {
         SingleCallOutput output;
         try
@@ -64,7 +65,7 @@ public static class ReconciliationValidator
             return ReconciliationValidation.Fail(DocumentWorkException.WorkOutputInvalid, [.. violations.Distinct(StringComparer.Ordinal)], output, composition);
         }
 
-        var completion = ReconciliationCompletion.EvaluateSingleCall(snapshot, output, composition);
+        var completion = ReconciliationCompletion.EvaluateSingleCall(snapshot, output, composition, gapAssessments);
         return new(completion.IsComplete ? ReconciliationOutcome.Complete : ReconciliationOutcome.ValidIncomplete, null, [], output, composition, completion);
     }
 }

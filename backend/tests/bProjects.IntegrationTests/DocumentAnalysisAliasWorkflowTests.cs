@@ -50,6 +50,57 @@ internal static class AliasModelReplies
 }
 
 /// <summary>
+/// Risposte del modello finto per il contratto v5 (alias-2): come <see cref="AliasModelReplies"/> leggono solo il messaggio inviato; per ogni evidenza `tipo=Gap` emettono una
+/// domanda aperta e una valutazione Open/NoAnswer (il caso più prudente), per le altre un requisito. Le prove N4 sostituiscono il DTO con quello atteso.
+/// </summary>
+internal static class AliasModelRepliesV5
+{
+    private static readonly Regex Entry = new(@"<<<VOCE \[(E[1-9][0-9]*)\] origine=(\w+) tipo=(\w+)[^>\n]*>>>\n(.*?)\n<<<", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    public static IReadOnlyList<(string Alias, string Origin, string Kind, string Text)> Entries(string prompt) =>
+        [.. Entry.Matches(prompt).Select(m => (m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value, m.Groups[4].Value))];
+
+    public static AiAnalysisOutputV2 Dto(string prompt, Func<AiAnalysisOutputV2, AiAnalysisOutputV2>? change = null)
+    {
+        var entries = Entries(prompt);
+        var aliases = entries.Select(e => e.Alias).ToList();
+        var requirements = new List<AiItem>();
+        var questions = new List<AiItem>();
+        var records = new List<AiGapAssessment>();
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var e = entries[i];
+            var classification = e.Origin == "Message" ? DocumentAnalysisClassification.Declared : DocumentAnalysisClassification.Documented;
+            if (e.Kind == "Gap")
+            {
+                var key = $"i{i + 1}";
+                questions.Add(AliasFixtures.Item(key, e.Text, classification, e.Alias));
+                records.Add(new() { Gap = e.Alias, Outcome = GapOutcome.Open, Reason = GapReason.NoAnswer, Rationale = "Nessun riscontro nelle fonti.", SupportingEvidence = [], OpenItem = key, OpenConflict = null });
+            }
+            else
+            {
+                requirements.Add(AliasFixtures.Item($"i{i + 1}", e.Text, classification, e.Alias));
+            }
+        }
+
+        var dto = new AiAnalysisOutputV2
+        {
+            Contract = "alias-2",
+            Visited = new() { A = aliases, B = aliases },
+            NoFindings = new() { A = "Nessuna relazione oltre quelle note.", B = "Nessuna relazione oltre quelle note.", Cross = null },
+            Items = new()
+            {
+                Goals = [], ScopeOverview = [], ScopeIncluded = [], ScopeExcluded = [], Requirements = requirements, Flows = [], Constraints = [], Dependencies = [], Assumptions = [], OpenQuestions = questions,
+            },
+            Conflicts = [], Findings = [], KnownRelationChecks = [], Patches = [], GapAssessments = records,
+        };
+        return change is null ? dto : change(dto);
+    }
+
+    public static string Reply(string prompt, Func<AiAnalysisOutputV2, AiAnalysisOutputV2>? change = null) => AnalysisAliasContracts.Encode(Dto(prompt, change));
+}
+
+/// <summary>
 /// T125 parte B (MAF-PG) — analisi documentale v3 con alias: percorso API + dispatcher/workflow + PostgreSQL + MAF reali con IChatClient finto a livello HTTP
 /// (nessun DGX). Il modello riceve solo alias e produce solo il DTO semantico; il server compone il canonico, lo valida con i validatori esistenti,
 /// persiste il WorkOutput {aiOutputHash, catalogHash, canonicalHash} e ricompone a ogni lettura/commit (contracts/ai-workflow.md §7).
@@ -563,6 +614,319 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkManifests\""));
     }
 
+    // ================================================================ v5: valutazione dei Gap (T136)
+
+    private const string V5Prompts = """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3"}""";
+
+    /// <summary>La v5 NON è instradata per le nuove richieste (T141): il test la ottiene riscrivendo la definizione congelata, come per v2.</summary>
+    private async Task PinToV5Async(Guid run) => await Execute(
+        "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v5', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", V5Prompts), ("r", run));
+
+    // N4 semplificato: E1 messaggio PM «45», E2 la domanda sulla scheda (Gap), E3 la scheda «30» (documentata).
+    private const string N4Pm = "Servono 45 pezzi al minuto.";
+    private const string N4Question = "Cosa dice la scheda tecnica sul numero di pezzi al minuto?";
+    private const string N4Sheet = "La scheda tecnica indica 30 pezzi al minuto.";
+
+    private async Task<Guid> N4RunAsync(HttpClient client)
+    {
+        var project = await NewProject(client);
+        await SeedPmEvidenceAsync(client, project, N4Pm);
+        await NewDocumentOfKinds(client, project, "scheda", [(N4Question, EvidenceKind.Gap), (N4Sheet, EvidenceKind.Requirement)]);
+        var run = await StartRunAsync(client, project);
+        await PinToV5Async(run);
+        return run;
+    }
+
+    /// <summary>Il DTO corretto dell'N4: E2 AnsweredInSnapshot/Answered con riscontro E3; conflitto Open E1 (Declared) contro E3 (Documented); nessuna domanda sulla scheda.</summary>
+    private static AiAnalysisOutputV2 N4Dto(IReadOnlyList<(string Alias, string Origin, string Kind, string Text)> entries)
+    {
+        string Alias(string text) => entries.Single(x => x.Text == text).Alias;
+        var (e1, e2, e3) = (Alias(N4Pm), Alias(N4Question), Alias(N4Sheet));
+        var all = entries.Select(x => x.Alias).ToList();
+        return new AiAnalysisOutputV2
+        {
+            Contract = "alias-2",
+            Visited = new() { A = all, B = all },
+            NoFindings = new() { A = null, B = "Nessuna relazione in vista B.", Cross = null },
+            Items = new()
+            {
+                Goals = [], ScopeOverview = [], ScopeIncluded = [], ScopeExcluded = [], Requirements = [], Flows = [], Constraints = [], Dependencies = [], Assumptions = [], OpenQuestions = [],
+            },
+            Conflicts =
+            [
+                new()
+                {
+                    Key = "c1", Description = "Pezzi al minuto discordanti.", Alternatives =
+                    [
+                        AliasFixtures.Item("i1", N4Pm, DocumentAnalysisClassification.Declared, e1), AliasFixtures.Item("i2", N4Sheet, DocumentAnalysisClassification.Documented, e3),
+                    ],
+                },
+            ],
+            Findings = [new() { Key = "f1", View = ReconcileView.A, Left = e1, Right = e3, Type = EvidenceRelationType.Contradicts, Basis = EvidenceRelationBasis.Inferred, Rationale = "45 contro 30.", Outcome = AiFindingOutcome.Open, Reason = "Serve la scelta del PM." }],
+            KnownRelationChecks = [], Patches = [],
+            GapAssessments = [new() { Gap = e2, Outcome = GapOutcome.AnsweredInSnapshot, Reason = GapReason.Answered, Rationale = "La scheda riporta la cadenza.", SupportingEvidence = [e3], OpenItem = null, OpenConflict = null }],
+        };
+    }
+
+    private static DocumentChatWorkflowTests.FakeChatModel N4Model(Func<AiAnalysisOutputV2, AiAnalysisOutputV2>? change = null) => new()
+    {
+        Responder = r => AnalysisAliasContracts.Encode(change is null ? N4Dto(AliasModelRepliesV5.Entries(r.AllText)) : change(N4Dto(AliasModelRepliesV5.Entries(r.AllText)))),
+    };
+
+    private static JsonObject Payload(string json) => JsonNode.Parse(json)!.AsObject();
+
+    private async Task<JsonObject> WorkPayloadAsync(Guid run) => Payload(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+
+    [Fact]
+    public async Task A_v5_run_completes_the_corrected_N4_with_one_call_the_v4_prompt_alias_2_and_the_assessment_in_the_work_output()
+    {
+        using var client = await App.LoginAsync();
+        var run = await N4RunAsync(client);
+        var input = await PrepareAsync(run);
+        var model = N4Model();
+
+        var result = await RunAsync(run, model);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, "Failed: " + result.ErrorCode + " " + await ErrorMessage(run));
+        var request = Assert.Single(model.Requests);
+        Assert.Equal(DocumentAnalysisWorkflow.InstructionsV4.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));
+        Assert.Contains("`alias-2`", request.AllText);
+        Assert.DoesNotContain("`alias-1`", request.AllText);
+        Assert.Matches(@"<<<VOCE \[E2\] origine=Document tipo=Gap polarita=\w+>>>", request.AllText);          // il tipo Gap è visibile al modello
+        Assert.DoesNotMatch(AnyUuid, request.System + request.AllText);
+        Assert.DoesNotMatch(AnyHash, request.System + request.AllText);
+        Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal("document-analysis-validation-v3", await Scalar<string>("SELECT \"ValidationVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal("project-analysis-documents-v5", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal("analysis-single-v3", await Scalar<string>("SELECT \"AlgorithmVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+
+        var payload = await WorkPayloadAsync(run);
+        Assert.Equal("document-analysis-alias-2", payload["schemaVersion"]!.GetValue<string>());
+        Assert.Equal("Complete", payload["outcome"]!.GetValue<string>());
+        Assert.Equal("gap-assessment-1", payload["gapAssessmentsVersion"]!.GetValue<string>());
+        var record = Assert.Single(payload["gapAssessments"]!.AsArray())!.AsObject();
+        Assert.Equal(("E2", "AnsweredInSnapshot", "Answered"), (record["gap"]!.GetValue<string>(), record["outcome"]!.GetValue<string>(), record["reason"]!.GetValue<string>()));
+        Assert.Equal(["E3"], record["supportingEvidence"]!.AsArray().Select(n => n!.GetValue<string>()));
+        var dto = AnalysisAliasContracts.DecodeV2(payload["ai"]!.ToJsonString());
+        Assert.Equal(GapAssessmentRules.Hash(dto.GapAssessments), payload["gapAssessmentsHash"]!.GetValue<string>());
+        Assert.Equal(AnalysisAliasContracts.Hash(dto), payload["aiOutputHash"]!.GetValue<string>());
+        Assert.Equal(AnalysisAliasCatalog.Build(input, AnalysisAliasContracts.SchemaVersionV2).CatalogHash, payload["catalogHash"]!.GetValue<string>());
+
+        // La revisione è l'AnalysisContent 1.1.0 composto: conflitto aperto E1/E3, nessuna domanda sulla scheda, Gap non mappato e nessun supporto automatico.
+        var content = DocumentAnalysisContentJson.Deserialize(await Scalar<string>("SELECT \"ContentJson\"::text FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        Assert.Equal(AnalysisConflictStatus.Open, Assert.Single(content.Conflicts).Status);
+        Assert.Empty(content.OpenQuestions);
+        Assert.Equal(2, await Count("SELECT count(*) FROM \"AnalysisEvidenceLinks\" WHERE \"RunId\" = @r", ("r", run)));      // E1 ed E3, mai il Gap E2
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
+    }
+
+    [Fact]
+    public async Task A_v5_run_with_a_gap_that_has_no_record_is_coverage_incomplete_with_a_reusable_output_gap_not_assessed_and_no_revision()
+    {
+        using var client = await App.LoginAsync();
+        var run = await N4RunAsync(client);
+        var model = N4Model(dto => dto with { GapAssessments = [] });
+
+        var result = await RunAsync(run, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.CoverageIncomplete), (result.Status, result.ErrorCode));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", run)));
+        var payload = await WorkPayloadAsync(run);
+        Assert.Equal("ValidIncomplete", payload["outcome"]!.GetValue<string>());
+        Assert.Contains(payload["gaps"]!.AsArray().Select(g => g!.GetValue<string>()), g => g.StartsWith("gap_not_assessed:", StringComparison.Ordinal));
+        Assert.Empty(payload["gapAssessments"]!.AsArray());
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
+        Assert.Single(model.Requests);                                                                                         // nessun retry guidato in v5 prima di T137
+    }
+
+    [Theory]
+    [InlineData("unknown-alias")]
+    [InlineData("non-gap-record")]
+    [InlineData("open-item-missing")]
+    public async Task A_v5_run_with_an_invalid_assessment_fails_permanently_with_no_work_output_no_revision_and_no_second_call(string kind)
+    {
+        using var client = await App.LoginAsync();
+        var run = await N4RunAsync(client);
+        var model = N4Model(dto =>
+        {
+            var record = dto.GapAssessments[0];
+            var bad = kind switch
+            {
+                "unknown-alias" => record with { SupportingEvidence = ["E9"] },
+                "non-gap-record" => record with { Gap = record.SupportingEvidence[0] },
+                _ => record with { Outcome = GapOutcome.Open, Reason = GapReason.NoAnswer, SupportingEvidence = [], OpenItem = "i7" },
+            };
+            return dto with { GapAssessments = [bad] };
+        });
+
+        var result = await RunAsync(run, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.WorkOutputInvalid), (result.Status, result.ErrorCode));
+        Assert.Single(model.Requests);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
+    }
+
+    [Fact]
+    public async Task A_v5_run_whose_model_returns_the_alias_1_contract_fails_work_output_invalid_and_the_formats_never_cross()
+    {
+        using var client = await App.LoginAsync();
+        var run = await N4RunAsync(client);
+        var legacy = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => AliasModelReplies.Reply(r.AllText) };
+
+        var result = await RunAsync(run, legacy);
+
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.WorkOutputInvalid), (result.Status, result.ErrorCode));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task A_v4_run_keeps_the_v3_prompt_and_alias_1_and_rejects_an_alias_2_reply()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewDocument(client, project, "regole", Statement1);
+        var run = await StartRunAsync(client, project);                                              // v4 congelata: single-call alias-1
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => AliasModelRepliesV5.Reply(r.AllText) };
+
+        var result = await RunAsync(run, model);
+
+        var request = Assert.Single(model.Requests);
+        Assert.Equal(DocumentAnalysisWorkflow.InstructionsV3.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));
+        Assert.Contains("`alias-1`", request.AllText);
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.WorkOutputInvalid), (result.Status, result.ErrorCode));
+    }
+
+    [Fact]
+    public async Task A_new_analyze_request_still_freezes_the_v4_definition_and_never_the_v5_one()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewDocument(client, project, "regole", Statement1);
+
+        var run = await StartRunAsync(client, project);
+
+        Assert.Equal("project-analysis-documents-v4", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))).RootElement;
+        Assert.Equal("document-analysis-v3", prompts.GetProperty("analysis").GetString());
+        Assert.Equal("document-analysis-alias-1", prompts.GetProperty("analysisAiSchema").GetString());
+        Assert.Equal("analysis-single-v2", prompts.GetProperty("algorithm").GetString());
+    }
+
+    [Theory]
+    [InlineData("tampered-gap-record")]
+    [InlineData("tampered-gap-hash")]
+    [InlineData("missing-gap-hash")]
+    [InlineData("tampered-canonical")]
+    [InlineData("v3-payload-in-v5-run")]
+    public async Task A_committed_v5_output_whose_assessments_diverge_is_a_permanent_error_without_inference_or_revision(string tamper)
+    {
+        using var client = await App.LoginAsync();
+        var run = await N4RunAsync(client);
+        // Valido ma incompleto (nessun item per le evidenze non-Gap): WorkOutput Committed riutilizzabile.
+        var incomplete = N4Model(dto => dto with { Findings = [], Conflicts = [], NoFindings = new() { A = "Nessuna.", B = "Nessuna.", Cross = "Nessun elemento." } });
+        Assert.Equal(DocumentWorkException.CoverageIncomplete, (await RunAsync(run, incomplete)).ErrorCode);
+        var expected = tamper switch
+        {
+            "tampered-gap-record" => DocumentWorkException.IntegrityConflict,
+            "tampered-gap-hash" => DocumentWorkException.WorkOutputInvalid,
+            "missing-gap-hash" => DocumentWorkException.WorkOutputInvalid,
+            "tampered-canonical" => DocumentWorkException.IntegrityConflict,
+            _ => DocumentWorkException.CheckpointIncompatible,
+        };
+        await TamperPayloadAsync(run, payload =>
+        {
+            switch (tamper)
+            {
+                case "tampered-gap-record":
+                    payload["ai"]!["gapAssessments"]![0]!["rationale"] = "Riscritta dopo il commit.";
+                    break;
+                case "tampered-gap-hash":
+                    payload["gapAssessmentsHash"] = new string('f', 64);
+                    break;
+                case "missing-gap-hash":
+                    payload.Remove("gapAssessmentsHash");
+                    break;
+                case "tampered-canonical":
+                    payload["canonicalHash"] = new string('f', 64);
+                    break;
+                default:
+                    payload["schemaVersion"] = "document-analysis-alias-1";
+                    break;
+            }
+        });
+
+        await ReopenAsync(run);
+        var silent = new DocumentChatWorkflowTests.FakeChatModel { Responder = _ => "{}" };
+        var result = await RunAsync(run, silent);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal(expected, result.ErrorCode);
+        Assert.Empty(silent.Requests);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
+    }
+
+    [Fact]
+    public async Task A_committed_incomplete_v5_output_is_recomposed_on_recovery_without_a_new_inference_and_stays_coverage_incomplete()
+    {
+        using var client = await App.LoginAsync();
+        var run = await N4RunAsync(client);
+        Assert.Equal(DocumentWorkException.CoverageIncomplete, (await RunAsync(run, N4Model(dto => dto with { GapAssessments = [] }))).ErrorCode);
+
+        await ReopenAsync(run);
+        var silent = new DocumentChatWorkflowTests.FakeChatModel { Responder = _ => "{}" };
+        var again = await RunAsync(run, silent);
+
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.CoverageIncomplete), (again.Status, again.ErrorCode));
+        Assert.Empty(silent.Requests);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\""));
+    }
+
+    [Fact]
+    public async Task A_v5_run_with_an_open_no_answer_gap_completes_the_open_assessment_is_not_a_technical_incompleteness()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewDocumentOfKinds(client, project, "rilievi", [("Chi approva la modifica?", EvidenceKind.Gap), ("Il turno dura 8 ore.", EvidenceKind.Requirement)]);
+        var run = await StartRunAsync(client, project);
+        await PinToV5Async(run);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => AliasModelRepliesV5.Reply(r.AllText) };
+
+        var result = await RunAsync(run, model);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, "Failed: " + result.ErrorCode + " " + await ErrorMessage(run));
+        var payload = await WorkPayloadAsync(run);
+        var record = Assert.Single(payload["gapAssessments"]!.AsArray())!.AsObject();
+        Assert.Equal(("Open", "NoAnswer"), (record["outcome"]!.GetValue<string>(), record["reason"]!.GetValue<string>()));
+        Assert.Empty(payload["gaps"]!.AsArray());
+        var content = DocumentAnalysisContentJson.Deserialize(await Scalar<string>("SELECT \"ContentJson\"::text FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        Assert.Equal("Chi approva la modifica?", Assert.Single(content.OpenQuestions).Text);
+    }
+
+    [Theory]
+    [InlineData("project-analysis-documents-v5", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v2","validation":"document-analysis-validation-v2"}""")]     // v5 con versioni v3
+    [InlineData("project-analysis-documents-v5", """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v2","validation":"document-analysis-validation-v3"}""")]     // algoritmo v2 con schema v5
+    [InlineData("project-analysis-documents-v5", """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v2"}""")]     // validazione v2
+    [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3"}""")]     // v3 con versioni v5
+    [InlineData("project-analysis-documents-v4", """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3"}""")]     // v4 con versioni v5
+    public async Task The_v5_versions_never_mix_with_the_v3_and_v4_definitions_and_a_mismatch_is_workflow_incompatible(string definition, string prompts)
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewDocument(client, project, "regole", Statement1);
+        var run = await StartRunAsync(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("d", definition), ("p", prompts), ("r", run));
+        var model = new DocumentChatWorkflowTests.FakeChatModel();
+
+        var result = await RunAsync(run, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "workflow_incompatible"), (result.Status, result.ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkManifests\""));
+    }
+
     // ================================================================ supporto: output e dati
 
     private static string Mutate(string json, Action<JsonObject> mutate)
@@ -646,8 +1010,13 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
     private sealed record Doc(Guid Document, Guid Version, Guid EvidenceVersion, List<Guid> EvidenceIds, List<Guid> SourceIds);
 
     /// <summary>Documento pronto con una evidenza (e una fonte documentale) per enunciato, nella stessa versione di evidenza.</summary>
-    private async Task<Doc> NewDocument(HttpClient client, Guid project, string name, params string[] statements)
+    private async Task<Doc> NewDocument(HttpClient client, Guid project, string name, params string[] statements) =>
+        await NewDocumentOfKinds(client, project, name, [.. statements.Select(s => (s, EvidenceKind.Requirement))]);
+
+    /// <summary>Come <see cref="NewDocument"/> ma con il tipo di evidenza per enunciato (T136: i Gap sono evidenze di tipo Gap).</summary>
+    private async Task<Doc> NewDocumentOfKinds(HttpClient client, Guid project, string name, (string Statement, EvidenceKind Kind)[] items)
     {
+        var statements = items.Select(i => i.Statement).ToArray();
         var created = await Json(await Upload(client, project, Text(name), name + ".txt", displayName: name));
         var (document, version) = (created.GetProperty("documentId").GetGuid(), created.GetProperty("id").GetGuid());
         using var scope = App.Services.CreateScope();
@@ -691,7 +1060,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
             db.Evidences.Add(new EvidenceItem
             {
                 Id = evidenceId, VersionId = evidenceVersion, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Ordinal = i + 1,
-                Key = $"e{i + 1}", Kind = EvidenceKind.Requirement, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = statement,
+                Key = $"e{i + 1}", Kind = items[i].Kind, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = statement,
                 Content = DocumentEvidenceCodec.EncodeContent(content),
             });
         }

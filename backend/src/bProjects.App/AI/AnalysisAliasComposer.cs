@@ -16,10 +16,13 @@ namespace bProjects.App.AI;
 /// Esito della composizione. <see cref="Output"/> è valorizzato solo se l'esito è riutilizzabile (Complete o ValidIncomplete); un rifiuto porta le
 /// violazioni (alias e percorso) e il codice permanente. <see cref="Validation"/> è l'esito dei validatori di dominio sul canonico composto.
 /// <see cref="DuplicateKeys"/> (T130) è valorizzato solo se l'UNICA causa del rifiuto sono chiavi locali duplicate: segnale tipizzato per il retry guidato.
+/// <see cref="GapAssessments"/> e <see cref="GapAssessmentsHash"/> (T136) sono valorizzati solo per il contratto alias-2: i record `gap-assessment-1` accettati (interpretazione
+/// AI non validata semanticamente) e l'hash della loro forma canonica.
 /// </summary>
 public sealed record AliasComposition(
     ReconciliationOutcome Outcome, string? ErrorCode, IReadOnlyList<string> Violations, SingleCallOutput? Output, ReconciliationValidation? Validation,
-    string? AiOutputHash, string CatalogHash, string? CanonicalHash, IReadOnlyList<string>? DuplicateKeys = null)
+    string? AiOutputHash, string CatalogHash, string? CanonicalHash, IReadOnlyList<string>? DuplicateKeys = null,
+    IReadOnlyList<AiGapAssessment>? GapAssessments = null, string? GapAssessmentsHash = null)
 {
     public bool IsReusableWorkOutput => Outcome != ReconciliationOutcome.Invalid;
 }
@@ -28,6 +31,11 @@ public static class AnalysisAliasComposer
 {
     public const string AlgorithmVersion = "analysis-single-v2";
     public const string ValidationVersion = "document-analysis-validation-v2";
+
+    /// <summary>Single-call v5 (T136, contracts/ai-workflow.md §13.1): DTO alias-2 con valutazioni dei Gap e coerenze §13.4. I valori v2 sopra restano storici e invariati.</summary>
+    public const string AlgorithmVersionV3 = "analysis-single-v3";
+
+    public const string ValidationVersionV3 = "document-analysis-validation-v3";
 
     /// <summary>`canon-ids-1`: UUIDv8 da SHA-256(JCS(["canon-ids-1", kind, rootId, sourceHash, localKey]))[0..16], kind in {item, conflict} (le alternative sono item).</summary>
     public static Guid CanonicalId(string kind, Guid rootId, string sourceHash, string localKey)
@@ -51,13 +59,44 @@ public static class AnalysisAliasComposer
     public static string CanonicalHash(SingleCallOutput output) => CanonicalJson.Sha256Hex(ReconciliationCodec.Encode(output));
 
     /// <summary>
+    /// `canonicalHash` del contratto alias-2: copre il canonico composto E le valutazioni dei Gap (<paramref name="gapAssessmentsHash"/>), che non entrano in AnalysisContent 1.1.0.
+    /// Forma distinta da quella di alias-1: un canonico alias-2 non coincide mai con uno alias-1, neppure a valutazioni vuote.
+    /// </summary>
+    public static string CanonicalHash(SingleCallOutput output, string gapAssessmentsHash)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentException.ThrowIfNullOrEmpty(gapAssessmentsHash);
+        var node = new JsonObject
+        {
+            ["contract"] = AnalysisAliasContracts.ContractValueV2, ["gapAssessmentsHash"] = gapAssessmentsHash, ["output"] = JsonNode.Parse(ReconciliationCodec.Encode(output)),
+        };
+        return CanonicalJson.HashText(CanonicalJson.Canonicalize(node.ToJsonString()));
+    }
+
+    /// <summary>
     /// Decodifica strict del DTO e composizione. Un catalogo non coincidente con lo snapshot congelato (manomissione, altro snapshot) è
     /// <c>checkpoint_incompatible</c> (eccezione): non è un errore del modello. Un output del modello non conforme è un rifiuto permanente.
+    /// Il contratto del DTO (alias-1 o alias-2) è quello del catalogo: il decoder dell'altro contratto non viene mai usato.
     /// </summary>
     public static AliasComposition Compose(
         string aiJson, AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string? batchKey = null, string? inputHash = null, string? expectedCanonicalHash = null)
     {
         VerifyCatalog(catalog, input);
+        if (catalog.Data.ContractVersion == AnalysisAliasContracts.SchemaVersionV2)
+        {
+            AiAnalysisOutputV2 v2;
+            try
+            {
+                v2 = AnalysisAliasContracts.DecodeV2(aiJson);
+            }
+            catch (JsonException e)
+            {
+                return Reject(catalog, null, DocumentWorkException.WorkOutputInvalid, [$"JSON non conforme a {AnalysisAliasContracts.SchemaVersionV2}: {e.Message}"]);
+            }
+
+            return new Builder(AsAlias1(v2), v2.GapAssessments, AnalysisAliasContracts.Hash(v2), catalog, input, batchKey ?? input.BatchKey, inputHash ?? input.InputHash).Run(expectedCanonicalHash);
+        }
+
         AiAnalysisOutput dto;
         try
         {
@@ -68,22 +107,41 @@ public static class AnalysisAliasComposer
             return Reject(catalog, null, DocumentWorkException.WorkOutputInvalid, [$"JSON non conforme a {AnalysisAliasContracts.SchemaVersion}: {e.Message}"]);
         }
 
-        return new Builder(dto, catalog, input, batchKey ?? input.BatchKey, inputHash ?? input.InputHash).Run(expectedCanonicalHash);
+        return new Builder(dto, null, AnalysisAliasContracts.Hash(dto), catalog, input, batchKey ?? input.BatchKey, inputHash ?? input.InputHash).Run(expectedCanonicalHash);
     }
 
     public static AliasComposition Compose(
         AiAnalysisOutput dto, AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string? batchKey = null, string? inputHash = null, string? expectedCanonicalHash = null)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        VerifyCatalog(catalog, input);
-        return new Builder(dto, catalog, input, batchKey ?? input.BatchKey, inputHash ?? input.InputHash).Run(expectedCanonicalHash);
+        VerifyCatalog(catalog, input, AnalysisAliasContracts.SchemaVersion);
+        return new Builder(dto, null, AnalysisAliasContracts.Hash(dto), catalog, input, batchKey ?? input.BatchKey, inputHash ?? input.InputHash).Run(expectedCanonicalHash);
     }
 
-    private static void VerifyCatalog(AnalysisAliasCatalog catalog, DocumentAnalysisInput input)
+    /// <summary>Composizione del DTO `document-analysis-alias-2` (T136): come alias-1 più le valutazioni dei Gap, la completezza v5 e le coerenze di §13.4.</summary>
+    public static AliasComposition Compose(
+        AiAnalysisOutputV2 dto, AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string? batchKey = null, string? inputHash = null, string? expectedCanonicalHash = null)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        VerifyCatalog(catalog, input, AnalysisAliasContracts.SchemaVersionV2);
+        return new Builder(AsAlias1(dto), dto.GapAssessments, AnalysisAliasContracts.Hash(dto), catalog, input, batchKey ?? input.BatchKey, inputHash ?? input.InputHash).Run(expectedCanonicalHash);
+    }
+
+    /// <summary>Gli otto campi comuni di alias-2 come DTO alias-1: il Builder condivide la composizione e riceve a parte le valutazioni e l'hash del DTO originale.</summary>
+    private static AiAnalysisOutput AsAlias1(AiAnalysisOutputV2 dto) => new()
+    {
+        Contract = AnalysisAliasContracts.ContractValue, Visited = dto.Visited, NoFindings = dto.NoFindings, Items = dto.Items, Conflicts = dto.Conflicts, Findings = dto.Findings,
+        KnownRelationChecks = dto.KnownRelationChecks, Patches = dto.Patches,
+    };
+
+    /// <summary>Il catalogo deve essere la funzione pura dello snapshot per la sua versione di contratto; <paramref name="expectedContract"/> vincola il contratto del DTO ricevuto.</summary>
+    private static void VerifyCatalog(AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string? expectedContract = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(input);
-        if (AnalysisAliasCatalog.Build(input).CatalogHash != catalog.CatalogHash)
+        var contract = catalog.Data.ContractVersion;
+        if (contract is not (AnalysisAliasContracts.SchemaVersion or AnalysisAliasContracts.SchemaVersionV2) || (expectedContract is not null && contract != expectedContract)
+            || AnalysisAliasCatalog.Build(input, contract).CatalogHash != catalog.CatalogHash)
         {
             throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il catalogo alias non coincide con lo snapshot congelato del run.");
         }
@@ -95,7 +153,8 @@ public static class AnalysisAliasComposer
 
     private sealed record ItemRecord(string Key, string Path, AiItem Dto, Guid Id, List<AliasEvidenceEntry> Evidence);
 
-    private sealed class Builder(AiAnalysisOutput dto, AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string batchKey, string inputHash)
+    private sealed class Builder(
+        AiAnalysisOutput dto, IReadOnlyList<AiGapAssessment>? gapAssessments, string aiHash, AnalysisAliasCatalog catalog, DocumentAnalysisInput input, string batchKey, string inputHash)
     {
         private readonly List<string> _errors = [];
         private readonly List<string> _duplicateKeys = [];
@@ -104,7 +163,6 @@ public static class AnalysisAliasComposer
 
         public AliasComposition Run(string? expectedCanonicalHash)
         {
-            var aiHash = AnalysisAliasContracts.Hash(dto);
             var visitedA = Visited(dto.Visited.A, "visited.A");
             var visitedB = Visited(dto.Visited.B, "visited.B");
 
@@ -141,6 +199,7 @@ public static class AnalysisAliasComposer
             Findings(aiHash, candidateIds, perView);
             KnownRelationChecks(aiHash, candidateIds, perView);
             var patchDrafts = PatchDrafts(proposalKeys);
+            var gapContext = GapAssessments(sections, conflicts);
 
             if (_errors.Count > 0)
             {
@@ -226,20 +285,86 @@ public static class AnalysisAliasComposer
                 ],
             };
 
-            var validation = DocumentAnalysisValidator.Validate(ReconciliationCodec.Encode(output), input.Snapshot, input.Facts, batchKey, inputHash);
+            var validation = DocumentAnalysisValidator.Validate(ReconciliationCodec.Encode(output), input.Snapshot, input.Facts, batchKey, inputHash, gapContext);
             if (!validation.IsReusableWorkOutput)
             {
                 return Reject(catalog, aiHash, validation.ErrorCode ?? DocumentWorkException.WorkOutputInvalid, validation.Violations, validation);
             }
 
-            var canonicalHash = CanonicalHash(output);
+            var gapHash = gapAssessments is null ? null : GapAssessmentRules.Hash(gapAssessments);
+            var canonicalHash = gapHash is null ? CanonicalHash(output) : CanonicalHash(output, gapHash);
             if (expectedCanonicalHash is not null && expectedCanonicalHash != canonicalHash)
             {
                 return Reject(catalog, aiHash, DocumentWorkException.IntegrityConflict, ["canonicalHash: il canonico ricomposto è diverso da quello committato."], validation);
             }
 
-            return new AliasComposition(validation.Outcome, null, [], output, validation, aiHash, catalog.CatalogHash, canonicalHash);
+            return new AliasComposition(
+                validation.Outcome, null, [], output, validation, aiHash, catalog.CatalogHash, canonicalHash, null, gapAssessments,
+                gapHash);
         }
+
+        /// <summary>
+        /// Solo contratto alias-2 (T136, §13.2/§13.4): verifica forma e riferimenti dei record `gap-assessment-1` contro l'input assegnato e le chiavi dell'output (un record
+        /// mancante NON è un rifiuto: diventa <c>gap_not_assessed</c> nella completezza), applica le coerenze verificabili e restituisce il contesto della completezza v5.
+        /// Il server non valuta mai pertinenza, prossimità o correttezza del riscontro, e non aggiunge alcun supporto: gli item restano quelli dichiarati dal modello.
+        /// </summary>
+        private GapAssessmentContext? GapAssessments(List<(string Name, List<ItemRecord> Items)> sections, List<(AiConflict Dto, Guid Id, List<ItemRecord> Alternatives)> conflicts)
+        {
+            if (gapAssessments is null)
+            {
+                return null;
+            }
+
+            var assigned = GapAssessmentRules.Assigned(catalog);
+            var openQuestionKeys = sections.Single(s => s.Name == "openQuestions").Items.Select(i => i.Key).ToList();
+            _errors.AddRange(GapAssessmentRules.Check(gapAssessments, assigned, openQuestionKeys, [.. dto.Conflicts.Select(c => c.Key)], allowMissing: true));
+            Coherence(sections, conflicts);
+            var gapIds = catalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).Select(e => e.EvidenceId).ToHashSet();
+            var assessed = gapAssessments.Select(r => catalog.Evidence(r.Gap)).Where(e => e is { Kind: EvidenceKind.Gap }).Select(e => e!.EvidenceId).ToHashSet();
+            return new GapAssessmentContext(gapIds, assessed, GapAssessmentRules.Hash(gapAssessments));
+        }
+
+        /// <summary>
+        /// §13.4, solo alias-2. (1) Un finding esplicito <c>Contradicts</c>/<c>AlternativeTo</c> con esito Open richiede un conflitto che citi, nelle sue alternative, entrambe le
+        /// evidenze endpoint (le fonti seguono dalle evidenze citate): il server verifica il collegamento ma non crea il conflitto. (2) Un item ordinario identico a un'alternativa
+        /// (stesso testo dopo la sola normalizzazione dei newline, stessa classificazione, stesso insieme di EvidenceId) è rifiutato. Nessun fuzzy matching né giudizio semantico:
+        /// parafrasi e contraddizioni non dichiarate restano al gate semantico.
+        /// </summary>
+        private void Coherence(List<(string Name, List<ItemRecord> Items)> sections, List<(AiConflict Dto, Guid Id, List<ItemRecord> Alternatives)> conflicts)
+        {
+            for (var i = 0; i < dto.Findings.Count; i++)
+            {
+                var f = dto.Findings[i];
+                if (f.Outcome != AiFindingOutcome.Open || f.Type is not (EvidenceRelationType.Contradicts or EvidenceRelationType.AlternativeTo) || f.Left == f.Right
+                    || catalog.Evidence(f.Left) is null || catalog.Evidence(f.Right) is null)
+                {
+                    continue;
+                }
+
+                var represented = conflicts.Any(c =>
+                {
+                    var cited = c.Alternatives.SelectMany(a => a.Evidence).Select(e => e.Alias).ToHashSet(StringComparer.Ordinal);
+                    return cited.Contains(f.Left) && cited.Contains(f.Right);
+                });
+                if (!represented)
+                {
+                    _errors.Add($"findings[{i}]: finding {f.Type} con esito Open senza un conflitto che citi nelle alternative entrambe le evidenze {f.Left} e {f.Right} (conflitto non rappresentato).");
+                }
+            }
+
+            var alternatives = conflicts.SelectMany(c => c.Alternatives).ToList();
+            foreach (var ordinary in sections.SelectMany(s => s.Items))
+            {
+                var text = NormalizeNewlines(ordinary.Dto.Text);
+                var ids = ordinary.Evidence.Select(e => e.EvidenceId).ToHashSet();
+                foreach (var alternative in alternatives.Where(a => a.Dto.Classification == ordinary.Dto.Classification && NormalizeNewlines(a.Dto.Text) == text && a.Evidence.Select(e => e.EvidenceId).ToHashSet().SetEquals(ids)))
+                {
+                    _errors.Add($"{ordinary.Path}: l'elemento {ordinary.Key} duplica l'alternativa {alternative.Key} ({alternative.Path}): stesso testo, classificazione ed evidenze; le alternative di un conflitto vanno solo in conflicts[].alternatives.");
+                }
+            }
+        }
+
+        private static string NormalizeNewlines(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
         private void DuplicateKey(string key, string error)
         {

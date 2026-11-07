@@ -215,7 +215,8 @@ public static class DocumentAnalysisBase
 /// </summary>
 public static class DocumentAnalysisValidator
 {
-    public static ReconciliationValidation Validate(string responseText, ReconciliationSnapshot snapshot, DocumentAnalysisFacts facts, string batchKey, string inputHash)
+    public static ReconciliationValidation Validate(
+        string responseText, ReconciliationSnapshot snapshot, DocumentAnalysisFacts facts, string batchKey, string inputHash, GapAssessmentContext? gapAssessments = null)
     {
         SingleCallOutput? decoded = null;
         try
@@ -228,7 +229,7 @@ public static class DocumentAnalysisValidator
         }
 
         var baseState = decoded is null ? new ReconciliationBase(new string('0', 64), new Dictionary<string, string>()) : DocumentAnalysisBase.Compute(decoded, snapshot);
-        var result = ReconciliationValidator.ValidateSingleCall(responseText, snapshot, baseState, facts);
+        var result = ReconciliationValidator.ValidateSingleCall(responseText, snapshot, baseState, facts, gapAssessments);
         if (result.Output is null)
         {
             return result;
@@ -281,10 +282,7 @@ public static class DocumentAnalysisValidator
 
         var completion = result.Completion!;
         var all = completion.Gaps.Concat(gaps).ToList();
-        var hash = CanonicalJson.HashText(ReconciliationCodec.Canonical(new
-        {
-            expected = completion.ExpectedEntryIds, visitedA = completion.VisitedEntryIdsA, visitedB = completion.VisitedEntryIdsB, missing = completion.MissingEntryIds, gaps = all,
-        }));
+        var hash = ReconciliationCompletion.CoverageHash(completion.ExpectedEntryIds, completion.VisitedEntryIdsA, completion.VisitedEntryIdsB, completion.MissingEntryIds, all, gapAssessments);
         return result with { Outcome = ReconciliationOutcome.ValidIncomplete, Completion = completion with { IsComplete = false, Gaps = all, CoverageHash = hash } };
     }
 }
@@ -334,6 +332,20 @@ public sealed class DocumentAnalysisWorkflow(
 
     public static string InstructionsV3 => PromptV3.Value;
 
+    // v5 (T136, contracts/ai-workflow.md §13.1): percorso a chiamata singola con valutazione dei Gap (prompt document-analysis-v4, schema document-analysis-alias-2, contract
+    // alias-2, algoritmo analysis-single-v3, validazione document-analysis-validation-v3). La definizione esiste ed è riconosciuta da ContractOf, ma NON è instradata per nuove
+    // richieste né congelata da SourceSnapshotStore: l'attivazione (routing, freeze, gerarchia v5) è T141. Oltre una chiamata la v5 fallisce finché non esiste la gerarchia (T138).
+    public const string DefinitionVersionV5 = "project-analysis-documents-v5";
+    public const string PromptVersionV4 = "document-analysis-v4";
+    public const string AlgorithmVersionV5 = AnalysisAliasComposer.AlgorithmVersionV3;
+    public const string SchemaNameV5 = "document_analysis_alias_2";
+    public const string SchemaVersionV5 = AnalysisAliasContracts.SchemaVersionV2;
+    public const string ValidationVersionV5 = AnalysisAliasComposer.ValidationVersionV3;
+
+    private static readonly Lazy<string> PromptV4 = new(() => ConversationalAgent.LoadPrompt("document-analysis-v4.md"));
+
+    public static string InstructionsV4 => PromptV4.Value;
+
     // v4 (T131, contracts/ai-workflow.md §11): percorso alias v3 se il payload entra in una chiamata, altrimenti riconciliazione gerarchica con alias nel motore condiviso
     // (prompt document-reconcile-v3, DTO reconcile-alias-1). Le nuove richieste di Analizza congelano la v4; v2 e v3 storici o in volo restano invariati.
     public const string DefinitionVersionV4 = "project-analysis-documents-v4";
@@ -359,6 +371,15 @@ public sealed class DocumentAnalysisWorkflow(
         if (run.WorkflowDefinitionVersion == DefinitionVersionV3 && alias)
         {
             return 3;
+        }
+
+        // v5 (T136): ogni versione del single-call con valutazione dei Gap deve coincidere; la parte gerarchica v5 (document-reconcile-v4, reconcile-alias-2) si aggiunge con T138.
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && run.PromptVersionMatches("analysis", PromptVersionV4)
+            && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
+            && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
+            && run.PromptVersionMatches("validation", ValidationVersionV5))
+        {
+            return 5;
         }
 
         // v4: le versioni del percorso alias più quelle della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch).
@@ -440,9 +461,12 @@ public sealed class DocumentAnalysisWorkflow(
     /// (l'esito incompatibile è del claim).
     /// </summary>
     public RegimePayload BuildRegimePayload(string? definitionVersion) =>
-        definitionVersion is DefinitionVersionV3 or DefinitionVersionV4
-            ? new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight)
-            : BuildRegimePayload();
+        definitionVersion switch
+        {
+            DefinitionVersionV3 or DefinitionVersionV4 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight),
+            DefinitionVersionV5 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136): schema del DTO alias-2
+            _ => BuildRegimePayload(),
+        };
 
     private async Task RunGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentLimits limits, CancellationToken ct)
     {
@@ -525,10 +549,12 @@ public sealed class DocumentAnalysisWorkflow(
     private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
-        var catalog = AnalysisAliasCatalog.Build(input);
+        // v5 (T136): catalogo con il contratto alias-2 nell'identità, prompt document-analysis-v4 e schema alias-2; v3/v4 invariati.
+        var gaps = contract == 5;
+        var catalog = AnalysisAliasCatalog.Build(input, gaps ? SchemaVersionV5 : SchemaVersionV3);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
-        var instructions = InstructionsV3;
-        var schema = AnalysisAliasContracts.JsonSchema();
+        var instructions = gaps ? InstructionsV4 : InstructionsV3;
+        var schema = gaps ? AnalysisAliasContracts.JsonSchemaV2() : AnalysisAliasContracts.JsonSchema();
         var messages = DocumentAnalysisAliasPlan.BuildMessages(input, catalog);
         var measure = await factory.Preflight.MeasureAsync(
             new DocumentPayload(AiPhase.Analysis, instructions, messages, structured ? schema.GetRawText() : null), ct);
@@ -548,7 +574,9 @@ public sealed class DocumentAnalysisWorkflow(
 
             throw new DocumentWorkException(
                 DocumentWorkException.CallLimitExceeded,
-                $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
+                gaps
+                    ? $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione gerarchica v5 non è ancora disponibile (T138)."
+                    : $"Le fonti selezionate ({measure.Tokens} token) superano la capacità dell'analisi a singola chiamata ({measure.InputBudgetTokens} token): la riconciliazione di più unità non è ancora disponibile.");
         }
 
         using var scope = scopes.CreateScope();
@@ -556,8 +584,9 @@ public sealed class DocumentAnalysisWorkflow(
         var writer = new CheckpointWriter(claim.RunId, claim.LeaseOwner, claim.FencingToken);
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisAliasPlan(
-            claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes, contract == 4 ? DefinitionVersionV4 : DefinitionVersionV3);
-        var maxCalls = contract == 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
+            claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes,
+            contract switch { 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 });
+        var maxCalls = contract >= 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
         try

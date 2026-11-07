@@ -27,6 +27,12 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
     private readonly IServiceScopeFactory _scopes;
     private readonly string _manifestIdentity;
     private readonly string _definition;
+    private readonly bool _gaps;
+    private readonly string _prompt;
+    private readonly string _schemaVersion;
+    private readonly string _schemaName;
+    private readonly string _algorithm;
+    private readonly string _validation;
 
     public DocumentAnalysisAliasPlan(
         AnalysisRunClaim claim, DocumentAnalysisInput input, AnalysisAliasCatalog catalog, IReadOnlyList<ChatMessage> messages, string instructions,
@@ -35,6 +41,11 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
     {
         _claim = claim;
         _definition = definition;
+        // v5 (T136): la definizione congelata sceglie l'intero profilo di versioni; v3/v4 conservano i valori storici.
+        _gaps = definition == DocumentAnalysisWorkflow.DefinitionVersionV5;
+        (_prompt, _schemaVersion, _schemaName, _algorithm, _validation) = _gaps
+            ? (DocumentAnalysisWorkflow.PromptVersionV4, DocumentAnalysisWorkflow.SchemaVersionV5, DocumentAnalysisWorkflow.SchemaNameV5, DocumentAnalysisWorkflow.AlgorithmVersionV5, DocumentAnalysisWorkflow.ValidationVersionV5)
+            : (DocumentAnalysisWorkflow.PromptVersionV3, DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.SchemaNameV3, DocumentAnalysisWorkflow.AlgorithmVersionV3, DocumentAnalysisWorkflow.ValidationVersionV3);
         _input = input;
         _catalog = catalog;
         _messages = messages;
@@ -44,30 +55,30 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
         var settings = factory.Options.ForPhase(AiPhase.Analysis);
         var configHash = DocumentAnalysisWorkflow.Sha(JsonSerializer.Serialize(new
         {
-            prompt = DocumentAnalysisWorkflow.PromptVersionV3, instructions = DocumentAnalysisWorkflow.Sha(instructions), schema = DocumentAnalysisWorkflow.SchemaVersionV3,
-            catalog = AnalysisAliasCatalog.Version, canonIds = AnalysisAliasCatalog.CanonIdsVersion, validation = DocumentAnalysisWorkflow.ValidationVersionV3, structured,
+            prompt = _prompt, instructions = DocumentAnalysisWorkflow.Sha(instructions), schema = _schemaVersion,
+            catalog = AnalysisAliasCatalog.Version, canonIds = AnalysisAliasCatalog.CanonIdsVersion, validation = _validation, structured,
             model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = measure.InputBudgetTokens,
         }));
         Agent = new BatchAgentSpec(
             "DocumentAnalysis", DocumentAnalysisWorkflow.AgentId, instructions,
-            structured ? client.CreateChatOptions(schema, DocumentAnalysisWorkflow.SchemaNameV3, temperature: 0.1f, phase: AiPhase.Analysis) : client.CreateChatOptions(temperature: 0.1f, phase: AiPhase.Analysis),
+            structured ? client.CreateChatOptions(schema, _schemaName, temperature: 0.1f, phase: AiPhase.Analysis) : client.CreateChatOptions(temperature: 0.1f, phase: AiPhase.Analysis),
             AiPhase.Analysis, measure.Profile.Fingerprint);
 
         var policyHash = DocumentAnalysisWorkflow.Sha("document-analysis-policy-v1");
         var planJson = new JsonObject
         {
-            ["algorithm"] = DocumentAnalysisWorkflow.AlgorithmVersionV3,
+            ["algorithm"] = _algorithm,
             ["batches"] = new JsonArray(JsonNode.Parse(InputIdsJson())!),
             ["catalog"] = catalog.RunIndependentHash,
             ["definition"] = definition,
             ["graph"] = new JsonArray(DocumentBatchWorkflow.Stages.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()),
         }.ToJsonString();
         Manifest = new WorkManifestInput(
-            configHash, input.Snapshot.SourceHash, measure.Profile.Fingerprint, definition, DocumentAnalysisWorkflow.AlgorithmVersionV3, policyHash, planJson);
+            configHash, input.Snapshot.SourceHash, measure.Profile.Fingerprint, definition, _algorithm, policyHash, planJson);
         _manifestIdentity = CanonicalJson.Sha256Hex(JsonSerializer.Serialize(new
         {
             configHash, source = input.Snapshot.SourceHash, runtime = measure.Profile.Fingerprint, definition,
-            algorithm = DocumentAnalysisWorkflow.AlgorithmVersionV3, policy = policyHash, plan = JsonDocument.Parse(planJson).RootElement,
+            algorithm = _algorithm, policy = policyHash, plan = JsonDocument.Parse(planJson).RootElement,
         }));
     }
 
@@ -76,7 +87,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
 
     public WorkManifestInput Manifest { get; }
 
-    public WorkLookupExpectation Expectation => new(DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.ValidationVersionV3);
+    public WorkLookupExpectation Expectation => new(_schemaVersion, _validation);
 
     public BatchAgentSpec Agent { get; }
 
@@ -147,7 +158,9 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
             }
         }
 
-        text.Append("\nRispondi ora con l'unico oggetto JSON `alias-1`.");
+        text.Append(catalog.Data.ContractVersion == AnalysisAliasContracts.SchemaVersionV2
+            ? "\nRispondi ora con l'unico oggetto JSON `alias-2`."
+            : "\nRispondi ora con l'unico oggetto JSON `alias-1`.");
         var payload = new ChatMessage(ChatRole.User, text.ToString());
         if (documentSpans.Count > 0)
         {
@@ -170,7 +183,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
         var provenance = _measure.Quality == TokenCountQuality.Measured ? "measured" : "calibrated_upper_bound";
         return new(new DerivedBatchInput(
             batchId, DocumentAnalysisWorkflow.BatchStage, null, null, null, ordinal, [], InputIdsJson(), _measure.Tokens, provenance, inputHash,
-            DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.PromptVersionV3));
+            _schemaVersion, _prompt));
     }
 
     public ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) => new(_messages);
@@ -188,7 +201,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
         var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, kind = retry.Kind.ToString(), items = retry.Items.Count, firstOutputHash = retry.OutputHash });
         return new DerivedBatchInput(
             id, GuidedRetryStage, null, null, null, 1, [], inputs, null, "calibrated_upper_bound", DocumentAnalysisWorkflow.Sha($"guided-retry-input|{batch.InputHash}"),
-            DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.PromptVersionV3);
+            _schemaVersion, _prompt);
     }
 
     /// <summary>
@@ -275,32 +288,43 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
     private ValidatedBatch ValidateCore(BatchRef batch, string responseText, bool allowRetry)
     {
         var composition = AnalysisAliasComposer.Compose(responseText, _catalog, _input);
-        if (allowRetry)
+        if (allowRetry && !_gaps)
         {
+            // v5 (T136): nessun retry guidato finché non esiste il protocollo informato (T137); un rifiuto o un incompleto restano la validazione ordinaria.
             ThrowIfRetryable(composition);
         }
 
         Require(composition);
 
-        var dto = AnalysisAliasContracts.Decode(responseText);
+        var ai = _gaps ? AnalysisAliasContracts.Canonical(AnalysisAliasContracts.DecodeV2(responseText)) : AnalysisAliasContracts.Canonical(AnalysisAliasContracts.Decode(responseText));
         var completion = composition.Validation!.Completion!;
         var payload = new JsonObject
         {
-            ["schemaVersion"] = DocumentAnalysisWorkflow.SchemaVersionV3,
+            ["schemaVersion"] = _schemaVersion,
             ["outcome"] = composition.Outcome.ToString(),
             ["gaps"] = new JsonArray([.. completion.Gaps.Select(g => (JsonNode)JsonValue.Create(g.Code + ": " + g.Detail)!)]),
             ["coverageHash"] = completion.CoverageHash,
             ["aiOutputHash"] = composition.AiOutputHash,
             ["catalogHash"] = composition.CatalogHash,
             ["canonicalHash"] = composition.CanonicalHash,
-            ["ai"] = JsonNode.Parse(AnalysisAliasContracts.Canonical(dto)),
+            ["ai"] = JsonNode.Parse(ai),
             ["catalog"] = JsonNode.Parse(_catalog.Encode()),
-        }.ToJsonString();
+        };
+        if (_gaps)
+        {
+            // T136 (§13.5): valutazioni `gap-assessment-1` in forma canonica (ordinate per Gap) e relativo hash: sono nel payload e quindi in OutputHash/PayloadHash; riferimenti di batch e catalogo
+            // sono quelli del WorkOutput e del payload. Alias risolvibili solo nel catalogo del payload: nessun id duplicato qui.
+            payload["gapAssessmentsVersion"] = GapAssessmentRules.Version;
+            payload["gapAssessments"] = JsonNode.Parse(GapAssessmentRules.Canonical(composition.GapAssessments!));
+            payload["gapAssessmentsHash"] = composition.GapAssessmentsHash;
+        }
+
+        var payloadJson = payload.ToJsonString();
         var covered = JsonSerializer.Serialize(_input.Evidence.Select(e => e.EvidenceId.ToString("D")));
         var maps = JsonSerializer.Serialize(new { evidenceMap = composition.Output!.EvidenceMap.Select(m => new { itemId = m.ItemId.ToString("D"), evidenceIds = m.EvidenceIds.Select(g => g.ToString("D")) }) });
         var output = new WorkOutputInput(
-            batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, maps, null,
-            DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.ValidationVersionV3, null);
+            batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payloadJson), payloadJson, null, null, covered, maps, null,
+            _schemaVersion, _validation, null);
         return new ValidatedBatch(output);
     }
 
@@ -327,17 +351,20 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
             ?? throw new DocumentWorkException(DocumentWorkException.CoverageIncomplete, "Assemble senza l'output dell'analisi: nessun risultato da committare.");
         JsonElement root;
         string catalogHash, aiOutputHash, canonicalHash, catalogJson, aiJson;
+        string? gapHash, gapJson;
         try
         {
             using var document = JsonDocument.Parse(output.PayloadJson ?? throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Payload mancante."));
             root = document.RootElement.Clone();
-            if (root.GetProperty("schemaVersion").GetString() != DocumentAnalysisWorkflow.SchemaVersionV3)
+            if (root.GetProperty("schemaVersion").GetString() != _schemaVersion)
             {
                 throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il WorkOutput non è del contratto con alias.");
             }
 
             (catalogHash, aiOutputHash, canonicalHash) = (root.GetProperty("catalogHash").GetString()!, root.GetProperty("aiOutputHash").GetString()!, root.GetProperty("canonicalHash").GetString()!);
             (catalogJson, aiJson) = (root.GetProperty("catalog").GetRawText(), root.GetProperty("ai").GetRawText());
+            gapHash = _gaps ? root.GetProperty("gapAssessmentsHash").GetString()! : null;
+            gapJson = _gaps ? root.GetProperty("gapAssessments").GetRawText() : null;
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
         {
@@ -345,11 +372,21 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IGuidedRet
         }
 
         var catalog = AnalysisAliasCatalog.Decode(catalogJson, catalogHash);
+        if (catalog.Data.ContractVersion != (_gaps ? DocumentAnalysisWorkflow.SchemaVersionV5 : DocumentAnalysisWorkflow.SchemaVersionV3))
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il catalogo del WorkOutput non è del contratto del run.");
+        }
+
         var composition = AnalysisAliasComposer.Compose(aiJson, catalog, _input, expectedCanonicalHash: canonicalHash);
         Require(composition);
         if (composition.AiOutputHash != aiOutputHash)
         {
             throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Il DTO committato ha un hash diverso da aiOutputHash.");
+        }
+
+        if (_gaps && (composition.GapAssessmentsHash != gapHash || CanonicalJson.Canonicalize(gapJson!) != GapAssessmentRules.Canonical(composition.GapAssessments!)))
+        {
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Le valutazioni dei Gap committate hanno un hash o una forma diversi da gapAssessmentsHash.");
         }
 
         return composition;

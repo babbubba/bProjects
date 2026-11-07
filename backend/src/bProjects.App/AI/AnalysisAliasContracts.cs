@@ -603,7 +603,8 @@ public static class GapAssessmentRules
     /// Include le violazioni di forma di <see cref="ValidateShape"/>. Elenco vuoto = nessuna violazione.
     /// </summary>
     public static IReadOnlyList<string> Check(
-        IReadOnlyList<AiGapAssessment> records, IReadOnlyDictionary<string, EvidenceKind> assigned, IReadOnlyCollection<string> openQuestionKeys, IReadOnlyCollection<string> conflictKeys)
+        IReadOnlyList<AiGapAssessment> records, IReadOnlyDictionary<string, EvidenceKind> assigned, IReadOnlyCollection<string> openQuestionKeys, IReadOnlyCollection<string> conflictKeys,
+        bool allowMissing = false)
     {
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(assigned);
@@ -645,13 +646,27 @@ public static class GapAssessmentRules
             }
         }
 
-        var assessed = records.Select(r => r.Gap).ToHashSet(StringComparer.Ordinal);
-        foreach (var gap in assigned.Where(kv => kv.Value == EvidenceKind.Gap && !assessed.Contains(kv.Key)).Select(kv => kv.Key).OrderBy(AnalysisAliasPattern.Number))
+        if (!allowMissing)
         {
-            problems.Add($"gapAssessments: manca il record per il Gap {gap}.");
+            foreach (var gap in MissingGaps(records, assigned))
+            {
+                problems.Add($"gapAssessments: manca il record per il Gap {gap}.");
+            }
         }
 
         return problems;
+    }
+
+    /// <summary>
+    /// Gap dell'input assegnato senza alcun record, in ordine di numero. Con <c>allowMissing</c> di <see cref="Check"/> (single-call v5, T136) un record mancante NON rende il DTO
+    /// invalido: il compositore lo riporta come obbligazione residua <c>gap_not_assessed</c> (output riutilizzabile ma incompleto), mai come rifiuto.
+    /// </summary>
+    public static IReadOnlyList<string> MissingGaps(IReadOnlyList<AiGapAssessment> records, IReadOnlyDictionary<string, EvidenceKind> assigned)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(assigned);
+        var assessed = records.Select(r => r.Gap).ToHashSet(StringComparer.Ordinal);
+        return [.. assigned.Where(kv => kv.Value == EvidenceKind.Gap && !assessed.Contains(kv.Key)).Select(kv => kv.Key).OrderBy(AnalysisAliasPattern.Number)];
     }
 
     /// <summary>Input assegnato di una chiamata singola: tutte le evidenze del catalogo con il loro tipo.</summary>
