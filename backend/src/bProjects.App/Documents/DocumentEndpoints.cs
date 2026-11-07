@@ -40,6 +40,7 @@ public static class ProjectDocumentEndpoints
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/blocks", ListBlocks);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/passages/{blockId:guid}", GetPassage);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/evidence/versions", EvidenceVersions);
+        group.MapPost("/documents/{documentId:guid}/versions/{version}/preparations", Reprocess);
         group.MapPost("/document-jobs/{jobId:guid}/retry", RetryParse);
         return app;
     }
@@ -398,7 +399,38 @@ public static class ProjectDocumentEndpoints
             return Problem(StatusCodes.Status400BadRequest, "idempotency_key_required", "Idempotency-Key mancante o non valida");
         }
 
-        var result = await preparations.RetryParseAsync(projectId, jobId, requestKey, requestedBy, ct);
+        return PreparationCommandResult(http, await preparations.RetryParseAsync(projectId, jobId, requestKey, requestedBy, ct));
+    }
+
+    /// <summary>
+    /// Rielaborazione della versione file (T094): nuova generazione candidata dello stesso documento, mai da GET. Idempotency-Key UUID obbligatoria;
+    /// 202 con job e preparazione collegati (replay: gli stessi), 409 se un'altra preparazione è aperta o la chiave è di un altro comando, 404 fuori dal progetto.
+    /// </summary>
+    private static async Task<IResult> Reprocess(
+        Guid projectId, Guid documentId, string version, HttpContext http, ClaimsPrincipal user, DocumentCatalog catalog, DocumentPreparationService preparations, CancellationToken ct)
+    {
+        if (!Guid.TryParse(user.FindFirstValue("sub"), out var requestedBy))
+        {
+            return Results.Unauthorized();
+        }
+
+        var found = await catalog.FindVersionAsync(projectId, documentId, version, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
+            || !Guid.TryParse(raw[0], out var requestKey) || requestKey == Guid.Empty)
+        {
+            return Problem(StatusCodes.Status400BadRequest, "idempotency_key_required", "Idempotency-Key mancante o non valida");
+        }
+
+        return PreparationCommandResult(http, await preparations.ReprocessAsync(projectId, found.Id, requestKey, requestedBy, ct));
+    }
+
+    private static IResult PreparationCommandResult(HttpContext http, PreparationRetryResult result)
+    {
         http.Response.Headers.CacheControl = "no-store";
         return result.Kind switch
         {

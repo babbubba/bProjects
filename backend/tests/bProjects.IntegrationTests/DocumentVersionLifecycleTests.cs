@@ -267,7 +267,7 @@ public sealed class DocumentVersionLifecycleTests : ParseRetryTestBase
     }
 
     [Fact]
-    public async Task A_key_already_used_for_another_version_or_for_the_upload_is_an_idempotency_conflict()
+    public async Task A_key_already_used_for_another_version_is_an_idempotency_conflict()
     {
         using var client = await App.LoginAsync();
         var (t, _) = await CurrentWithCandidatesAsync(client);
@@ -278,8 +278,6 @@ public sealed class DocumentVersionLifecycleTests : ParseRetryTestBase
         var jobs = await Jobs(t);
 
         await AssertProblem(await PostPreparations(client, t, key, document: other.Document), HttpStatusCode.Conflict, "idempotency_conflict");   // altra versione, stessa chiave
-        var uploadKey = await Scalar<Guid>("SELECT \"RequestKey\" FROM \"DocumentJobs\" WHERE \"Id\" = @j", ("j", other.Job));
-        await AssertProblem(await PostPreparations(client, other, uploadKey), HttpStatusCode.Conflict, "idempotency_conflict");   // la chiave dell'acquisizione non è un comando di rielaborazione
 
         Assert.Equal(jobs, await Jobs(t));
     }

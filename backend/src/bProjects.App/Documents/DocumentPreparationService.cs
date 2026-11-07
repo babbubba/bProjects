@@ -1,6 +1,7 @@
 using System.Text.Json;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace bProjects.App.Documents;
 
@@ -25,7 +26,7 @@ public sealed record PreparationRetryResult(
 
 /// <summary>
 /// Retry minimo del parsing (T116), servizio unico delle azioni di preparazione (T094 lo estende, senza un secondo percorso di retry).
-/// Un job Parse terminale fallito, oppure Completed con preparazione Incomplete, genera una NUOVA Preparation con un nuovo job Parse Queued
+/// Un job Parse terminale fallito, oppure Completed con preparazione Incomplete o Failed (estrazione/aggregazione non riuscite dopo il parsing), genera una NUOVA Preparation con un nuovo job Parse Queued
 /// collegati al precedente (<c>RetryOfId</c>), con t0 e cap di preparazione nuovi e un policy hash congelato adesso. Il vecchio root, il suo
 /// errore, i suoi output e le sue scadenze restano immutati; l'originale non viene riscritto. L'idempotenza è la chiave della richiesta,
 /// unica per progetto. Tutto avviene in una transazione breve sotto il lock di progetto; il lavoro vero lo esegue il worker del parsing.
@@ -35,11 +36,11 @@ public sealed class DocumentPreparationService(AppDbContext db, DocumentPolicySe
     public const int ParseMaxAttempts = 3;
 
     /// <summary>
-    /// Stato terminale ritentabile per il PM: job Failed, o job Completed la cui preparazione è Incomplete. Non dice nulla sulla presenza di una
+    /// Stato terminale ritentabile per il PM: job Failed, o job Completed la cui preparazione è Incomplete o Failed. Non dice nulla sulla presenza di una
     /// generazione successiva o di lavoro aperto: lo decide <see cref="RetryParseAsync"/> sotto lock (e <see cref="IsRetryAllowedAsync"/> per le viste).
     /// </summary>
     public static bool IsRetryableTerminal(DocumentJobStatus job, PreparationStatus preparation) =>
-        job == DocumentJobStatus.Failed || (job == DocumentJobStatus.Completed && preparation == PreparationStatus.Incomplete);
+        job == DocumentJobStatus.Failed || (job == DocumentJobStatus.Completed && preparation is PreparationStatus.Incomplete or PreparationStatus.Failed);
 
     /// <summary>Azione «retry» ammessa per la preparazione: ultima generazione della versione, nessun lavoro aperto e job Parse terminale ritentabile.</summary>
     public async Task<bool> IsRetryAllowedAsync(DocumentPreparation preparation, CancellationToken ct)
@@ -107,6 +108,55 @@ public sealed class DocumentPreparationService(AppDbContext db, DocumentPolicySe
             return new(PreparationRetryKind.Conflict, "job_superseded");   // il terminale è già stato superato da un'altra generazione
         }
 
+        return await CreateGenerationAsync(transaction, policy, projectId, previous, target.Id, siblings.Max(p => p.Generation) + 1, requestKey, requestedBy, ct);
+    }
+
+    /// <summary>
+    /// Rielaborazione manuale della versione file (POST .../preparations, T094): nuova Generation della stessa versione, collegata all'ultima, anche
+    /// se questa è Ready (diventa una candidata: il puntatore corrente non cambia finché il PM non promuove, T095) oppure Failed/Incomplete oltre il solo
+    /// parsing. Stessa idempotenza, stesso lock, stesso nuovo t0 e stessa creazione del retry di un job Parse: un solo percorso, nessun secondo scheduler.
+    /// Nulla viene riusato dalle generazioni precedenti (l'import degli output compatibili è di T099).
+    /// </summary>
+    public async Task<PreparationRetryResult> ReprocessAsync(Guid projectId, Guid documentVersionId, Guid requestKey, Guid requestedBy, CancellationToken ct)
+    {
+        var (_, policy) = await policies.GetAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await ProjectLock.AcquireAsync(db, projectId, ct);
+
+        var generations = await db.DocumentPreparations.AsNoTracking().Where(p => p.ProjectId == projectId && p.DocumentVersionId == documentVersionId)
+            .OrderByDescending(p => p.Generation).ToListAsync(ct);
+        if (generations.Count == 0)
+        {
+            return new(PreparationRetryKind.NotFound);
+        }
+
+        var existing = await db.DocumentJobs.AsNoTracking().SingleOrDefaultAsync(j => j.ProjectId == projectId && j.RequestKey == requestKey, ct);
+        if (existing is not null)
+        {
+            // La stessa chiave risponde con gli stessi ID solo se ha già creato una generazione di QUESTA versione; l'acquisizione o altra versione = conflitto.
+            return existing.Kind == DocumentJobKind.Parse && existing.RetryOfId is not null && generations.Any(p => p.Id == existing.PreparationId)
+                ? await ViewAsync(PreparationRetryKind.Replayed, existing, ct)
+                : new(PreparationRetryKind.Conflict, "idempotency_conflict");
+        }
+
+        if (generations.Any(p => p.Status is PreparationStatus.Queued or PreparationStatus.Parsing or PreparationStatus.Extracting))
+        {
+            return new(PreparationRetryKind.Conflict, "preparation_active");
+        }
+
+        var latest = generations[0];
+        var parseJobId = await db.DocumentJobs.AsNoTracking().Where(j => j.PreparationId == latest.Id && j.Kind == DocumentJobKind.Parse).Select(j => j.Id).SingleAsync(ct);
+        return await CreateGenerationAsync(transaction, policy, projectId, latest, parseJobId, latest.Generation + 1, requestKey, requestedBy, ct);
+    }
+
+    /// <summary>
+    /// Crea la nuova Preparation Queued e il suo job Parse Queued, collegati ai precedenti, con t0 esplicito e cap e policy congelati adesso, e chiude
+    /// la transazione. È l'unico punto di creazione di una generazione dopo l'acquisizione: retry di un job e rielaborazione condividono ogni regola.
+    /// </summary>
+    private async Task<PreparationRetryResult> CreateGenerationAsync(
+        IDbContextTransaction transaction, DocumentPolicySnapshot policy, Guid projectId, DocumentPreparation previous, Guid previousParseJobId,
+        int generation, Guid requestKey, Guid requestedBy, CancellationToken ct)
+    {
         var now = await ProjectLock.NowAsync(db, ct);   // nuovo t0 esplicito: il cap non è quello del vecchio root
         var hardDeadline = now.AddSeconds(policy.Limits.PreparationDeadlineSeconds);
         var preparation = new DocumentPreparation
@@ -114,7 +164,7 @@ public sealed class DocumentPreparationService(AppDbContext db, DocumentPolicySe
             Id = Guid.NewGuid(),
             ProjectId = projectId,
             DocumentVersionId = previous.DocumentVersionId,
-            Generation = siblings.Max(p => p.Generation) + 1,
+            Generation = generation,
             Status = PreparationStatus.Queued,
             RetryOfId = previous.Id,
             RequestedAt = now,
@@ -135,7 +185,7 @@ public sealed class DocumentPreparationService(AppDbContext db, DocumentPolicySe
             Kind = DocumentJobKind.Parse,
             Status = DocumentJobStatus.Queued,
             RequestKey = requestKey,
-            RetryOfId = target.Id,
+            RetryOfId = previousParseJobId,
             RequestedBy = requestedBy,
             RequestedAt = now,
             DeadlineAt = hardDeadline,
@@ -156,7 +206,7 @@ public sealed class DocumentPreparationService(AppDbContext db, DocumentPolicySe
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         db.ChangeTracker.Clear();
-        return new(PreparationRetryKind.Created, null, job.Id, preparation.Id, preparation.Generation, target.Id, previous.Id, now, hardDeadline);
+        return new(PreparationRetryKind.Created, null, job.Id, preparation.Id, preparation.Generation, previousParseJobId, previous.Id, now, hardDeadline);
     }
 
     private async Task<PreparationRetryResult> ViewAsync(PreparationRetryKind kind, DocumentJob job, CancellationToken ct)
