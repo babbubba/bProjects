@@ -46,11 +46,12 @@ Ambiente: Windows 11, .NET 10.0.403, Node 26.13, PostgreSQL 18 in Docker locale,
 | Frontend Vitest | 429 (23 file) | 429 | 0 | 0 |
 | Build frontend Angular | OK; avviso: budget iniziale 650 kB superato di 386 byte (650,39 kB) | | | |
 | Playwright offline (1440 e 390 px) | 314 | 242 | 0 | 72 (stack reale/DGX) |
-| Playwright stack reale con LLM finto (backend, PostgreSQL, parser reali) | 15 | 14 | **1** | 0 |
+| Playwright stack reale con LLM finto, 1ª esecuzione, parser preesistente `bprojects-t055-parser` (obsoleto) | 17 | 14 | **1** (+2 non eseguiti dopo il fallimento) | 0 |
+| Playwright stack reale con LLM finto, **2ª esecuzione, parser ricostruito** (`bprojects-parser:rc-3819e30`, container `bprojects-rc-parser`) | 17 | **17** | 0 | 0 |
 
 T125: coperto dalla suite backend completa (0 fallimenti); la verifica reale N1–N3 è in `validation/I4-real-v3-N1-N3.md` e non è stata rieseguita.
 
-**Fallimento dello stack reale**: `document-security-stack.spec.ts:295` (egress/immagini remote) dà `Failed` invece di `Incomplete`. Causa ambientale nota, già descritta in `validation/verification.md` (punto 2): il container `bprojects-t055-parser` (creato il 2026-11-03) precede la correzione `31ef50e` (immagine Markdown in un paragrafo). **Non rieseguito con un parser ricostruito in questa sessione**: nessuna regressione di codice dimostrata, ma il test è **non superato** in questa esecuzione e va ripetuto con `E2E_STACK_PARSER_CONTAINER`/`E2E_STACK_PARSER_PORT` su un container ricostruito.
+**Fallimento dello stack reale**: `document-security-stack.spec.ts:295` (egress/immagini remote) dà `Failed` invece di `Incomplete`. Causa ambientale nota, già descritta in `validation/verification.md` (punto 2): il container `bprojects-t055-parser` (creato il 2026-11-03) precede la correzione `31ef50e` (immagine Markdown in un paragrafo). **Rieseguito con parser ricostruito (2026-11-08, nessun codice, test o criterio modificato)**: immagine `bprojects-parser:rc-3819e30` (id `sha256:68c89d2a…e9af`, target `runtime` costruito da `parser/` al commit `3819e30`, che include `31ef50e`), container temporaneo `bprojects-rc-parser` (porta 58301, `--read-only`, tmpfs `/tmp`, 2 CPU, 4 GB, stesso segreto interno del container preesistente, che non è stato modificato). Allineamento verificato: `sha256` di `/app/text_sources.py` nel container = `a0fac34f…d5f8` = quello di `parser/text_sources.py` nel repository (2 occorrenze di `unprocessed_markdown_image`; il container obsoleto ha hash `61966675…15ec` e 1 occorrenza). Selettori `E2E_STACK_PARSER_CONTAINER=bprojects-rc-parser`, `E2E_STACK_PARSER_PORT=58301`. Esiti: `document-security-stack.spec.ts:295` **PASS** da solo; suite completa dello stack reale **17/17 PASS** (10,5 min), nessun DGX. Il fallimento precedente era quindi ambientale. Il container `bprojects-rc-parser` è lasciato attivo per ulteriori prove.
 
 Accessibilità automatica (T107): `document-accessibility` fake (12 casi) e `document-accessibility-stack` (2 casi) superati; axe senza violazioni, nessuno scroll orizzontale, audit del focus.
 
@@ -60,7 +61,7 @@ Nessuna regressione di codice emersa. Nessun test o aspettativa modificati.
 
 ## 7. Test reali ancora necessari
 
-Prova T126 a modello scaricato sul router DGX (una inferenza alla volta, dopo decisione sul load endpoint); T067 (con browser reale), T082, T083, T090, T104, T109, T110; revisione umana T107; E2E PM T111; gate T114; ripetizione dello stack reale con parser aggiornato.
+Prova T126 a modello scaricato sul router DGX (una inferenza alla volta, dopo decisione sul load endpoint); T067 (con browser reale), T082, T083, T090, T104, T109, T110; revisione umana T107; E2E PM T111; gate T114.
 
 ## 8. Limiti semantici (T142/N4)
 
@@ -82,4 +83,4 @@ Debito T138 e qualità N4; KB condivise/RAG restano fuori; il livello reale dipe
 
 ## 12. Valutazione della release candidate
 
-**READY WITH LIMITATIONS** per un pilota tecnico controllato: build pulite, 0 test falliti in backend, Vitest e Playwright offline; funzionalità implementate e tecnicamente verificate. Non è `FUNCTIONALLY_VERIFIED` né `ACCEPTED`: N4 fallisce semanticamente, T138 blocca SC-004 per i Gap oltre contesto, i gate DGX/PM e la revisione umana di accessibilità non sono eseguiti, e un test dello stack reale è fallito per parser non allineato. All'accettazione mancano T126 (prova DGX), T107 (umana), T142, T138, T067, T082, T083, T090, T104, T109, T110, T111, T114.
+**READY WITH LIMITATIONS** per un pilota tecnico controllato: build pulite, 0 test falliti in backend, Vitest e Playwright offline; funzionalità implementate e tecnicamente verificate. Non è `FUNCTIONALLY_VERIFIED` né `ACCEPTED`: N4 fallisce semanticamente, T138 blocca SC-004 per i Gap oltre contesto, i gate DGX/PM e la revisione umana di accessibilità non sono eseguiti. Lo stack reale con LLM finto passa 17/17 con parser aggiornato (il fallimento iniziale era ambientale). All'accettazione mancano T126 (prova DGX), T107 (umana), T142, T138, T067, T082, T083, T090, T104, T109, T110, T111, T114.
