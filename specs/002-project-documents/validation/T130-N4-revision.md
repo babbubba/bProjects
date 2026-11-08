@@ -156,3 +156,14 @@ Implementato in `Documents/SourceSnapshotStore.cs` (`AnalysisDefinition` = `proj
 - DGX, MafReal, browser: NOT RUN. Frontend: nessuna modifica, `test:ci` non rieseguito.
 
 Limite dichiarato: il rosso comportamentale del single-call in `DocumentLimitsSnapshotTests` è assente (il modello finto v5 non discrimina l'endpoint); il rosso di quel file sta nell'aggiunta sul POST reale.
+
+## T142 — prima esecuzione N4 reale su DGX (2026-11-08): FAIL, T142 NON chiuso
+
+Test `DocumentSmallFlowMafRealTests.T142_N4_v5_gap_e2_answered_by_e3_and_open_conflict_e1_e3_with_provenance` (commit `17edc55`, una sola esecuzione, seriale; N4 originale invariato). Modello `Qwen3.6-35B-Smart` (router llama.cpp b10703), runtime n_ctx 131072, 1 slot libero, `enable_thinking=false` inviato per ogni fase (template Qwen che inserisce `<think></think>` vuoto), budget input analisi 113664, output analisi 16384. PostgreSQL 18.6 e parser reali. Durata del test 59 s; 7 invii al modello (3 estrazioni, 2 chat, 1 analisi, 1 bozza), nessun retry, nessun `finish=length`; analisi: prompt 3998 / completion 290 token, 6,7 s. Risultato: 55 PASS / 3 FAIL.
+
+- **PASS**: run `project-analysis-documents-v5`; conflitto unico Open 45 Declared (messaggio PM) contro 30 Documented (scheda A), senza risoluzione né terza alternativa; citazioni e provenienze esatte; E2 assente dalle fonti; conferma e bozza con 30 e 45 e marcatori validi.
+- **FAIL 1 (a monte dell'analisi)**: E2 non è mai diventata evidenza Gap. L'estrazione del messaggio «Cosa dice la scheda A sul termine di pagamento?» ha restituito `evidences: []` con motivo «domanda informativa». `extraction.md` definisce Gap solo come «informazione che il PM dice di non sapere o di non aver deciso» e non prevede domande; spec FR-007/008/015 e i test deterministici T136/T141 presuppongono invece un Gap da domanda. Di conseguenza `gapAssessments` è vuoto (0 attesi, 0 valutati) e la valutazione E2/E3 non è stata esercitata.
+- **FAIL 2 (analisi)**: gli stessi valori 30 e 45 compaiono sia come voci ordinarie (`scopeIncluded`, `constraints`) sia come alternative del conflitto (4 voci, «come da documento»), contro FR-010/012 (alternative non duplicate nelle sezioni ordinarie). `findings` vuoto.
+- **NOT VERIFIED**: valutazione Gap E2 `AnsweredInSnapshot`, supporto E3, retry informato v5 (non attivato: una sola chiamata di analisi valida), stabilità su tre N4, avversi.
+
+Diagnostica grezza (richieste/risposte) solo locale, fuori da Git. Nessun gold, criterio o asserzione modificati; nessun nuovo invio DGX dopo il FAIL. Decisione necessaria prima di nuove inferenze: come E2 deve diventare un Gap (estrazione) e se il prompt v5 deve vietare la duplicazione nelle sezioni ordinarie.
