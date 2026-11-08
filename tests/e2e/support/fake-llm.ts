@@ -160,33 +160,44 @@ function questionKeywords(text: string): string[] {
   return [...tail.toLowerCase().matchAll(/\p{L}{6,}/gu)].map((m) => m[0]);
 }
 
-const matching = (blocks: EvidenceBlock[], keywords: string[]) => blocks.filter((b) => keywords.some((k) => b.body.toLowerCase().includes(k)));
+/** Evidenze che rispondono alla domanda, raggruppate per la prima parola chiave della domanda che contengono (una nota per gruppo, mai una per evidenza). */
+function groupsByKeyword(blocks: EvidenceBlock[], keywords: string[]): Map<string, EvidenceBlock[]> {
+  const groups = new Map<string, EvidenceBlock[]>();
+  for (const b of blocks) {
+    const keyword = keywords.find((k) => b.body.toLowerCase().includes(k));
+    if (keyword) groups.set(keyword, [...(groups.get(keyword) ?? []), b]);
+  }
+  return groups;
+}
 
+/** Scansione di un gruppo: una nota per argomento trovato (non per evidenza), che cita la PRIMA evidenza pertinente del gruppo; altrimenti no_support motivato. */
 export function scanReply(text: string, noteWords: number): string {
-  const found = matching(evidenceBlocks(text), questionKeywords(text));
-  if (found.length === 0) {
+  const groups = groupsByKeyword(evidenceBlocks(text), questionKeywords(text));
+  if (groups.size === 0) {
     return JSON.stringify({ outcome: 'no_support', reason: 'Nessuna evidenza di questo gruppo riguarda la domanda del project manager.', notes: [] });
   }
-  const notes = found.map((f) => ({
+  const notes = [...groups].map(([keyword, blocks]) => ({
     kind: 'support',
-    text: 'Nota: ' + f.body.replace(/\s+/g, ' ').replace(/fonte:\S+/g, '').trim().split(' ').slice(0, 12).join(' ') + ' ' + Array.from({ length: noteWords }, (_, i) => `riempitivo${i}`).join(' '),
-    sources: [f.label],
+    text: `Nota ${keyword}: ${blocks.length} evidenze pertinenti. ` + Array.from({ length: noteWords }, (_, i) => `riempitivo${i}`).join(' '),
+    sources: [blocks[0].label],
   }));
   return JSON.stringify({ outcome: 'support', reason: '', notes });
 }
 
+/** Riduzione: una sintesi breve e a lunghezza limitata (converge sempre), con gli argomenti delle note unite. */
 export function reduceReply(text: string): string {
   const notes = [...text.matchAll(/<<<NOTA[^\n]*>>>\n([\s\S]*?)\n<<<FINE NOTA>>>/g)].map((m) => m[1]);
-  return JSON.stringify({ text: `Sintesi unita di ${notes.length} note: ` + notes.map((n) => n.split(' ').slice(1, 6).join(' ')).join('; '), conflict: false });
+  const keywords = [...new Set(notes.map((n) => /^Nota (\S+):/.exec(n)?.[1]).filter(Boolean))];
+  return JSON.stringify({ text: `Sintesi unita di ${notes.length} note: ${keywords.join(', ')}.`, conflict: false });
 }
 
-/** Risposta finale oltre contesto: cita le fonti delle evidenze riaperte che rispondono alla domanda (al piu 6); altrimenti dichiara l'assenza di uso dei documenti. */
+/** Risposta finale oltre contesto: cita, per ogni argomento della domanda, la prima fonte riaperta che lo contiene; altrimenti dichiara l'assenza di uso dei documenti. */
 export function longFinalReply(text: string): string | null {
   const blocks = evidenceBlocks(text);
   if (blocks.length === 0) return null;
-  const found = [...new Map(matching(blocks, questionKeywords(text)).map((b) => [b.label, b])).values()].slice(0, 6);
-  if (found.length === 0) return JSON.stringify({ mode: 'no_document_use', answer: 'Nei documenti selezionati non risulta nulla di pertinente.' });
-  return JSON.stringify({ mode: 'documented', answer: 'Zone trovate: ' + found.map((f) => `${f.body.replace(/\s+/g, ' ').trim().split(' ')[0]} [fonte:${f.label}]`).join('; ') });
+  const groups = groupsByKeyword(blocks, questionKeywords(text));
+  if (groups.size === 0) return JSON.stringify({ mode: 'no_document_use', answer: 'Nei documenti selezionati non risulta nulla di pertinente.' });
+  return JSON.stringify({ mode: 'documented', answer: 'Zone trovate: ' + [...groups].map(([keyword, found]) => `${keyword} [fonte:${found[0].label}]`).join('; ') });
 }
 
 /**

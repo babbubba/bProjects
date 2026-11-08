@@ -105,7 +105,7 @@ export class RealStack {
   user = 'pm-e2e';
   password = randomBytes(12).toString('hex') + 'Aa1!';
   backendRestarts = 0;
-  /** Variabili Ai__*/Documents__*/... aggiuntive per il backend (configurazione normale, nessun hook): es. finestra piccola per la prova oltre contesto. */
+  /** Variabili d'ambiente aggiuntive per il backend (configurazione normale, nessun hook): es. Ai__ContextWindowTokens piccola per la prova oltre contesto. */
   envOverride: Record<string, string> = {};
   private backend?: ChildProcess;
   private proxy?: Server;
