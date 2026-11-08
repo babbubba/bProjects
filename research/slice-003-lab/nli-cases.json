@@ -1,0 +1,36 @@
+{
+  "version": "research-003-nli-v1",
+  "note": "Risultati attesi su logica dei vincoli per evidenziare un limite dei modelli NLI generalisti.",
+  "cases": [
+    {
+      "id": "exact-conflict",
+      "premise": "Il termine contrattuale di pagamento è esattamente di 45 giorni.",
+      "hypothesis": "Il termine contrattuale di pagamento è esattamente di 30 giorni.",
+      "expected": "contradiction"
+    },
+    {
+      "id": "language-paraphrase",
+      "premise": "La fattura deve essere saldata entro 30 giorni dalla data di emissione.",
+      "hypothesis": "Il pagamento della fattura non può avvenire oltre 30 giorni dalla sua emissione.",
+      "expected": "entailment"
+    },
+    {
+      "id": "different-scopes",
+      "premise": "Per i clienti italiani il pagamento è previsto entro 30 giorni.",
+      "hypothesis": "Per i clienti esteri il pagamento è previsto entro 45 giorni.",
+      "expected": "neutral"
+    },
+    {
+      "id": "numerical-entailment",
+      "premise": "Il pagamento deve essere effettuato entro 30 giorni.",
+      "hypothesis": "Il pagamento deve essere effettuato entro 60 giorni.",
+      "expected": "entailment"
+    },
+    {
+      "id": "reverse-non-entailment",
+      "premise": "Il pagamento deve essere effettuato entro 45 giorni.",
+      "hypothesis": "Il pagamento deve essere effettuato entro 30 giorni.",
+      "expected": "neutral"
+    }
+  ]
+}
