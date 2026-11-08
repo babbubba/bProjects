@@ -50,6 +50,10 @@ public sealed class DocumentEvidenceAgent(
 {
     public const string AgentName = "DocumentEvidenceAgent";
     public const string AgentId = "document-evidence";
+    /// <summary>Prompt storico: lo usano i job creati prima di v3 (la configurazione congelata non ha <c>promptVersion</c>).</summary>
+    public const string PromptVersionV2 = "document-extraction-v2";
+
+    /// <summary>Prompt corrente: lo congelano i job creati da ora (002 T082).</summary>
     public const string PromptVersion = "document-extraction-v3";
 
     /// <summary>Definizione del grafo congelata per i nuovi owner (checkpoint e manifesto); un owner con un'altra definizione non si riprende.</summary>
@@ -63,8 +67,51 @@ public sealed class DocumentEvidenceAgent(
     public const int UnitOrdinalStride = 10_000;
 
     private static readonly Lazy<string> Prompt = new(() => LoadPrompt("document-extraction-v3.md"));
+    private static readonly Lazy<string> PromptV2 = new(() => LoadPrompt("document-extraction-v2.md"));
 
     public static string Instructions => Prompt.Value;
+
+    public static string InstructionsFor(string promptVersion) => promptVersion == PromptVersionV2 ? PromptV2.Value : Prompt.Value;
+
+    /// <summary>
+    /// Versione del prompt di un job dalla sua configurazione congelata. Il ripiego a v2 vale SOLO per la chiave <c>promptVersion</c> assente (ogni job creato prima
+    /// di v3 non l'ha e deve riprendere con l'identità con cui è partito: manifesto, batchId, checkpoint). Una versione esplicita diversa da v2/v3, non testuale o una
+    /// configurazione non leggibile è un errore di compatibilità permanente (<see cref="DocumentWorkException.CheckpointIncompatible"/>), mai un v2 implicito.
+    /// </summary>
+    public static string EffectivePromptVersion(string? frozenConfig)
+    {
+        if (string.IsNullOrWhiteSpace(frozenConfig))
+        {
+            return PromptVersionV2;
+        }
+
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(frozenConfig);
+        }
+        catch (JsonException)
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "La configurazione congelata del job non è leggibile: versione del prompt di estrazione non determinabile.");
+        }
+
+        using (doc)
+        {
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "La configurazione congelata del job non è un oggetto: versione del prompt di estrazione non determinabile.");
+            }
+
+            if (!doc.RootElement.TryGetProperty("promptVersion", out var v))
+            {
+                return PromptVersionV2;
+            }
+
+            return v.ValueKind == JsonValueKind.String && v.GetString() is PromptVersionV2 or PromptVersion
+                ? v.GetString()!
+                : throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "La versione del prompt di estrazione congelata nel job non è supportata da questa versione dell'applicazione.");
+        }
+    }
 
     public async Task ExecuteAsync(DocumentUnitClaim claim, CancellationToken ct)
     {
@@ -82,8 +129,9 @@ public sealed class DocumentEvidenceAgent(
         var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Extraction, ct);
         var limits = new PlannerLimits(profile.InputBudgetTokens, profile.OutputTokens);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
+        var promptVersion = EffectivePromptVersion(claim.ConfigJson);
         var partition = await new DocumentPortionPlanner(limits).PartitionAsync(
-            input.Portions, (ranges, token) => MeasureAsync(profile, structured, ranges, token), ct);
+            input.Portions, (ranges, token) => MeasureAsync(profile, structured, promptVersion, ranges, token), ct);
         if (partition.Batches.Count >= UnitOrdinalStride)
         {
             throw new DocumentWorkException(DocumentWorkException.DocumentIncomplete, "L'unità richiede troppi batch per essere identificata in modo univoco.");
@@ -92,7 +140,7 @@ public sealed class DocumentEvidenceAgent(
         var writer = CheckpointWriter.ForDocumentJob(claim.JobId, claim.LeaseOwner, claim.FencingToken, definition);
         var store = new DocumentWorkStore(db, writer);
         var plan = new DocumentExtractionPlan(
-            claim, input, partition, profile, limits, factory.Options, client, structured,
+            claim, input, partition, profile, limits, factory.Options, client, structured, promptVersion,
             (resultHash, portions, token) => new ValueTask(store.CompleteUnitAsync(resultHash, portions, claim.AttemptCount, token)));
         var port = new DocumentBatchPort(store, db, writer, factory, plan, new RootCallCounterReservation(db, writer, FrozenMaxCalls(claim.ConfigJson, documents.Value)));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(db, writer));
@@ -157,11 +205,11 @@ public sealed class DocumentEvidenceAgent(
         return [new ChatMessage(ChatRole.User, text.ToString()) { AdditionalProperties = new() { [ContextComposition.CategoryProperty] = ContextComposition.DocumentSources } }];
     }
 
-    private async ValueTask<UnitMeasure> MeasureAsync(DocumentRuntimeProfile profile, bool structured, IReadOnlyList<DocumentSourceRange> ranges, CancellationToken ct)
+    private async ValueTask<UnitMeasure> MeasureAsync(DocumentRuntimeProfile profile, bool structured, string promptVersion, IReadOnlyList<DocumentSourceRange> ranges, CancellationToken ct)
     {
         var schema = structured ? DocumentEvidenceSchema.ForUnit(ranges.Select(r => r.RangeKey)).GetRawText() : null;
         var full = await factory.Preflight.MeasureAsync(
-            new DocumentPayload(AiPhase.Extraction, Instructions, BuildMessages(ranges), schema), ct, profile.Fingerprint);
+            new DocumentPayload(AiPhase.Extraction, InstructionsFor(promptVersion), BuildMessages(ranges), schema), ct, profile.Fingerprint);
         // Base della stima dell'output: i soli intervalli proprietari, misurati senza istruzioni né schema.
         var ownedText = string.Join("\n", ranges.Where(r => r.Owned).Select(r => r.Text.ToString()));
         var owned = await factory.Preflight.MeasureAsync(
@@ -290,13 +338,15 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryP
     private readonly InternalModelClient _client;
     private readonly bool _structured;
     private readonly UnitCompletion _complete;
+    private readonly string _promptVersion;
     private readonly string _manifestIdentity;
     private readonly DocumentSourceMap[] _maps;
 
     public DocumentExtractionPlan(
         DocumentUnitClaim claim, UnitInput input, ExtractionPartition partition, DocumentRuntimeProfile profile, PlannerLimits limits, AiOptions options,
-        InternalModelClient client, bool structured, UnitCompletion complete)
+        InternalModelClient client, bool structured, string promptVersion, UnitCompletion complete)
     {
+        _promptVersion = promptVersion;
         _claim = claim;
         _input = input;
         _partition = partition;
@@ -316,7 +366,7 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryP
         var settings = options.ForPhase(AiPhase.Extraction);
         var configHash = DocumentEvidenceAgent.Sha(JsonSerializer.Serialize(new
         {
-            prompt = DocumentEvidenceAgent.PromptVersion, instructions = DocumentEvidenceAgent.Sha(DocumentEvidenceAgent.Instructions),
+            prompt = promptVersion, instructions = DocumentEvidenceAgent.Sha(DocumentEvidenceAgent.InstructionsFor(promptVersion)),
             schema = DocumentEvidenceContent.SchemaVersionValue, schemaName = DocumentEvidenceSchema.Name, structured,
             model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking,
             inputBudget = limits.InputBudgetTokens, outputTokens = limits.OutputTokens, outputExpansion = limits.OutputExpansion,
@@ -349,7 +399,7 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryP
     public BatchAgentSpec AgentFor(BatchRef batch) => AgentOf(_partition.Batches[batch.Ordinal].Ranges.Select(r => r.RangeKey));
 
     private BatchAgentSpec AgentOf(IEnumerable<string> rangeKeys) => new(
-        DocumentEvidenceAgent.AgentName, DocumentEvidenceAgent.AgentId, DocumentEvidenceAgent.Instructions,
+        DocumentEvidenceAgent.AgentName, DocumentEvidenceAgent.AgentId, DocumentEvidenceAgent.InstructionsFor(_promptVersion),
         _structured
             ? _client.CreateChatOptions(DocumentEvidenceSchema.ForUnit(rangeKeys), DocumentEvidenceSchema.Name, temperature: 0, phase: AiPhase.Extraction)
             : _client.CreateChatOptions(temperature: 0, phase: AiPhase.Extraction),
@@ -366,7 +416,7 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryP
         var provenance = planned.Measure.Quality == TokenCountQuality.Measured ? "measured" : "calibrated_upper_bound";
         return new(new DerivedBatchInput(
             batchId, DocumentEvidenceAgent.BatchStage, null, null, null, ordinal, [], DocumentPortionPlanner.DescribeInputs(planned), planned.Measure.Tokens, provenance,
-            inputHash, DocumentEvidenceContent.SchemaVersionValue, DocumentEvidenceAgent.PromptVersion));
+            inputHash, DocumentEvidenceContent.SchemaVersionValue, _promptVersion));
     }
 
     public ValueTask<IReadOnlyList<ChatMessage>> ComposeAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) =>
@@ -397,7 +447,7 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryP
         var inputs = JsonSerializer.Serialize(new { guidedRetryOf = batch.BatchId, kind = "other_without_rationale", evidences = retry.EvidenceKeys.Count, firstOutputHash = retry.OutputHash });
         return new DerivedBatchInput(
             id, GuidedRetryStage, null, null, null, GuidedRetryOrdinalBase + batch.Ordinal, [], inputs, null, "calibrated_upper_bound",
-            DocumentEvidenceAgent.Sha($"guided-retry-input|{batch.InputHash}"), DocumentEvidenceContent.SchemaVersionValue, DocumentEvidenceAgent.PromptVersion);
+            DocumentEvidenceAgent.Sha($"guided-retry-input|{batch.InputHash}"), DocumentEvidenceContent.SchemaVersionValue, _promptVersion);
     }
 
     /// <summary>

@@ -195,6 +195,7 @@ public sealed class DocumentParseRunner(
             config["modelId"] = modelId;
         }
 
+        config["promptVersion"] = DocumentEvidenceAgent.PromptVersion;   // congelata nei job nuovi; i job storici non l'hanno e restano su v2
         var configJson = config.ToJsonString();
         var units = DocumentUnitPlan.Group(portions);
         foreach (var group in units)
@@ -217,7 +218,7 @@ public sealed class DocumentParseRunner(
             Id = Guid.NewGuid(), ProjectId = claim.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = claim.PreparationId,
             Reason = ExtractionJobReason.Initial, Status = ExtractionJobStatus.Queued, RequestedAt = now, DeadlineAt = hardDeadline,
             MaxAttempts = DocumentUnitPlan.ExtractMaxAttempts,
-            ExtractorConfig = JsonSerializer.Serialize(new { kind = "document-aggregation", algorithm = DocumentBundleStore.AlgorithmVersion, units = units.Count, modelId }),
+            ExtractorConfig = JsonSerializer.Serialize(new { kind = "document-aggregation", algorithm = DocumentBundleStore.AlgorithmVersion, units = units.Count, modelId, promptVersion = DocumentEvidenceAgent.PromptVersion }),
         });
     }
 

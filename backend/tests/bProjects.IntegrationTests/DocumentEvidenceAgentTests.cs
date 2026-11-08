@@ -171,6 +171,52 @@ public sealed partial class DocumentEvidenceAgentTests
         Assert.Equal(0, await rig.CallCountAsync());
     }
 
+    // ------------------------------------------------------------------ versione del prompt congelata nel job (T082)
+
+    [Fact]
+    public async Task A_job_without_the_prompt_version_replays_as_historic_v2_and_a_new_job_freezes_v3_with_different_manifest_and_batch_identities()
+    {
+        TestEnvironment.RequirePostgres();
+        string[] portions = [Words(50, "p")];
+        string historicVersion, historicConfig, historicBatch, currentVersion, currentConfig, currentBatch;
+
+        await using (var historic = await UnitRig.CreateAsync(portions))
+        {
+            await historic.RunAsync(new FakeUnitModel());
+            historicVersion = await historic.Db.ScalarAsync<string>("""SELECT "PromptVersion" FROM "DerivedBatches" LIMIT 1""");
+            historicConfig = await historic.Db.ScalarAsync<string>("""SELECT "ConfigHash" FROM "WorkManifests" LIMIT 1""");
+            historicBatch = await historic.Db.ScalarAsync<string>("""SELECT "Id"::text FROM "DerivedBatches" LIMIT 1""");
+        }
+
+        await using (var current = await UnitRig.CreateAsync(portions, configJson: """{"promptVersion":"document-extraction-v3"}"""))
+        {
+            await current.RunAsync(new FakeUnitModel());
+            currentVersion = await current.Db.ScalarAsync<string>("""SELECT "PromptVersion" FROM "DerivedBatches" LIMIT 1""");
+            currentConfig = await current.Db.ScalarAsync<string>("""SELECT "ConfigHash" FROM "WorkManifests" LIMIT 1""");
+            currentBatch = await current.Db.ScalarAsync<string>("""SELECT "Id"::text FROM "DerivedBatches" LIMIT 1""");
+        }
+
+        Assert.Equal("document-extraction-v2", historicVersion);
+        Assert.Equal("document-extraction-v3", currentVersion);
+        Assert.NotEqual(historicConfig, currentConfig);
+        Assert.NotEqual(historicBatch, currentBatch);
+    }
+
+    [Fact]
+    public async Task A_job_frozen_with_an_unknown_prompt_version_fails_as_incompatible_before_any_model_call()
+    {
+        TestEnvironment.RequirePostgres();
+        await using var rig = await UnitRig.CreateAsync([Words(50, "p")], configJson: """{"promptVersion":"document-extraction-v9"}""");
+        var model = new FakeUnitModel();
+
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => rig.RunAsync(model));
+
+        var work = Assert.IsType<DocumentWorkException>(Unwrap(failure));
+        Assert.Equal(DocumentWorkException.CheckpointIncompatible, work.Code);
+        Assert.Empty(model.Requests);
+        Assert.Equal(0L, await rig.Db.ScalarAsync<long>("""SELECT count(*) FROM "WorkOutputs" """));
+    }
+
     // ------------------------------------------------------------------ tetto chiamate e retry
 
     [Fact]

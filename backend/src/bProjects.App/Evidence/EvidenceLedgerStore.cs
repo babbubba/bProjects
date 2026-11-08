@@ -362,7 +362,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             Version = number,
             JobId = job.Id,
             SchemaVersion = EvidenceExtractionVersion.DocumentSchemaVersion,
-            PromptVersion = DocumentEvidenceAgent.PromptVersion,
+            PromptVersion = DocumentEvidenceAgent.EffectivePromptVersion(job.ExtractorConfig),
             ModelId = aggregate.ModelId,
             Parameters = aggregate.ParametersJson,
             EvidenceCount = aggregate.Evidences.Count,

@@ -62,3 +62,5 @@ Per le campagne non-DGX rimuovere dal processo le variabili `BPROJECTS_TEST_DGX_
 - Coda: un solo slot di inferenza, quindi analisi, chat ed estrazioni attendono in FIFO; la deadline parte dal comando del PM e il retry non la azzera.
 - Riavvio o crash: stato e lease si recuperano da PostgreSQL; nessuna migrazione automatica. Controllare `GET /health` di `app` e lo stato `healthy` di `parser` con `docker compose -f infra/compose.yaml ps`.
 - Log: nessun testo integrale dei documenti; segreti mai stampati.
+
+**Prove reali lunghe (T082/T083/T090).** Il test host usa un solo login e il token d'accesso dura 10 minuti per default (`Auth:AccessTokenMinutes`): per scenari oltre 10 minuti impostare `Auth__AccessTokenMinutes=480` nell'ambiente del test (solo harness, nessuna modifica al prodotto). Senza, la prova cade con `KeyNotFoundException` nel polling (vedi `I5-single-real.md`, quinta esecuzione).
