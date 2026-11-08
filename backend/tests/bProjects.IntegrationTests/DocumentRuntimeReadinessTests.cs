@@ -15,18 +15,18 @@ namespace bProjects.IntegrationTests;
 /// </summary>
 public sealed class DocumentRuntimeReadinessTests
 {
-    private const string Model = "Qwen-A";
+    internal const string Model = "Qwen-A";
     private const string Schema = """{"type":"object"}""";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static AiOptions Options(int maxOutput = 100, int margin = 20) => new()
+    internal static AiOptions Options(int maxOutput = 100, int margin = 20) => new()
     {
         Endpoint = "http://dgx.internal:8080/v1/", ModelId = Model, ApiKey = "test-key", ContextWindowTokens = 2000,
         MaxOutputTokens = maxOutput, SafetyMarginTokens = margin, RuntimeCheckSeconds = 60,
     };
 
     /// <summary>Clock virtuale: i timer scattano quando il test li spinge, nell'ordine delle scadenze, spostando il tempo alla loro scadenza.</summary>
-    private sealed class VirtualTime : TimeProvider
+    internal sealed class VirtualTime : TimeProvider
     {
         private readonly object _gate = new();
         private readonly List<VirtualTimer> _timers = [];
@@ -147,7 +147,7 @@ public sealed class DocumentRuntimeReadinessTests
     }
 
     /// <summary>llama.cpp simulato in router mode: lo stato del modello nell'elenco è deciso dal numero della sonda (1ª, 2ª...).</summary>
-    private sealed class FakeRuntime : HttpMessageHandler
+    internal sealed class FakeRuntime : HttpMessageHandler
     {
         public Func<int, string> StatusAt { get; set; } = _ => "loaded";
 
@@ -214,7 +214,7 @@ public sealed class DocumentRuntimeReadinessTests
     }
 
     /// <summary>Un «processo»: monitor, client e preflight nuovi sullo stesso runtime e sullo stesso clock (il riavvio azzera ogni stato in memoria).</summary>
-    private sealed class Process : IDisposable
+    internal sealed class Process : IDisposable
     {
         private readonly InternalModelClient _client;
 
@@ -478,5 +478,234 @@ public sealed class DocumentRuntimeReadinessTests
 
         Assert.Equal(DocumentRegimePolicy.ComputeInputHash(plain), DocumentRegimePolicy.ComputeInputHash(withNull));
         Assert.DoesNotContain("runtimeFailure", System.Text.Json.JsonSerializer.Serialize(plain));
+    }
+}
+
+/// <summary>
+/// T126 (PG) — la readiness bounded nel classificatore dei root, dal Pending al ClassificationRecord. PostgreSQL reale; runtime FINTO e clock VIRTUALE
+/// (stessi doppi dei test deterministici): il residuo della deadline è quello ORIGINALE dal RequestedAt del root, letto dal database; nessuna
+/// richiesta di generazione parte mai, né prima né dopo il fallimento. Nessun DGX, nessun modello.
+/// </summary>
+[Trait("Category", TestCategories.Integration)]
+public sealed class DocumentRuntimeReadinessRootTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>Sonda reale (RegimeMeasurer + preflight sul runtime finto) che registra il residuo della deadline ricevuto dal classificatore.</summary>
+    private sealed class ReadinessProbe(DocumentRuntimeReadinessTests.Process process, DocumentRuntimeReadinessTests.VirtualTime time, bool driveTime = true) : IDocumentRegimeProbe
+    {
+        private readonly List<TimeSpan> _remaining = [];
+
+        public IReadOnlyList<TimeSpan> Remaining
+        {
+            get
+            {
+                lock (_remaining)
+                {
+                    return [.. _remaining];
+                }
+            }
+        }
+
+        public Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, CancellationToken ct) =>
+            throw new InvalidOperationException("il classificatore deve passare il residuo della deadline originale al preflight");
+
+        public async Task<RegimeMeasurement> MeasureAsync(ClassificationOwnerKind kind, Guid rootId, TimeSpan remaining, CancellationToken ct)
+        {
+            lock (_remaining)
+            {
+                _remaining.Add(remaining);
+            }
+
+            var measure = process.MeasureAsync(remaining, ct);
+            if (driveTime)
+            {
+                await time.RunAsync(measure);
+            }
+
+            return await measure;
+        }
+    }
+
+    private static Task<string> Text(ParsingDatabase db, SeededRoot root, string column) => DocumentRootClassificationTests.Text(db, root, column);
+
+    private static async Task<(string, string, string)> TimersAsync(ParsingDatabase db, SeededRoot root) =>
+        (await Text(db, root, "RequestedAt"), await Text(db, root, "EffectiveDeadlineAt"), await Text(db, root, "HardDeadlineAt"));
+
+    private static Task<string> RecordAsync(ParsingDatabase db, SeededRoot root, string column) =>
+        db.ScalarAsync<string>($"SELECT \"{column}\"::text FROM \"ClassificationRecords\" WHERE \"OwnerId\" = '{root.Id}'");
+
+    public enum Case
+    {
+        Unloaded,
+        Missing,
+        Window,
+        Deadline,
+    }
+
+    [Theory]
+    [InlineData(RootKind.Turn, Case.Unloaded, "model_unloaded", "runtime_unverified")]
+    [InlineData(RootKind.Run, Case.Unloaded, "model_unloaded", "runtime_unverified")]
+    [InlineData(RootKind.Turn, Case.Missing, "model_not_available", "model_not_available")]
+    [InlineData(RootKind.Run, Case.Missing, "model_not_available", "model_not_available")]
+    [InlineData(RootKind.Turn, Case.Window, "context_window_mismatch", "context_window_mismatch")]
+    [InlineData(RootKind.Run, Case.Window, "context_window_mismatch", "context_window_mismatch")]
+    [InlineData(RootKind.Turn, Case.Deadline, "deadline_exceeded", "deadline_exceeded")]
+    [InlineData(RootKind.Run, Case.Deadline, "deadline_exceeded", "deadline_exceeded")]
+    public async Task An_exhausted_readiness_fails_the_root_with_the_distinct_reason_and_the_case_code_without_sending_or_touching_the_timers(
+        RootKind kind, Case failure, string reason, string code)
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var runtime = new DocumentRuntimeReadinessTests.FakeRuntime
+        {
+            StatusAt = failure == Case.Deadline ? _ => "loading" : failure == Case.Unloaded ? _ => "unloaded" : _ => "loaded",
+            Listed = failure != Case.Missing,
+            Window = failure == Case.Window ? 1000 : 2000,
+        };
+        var time = new DocumentRuntimeReadinessTests.VirtualTime();
+        using var process = new DocumentRuntimeReadinessTests.Process(runtime, time);
+        var probe = new ReadinessProbe(process, time);
+        await using var rig = DocumentRootClassificationTests.Rig.Create(database, probe);
+        var elapsed = failure == Case.Deadline ? 3_594 : 5;
+        var root = await DocumentRootClassificationTests.SeedPendingAsync(database, kind, elapsed);
+        var timers = await TimersAsync(database, root);
+
+        var result = await rig.Classifier.ClassifyNextAsync(turns: true, analysisRuns: true, documentRuns: true, Ct);
+
+        Assert.Equal(ClassificationAttempt.Failed, result!.Attempt);
+        Assert.Equal(("Failed", code, "Rejected", "<null>"),
+            (await Text(database, root, "Status"), await Text(database, root, "ErrorCode"),
+             await Text(database, root, "ClassificationStatus"), await Text(database, root, "InitialRegime")));
+        Assert.Equal(("Fail", reason), (await RecordAsync(database, root, "Outcome"), await RecordAsync(database, root, "Reason")));
+        Assert.Equal(1, await DocumentRootClassificationTests.Records(database, root));
+        Assert.Equal(timers, await TimersAsync(database, root));                                         // la deadline non si riavvia né si allunga
+        Assert.Equal(0, await database.ScalarAsync<long>($"SELECT count(*) FROM \"RegimeTransitions\" WHERE \"RootId\" = '{root.Id}'"));   // attendere non è promuovere
+
+        var remaining = Assert.Single(probe.Remaining);
+        Assert.InRange(remaining, TimeSpan.Zero, TimeSpan.FromSeconds(3_600 - elapsed));                 // residuo dal RequestedAt originale, mai 3600 s interi
+        switch (failure)
+        {
+            case Case.Deadline:
+                Assert.InRange(time.Elapsed, remaining - TimeSpan.FromMilliseconds(1), remaining);          // l'attesa finisce alla deadline originale (timer al ms), non oltre
+                break;
+            case Case.Unloaded:
+                Assert.Equal(ModelRuntimeMonitor.ReadinessBackoff.Aggregate(TimeSpan.Zero, (a, b) => a + b), time.Elapsed);   // tetto fisso, non la deadline
+                break;
+            default:
+                Assert.Equal(TimeSpan.Zero, time.Elapsed);                                               // fallimento immediato
+                break;
+        }
+
+        Assert.Equal(0, runtime.Completions);
+        Assert.Null(await rig.ClaimAsync());
+        Assert.Empty(rig.Executor.StatusAtInvocation);
+    }
+
+    [Fact]
+    public async Task A_slow_load_that_becomes_ready_within_the_deadline_classifies_the_turn_then_the_dispatcher_executes_it_with_no_inference_before()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var runtime = new DocumentRuntimeReadinessTests.FakeRuntime { StatusAt = probe => probe < 3 ? "loading" : "loaded" };
+        var time = new DocumentRuntimeReadinessTests.VirtualTime();
+        using var process = new DocumentRuntimeReadinessTests.Process(runtime, time);
+        await using var rig = DocumentRootClassificationTests.Rig.Create(database, new ReadinessProbe(process, time));
+        var root = await DocumentRootClassificationTests.SeedPendingAsync(database, RootKind.Turn);
+
+        Assert.True(await rig.Dispatcher.RunOnceAsync(Ct));                                              // passo di classificazione: nessun invio
+        Assert.Empty(rig.Executor.StatusAtInvocation);
+        Assert.Equal(0, runtime.Completions);
+        Assert.Equal("Classified", await Text(database, root, "ClassificationStatus"));
+        Assert.NotEqual("Fail", await RecordAsync(database, root, "Outcome"));
+        Assert.Equal(TimeSpan.FromSeconds(3), time.Elapsed);                                             // 1 s + 2 s di backoff, poi pronto
+
+        Assert.True(await rig.Dispatcher.RunOnceAsync(Ct));                                              // claim ed esecuzione solo dopo la classificazione
+        Assert.Equal(["Classified"], rig.Executor.StatusAtInvocation);
+        Assert.Equal(1, await DocumentRootClassificationTests.Records(database, root));
+    }
+
+    [Fact]
+    public async Task A_process_restart_mid_wait_leaves_the_root_pending_and_the_next_process_waits_only_for_the_residual_of_the_original_deadline()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var runtime = new DocumentRuntimeReadinessTests.FakeRuntime { StatusAt = _ => "loading" };
+        var root = await DocumentRootClassificationTests.SeedPendingAsync(database, RootKind.Turn, elapsed: 3_590);   // restano ~10 s al cap
+        var timers = await TimersAsync(database, root);
+        TimeSpan firstRemaining;
+
+        var firstTime = new DocumentRuntimeReadinessTests.VirtualTime();
+        using (var first = new DocumentRuntimeReadinessTests.Process(runtime, firstTime))
+        {
+            var probe = new ReadinessProbe(first, firstTime, driveTime: false);
+            await using var rig = DocumentRootClassificationTests.Rig.Create(database, probe);
+            using var interrupted = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+            var attempt = rig.Classifier.ClassifyAsync(ClassificationOwnerKind.ChatTurn, root.Id, interrupted.Token);
+            await firstTime.RunAsync(attempt, until: () => runtime.Count("/v1/models") >= 2);
+            await interrupted.CancelAsync();                                                             // il processo muore a metà attesa
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
+            firstRemaining = Assert.Single(probe.Remaining);
+        }
+
+        Assert.Equal("Pending", await Text(database, root, "ClassificationStatus"));                     // nulla scritto
+        Assert.Equal(0, await DocumentRootClassificationTests.Records(database, root));
+
+        var secondTime = new DocumentRuntimeReadinessTests.VirtualTime();
+        using var second = new DocumentRuntimeReadinessTests.Process(runtime, secondTime);
+        var secondProbe = new ReadinessProbe(second, secondTime);
+        await using var next = DocumentRootClassificationTests.Rig.Create(database, secondProbe);
+
+        var result = await next.Classifier.ClassifyAsync(ClassificationOwnerKind.ChatTurn, root.Id, Ct);
+
+        var secondRemaining = Assert.Single(secondProbe.Remaining);
+        Assert.InRange(firstRemaining, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        Assert.True(secondRemaining <= firstRemaining, "il riavvio non ripristina il tempo: il residuo scende, mai sale");
+        Assert.InRange(secondTime.Elapsed, secondRemaining - TimeSpan.FromMilliseconds(1), secondRemaining);   // attesa fino alla sola deadline originale (timer al ms), non oltre
+        Assert.Equal(ClassificationAttempt.Failed, result.Attempt);
+        Assert.Equal(("deadline_exceeded", "deadline_exceeded"), (await Text(database, root, "ErrorCode"), await RecordAsync(database, root, "Reason")));
+        Assert.Equal(timers, await TimersAsync(database, root));
+        Assert.Equal(0, runtime.Completions);
+        Assert.Empty(next.Executor.StatusAtInvocation);
+    }
+
+    [Fact]
+    public async Task Two_workers_on_the_same_pending_root_share_one_readiness_wait_and_produce_one_record_with_no_duplicate_probe_or_inference()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var runtime = new DocumentRuntimeReadinessTests.FakeRuntime { StatusAt = probe => probe < 3 ? "loading" : "loaded" };
+        var time = new DocumentRuntimeReadinessTests.VirtualTime();
+        using var process = new DocumentRuntimeReadinessTests.Process(runtime, time);
+        var probe = new ReadinessProbe(process, time, driveTime: false);
+        await using var a = DocumentRootClassificationTests.Rig.Create(database, probe);
+        await using var b = DocumentRootClassificationTests.Rig.Create(database, probe);
+        var root = await DocumentRootClassificationTests.SeedPendingAsync(database, RootKind.Turn);
+
+        var both = Task.WhenAll(
+            a.Classifier.ClassifyAsync(ClassificationOwnerKind.ChatTurn, root.Id, Ct),
+            b.Classifier.ClassifyAsync(ClassificationOwnerKind.ChatTurn, root.Id, Ct));
+        await time.RunAsync(both);
+        var results = await both;
+
+        Assert.Equal([ClassificationAttempt.Classified, ClassificationAttempt.NotPending], results.Select(r => r.Attempt).Order().ToArray());
+        Assert.Equal(1, await DocumentRootClassificationTests.Records(database, root));
+        Assert.Equal(3, runtime.Count("/v1/models"));                                                    // un solo giro di sonde, non uno per worker
+        Assert.Equal(1, runtime.Count("/props"));
+        Assert.Equal(0, runtime.Completions);
+    }
+
+    [Fact]
+    public async Task An_unverifiable_tokenizer_never_makes_the_root_ordinary_and_sends_nothing()
+    {
+        await using var database = await ParsingDatabase.CreateAsync();
+        var runtime = new DocumentRuntimeReadinessTests.FakeRuntime { TokenizerAvailable = false, TemplateAvailable = false };
+        var time = new DocumentRuntimeReadinessTests.VirtualTime();
+        using var process = new DocumentRuntimeReadinessTests.Process(runtime, time);
+        await using var rig = DocumentRootClassificationTests.Rig.Create(database, new ReadinessProbe(process, time));
+        var root = await DocumentRootClassificationTests.SeedPendingAsync(database, RootKind.Run);
+
+        var result = await rig.Classifier.ClassifyNextAsync(turns: true, analysisRuns: true, documentRuns: true, Ct);
+
+        Assert.Equal(ClassificationAttempt.Classified, result!.Attempt);
+        Assert.Equal(("Classified", "Extended", "workload_unknown"),
+            (await Text(database, root, "ClassificationStatus"), await Text(database, root, "InitialRegime"), await Text(database, root, "ClassificationReason")));
+        Assert.Equal(0, runtime.Completions);
     }
 }

@@ -161,11 +161,11 @@ public sealed class DocumentRootClassificationInputTests
 public sealed class DocumentRootClassificationTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-    private static string PolicyHash => DocumentRegimePolicy.ComputePolicyHash(180, 3_600);
+    internal static string PolicyHash => DocumentRegimePolicy.ComputePolicyHash(180, 3_600);
 
     private static RegimeMeasurement Fit => DocumentRootClassificationInputTests.Fit;
 
-    private sealed class FakeProbe(Func<ClassificationOwnerKind, Guid, RegimeMeasurement> measure) : IDocumentRegimeProbe
+    internal sealed class FakeProbe(Func<ClassificationOwnerKind, Guid, RegimeMeasurement> measure) : IDocumentRegimeProbe
     {
         private int _calls;
 
@@ -196,7 +196,7 @@ public sealed class DocumentRootClassificationTests
     }
 
     /// <summary>Esecutore dei turni finto: registra lo stato di classificazione del turno nell'istante in cui il dispatcher lo invoca.</summary>
-    private sealed class RecordingExecutor(ParsingDatabase database) : IChatTurnExecutor
+    internal sealed class RecordingExecutor(ParsingDatabase database) : IChatTurnExecutor
     {
         public List<string> StatusAtInvocation { get; } = [];
 
@@ -210,7 +210,7 @@ public sealed class DocumentRootClassificationTests
         }
     }
 
-    private sealed class Rig : IAsyncDisposable
+    internal sealed class Rig : IAsyncDisposable
     {
         public required ParsingDatabase Database { get; init; }
         public required ServiceProvider Services { get; init; }
@@ -245,7 +245,7 @@ public sealed class DocumentRootClassificationTests
     }
 
     /// <summary>Root documentale appena richiesto dal POST: Queued, t0 spostato indietro di <paramref name="elapsed"/> s, Pending Extended provvisorio con cap dal t0.</summary>
-    private static async Task<SeededRoot> SeedPendingAsync(ParsingDatabase database, RootKind kind, double elapsed = 5)
+    internal static async Task<SeededRoot> SeedPendingAsync(ParsingDatabase database, RootKind kind, double elapsed = 5)
     {
         var root = await DocumentRegimeRoots.SeedAsync(
             database, kind, new RootSpec { Status = "Queued", LeaseOwner = null, AttemptCount = 0, Fence = 0, Legacy = true });
@@ -260,15 +260,15 @@ public sealed class DocumentRootClassificationTests
         return root;
     }
 
-    private static ClassificationOwnerKind OwnerOf(SeededRoot root) => root.Kind == RootKind.Turn ? ClassificationOwnerKind.ChatTurn : ClassificationOwnerKind.ProcessingRun;
+    internal static ClassificationOwnerKind OwnerOf(SeededRoot root) => root.Kind == RootKind.Turn ? ClassificationOwnerKind.ChatTurn : ClassificationOwnerKind.ProcessingRun;
 
-    private static Task<string> Text(ParsingDatabase db, SeededRoot root, string column) =>
+    internal static Task<string> Text(ParsingDatabase db, SeededRoot root, string column) =>
         db.ScalarAsync<string>($"SELECT COALESCE(\"{column}\"::text, '<null>') FROM \"{root.Table}\" WHERE \"Id\" = '{root.Id}'");
 
-    private static Task<long> Records(ParsingDatabase db, SeededRoot root) =>
+    internal static Task<long> Records(ParsingDatabase db, SeededRoot root) =>
         db.ScalarAsync<long>($"SELECT count(*) FROM \"ClassificationRecords\" WHERE \"OwnerId\" = '{root.Id}'");
 
-    private static Task<bool> Holds(ParsingDatabase db, SeededRoot root, string predicate) =>
+    internal static Task<bool> Holds(ParsingDatabase db, SeededRoot root, string predicate) =>
         db.ScalarAsync<bool>($"SELECT {predicate} FROM \"{root.Table}\" WHERE \"Id\" = '{root.Id}'");
 
     // ================================================================ Pending: nessun invio
