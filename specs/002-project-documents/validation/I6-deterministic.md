@@ -35,7 +35,7 @@ Comando: `npx playwright test -c playwright.real.config.ts document-long-context
 - **Progressi multipasso reali**: il contratto reale riporta `completedUnits`/`plannedUnits` solo per le preparazioni documentali (`InferenceMetrics`); per chat e analisi sono `null` e il pannello dice «Unita: indisponibili». Le unita «x di y pianificate finora» sono quindi provate SOLO sul fake-stack (che le simula); sullo stack reale e provato che non compaiono percentuali ne valori inventati. Non e un difetto corretto qui (richiederebbe una nuova telemetria).
 - **Riclassificazione N->E dopo latenza**: sul reale il regime e Esteso fin dall'inizio (`InitialRegime == Regime`, nessuna promozione); il caso Ordinario che resta Ordinario con latenza lunga e provato solo sul fake-stack.
 - Il modello finto non emette relazioni, conflitti ne alternative: coverage con alternative/frontiera, fonti multi-blocco con gruppi condivisi e copertura parziale restano provate dal livello 1 e dai test backend; sul reale la bozza ha un blocco per unita editoriale.
-- Solo desktop-1440 sullo stack reale; tokenizer del modello finto = parole separate da spazi; non eseguite la suite backend completa, Vitest completa ne Playwright completa.
+- Solo desktop-1440 sullo stack reale; tokenizer del modello finto = parole separate da spazi; non eseguite la suite backend completa ne la suite Playwright di default completa (Vitest completa rieseguita a fine lavoro: 23 file, 423/423 PASS).
 - Le garanzie di qualita semantica del modello reale restano T090/DGX.
 
 ## Dettaglio del livello 1: cosa provano i test fake-stack (solo contratto HTTP letto dal browser)

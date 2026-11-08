@@ -50,7 +50,7 @@ Smoke dell'harness (`real-stack-smoke.spec.ts`, separato): 1 discovered, 1 passe
 
 ## NON eseguito / limiti
 
-- Nessuna esecuzione della suite backend completa, di Vitest completa, ne della suite Playwright di default completa: solo i file toccati (`DocumentVersionLifecycleTests`, `project-documents.component.spec.ts`, `document-version-recovery.spec.ts`).
+- Non eseguite la suite backend completa e la suite Playwright di default completa: solo i file toccati (`DocumentVersionLifecycleTests` 52/52, `document-version-recovery.spec.ts`) e le suite fake-stack che condividono `fake-stack.ts`/`fake-parsing.ts` (vedi I6). Vitest completa rieseguita a fine lavoro dopo entrambe le correzioni frontend (T103 e T092): 23 file, 423/423 PASS.
 - Livello reale: solo desktop-1440; nessun mobile-390. Tokenizer del modello finto = parole separate da spazi; l'estrazione dei messaggi PM restituisce zero evidenze motivate (la sola forma valida e ripetibile senza inventare).
 - Il modello finto non prova qualita ne conformita semantica del modello reale: quelli restano T104/DGX.
 - Non sono provati qui i task T104 (DGX), T106, T107.
