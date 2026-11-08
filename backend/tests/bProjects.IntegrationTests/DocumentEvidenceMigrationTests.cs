@@ -22,11 +22,11 @@ namespace bProjects.IntegrationTests;
 [Trait("Category", TestCategories.Integration)]
 public sealed class DocumentEvidenceMigrationTests
 {
-    private const string LastMigration001 = "20261031210114_EvidenceLedger";
+    internal const string LastMigration001 = "20261031210114_EvidenceLedger";
     private const string Previous = "20261101223202_DocumentParsing";
 
     // Tabelle storiche di ledger, run, bozze e checkpoint: tutte byte-logicamente identiche dopo l'upgrade (colonne preesistenti).
-    private static readonly string[] LegacyTables =
+    internal static readonly string[] LegacyTables =
     [
         "Projects", "Conversations", "ConversationMessages", "ChatTurns", "ProcessingRuns", "AnalysisRevisions", "Drafts", "WorkflowCheckpoints", "InferenceCalls",
         "EvidenceExtractionJobs", "EvidenceExtractionVersions", "Evidences", "EvidenceRelations", "EvidenceMessageStates", "EvidencePromotions",
@@ -268,7 +268,7 @@ public sealed class DocumentEvidenceMigrationTests
 
     // ================== Dati e SQL grezzo ==================
 
-    private sealed record Legacy(
+    internal sealed record Legacy(
         Guid User, Guid Project, Guid Conversation, Guid M1, Guid M2, Guid M3, Guid Job1, Guid Job2, Guid Version1, Guid Version2,
         Guid Evidence1, Guid Evidence2, Guid Run, Guid DocRun, Guid Rev1, Guid Rev2, Guid DraftId, Guid Item1, Guid Item2,
         Guid SourceM1, Guid SourceM3, Guid SourceRevision)
@@ -279,7 +279,7 @@ public sealed class DocumentEvidenceMigrationTests
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
     }
 
-    private sealed record DocSet(
+    internal sealed record DocSet(
         Guid Project, Guid OtherProject, Guid Version1, Guid Version2, Guid PreparationA1, Guid PreparationA2, Guid PreparationB, Guid PreparationOtherFree, Guid PreparationOther,
         Guid JobA1 = default, Guid JobA2 = default, Guid JobB = default, Guid JobOther = default,
         Guid EvidenceVersionA1 = default, Guid EvidenceVersionA2 = default, Guid EvidenceVersionOther = default);
@@ -366,7 +366,7 @@ public sealed class DocumentEvidenceMigrationTests
         });
 
     /// <summary>Colonne e istantanea canonica per tabella prima dell'upgrade (le colonne nuove sono escluse dal confronto).</summary>
-    private static async Task<(Dictionary<string, string[]> Columns, Dictionary<string, string> Snapshots)> CaptureAsync(TempDatabase database)
+    internal static async Task<(Dictionary<string, string[]> Columns, Dictionary<string, string> Snapshots)> CaptureAsync(TempDatabase database)
     {
         var columns = new Dictionary<string, string[]>();
         var snapshots = new Dictionary<string, string>();
@@ -385,7 +385,7 @@ public sealed class DocumentEvidenceMigrationTests
     /// completata con revisione AI e revisione PM confermata, selezione congelata e link, bozza con citazioni, report coverage-v1, checkpoint e
     /// telemetria. JSON volutamente non canonici; le righe sono scritte con le colonne esatte dello schema 001.
     /// </summary>
-    private static async Task SeedLegacyAsync(TempDatabase database, Legacy x)
+    internal static async Task SeedLegacyAsync(TempDatabase database, Legacy x)
     {
         await database.SeedUserAndProjectAsync(x.User, x.Project, projectName: "Legacy");
         // Sullo schema 001 il discriminante non esiste; sullo schema nuovo ogni scrittore lo dichiara (nessun default).
@@ -481,7 +481,7 @@ public sealed class DocumentEvidenceMigrationTests
     /// Due progetti con file, versioni e preparazioni: progetto principale (documento 1 con A1 Incomplete e A2 Extracting; documento 2 con B
     /// Extracting) e progetto estraneo (una preparazione libera e una che ospita lavoro e versione Evidence documentale).
     /// </summary>
-    private static async Task<DocSet> SeedDocumentsAsync(TempDatabase database, Guid user, Guid project)
+    internal static async Task<DocSet> SeedDocumentsAsync(TempDatabase database, Guid user, Guid project)
     {
         var other = Guid.NewGuid();
         await database.ExecuteAsync(Insert("Projects", ("Id", other), ("Name", "Altro"), ("CreatedBy", user), ("CreatedAt", Now)));
@@ -517,7 +517,7 @@ public sealed class DocumentEvidenceMigrationTests
     }
 
     /// <summary>Come <see cref="SeedDocumentsAsync"/> più aggregatori documentali, versioni Evidence 1.1, una evidenza con fonte DocumentPassage e una selezione di run.</summary>
-    private static async Task<DocSet> SeedDocumentEvidenceAsync(TempDatabase database, Legacy ids)
+    internal static async Task<DocSet> SeedDocumentEvidenceAsync(TempDatabase database, Legacy ids)
     {
         var d = await SeedDocumentsAsync(database, ids.User, ids.Project);
         d = d with { JobA1 = Guid.NewGuid(), JobA2 = Guid.NewGuid(), JobB = Guid.NewGuid(), JobOther = Guid.NewGuid(), EvidenceVersionA1 = Guid.NewGuid(), EvidenceVersionA2 = Guid.NewGuid(), EvidenceVersionOther = Guid.NewGuid() };
@@ -538,7 +538,7 @@ public sealed class DocumentEvidenceMigrationTests
 
     // ================== Database temporaneo ==================
 
-    private sealed class TempDatabase : IAsyncDisposable
+    internal sealed class TempDatabase : IAsyncDisposable
     {
         private readonly string _admin;
         private readonly string _name;
@@ -568,6 +568,17 @@ public sealed class DocumentEvidenceMigrationTests
             }
 
             return database;
+        }
+
+        /// <summary>Copia consistente dell'intero database (CREATE DATABASE ... TEMPLATE): richiede nessuna sessione aperta, cioè app ferma.</summary>
+        public async Task<TempDatabase> CloneAsync()
+        {
+            NpgsqlConnection.ClearAllPools();
+            var copy = new TempDatabase(_admin, $"bprojects_test_{Guid.NewGuid():N}");
+            await using var connection = new NpgsqlConnection(_admin);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await new NpgsqlCommand($"CREATE DATABASE \"{copy._name}\" TEMPLATE \"{_name}\"", connection).ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            return copy;
         }
 
         public AppDbContext NewContext() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
