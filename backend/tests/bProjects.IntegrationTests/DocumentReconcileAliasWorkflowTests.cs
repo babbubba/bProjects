@@ -673,7 +673,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     // ================================================================ v5 oltre contesto (T143, contracts/ai-workflow.md §13.6)
 
     private const string V5Hierarchical =
-        """{"analysis":"document-analysis-v4","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
+        """{"analysis":"document-analysis-v5","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
 
     private const string V5 = "project-analysis-documents-v5";
 
@@ -951,7 +951,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         {
             Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
             var request = Assert.Single(model.Requests);
-            Assert.Equal(DocumentAnalysisWorkflow.InstructionsV4.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));   // misurato con il prompt document-analysis-v4
+            Assert.Equal(DocumentAnalysisWorkflow.InstructionsV5.Replace("\r\n", "\n"), request.System.Replace("\r\n", "\n"));   // misurato con il prompt document-analysis-v5
             Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
             Assert.Equal(1, (await RunRow(run)).Calls);
         }

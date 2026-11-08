@@ -344,6 +344,9 @@ public sealed class DocumentAnalysisWorkflow(
     /// </summary>
     public const string ReconcileGapPolicyV1 = "hierarchical-gap-incomplete-1";
     public const string PromptVersionV4 = "document-analysis-v4";
+
+    /// <summary>Prompt delle NUOVE richieste v5 (procedura di composizione anti-duplicazione, 002 T142); v4 resta valido e invariato per i run già congelati.</summary>
+    public const string PromptVersionV5 = "document-analysis-v5";
     public const string AlgorithmVersionV5 = AnalysisAliasComposer.AlgorithmVersionV3;
     public const string SchemaNameV5 = "document_analysis_alias_2";
     public const string SchemaVersionV5 = AnalysisAliasContracts.SchemaVersionV2;
@@ -353,12 +356,19 @@ public sealed class DocumentAnalysisWorkflow(
 
     public static string InstructionsV4 => PromptV4.Value;
 
+    private static readonly Lazy<string> PromptV5 = new(() => ConversationalAgent.LoadPrompt("document-analysis-v5.md"));
+
+    public static string InstructionsV5 => PromptV5.Value;
+
+    /// <summary>Prompt congelato di un run v5: v4 (storico) o v5 (nuove richieste); le versioni ignote sono già escluse da <see cref="ContractOf"/>.</summary>
+    public static string GapPromptOf(ProcessingRun run) => run.PromptVersionMatches("analysis", PromptVersionV5) ? PromptVersionV5 : PromptVersionV4;
+
     // v4 (T131, contracts/ai-workflow.md §11): percorso alias v3 se il payload entra in una chiamata, altrimenti riconciliazione gerarchica con alias nel motore condiviso
     // (prompt document-reconcile-v3, DTO reconcile-alias-1). Le nuove richieste di Analizza congelano la v4; v2 e v3 storici o in volo restano invariati.
     public const string DefinitionVersionV4 = "project-analysis-documents-v4";
 
     /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata), v4 (alias con gerarchia) o v5 (single-call con Gap + gerarchia v4 + policy Gap, T141); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
-    internal static int? ContractOf(ProcessingRun run)
+    public static int? ContractOf(ProcessingRun run)
     {
         if (run.MafVersion != Conversation.CurrentMafVersion)
         {
@@ -383,7 +393,7 @@ public sealed class DocumentAnalysisWorkflow(
         // v5 (T136 + T143): ogni versione del single-call con valutazione dei Gap deve coincidere E ogni versione della gerarchia v4 più la policy Gap temporanea (C + D, §13.6).
         // Chiavi gerarchiche mancanti o diverse (es. document-reconcile-v4, reconcile-alias-2, global-reconcile-v2 della futura gerarchia nominale) ⇒ workflow_incompatible, mai reinterpretate.
         // Anche la versione dello schema del canonico (AnalysisContent 1.1.0, chiave `analysisSchema`) è una chiave di freeze della v5 (T141: «TUTTE le chiavi», AI §13.1): ignota ⇒ incompatibile.
-        if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && run.PromptVersionMatches("analysis", PromptVersionV4)
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && (run.PromptVersionMatches("analysis", PromptVersionV4) || run.PromptVersionMatches("analysis", PromptVersionV5))
             && run.PromptVersionMatches("analysisSchema", DocumentAnalysisContent.SchemaVersionValue)
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
@@ -447,7 +457,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, ct) : RunGraphAsync(db, claim, limits, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract == 5 ? GapPromptOf(run) : PromptVersionV3, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -559,14 +569,14 @@ public sealed class DocumentAnalysisWorkflow(
     /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata; v5 (T143, §13.6): con almeno un Gap fail-fast senza chiamate (<c>document_limit_exceeded</c>,
     /// motivo <c>hierarchical_gap_assessment_unsupported</c>), senza Gap gerarchia come v4 con la definizione v5.
     /// </summary>
-    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, CancellationToken ct)
+    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, string promptVersion, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         // v5 (T136): catalogo con il contratto alias-2 nell'identità, prompt document-analysis-v4 e schema alias-2; v3/v4 invariati.
         var gaps = contract == 5;
         var catalog = AnalysisAliasCatalog.Build(input, gaps ? SchemaVersionV5 : SchemaVersionV3);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
-        var instructions = gaps ? InstructionsV4 : InstructionsV3;
+        var instructions = !gaps ? InstructionsV3 : promptVersion == PromptVersionV5 ? InstructionsV5 : InstructionsV4;
         var schema = gaps ? AnalysisAliasContracts.JsonSchemaV2() : AnalysisAliasContracts.JsonSchema();
         var messages = DocumentAnalysisAliasPlan.BuildMessages(input, catalog);
         var measure = await factory.Preflight.MeasureAsync(
@@ -616,7 +626,7 @@ public sealed class DocumentAnalysisWorkflow(
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisAliasPlan(
             claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes,
-            contract switch { 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 });
+            contract switch { 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
         var maxCalls = contract >= 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));

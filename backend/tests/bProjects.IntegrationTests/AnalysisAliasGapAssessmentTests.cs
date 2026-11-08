@@ -698,6 +698,45 @@ public sealed class AnalysisAliasGapAssessmentTests
         Assert.Contains("gapAssessments", schema.GetProperty("required").EnumerateArray().Select(e => e.GetString()));
         Assert.Equal("alias-2", schema.GetProperty("properties").GetProperty("contract").GetProperty("enum")[0].GetString());
     }
+
+    // ---------------------------------------------------------------- 002 T142: composizione senza duplicati (modello finto: struttura, NON comportamento del DGX)
+
+    /// <summary>La struttura corretta del N4 v5: una sola alternativa 45 e una sola 30, entrambe nel conflitto Open; nessun item ordinario con gli stessi valori; E2 (Gap) Answered con E3.</summary>
+    [Fact]
+    public void T142_the_correct_structure_has_one_45_and_one_30_alternative_in_the_open_conflict_and_no_ordinary_item_repeats_them()
+    {
+        var result = Complete(N4());
+
+        var analysis = result.Output!.Analysis;
+        var conflict = Assert.Single(analysis.Conflicts);
+        Assert.Equal(2, conflict.Alternatives.Count);
+        Assert.Single(conflict.Alternatives, a => a.Text.Contains("45", StringComparison.Ordinal));
+        Assert.Single(conflict.Alternatives, a => a.Text.Contains("30", StringComparison.Ordinal));
+        var ordinary = analysis.Goals.Concat(analysis.Requirements).Concat(analysis.OperationalFlows).Concat(analysis.Constraints).Concat(analysis.Dependencies).Concat(analysis.Assumptions).Concat(analysis.OpenQuestions).Select(i => i.Text);
+        Assert.DoesNotContain(ordinary, t => t.Contains("45", StringComparison.Ordinal) || t.Contains("30", StringComparison.Ordinal));
+        var gap = Assert.Single(result.GapAssessments!, g => g.Outcome == GapOutcome.AnsweredInSnapshot);
+        Assert.Equal("E2", gap.Gap);
+    }
+
+    /// <summary>
+    /// Caratterizzazione della forma osservata sul DGX (item ordinari 30/45 con testo diverso dalle alternative «come da documento»): il controllo deterministico esistente intercetta solo
+    /// il duplicato con testo identico (rifiutato più sopra); la riformulazione NON è un duplicato oggettivo. Non si introduce deduplicazione semantica: la prevenzione spetta al prompt v5.
+    /// </summary>
+    [Fact]
+    public void T142_a_reworded_repetition_is_not_an_objective_duplicate_for_the_deterministic_validator_so_prevention_belongs_to_the_prompt()
+    {
+        var dto = N4() with
+        {
+            Items = N4().Items with
+            {
+                Requirements = [AliasFixtures.Item("i3", "Il turno dura 8 ore.", DocumentAnalysisClassification.Documented, "E4"), AliasFixtures.Item("i6", "Servono 45 pezzi al minuto (da dichiarazione).", DocumentAnalysisClassification.Declared, "E1")],
+            },
+        };
+
+        var result = Compose(dto);
+
+        Assert.Equal(ReconciliationOutcome.Complete, result.Outcome);   // accettato: nessun falso positivo sulle informazioni distinte, nessuna euristica semantica
+    }
 }
 
 /// <summary>Contratto del testo del prompt `document-analysis-v4` (single-call v5): v3 resta intatto, v4 aggiunge la valutazione dei Gap senza mai istruire un supporto automatico.</summary>

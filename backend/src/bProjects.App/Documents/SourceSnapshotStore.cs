@@ -18,7 +18,7 @@ public sealed class SourceSnapshotStore(AppDbContext db)
 {
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
-    public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV4;
+    public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV5;
     public const string AnalysisSchemaVersion = "1.1.0";
     public const string DocumentPromptVersion = DocumentSourceDraftWorkflow.PromptVersionV3;
 

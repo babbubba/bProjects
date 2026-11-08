@@ -37,14 +37,14 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IInformedR
     public DocumentAnalysisAliasPlan(
         AnalysisRunClaim claim, DocumentAnalysisInput input, AnalysisAliasCatalog catalog, IReadOnlyList<ChatMessage> messages, string instructions,
         PayloadPreflight measure, bool structured, AgentFactory factory, InternalModelClient client, JsonElement schema, IServiceScopeFactory scopes,
-        string definition = DocumentAnalysisWorkflow.DefinitionVersionV3)
+        string definition = DocumentAnalysisWorkflow.DefinitionVersionV3, string gapPrompt = DocumentAnalysisWorkflow.PromptVersionV4)
     {
         _claim = claim;
         _definition = definition;
         // v5 (T136): la definizione congelata sceglie l'intero profilo di versioni; v3/v4 conservano i valori storici.
         _gaps = definition == DocumentAnalysisWorkflow.DefinitionVersionV5;
         (_prompt, _schemaVersion, _schemaName, _algorithm, _validation) = _gaps
-            ? (DocumentAnalysisWorkflow.PromptVersionV4, DocumentAnalysisWorkflow.SchemaVersionV5, DocumentAnalysisWorkflow.SchemaNameV5, DocumentAnalysisWorkflow.AlgorithmVersionV5, DocumentAnalysisWorkflow.ValidationVersionV5)
+            ? (gapPrompt, DocumentAnalysisWorkflow.SchemaVersionV5, DocumentAnalysisWorkflow.SchemaNameV5, DocumentAnalysisWorkflow.AlgorithmVersionV5, DocumentAnalysisWorkflow.ValidationVersionV5)
             : (DocumentAnalysisWorkflow.PromptVersionV3, DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.SchemaNameV3, DocumentAnalysisWorkflow.AlgorithmVersionV3, DocumentAnalysisWorkflow.ValidationVersionV3);
         _input = input;
         _catalog = catalog;
