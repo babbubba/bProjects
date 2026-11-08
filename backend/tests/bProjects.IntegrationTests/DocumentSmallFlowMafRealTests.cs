@@ -259,6 +259,37 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
             ConflictSides: [["30 giorni"], ["45 giorni"]]));
     }
 
+    // T142 — N4 sul workflow v5 con valutazione Gap (attese annotate PRIMA della prova). Stesso corpus, stessi gold e stesse attese di N4; E1 ed E2 sono due
+    //        messaggi PM distinti (testo identico). Attese: run v5 (project-analysis-documents-v5, coverage-3 con gapAssessments); E2 estratta come Gap;
+    //        valutazione E2 = AnsweredInSnapshot/Answered con supporto E3 (30 giorni, Documented), nessun punto aperto per E2; conflitto Open E1 (45 giorni,
+    //        Declared, messaggio PM) contro E3 (30 giorni, Documented, scheda A), senza risoluzione; E2 mai fra le fonti dell'analisi; nessun item o conflitto
+    //        duplicato e nessuna domanda aperta che ripeta E2; citazioni esatte. Il retry informato e solo osservato: se non scatta resta NOT VERIFIED.
+    [Fact]
+    public async Task T142_N4_v5_gap_e2_answered_by_e3_and_open_conflict_e1_e3_with_provenance()
+    {
+        await Require();
+        await RunNominalAsync(new Nominal(
+            "T142-N4",
+            ["txt-conflict-a.txt"],
+            PmStatement: "Il cliente mi ha confermato per telefono che il termine di pagamento e' di 45 giorni.",
+            Question: "Cosa dice la scheda A sul termine di pagamento?",
+            ChatAnswerTokens: ["30"],
+            ChatCitedQuotes: [["30 giorni"]],
+            Expected:
+            [
+                new("documento: 30 giorni (Documented)", ["30"], ["30 giorni"]),
+                new("PM: 45 giorni (Declared)", ["45"], ["45 giorni"], Class: "Declared"),
+            ],
+            Violations: c => c.Items.Where(i => i.Classification == "Declared" && i.Has("30") && !i.Has("45")).Select(i => "30 dichiarato dal PM: " + i.Short)
+                .Concat(c.Items.Where(i => i.Classification == "Documented" && i.Has("45") && !i.Has("30")).Select(i => "45 attribuito al documento: " + i.Short)),
+            Correction: null,
+            DraftTokens: ["30", "45"],
+            ExpectConflict: true,
+            ConflictSides: [["30 giorni"], ["45 giorni"]],
+            SplitPm: true,
+            GapChecks: true));
+    }
+
     // N5 — nuova versione ed esclusione: v1 della scheda A (30 giorni) confermata; v2 (90 giorni, salvo diverso accordo scritto) caricata e
     //      note-negazioni ESCLUSE dalle fonti. La revisione confermata resta intatta e leggibile; chat e nuova analisi usano solo v2.
     [Fact]
@@ -380,7 +411,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
 
     private sealed record Nominal(
         string Id, string[] Files, string? PmStatement, string Question, string[] ChatAnswerTokens, string[][] ChatCitedQuotes, Exp[] Expected,
-        Func<Content, IEnumerable<string>> Violations, Correction? Correction, string[] DraftTokens, bool ExpectConflict, string[][]? ConflictSides = null);
+        Func<Content, IEnumerable<string>> Violations, Correction? Correction, string[] DraftTokens, bool ExpectConflict, string[][]? ConflictSides = null, bool SplitPm = false, bool GapChecks = false);
 
     private async Task RunNominalAsync(Nominal n)
     {
@@ -406,7 +437,19 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         v.Check("ogni documento ha almeno un'evidenza", docs.All(d => evidences.Any(e => e.Sources.Any(s => s.DocumentId == d.Document))));
 
         // --- 2. Chat con fonti: ogni marcatore e una fonte documentale reale, con citazione esatta, e le attese annotate sono nella risposta.
-        var chat = await ChatAsync(client, project, (n.PmStatement is null ? "" : n.PmStatement + " ") + n.Question, v, "chat");
+        // T142: E1 (dichiarazione del PM) ed E2 (domanda) sono due messaggi distinti, con testo identico a N4: E2 deve poter essere una evidenza Gap propria.
+        if (n.SplitPm && n.PmStatement is not null)
+        {
+            var statement = await ChatAsync(client, project, n.PmStatement, v, "chat E1 (dichiarazione PM)");
+            if (statement is null)
+            {
+                await TelemetryAsync(project, v);
+                v.Flush();
+                return;
+            }
+        }
+
+        var chat = await ChatAsync(client, project, n.SplitPm ? n.Question : (n.PmStatement is null ? "" : n.PmStatement + " ") + n.Question, v, n.SplitPm ? "chat E2 (domanda PM)" : "chat");
         if (chat is null)
         {
             await TelemetryAsync(project, v);
@@ -485,6 +528,10 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         }
 
         await AssertExecution(client, project, "analysis", analysis.Analysis, v, "analisi", expectOrdinary: false);
+        if (n.GapChecks)
+        {
+            await VerifyT142Async(client, project, analysis, content, evidences, v);
+        }
 
         // --- 4. Correzione PM (nuova revisione 1.1) e conferma.
         var revision = analysis.Revision;
@@ -647,6 +694,93 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         v.Check($"{label}: revisione 1.1.0 (workflow documentale v4 con alias)", view.GetProperty("schemaVersion").GetString() == "1.1.0"
             && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersionV5);
         return new AnalysisOutcome(run, view.GetProperty("currentRevisionId").GetGuid(), JsonNode.Parse(view.GetProperty("content").GetRawText())!);
+    }
+
+    /// <summary>Verifiche specifiche T142 sulla revisione AI v5: workflow, Gap E2, valutazioni (coverage-3), conflitto Open E1/E3, nessun duplicato, provenienze.</summary>
+    private async Task VerifyT142Async(HttpClient client, Guid project, AnalysisOutcome analysis, Content content, List<Ev> documentEvidences, Verdicts v)
+    {
+        var l = "T142";
+        var definition = await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis.Analysis));
+        v.Check($"{l}: workflow project-analysis-documents-v5 (non un run storico v4)", definition == DocumentAnalysisWorkflow.DefinitionVersionV5 && definition == "project-analysis-documents-v5", definition);
+
+        // E2: evidenza Gap distinta (messaggio PM), E3: evidenza documentale con 30 giorni.
+        var gapPage = await Json(await client.GetAsync($"/api/projects/{project}/evidence?kind=Gap&viewVersion=1.1.0&limit=100", Ct));
+        var gaps = gapPage.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("evidence")).Select(e => (Id: e.GetProperty("id").GetGuid(), Statement: e.GetProperty("statement").GetString() ?? "")).ToList();
+        v.Note($"{l}: evidenze Gap nel progetto = {gaps.Count}: " + string.Join(" | ", gaps.Select(g => Short(g.Statement, 90))));
+        var e2 = gaps.Where(g => Fold(g.Statement).Contains("scheda a", StringComparison.Ordinal) && Fold(g.Statement).Contains("termine", StringComparison.Ordinal)).ToList();
+        v.Check($"{l}: E2 (domanda del PM sul termine della scheda A) estratta come evidenza Gap, una sola", e2.Count == 1, $"{e2.Count}");
+        var e3 = documentEvidences.Where(e => e.Sources.Any(s => Fold(s.Quote).Contains("30 giorni", StringComparison.Ordinal))).ToList();
+        v.Check($"{l}: E3 (scheda A, 30 giorni) e una evidenza documentale", e3.Count >= 1, $"{e3.Count}");
+
+        var coverage = await client.PostAsJsonAsync($"/api/projects/{project}/analyses/{analysis.Analysis}/coverage-reports", new { revisionId = analysis.Revision }, Ct);
+        var report = await Json(coverage);
+        v.Check($"{l}: coverage-3 creato", coverage.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created && report.TryGetProperty("checkerVersion", out var cv) && cv.GetString() == "coverage-3", $"{(int)coverage.StatusCode} {Short(report.GetRawText(), 300)}");
+        if (!report.TryGetProperty("gapAssessments", out var assessments) || assessments.ValueKind != JsonValueKind.Array)
+        {
+            v.Check($"{l}: gapAssessments presente", false);
+            return;
+        }
+
+        var records = assessments.EnumerateArray().ToList();
+        var summary = report.GetProperty("summary");
+        v.Note($"{l}: gapAssessments={records.Count} hash={Short(report.GetProperty("gapAssessmentsHash").GetString() ?? "-", 16)} expected={summary.GetProperty("expectedGaps").GetInt32()} assessed={summary.GetProperty("assessedGaps").GetInt32()} answered={summary.GetProperty("answeredGaps").GetInt32()} open={summary.GetProperty("openGaps").GetInt32()} unassessed={summary.GetProperty("unassessedGaps").GetInt32()}");
+        v.Check($"{l}: gapAssessments presente, non vuoto, con hash", records.Count > 0 && (report.GetProperty("gapAssessmentsHash").GetString() ?? "").Length > 0);
+        v.Check($"{l}: nessun Gap non valutato e un solo record per Gap", summary.GetProperty("unassessedGaps").GetInt32() == 0
+            && records.Select(r => r.GetProperty("gapEvidenceId").GetGuid()).Distinct().Count() == records.Count
+            && gaps.All(g => records.Any(r => r.GetProperty("gapEvidenceId").GetGuid() == g.Id)));
+        if (e2.Count == 1)
+        {
+            var record = records.FirstOrDefault(r => r.GetProperty("gapEvidenceId").GetGuid() == e2[0].Id);
+            v.Check($"{l}: E2 AnsweredInSnapshot/Answered", record.ValueKind == JsonValueKind.Object && record.GetProperty("outcome").GetString() == "AnsweredInSnapshot" && record.GetProperty("reason").GetString() == "Answered",
+                record.ValueKind == JsonValueKind.Object ? Short(record.GetRawText(), 400) : "nessun record per E2");
+            if (record.ValueKind == JsonValueKind.Object)
+            {
+                var support = record.GetProperty("supportingEvidenceIds").EnumerateArray().Select(x => x.GetGuid()).ToList();
+                v.Check($"{l}: il supporto di E2 e E3 (scheda A, 30 giorni) e solo documentale", support.Count > 0 && support.All(id => e3.Any(e => e.Id == id)), $"supporto={support.Count}");
+                v.Check($"{l}: nessun punto o conflitto aperto collegato a E2", record.GetProperty("openItemId").ValueKind == JsonValueKind.Null && record.GetProperty("openConflictId").ValueKind == JsonValueKind.Null);
+                v.Check($"{l}: motivazione e snapshot hash presenti", (record.GetProperty("rationale").GetString() ?? "").Trim().Length > 0 && (record.GetProperty("sourceSnapshotHash").GetString() ?? "").Length > 0);
+                foreach (var id in support)
+                {
+                    foreach (var source in documentEvidences.Where(e => e.Id == id).SelectMany(e => e.Sources))
+                    {
+                        v.Check($"{l}: supporto E3, citazione «{Short(source.Quote, 40)}» esatta nel blocco", await PassageText(client, project, source) == source.Quote);
+                    }
+                }
+            }
+        }
+
+        // Conflitto Open E1 (45, Declared, messaggio PM) / E3 (30, Documented, scheda A): un solo conflitto, nessuna scelta, nessun duplicato.
+        var related = content.Conflicts.Where(c => c.Alternatives.Any(a => a.Has("30")) && c.Alternatives.Any(a => a.Has("45"))).ToList();
+        v.Check($"{l}: esattamente un conflitto 30/45 (nessun duplicato) e nessun altro conflitto", related.Count == 1 && content.Conflicts.Count == 1, $"conflitti={content.Conflicts.Count}, 30/45={related.Count}");
+        v.Check($"{l}: nessun conflitto Resolved e nessuna scelta automatica", content.Conflicts.All(c => c.Status == "Open" && !c.HasResolution));
+        if (related.Count == 1)
+        {
+            var sides = related[0].Alternatives;
+            v.Check($"{l}: alternativa PM = 45 giorni Declared con fonte Message e citazione del messaggio", sides.Any(a => a.Classification == "Declared" && a.Has("45") && !a.Has("30")
+                && a.Refs.Any(r => content.Sources[r].Kind == "Message") && a.QuotesHave("45 giorni")));
+            v.Check($"{l}: alternativa documento = 30 giorni Documented con passaggio della scheda A", sides.Any(a => a.Classification == "Documented" && a.Has("30") && !a.Has("45")
+                && a.Refs.Any(r => content.Sources[r].Kind == "DocumentPassage") && a.QuotesHave("30 giorni")));
+            v.Check($"{l}: nessuna terza alternativa (nessuna sintesi o media)", sides.Count == 2, $"{sides.Count}");
+        }
+
+        // Nessun duplicato di item: stesso testo, un solo 30 Documented e un solo 45 Declared, nessuna domanda aperta che ripeta E2.
+        var texts = content.Items.Select(i => Fold(i.Text)).ToList();
+        v.Check($"{l}: nessun item duplicato (testo identico)", texts.Distinct().Count() == texts.Count, string.Join(" | ", texts.GroupBy(t => t).Where(g => g.Count() > 1).Select(g => Short(g.Key, 60))));
+        v.Check($"{l}: un solo item 30 giorni Documented e un solo 45 giorni Declared", content.Items.Count(i => i.Classification == "Documented" && i.Has("30 giorni")) == 1
+            && content.Items.Count(i => i.Classification == "Declared" && i.Has("45 giorni")) == 1);
+        v.Check($"{l}: nessuna domanda aperta che ripete E2 (gia riscontrata)", !content.Items.Any(i => i.Section == "openQuestions" && Fold(i.Text).Contains("scheda a", StringComparison.Ordinal) && Fold(i.Text).Contains("termine", StringComparison.Ordinal)));
+        var messageBodies = new List<string>();
+        foreach (var source in content.Sources.Values.Where(s => s.Kind == "Message"))
+        {
+            messageBodies.Add(await Scalar<string>("SELECT \"Body\" FROM \"ConversationMessages\" WHERE \"Id\" = @i", ("i", Guid.Parse(source.Raw["messageId"]!.GetValue<string>()))));
+        }
+
+        v.Check($"{l}: E2 non compare fra le fonti dell'analisi", !messageBodies.Any(b => Fold(b).Contains("cosa dice la scheda", StringComparison.Ordinal)));
+
+        // Retry informato: solo osservato. Un run valido senza retry non e un errore nominale, ma il requisito resta NOT VERIFIED.
+        var attempts = await Count("SELECT count(*) FROM \"InferenceCalls\" WHERE \"ProjectId\" = @p AND \"Phase\" = 'Analysis'", ("p", project));
+        var retried = await Count("SELECT count(*) FROM \"InferenceCalls\" WHERE \"ProjectId\" = @p AND \"Phase\" = 'Analysis' AND \"Attempt\" > 1", ("p", project));
+        v.Note($"{l}: chiamate di analisi={attempts}, con tentativo>1={retried} => retry informato v5 {(retried > 0 ? "ESERCITATO (qualita da leggere nel log)" : "NON esercitato: NOT VERIFIED")}");
     }
 
     private async Task<JsonElement?> ConfirmAsync(HttpClient client, Guid project, Guid analysis, Guid revision, Verdicts v, string label)
