@@ -115,6 +115,11 @@ export class FakeParsing {
     return this.outcomes.shift() ?? 'Ready';
   }
 
+  /** Nuova generazione (rielaborazione della stessa versione): esito dalla coda `outcomes`, poi Ready. */
+  createGeneration(v: VersionLike, retryOfId: string | null): FakeGen {
+    return this.newGen(v, retryOfId);
+  }
+
   private newGen(v: VersionLike, retryOfId: string | null): FakeGen {
     const list = this.gens.get(v.id) ?? [];
     const outcome = this.nextOutcome();

@@ -2,6 +2,7 @@ import { FakeParsing } from './fake-parsing';
 import type { Page, Request, Route } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { emptyUsage } from './context-usage';
+import type { FakeLifecycle } from './fake-lifecycle';
 
 // Stack finto per le prove d'errore (T050): API HTTP e flusso SSE sostituiti nel browser, cosi' i guasti
 // (POST incerto, stream caduto, run Failed, PUT rifiutato) sono provocati in modo deterministico, senza DGX e senza
@@ -139,6 +140,10 @@ export class FakeStack {
   private readonly faults = new Map<string, Fault[]>();
   /** Parsing simulato (I2): null = nessun parser, ogni versione resta «In coda» come in I1. */
   parsing: FakeParsing | null = null;
+  /** Ciclo di vita delle versioni (T103): bundle corrente, candidate, rielaborazione e promozione CAS; richiede `parsing`. */
+  lifecycle: FakeLifecycle | null = null;
+  /** Server «spento» (riavvio simulato): ogni richiesta /api cade con connessione resettata e non viene registrata fra le chiamate. */
+  down = false;
   private seq = 0;
 
   constructor() {
@@ -304,7 +309,7 @@ export class FakeStack {
       id: v.id, documentId: d.id, projectId: p.id, version: v.version, originalName: v.originalName, mediaType: v.mediaType,
       byteLength: v.bytes.length, sha256: sha256Hex(v.bytes), uploadedBy: 'Pm Uno', uploadedAt: v.uploadedAt, processingStatus: this.statusOf(v),
       applicationStatus: 'NotApplicable', currentPreparationId: this.parsing?.latest(v.id)?.id ?? null, currentEvidenceVersionId: null, bundleRevision: 0,
-      candidatePreparations: [], latestJobId: this.parsing?.latest(v.id)?.jobId ?? null, included: pref.included, selectionMode: pref.mode, isApplicable: false,
+      candidatePreparations: [], ...(this.lifecycle ? this.lifecycle.view(v.id) : {}), latestJobId: this.parsing?.latest(v.id)?.jobId ?? null, included: pref.included, selectionMode: pref.mode, isApplicable: false,
       previousReadyVersionId: null, issuesSummary: this.parsing?.issuesSummary(v.id) ?? null, allowedActions: ['Download'],
     };
   }
@@ -417,6 +422,7 @@ export class FakeStack {
     } catch {
       body = null;
     }
+    if (this.down && path.startsWith('/api/')) return void (await route.abort('connectionreset'));
     const call: Call = {
       method, path, key: request.headers()['idempotency-key'] ?? null, ifMatch: request.headers()['if-match'] ?? null, body,
     };
@@ -591,6 +597,7 @@ export class FakeStack {
         },
       };
       if (await parsing.handle(rest, method, request, call.key, docs, { json, problem, faulted }, route)) return;
+      if (this.lifecycle && (await this.lifecycle.handle(rest, method, call.key, call.body, docs, { json, problem }))) return;
     }
     if (rest === '/documents' && method === 'GET') {
       this.parsing?.tick();
