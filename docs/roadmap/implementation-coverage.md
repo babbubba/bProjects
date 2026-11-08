@@ -68,19 +68,11 @@ Gli artefatti della 001 restano invariati; queste discrepanze non cambiano i
 criteri storici né i FAIL. Le tracce locali `docs/acceptance-trace/` restano non
 versionate e non sono necessarie per consultare questa baseline.
 
-## Prossimo incremento previsto: 002-project-documents
+## Incremento 002-project-documents — stato al 2026-11-08
 
-Branch previsto `feature/002-project-documents`. Perimetro da specificare con
-Spec Kit al successivo mandato: allegati di progetto **PDF testuali, DOCX,
-Markdown e TXT**, parsing, provenienza e trattamento di documenti oltre contesto.
-Riusare i componenti sopra dove compatibili, verificando esplicitamente il delta:
-le fonti Evidence basate su messaggi e il consolidamento della 001 non costituiscono
-già parsing, provenienza documentale o supporto a file arbitrariamente grandi.
-
-**KB condivise e RAG fuori dalla 002**; PDF scansionati/OCR fuori dal perimetro
-input approvato. Nessuna scelta anticipata di parser, nuovi servizi o contratti.
-Upload/storage e versioni documentali, parsing e collegamento alle evidenze restano
-da realizzare; nessuna directory Spec Kit della 002 viene creata in questa preparazione.
+Branch `feature/002-implementation`, baseline `03514b0`: 130/143 task spuntati; aperti T126, T067, T142, T082, T083, T138, T090, T104, T107, T109, T110, T111, T114.
+Stato per area (IMPLEMENTED e TECHNICALLY_VERIFIED; nessuna area è FUNCTIONALLY_VERIFIED o ACCEPTED): documenti e versioni, parser offline con provenienza (`parser/`, `AI/Document*`), Evidence documentali, chat/analisi con fonti, oltre contesto con fail-fast per Gap (T143), readiness runtime (T126: `AI/ModelRuntimeMonitor.cs`, `DocumentRootClassification.cs`; test `DocumentRuntimeReadinessTests`). BLOCKED: T138 (valutazione Gap gerarchica) e T142 (N4). NOT_VERIFIED: DGX/PM e revisione umana di accessibilità.
+Tracciabilità: requisiti in `specs/002-project-documents/spec.md`, task in `tasks.md`, evidenze in `specs/002-project-documents/validation/`, esiti e conteggi in [slice-002-technical-closure.md](slice-002-technical-closure.md). KB condivise e RAG restano fuori; PDF scansionati/OCR fuori dal perimetro.
 
 Altre capacità del prodotto ancora future rispetto alla 001: KB e retrieval condiviso,
 ricerca web controllata, editor JSON visuale avanzato, revisione AI per sezione,
