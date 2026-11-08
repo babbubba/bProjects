@@ -137,7 +137,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
 
         Assert.Equal("project-analysis-documents-v5", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))).RootElement;
-        Assert.Equal("document-analysis-v5", prompts.GetProperty("analysis").GetString());
+        Assert.Equal("document-analysis-v6", prompts.GetProperty("analysis").GetString());
         Assert.Equal("1.1.0", prompts.GetProperty("analysisSchema").GetString());
         Assert.Equal("document-analysis-alias-2", prompts.GetProperty("analysisAiSchema").GetString());
         Assert.Equal("alias-catalog-1", prompts.GetProperty("aliasCatalog").GetString());

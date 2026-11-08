@@ -360,8 +360,16 @@ public sealed class DocumentAnalysisWorkflow(
 
     public static string InstructionsV5 => PromptV5.Value;
 
+    /// <summary>Prompt delle NUOVE richieste v5 dopo la seconda prova N4 (002 T142): domande che nominano un documento e duplicazione; v4 e v5 restano validi e invariati per i run già congelati.</summary>
+    public const string PromptVersionV6 = "document-analysis-v6";
+
+    private static readonly Lazy<string> PromptV6 = new(() => ConversationalAgent.LoadPrompt("document-analysis-v6.md"));
+
+    public static string InstructionsV6 => PromptV6.Value;
+
     /// <summary>Prompt congelato di un run v5: v4 (storico) o v5 (nuove richieste); le versioni ignote sono già escluse da <see cref="ContractOf"/>.</summary>
-    public static string GapPromptOf(ProcessingRun run) => run.PromptVersionMatches("analysis", PromptVersionV5) ? PromptVersionV5 : PromptVersionV4;
+    public static string GapPromptOf(ProcessingRun run) =>
+        run.PromptVersionMatches("analysis", PromptVersionV6) ? PromptVersionV6 : run.PromptVersionMatches("analysis", PromptVersionV5) ? PromptVersionV5 : PromptVersionV4;
 
     // v4 (T131, contracts/ai-workflow.md §11): percorso alias v3 se il payload entra in una chiamata, altrimenti riconciliazione gerarchica con alias nel motore condiviso
     // (prompt document-reconcile-v3, DTO reconcile-alias-1). Le nuove richieste di Analizza congelano la v4; v2 e v3 storici o in volo restano invariati.
@@ -393,7 +401,7 @@ public sealed class DocumentAnalysisWorkflow(
         // v5 (T136 + T143): ogni versione del single-call con valutazione dei Gap deve coincidere E ogni versione della gerarchia v4 più la policy Gap temporanea (C + D, §13.6).
         // Chiavi gerarchiche mancanti o diverse (es. document-reconcile-v4, reconcile-alias-2, global-reconcile-v2 della futura gerarchia nominale) ⇒ workflow_incompatible, mai reinterpretate.
         // Anche la versione dello schema del canonico (AnalysisContent 1.1.0, chiave `analysisSchema`) è una chiave di freeze della v5 (T141: «TUTTE le chiavi», AI §13.1): ignota ⇒ incompatibile.
-        if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && (run.PromptVersionMatches("analysis", PromptVersionV4) || run.PromptVersionMatches("analysis", PromptVersionV5))
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV5 && (run.PromptVersionMatches("analysis", PromptVersionV4) || run.PromptVersionMatches("analysis", PromptVersionV5) || run.PromptVersionMatches("analysis", PromptVersionV6))
             && run.PromptVersionMatches("analysisSchema", DocumentAnalysisContent.SchemaVersionValue)
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
@@ -576,7 +584,7 @@ public sealed class DocumentAnalysisWorkflow(
         var gaps = contract == 5;
         var catalog = AnalysisAliasCatalog.Build(input, gaps ? SchemaVersionV5 : SchemaVersionV3);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
-        var instructions = !gaps ? InstructionsV3 : promptVersion == PromptVersionV5 ? InstructionsV5 : InstructionsV4;
+        var instructions = !gaps ? InstructionsV3 : promptVersion == PromptVersionV6 ? InstructionsV6 : promptVersion == PromptVersionV5 ? InstructionsV5 : InstructionsV4;
         var schema = gaps ? AnalysisAliasContracts.JsonSchemaV2() : AnalysisAliasContracts.JsonSchema();
         var messages = DocumentAnalysisAliasPlan.BuildMessages(input, catalog);
         var measure = await factory.Preflight.MeasureAsync(

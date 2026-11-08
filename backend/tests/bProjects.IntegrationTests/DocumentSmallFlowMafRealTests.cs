@@ -702,9 +702,9 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         var l = "T142";
         var definition = await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis.Analysis));
         v.Check($"{l}: workflow project-analysis-documents-v5 (non un run storico v4)", definition == DocumentAnalysisWorkflow.DefinitionVersionV5 && definition == "project-analysis-documents-v5", definition);
-        // Versioni effettive (correzioni T142): analisi con il prompt document-analysis-v5 congelato e tutte le estrazioni dei messaggi PM con extraction-v3.
+        // Versioni effettive (correzioni T142): analisi con il prompt document-analysis-v6 congelato e tutte le estrazioni dei messaggi PM con extraction-v3.
         var analysisPrompt = await Scalar<string>("SELECT \"PromptVersions\"->>'analysis' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis.Analysis));
-        v.Check($"{l}: prompt di analisi congelato document-analysis-v5", analysisPrompt == DocumentAnalysisWorkflow.PromptVersionV5, analysisPrompt);
+        v.Check($"{l}: prompt di analisi congelato document-analysis-v6", analysisPrompt == DocumentAnalysisWorkflow.PromptVersionV6, analysisPrompt);
         var extractionTotal = await Scalar<long>("SELECT count(*) FROM \"EvidenceExtractionVersions\" WHERE \"ProjectId\" = @p AND \"MessageId\" IS NOT NULL", ("p", project));
         var extractionNotV3 = await Scalar<long>("SELECT count(*) FROM \"EvidenceExtractionVersions\" WHERE \"ProjectId\" = @p AND \"MessageId\" IS NOT NULL AND \"PromptVersion\" <> @v", ("p", project), ("v", EvidenceExtractor.PromptVersion));
         v.Check($"{l}: estrazioni dei messaggi PM con extraction-v3", extractionTotal > 0 && extractionNotV3 == 0, $"totale={extractionTotal} diverse={extractionNotV3}");

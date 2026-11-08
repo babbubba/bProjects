@@ -852,7 +852,7 @@ public sealed class DocumentSmallFlowTests : ArchiveTestBase
             : s.Contains(Norm(DocumentChatWorkflow.InstructionsV3)) ? Graph.DocChatV3
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
-            : (s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV4)) || s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV5))) ? Graph.DocAnalysisV5
+            : (s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV4)) || s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV5)) || s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV6))) ? Graph.DocAnalysisV5
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
             : s.Contains(Norm(DocumentSourceDraftWorkflow.InstructionsV3)) ? Graph.DocDraftV3
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001

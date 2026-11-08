@@ -560,7 +560,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
     /// <summary>Le dodici chiavi di versione di una nuova richiesta v5 (AI §13.1 + §13.6), nell'ordine di congelamento.</summary>
     private static readonly (string Key, string Value)[] V5Keys =
     [
-        ("analysis", "document-analysis-v5"), ("analysisSchema", "1.1.0"), ("analysisAiSchema", "document-analysis-alias-2"), ("aliasCatalog", "alias-catalog-1"),
+        ("analysis", "document-analysis-v6"), ("analysisSchema", "1.1.0"), ("analysisAiSchema", "document-analysis-alias-2"), ("aliasCatalog", "alias-catalog-1"),
         ("canonIds", "canon-ids-1"), ("algorithm", "analysis-single-v3"), ("validation", "document-analysis-validation-v3"), ("reconcile", "document-reconcile-v3"),
         ("reconcileAiSchema", "reconcile-alias-1"), ("reconcileAlgorithm", "global-reconcile-v1"), ("reconcileCatalog", "reconcile-alias-catalog-1"), ("reconcileGapPolicy", "hierarchical-gap-incomplete-1"),
     ];
@@ -1021,7 +1021,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
             : s.Contains(Norm(DocumentChatWorkflow.InstructionsV3)) ? Graph.DocChatV3
             : s.Contains(Norm(DocumentAnalysisWorkflow.Instructions)) ? Graph.DocAnalysis
             : s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV3)) ? Graph.DocAnalysisV3
-            : (s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV4)) || s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV5))) ? Graph.DocAnalysisV5
+            : (s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV4)) || s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV5)) || s.Contains(Norm(DocumentAnalysisWorkflow.InstructionsV6))) ? Graph.DocAnalysisV5
             : s.Contains(Norm(DocumentSourceDraftWorkflow.Instructions)) ? Graph.DocDraft
             : s.Contains(Norm(DocumentSourceDraftWorkflow.InstructionsV3)) ? Graph.DocDraftV3
             : s.Contains(Norm(ConversationalAgent.ConsolidationInstructions)) ? Graph.Analysis001

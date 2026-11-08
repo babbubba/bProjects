@@ -138,7 +138,7 @@ public sealed class DocumentSourceSnapshotTests : ArchiveTestBase
         var frozen = prompts.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => $"{p.Name}={p.Value.GetString()}").ToList();
         Assert.Equal(
         [
-            "algorithm=analysis-single-v3", "aliasCatalog=alias-catalog-1", "analysis=document-analysis-v5", "analysisAiSchema=document-analysis-alias-2", "analysisSchema=1.1.0",
+            "algorithm=analysis-single-v3", "aliasCatalog=alias-catalog-1", "analysis=document-analysis-v6", "analysisAiSchema=document-analysis-alias-2", "analysisSchema=1.1.0",
             "canonIds=canon-ids-1", "reconcile=document-reconcile-v3", "reconcileAiSchema=reconcile-alias-1", "reconcileAlgorithm=global-reconcile-v1",
             "reconcileCatalog=reconcile-alias-catalog-1", "reconcileGapPolicy=hierarchical-gap-incomplete-1", "validation=document-analysis-validation-v3",
         ], frozen);
