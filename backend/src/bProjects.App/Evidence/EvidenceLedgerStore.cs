@@ -188,7 +188,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
     /// stato e promozione automatica tracciata. Un worker con lease/fencing/deadline non più validi non scrive nulla.
     /// </summary>
     public async Task<ExtractionCommitResult> CommitAsync(
-        ExtractionJobClaim claim, ExtractionContext context, ExtractionValidationResult validation, string modelId, string parameters, CancellationToken ct)
+        ExtractionJobClaim claim, ExtractionContext context, ExtractionValidationResult validation, string modelId, string parameters, CancellationToken ct,
+        string? promptVersion = null)
     {
         ArgumentNullException.ThrowIfNull(validation);
         if (!validation.Accepted)
@@ -239,7 +240,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             Version = number,
             JobId = job.Id,
             SchemaVersion = EvidenceExtractionVersion.CurrentSchemaVersion,
-            PromptVersion = EvidenceExtractor.PromptVersion,
+            PromptVersion = promptVersion ?? EvidenceExtractor.PromptVersion,
             ModelId = modelId.Length <= 256 ? modelId : modelId[..256],
             Parameters = parameters,
             EvidenceCount = validation.Evidences.Count,
