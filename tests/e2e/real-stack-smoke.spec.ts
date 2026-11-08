@@ -21,6 +21,7 @@ async function login(page: Page) {
 
 test('[stack reale + LLM finto] smoke: upload -> parser reale -> estrazione (modello finto) -> Pronto -> chat con fonte -> persistenza in PostgreSQL', async ({ page }) => {
   await stack.resetLlm();
+  await stack.resetData(); // isolamento: lo smoke non dipende dall'ordine rispetto alle altre prove dello stack reale
   await login(page);
   const name = `Smoke ${unique()}`;
   await page.getByRole('button', { name: 'Nuovo progetto' }).click();
