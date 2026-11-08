@@ -127,3 +127,21 @@ Non è stata alterata alcuna dipendenza approvata. Catena effettiva: T126/T142/T
 2. **T142**: dopo la seconda prova la scelta è fra (i) altra revisione del prompt di analisi v5 (vietata senza approvazione), (ii) controllo deterministico del duplicato *identico* già presente (nuova validazione), (iii) retry informato esteso al record Gap invalido (nuovo retry). Nessuna è stata applicata.
 3. **T082/T083**: nessuna delle tre correzioni proposte in `I5-single-real.md` (prompt di estrazione, `OutputExpansion`, retry guidato) è autorizzata; rieseguire senza di esse riprodurrebbe il FAIL.
 4. **T138**: opzioni A/B, confronto in preparazione; nessuna implementazione.
+
+## 14. T138 — confronto tecnico A/B (2026-11-08, senza implementazione)
+
+Problema (evidenza: `validation/T130-N4-revision.md`, gate anticipato T138): nella gerarchia attuale una domanda (Gap) e il suo riscontro possono stare in batch diversi; solo i percorsi single-call valutano i Gap (T136/T143), quindi oltre contesto con Gap il sistema fa fail-fast (`document_limit_exceeded`) e SC-004 resta non soddisfatto per quei casi.
+
+| Criterio | A — fase dedicata di valutazione Gap | B — Gap come obbligazioni nella riconciliazione esistente |
+| --- | --- | --- |
+| Soddisfa FR-013/SC-004 | Sì, se il recupero ricompone domanda + riscontri pertinenti entro il budget | Sì, se il partizionamento garantisce co-locazione; non garantita con molte domande e riscontri sparsi |
+| Completezza delle evidenze | Dipende dal recupero (selezione = rischio di omissione); i riscontri non recuperati sono invisibili | Completa per costruzione solo se ogni coppia Gap/riscontro viene confrontata: crescita quadratica del lavoro nei casi peggiori |
+| Complessità | Nuova fase, nuovo prompt/schema, nuova persistenza dei WorkOutput | Modifica di `DocumentReconcilePlan`, composer, assembly e completamento; nessuna fase nuova ma regole di raggruppamento delicate |
+| Chiamate LLM | +1 per Gap (o per gruppo di Gap) | Variabile: aumenta i batch del livello di confronto |
+| Latenza / contesto | Prevedibile (una chiamata per gruppo con budget noto) | Cresce con il numero di Gap; rischio di superare il cap E |
+| Affidabilità | Più semplice da validare (un record per Gap, contratto già esistente `gapAssessments`) | Più difficile da provare: dipende dal raggruppamento |
+| Compatibilità MAF / recovery | Nuovo nodo del grafo: checkpoint e WorkOutput con le regole esistenti | Stesso grafo, ma identità dei batch e checkpoint da rivedere (T138) |
+| Riuso | Riusa validazione e formato delle valutazioni Gap v5 | Riusa la riconciliazione, ma ne altera il partizionamento già verificato |
+| Rischio rispetto alla 003 | Alto: il recupero è proprio il tema del retrieval della 003, rischio di duplicare e poi sostituire | Medio: meno codice nuovo, ma anche qui parte della logica diventa inutile con il retrieval |
+
+Raccomandazione: **A**, ridotta al minimo e progettata come adattatore sostituibile (input = un Gap + riscontri candidati, output = il record `gapAssessments` già contrattualizzato), così la 003 può sostituire solo il passo «recupero dei candidati» senza toccare il contratto. B è sconsigliata come soluzione definitiva perché lega la correttezza dei Gap a un partizionamento che la 003 dovrà comunque rivedere. Decisione del committente richiesta prima di qualunque implementazione; fino ad allora resta in vigore la soluzione temporanea C+D.
