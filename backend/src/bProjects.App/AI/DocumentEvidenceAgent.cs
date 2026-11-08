@@ -50,7 +50,7 @@ public sealed class DocumentEvidenceAgent(
 {
     public const string AgentName = "DocumentEvidenceAgent";
     public const string AgentId = "document-evidence";
-    public const string PromptVersion = "document-extraction-v2";
+    public const string PromptVersion = "document-extraction-v3";
 
     /// <summary>Definizione del grafo congelata per i nuovi owner (checkpoint e manifesto); un owner con un'altra definizione non si riprende.</summary>
     public const string DefinitionVersion = "document-extraction-1";
@@ -62,7 +62,7 @@ public sealed class DocumentEvidenceAgent(
     /// <summary>Moltiplicatore dell'ordinale della prima porzione: ordinale globale di unità = prima porzione × 10000 + ordinale del batch.</summary>
     public const int UnitOrdinalStride = 10_000;
 
-    private static readonly Lazy<string> Prompt = new(() => LoadPrompt("document-extraction-v2.md"));
+    private static readonly Lazy<string> Prompt = new(() => LoadPrompt("document-extraction-v3.md"));
 
     public static string Instructions => Prompt.Value;
 
