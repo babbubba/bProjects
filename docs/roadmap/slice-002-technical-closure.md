@@ -84,3 +84,46 @@ Debito T138 e qualità N4; KB condivise/RAG restano fuori; il livello reale dipe
 ## 12. Valutazione della release candidate
 
 **READY WITH LIMITATIONS** per un pilota tecnico controllato: build pulite, 0 test falliti in backend, Vitest e Playwright offline; funzionalità implementate e tecnicamente verificate. Non è `FUNCTIONALLY_VERIFIED` né `ACCEPTED`: N4 fallisce semanticamente, T138 blocca SC-004 per i Gap oltre contesto, i gate DGX/PM e la revisione umana di accessibilità non sono eseguiti. Lo stack reale con LLM finto passa 17/17 con parser aggiornato (il fallimento iniziale era ambientale). All'accettazione mancano T126 (prova DGX), T107 (umana), T142, T138, T067, T082, T083, T090, T104, T109, T110, T111, T114.
+
+## 13. Campagna di chiusura dei gate — avvio (2026-11-08, base `217eaf8`)
+
+Sezione aggiunta; le sezioni 1–12 restano il riferimento storico. Nessuna inferenza DGX eseguita in questo passo (`BPROJECTS_TEST_DGX_ALLOW` non impostata).
+
+### 13.1 Verifiche di baseline
+
+- Branch `feature/002-implementation`, HEAD `217eaf8`, worktree pulito, 0 commit di scarto rispetto a `origin/feature/002-implementation`.
+- Parser corretto attivo: `bprojects-rc-parser` (immagine `bprojects-parser:rc-3819e30`, healthy). `bprojects-t055-parser` (obsoleto) e `bprojects-002-test-pg2` (PostgreSQL 18) sono attivi e non toccati.
+- Task: 143 totali, 130 spuntati, 13 aperti (`T126, T067, T142, T082, T083, T138, T090, T104, T107, T109, T110, T111, T114`).
+
+### 13.2 Sonda sola lettura del router DGX (GET `/v1/models`, `/props`; nessuna inferenza)
+
+- Router llama.cpp `b10703`, `role=router`, `max_instances=4`, `models_autoload=true`. `/slots` senza nome modello risponde 400 (il router richiede il modello).
+- `Qwen3.6-35B-Smart`: stato `loaded`, `--ctx-size 131072`, `--parallel 1`, `--sleep-idle-seconds 900`; gli altri 22 modelli `unloaded`. Il profilo N4 concordato (131072, 1 slot) è quindi disponibile **ora**.
+- Per T126: il router non espone in sola lettura un modo per caricare un modello senza inferenza; il solo meccanismo osservato è l'autoload alla prima richiesta (che è un'inferenza). Nessun endpoint di load è stato provato né inventato → **decisione necessaria** (vedi 13.4).
+
+### 13.3 Matrice dei gate
+
+| Task | Dipendenze (tasks.md) | Prerequisito mancante | Test / ambiente | Criterio PASS | Stato |
+| --- | --- | --- | --- | --- | --- |
+| T107 | T087, T092, T101, T103 (chiusi) | revisione umana (lettore di schermo, contrasto visivo, reflow, touch) | checklist `accessibility.md` §(d); Playwright offline 1440/390 già verde | tutte le voci umane eseguite e attribuite | TECHNICALLY_VERIFIED; parte umana NOT_VERIFIED |
+| T126 | T124, T125 (chiusi) | meccanismo verificato di load senza inferenza | router DGX, modello scaricato → disponibile | readiness bounded dentro la deadline originale, zero inferenze prima della classificazione | IMPLEMENTED, TECHNICALLY_VERIFIED (49 test); prova reale BLOCKED (decisione) |
+| T142 | T141, T055 | decisione semantica (13.4) | N4 reale ×3 seriali, `Qwen3.6-35B-Smart` | 3 N4 conformi, Gap E2 valutato Answered, conflitto Open 45/30 senza duplicati | BLOCKED (decisione); 2 prove FAIL già registrate |
+| T067 | T055, T066, T125–T129 | T126 (prova reale) e T142 per N4 | stack reale + DGX + browser | ≥5 nominali SC-003 su 4 formati, gold, provenienze, conferma PM | NOT_VERIFIED, bloccato da T126/T142 |
+| T082 | T055, T078, T080, T123, T131 | nuova ipotesi per l'estrazione di corpus narrativo (4 FAIL, `I5-single-real.md`) e T138 per i Gap | DGX | analisi completa >2×B, ≥12 fatti, citazioni corrette entro cap E | FAILED in estrazione; BLOCKED (decisione) |
+| T083 | come T082, seriale dopo T082 | T082 | DGX | come T082 su ≥3 documenti | NOT_VERIFIED |
+| T138 | — | decisione A/B (e rapporto con la 003) | confronto tecnico | decisione esplicita del committente | BLOCKED (decisione) |
+| T090 | T082, T083 | T082, T083, T138 | DGX + browser | SC-004 end-to-end | NOT_VERIFIED, BLOCKED |
+| T104 | T067, T100, T103 | T067 | stack reale + DGX | fonti congelate, restart, promozione/esclusione | NOT_VERIFIED |
+| T109 | T048, T050, T065, T090, T102 | T090 | DGX occupato | coda/deadline/risultati tardivi | NOT_VERIFIED |
+| T110 | T048, T067, T090 | T067, T090 | DGX a zero carico | N ≤180 s, E ≤3600 s | NOT_VERIFIED |
+| T111 | T067, T090, T104, T107, T109, T110 | persone reali | due PM + un tecnico | giudizi umani attribuiti | NOT_VERIFIED (componente umana) |
+| T114 | T108–T113 | tutti i precedenti | consolidamento | nessun gate mancante classificato PASS | NOT_VERIFIED |
+
+Non è stata alterata alcuna dipendenza approvata. Catena effettiva: T126/T142/T138 → T067 → T104; T082 → T083 → T090 → T109/T110 → T111 → T114.
+
+### 13.4 Decisioni aperte
+
+1. **T126**: autorizzare uno dei due modi di ottenere lo stato «scaricato → disponibile»: (a) attendere lo sleep naturale (`--sleep-idle-seconds 900`) del modello e poi far partire **una sola** richiesta autorizzata che lo risvegli, osservando `/v1/models` prima e dopo; (b) indicare un endpoint di load supportato dal router. Fino ad allora la prova reale resta NOT_VERIFIED.
+2. **T142**: dopo la seconda prova la scelta è fra (i) altra revisione del prompt di analisi v5 (vietata senza approvazione), (ii) controllo deterministico del duplicato *identico* già presente (nuova validazione), (iii) retry informato esteso al record Gap invalido (nuovo retry). Nessuna è stata applicata.
+3. **T082/T083**: nessuna delle tre correzioni proposte in `I5-single-real.md` (prompt di estrazione, `OutputExpansion`, retry guidato) è autorizzata; rieseguire senza di esse riprodurrebbe il FAIL.
+4. **T138**: opzioni A/B, confronto in preparazione; nessuna implementazione.
