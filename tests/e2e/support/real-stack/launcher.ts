@@ -54,6 +54,11 @@ export function sql<T = Record<string, unknown>>(database: string, query: string
   return JSON.parse(out.trim()) as T[];
 }
 
+/** Esegue un comando SQL (senza risultato) sul database isolato dell'esecuzione. */
+export function execSql(database: string, statement: string) {
+  execFileSync('docker', ['exec', '-i', PG_CONTAINER, 'psql', '-U', 'postgres', '-d', database, '-v', 'ON_ERROR_STOP=1'], { input: 'SET client_min_messages = warning;\n' + statement, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+}
+
 function psqlAdmin(statement: string) {
   execFileSync('docker', ['exec', '-i', PG_CONTAINER, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], { input: statement, encoding: 'utf8' });
 }
@@ -100,6 +105,8 @@ export class RealStack {
   user = 'pm-e2e';
   password = randomBytes(12).toString('hex') + 'Aa1!';
   backendRestarts = 0;
+  /** Variabili Ai__*/Documents__*/... aggiuntive per il backend (configurazione normale, nessun hook): es. finestra piccola per la prova oltre contesto. */
+  envOverride: Record<string, string> = {};
   private backend?: ChildProcess;
   private proxy?: Server;
   private control?: Server;
@@ -135,6 +142,7 @@ export class RealStack {
       ...cleanEnv(),
       ASPNETCORE_ENVIRONMENT: 'Production',
       ASPNETCORE_URLS: `http://127.0.0.1:${PORTS.backend}`,
+      'Logging__LogLevel__Microsoft.EntityFrameworkCore': 'Warning',
       Auth__SigningKey: this.signingKey,
       ConnectionStrings__AppDb: this.connectionString(),
       // Modello finto, valori fittizi: nessun segreto reale, nessun DGX.
@@ -146,6 +154,7 @@ export class RealStack {
       Documents__StorageRoot: this.storageRoot,
       Parser__BaseUrl: `http://127.0.0.1:${PARSER_PORT}/`,
       Parser__Secret: this.parserSecret,
+      ...this.envOverride,
       ...(process.env['E2E_STACK_BACKEND_ENV'] ? (JSON.parse(process.env['E2E_STACK_BACKEND_ENV']) as Record<string, string>) : {}),
     };
   }
@@ -291,13 +300,21 @@ export class RealStack {
         };
         try {
           switch (`${req.method} ${path}`) {
-            case 'POST /backend/restart': await this.restartBackend(); return out({ ok: true });
+            case 'POST /backend/restart': {
+              if (body['env'] !== undefined) this.envOverride = body['env'] as Record<string, string>;
+              await this.restartBackend();
+              return out({ ok: true, env: Object.keys(this.envOverride) });
+            }
             case 'POST /backend/stop': await this.stopBackend(); return out({ ok: true });
             case 'POST /backend/start': await this.startBackend(); return out({ ok: true });
             case 'POST /sql': return out(sql(this.database, String(body['query'])));
             case 'GET /llm/requests': return out({ requests: this.llm.requests, unexpected: this.llm.unexpected });
+            // Isolamento fra prove: svuota progetti e tutto cio che ne dipende (account e ruoli restano). Il backend non tiene stato in memoria sui progetti.
+            case 'POST /db/reset': execSql(this.database, 'TRUNCATE TABLE "Projects" CASCADE'); return out({ ok: true });
             case 'POST /llm/reset': this.llm.reset(); return out({ ok: true });
             case 'POST /llm/fault': this.llm.faults.push(body as unknown as Fault); return out({ ok: true });
+            case 'POST /llm/runtime': Object.assign(this.llm.runtime, body); return out({ ok: true, runtime: this.llm.runtime });
+            case 'POST /llm/config': Object.assign(this.llm.config, body); return out({ ok: true, config: this.llm.config });
             case 'POST /llm/clear-faults': this.llm.faults.length = 0; return out({ ok: true });
             default: return out({ error: 'non supportato' }, 404);
           }

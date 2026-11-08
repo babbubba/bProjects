@@ -11,7 +11,7 @@ import type { AddressInfo } from 'node:net';
 // Le risposte sono deterministiche e derivano SOLO dal testo del messaggio inviato (come farebbe un modello reale), con le stesse regole dei
 // modelli finti in backend/tests/bProjects.IntegrationTests (DocumentSmallFlowTests.FlowModel e simili): i validatori del backend restano attivi.
 
-export type Graph = 'extract' | 'extract-pm' | 'doc-chat' | 'unknown';
+export type Graph = 'extract' | 'extract-pm' | 'doc-chat' | 'doc-chat-scan' | 'doc-chat-reduce' | 'doc-analysis' | 'doc-reconcile' | 'doc-draft' | 'unknown';
 
 export interface RecordedRequest {
   seq: number;
@@ -42,8 +42,14 @@ export interface FakeLlmOptions {
 }
 
 const MARKERS: [Graph, string][] = [
+  ['doc-chat-scan', '# Scansione documentale oltre contesto'],
+  ['doc-chat-reduce', '# Riduzione delle note'],
+  ['doc-reconcile', 'Sei il riconciliatore globale delle evidenze di bProjects'],
+  ['doc-draft', "Sei l'assistente di redazione di bProjects. Ricevi una PARTE"],
   ["extract", "Sei l'estrattore delle evidenze documentali di bProjects"],
   ['extract-pm', "Sei l'estrattore delle evidenze di bProjects"],
+  ['doc-analysis', "Sei l'assistente di analisi di bProjects, in modalità documentale."],
+  ['doc-draft', "Sei l'assistente di redazione di bProjects. Ricevi l'analisi dei requisiti di un progetto, gia verificata"],
   ['doc-chat', "Sei l'assistente conversazionale di bProjects. Parli con un project manager italiano che descrive un progetto software e può consultare i documenti"],
 ];
 
@@ -82,9 +88,9 @@ export function extractionReply(text: string): string {
   });
 }
 
-/** Messaggi del PM: nessuna informazione registrata (risposta valida dello schema evidence-1.0.0, mai inventare). */
+/** Messaggi del PM: nessuna informazione registrata (`ExtractionOutput` di evidence-1.0.0: solo `evidences` e `noEvidenceReason`, nessun altro campo; mai inventare). */
 export function pmExtractionReply(): string {
-  return JSON.stringify({ schemaVersion: 'evidence-1.0.0', evidences: [], noEvidenceReason: 'Il messaggio non contiene informazioni sul progetto da registrare.' });
+  return JSON.stringify({ evidences: [], noEvidenceReason: 'Il messaggio non contiene informazioni sul progetto da registrare.' });
 }
 
 /** Cita le fonti il cui testo risponde alla domanda (contiene una parola chiave del messaggio PM); se nessuna, la prima fonte disponibile. */
@@ -98,17 +104,144 @@ export function chatReply(text: string): string {
   return JSON.stringify({ mode: 'documented', answer: 'Secondo i documenti: ' + cited.map((s) => `[fonte:${s}]`).join(' ') + '.' });
 }
 
-function reply(graph: Graph, text: string): string | null {
+/**
+ * Analisi documentale v5 (contratto alias-2, una sola chiamata): legge SOLO le voci `<<<VOCE [E<n>] origine=.. tipo=..>>>` del messaggio, come un modello
+ * reale. Un requisito per evidenza; per ogni evidenza `tipo=Gap` una domanda aperta con valutazione Open/NoAnswer (il caso piu prudente).
+ * Senza voci con `tipo=` (contratti storici) la richiesta non e supportata.
+ */
+export function analysisReply(text: string): string | null {
+  const entries = [...text.matchAll(/<<<VOCE \[(E[1-9][0-9]*)\] origine=(\w+) tipo=(\w+)[^>\n]*>>>\n([\s\S]*?)\n<<</g)]
+    .map((m) => ({ alias: m[1], origin: m[2], kind: m[3], text: m[4] }));
+  if (entries.length === 0) return null;
+  const aliases = entries.map((e) => e.alias);
+  const requirements: unknown[] = [];
+  const questions: unknown[] = [];
+  const gapAssessments: unknown[] = [];
+  entries.forEach((e, i) => {
+    const classification = e.origin === 'Message' ? 'Declared' : 'Documented';
+    const item = { key: `i${i + 1}`, text: e.text, classification, evidence: [e.alias] };
+    if (e.kind === 'Gap') {
+      questions.push(item);
+      gapAssessments.push({ gap: e.alias, outcome: 'Open', reason: 'NoAnswer', rationale: 'Nessun riscontro nelle fonti.', supportingEvidence: [], openItem: item.key, openConflict: null });
+    } else requirements.push(item);
+  });
+  return JSON.stringify({
+    contract: 'alias-2', visited: { A: aliases, B: aliases }, noFindings: { A: 'Nessuna relazione oltre quelle note.', B: 'Nessuna relazione oltre quelle note.', Cross: null },
+    items: { goals: [], scopeOverview: [], scopeIncluded: [], scopeExcluded: [], requirements, flows: [], constraints: [], dependencies: [], assumptions: [], openQuestions: questions },
+    conflicts: [], findings: [], knownRelationChecks: [], patches: [], gapAssessments,
+  });
+}
+
+/** Bozza v3 (alias): un unico blocco con tutti gli item `[I<n>]` del messaggio e le loro fonti `F<n>` (DTO document-draft-alias-1). */
+export function draftReply(text: string): string | null {
+  const elements = [...text.matchAll(/<<<(?:ELEMENTO|ALTERNATIVA) \[(I[1-9][0-9]*)\][^>\n]*fonti=([^>\n]*)>>>/g)]
+    .map((m) => ({ item: m[1], sources: m[2].split(',').map((x) => x.trim()).filter(Boolean) }));
+  if (elements.length === 0) return null;
+  const sources = [...new Set(elements.flatMap((e) => e.sources))];
+  return JSON.stringify({ sectionKey: 'documento', blocks: [{ items: elements.map((e) => e.item), markdown: '- Requisiti confermati ' + sources.map((s) => `[fonte:${s}]`).join(' '), sources }] });
+}
+
+// ---- oltre contesto: chat a scansione/riduzione/finale e riconciliazione gerarchica (stessi contratti dei modelli finti in-process)
+
+interface EvidenceBlock {
+  label: string;
+  body: string;
+}
+
+const evidenceBlocks = (text: string): EvidenceBlock[] =>
+  [...text.matchAll(/<<<EVIDENZA[^\n]*>>>\n([\s\S]*?)<<<FINE EVIDENZA>>>/g)]
+    .map((m) => ({ label: /fonte:(F[1-9][0-9]*|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/.exec(m[1])?.[1] ?? '', body: m[1] }))
+    .filter((b) => b.label !== '');
+
+/** Parole (>= 6 lettere) della domanda del PM: nel messaggio e dopo l'ultimo blocco di evidenze/note oppure dopo «Messaggio del project manager:». */
+function questionKeywords(text: string): string[] {
+  const marker = text.lastIndexOf('Messaggio del project manager:');
+  const tail = marker >= 0 ? text.slice(marker) : text.slice(Math.max(text.lastIndexOf('<<<FINE EVIDENZA>>>'), text.lastIndexOf('<<<FINE NOTA>>>'), 0));
+  return [...tail.toLowerCase().matchAll(/\p{L}{6,}/gu)].map((m) => m[0]);
+}
+
+const matching = (blocks: EvidenceBlock[], keywords: string[]) => blocks.filter((b) => keywords.some((k) => b.body.toLowerCase().includes(k)));
+
+export function scanReply(text: string, noteWords: number): string {
+  const found = matching(evidenceBlocks(text), questionKeywords(text));
+  if (found.length === 0) {
+    return JSON.stringify({ outcome: 'no_support', reason: 'Nessuna evidenza di questo gruppo riguarda la domanda del project manager.', notes: [] });
+  }
+  const notes = found.map((f) => ({
+    kind: 'support',
+    text: 'Nota: ' + f.body.replace(/\s+/g, ' ').replace(/fonte:\S+/g, '').trim().split(' ').slice(0, 12).join(' ') + ' ' + Array.from({ length: noteWords }, (_, i) => `riempitivo${i}`).join(' '),
+    sources: [f.label],
+  }));
+  return JSON.stringify({ outcome: 'support', reason: '', notes });
+}
+
+export function reduceReply(text: string): string {
+  const notes = [...text.matchAll(/<<<NOTA[^\n]*>>>\n([\s\S]*?)\n<<<FINE NOTA>>>/g)].map((m) => m[1]);
+  return JSON.stringify({ text: `Sintesi unita di ${notes.length} note: ` + notes.map((n) => n.split(' ').slice(1, 6).join(' ')).join('; '), conflict: false });
+}
+
+/** Risposta finale oltre contesto: cita le fonti delle evidenze riaperte che rispondono alla domanda (al piu 6); altrimenti dichiara l'assenza di uso dei documenti. */
+export function longFinalReply(text: string): string | null {
+  const blocks = evidenceBlocks(text);
+  if (blocks.length === 0) return null;
+  const found = [...new Map(matching(blocks, questionKeywords(text)).map((b) => [b.label, b])).values()].slice(0, 6);
+  if (found.length === 0) return JSON.stringify({ mode: 'no_document_use', answer: 'Nei documenti selezionati non risulta nulla di pertinente.' });
+  return JSON.stringify({ mode: 'documented', answer: 'Zone trovate: ' + found.map((f) => `${f.body.replace(/\s+/g, ' ').trim().split(' ')[0]} [fonte:${f.label}]`).join('; ') });
+}
+
+/**
+ * Riconciliazione gerarchica (`reconcile-alias-1`, un batch per chiamata): nelle foglie della vista A una voce `requirements` per evidenza; altrove soltanto il descrittore.
+ * Nessun candidato, nessuna patch: i collegamenti li trova solo un modello reale (qui il modello finto non emette relazioni, come negli altri modelli finti).
+ */
+export function reconcileReply(text: string): string | null {
+  const stageName = /^Tipo di batch: (\w+)$/m.exec(text)?.[1];
+  if (!stageName) return null;
+  const stage = ({ foglia: 'leaf', riduzione: 'reduce', espansione: 'expand', confronto: 'compare' } as Record<string, string>)[stageName] ?? stageName;
+  const view = /^Vista: (\w+)$/m.exec(text)?.[1] ?? '';
+  const voci = [...text.matchAll(/<<<VOCE \[(E[1-9][0-9]*)\][^>\n]*>>>\n([\s\S]*?)\n<<<FONTE/g)].map((m) => ({ alias: m[1], statement: m[2] }));
+  const nodes = [...text.matchAll(/<<<NODO \[(N[1-9][0-9]*)\]/g)].map((m) => m[1]);
+  const items = stage === 'leaf' && view === 'A'
+    ? voci.map((v, i) => ({ key: `i${i + 1}`, section: 'requirements', text: v.statement, classification: 'Documented', evidence: [v.alias] }))
+    : [];
+  const refs = [...voci.map((v) => v.alias), ...nodes];
+  return JSON.stringify({
+    contract: 'reconcile-alias-1',
+    descriptor: stage === 'leaf' || stage === 'reduce' ? `gruppo ${stage} ${view} ${refs[0] ?? ''}-${refs.at(-1) ?? ''} (${refs.length})` : null,
+    noFindings: items.length > 0 ? null : 'nessun collegamento emerso',
+    items, candidates: [], focus: stage === 'compare' ? { outcome: 'Compared', reason: null } : null, patches: [],
+  });
+}
+
+function reply(graph: Graph, text: string, config: LlmConfig): string | null {
   switch (graph) {
     case 'extract': return extractionReply(text);
     case 'extract-pm': return pmExtractionReply();
-    case 'doc-chat': return chatReply(text);
+    case 'doc-chat': return longFinalReply(text) ?? chatReply(text);
+    case 'doc-chat-scan': return scanReply(text, config.noteWords);
+    case 'doc-chat-reduce': return reduceReply(text);
+    case 'doc-reconcile': return reconcileReply(text);
+    case 'doc-analysis': return analysisReply(text);
+    case 'doc-draft': return draftReply(text);
     default: return null;
   }
 }
 
+/** Parametri di comportamento delle risposte (non del protocollo). */
+export interface LlmConfig {
+  /** Parole di riempimento di ogni nota di scansione: note grandi forzano la riduzione gerarchica della chat. */
+  noteWords: number;
+}
+
+/** Stato del runtime simulato (readiness): `down` = ogni richiesta risponde 503; `missing` = il modello non e elencato da /v1/models; `unloaded` = elencato ma non caricato. */
+export interface RuntimeState {
+  mode: 'normal' | 'down' | 'missing' | 'unloaded';
+  contextWindowTokens: number;
+}
+
 export class FakeLlm {
   readonly requests: RecordedRequest[] = [];
+  readonly runtime: RuntimeState;
+  readonly config: LlmConfig = { noteWords: 10 };
   /** Richieste fuori dal protocollo o di grafi non riconosciuti: devono restare vuote (le prove lo verificano). */
   readonly unexpected: string[] = [];
   readonly faults: Fault[] = [];
@@ -116,7 +249,9 @@ export class FakeLlm {
   private readonly sockets = new Set<import('node:net').Socket>();
   private seq = 0;
 
-  private constructor(private readonly options: FakeLlmOptions) {}
+  private constructor(private readonly options: FakeLlmOptions) {
+    this.runtime = { mode: 'normal', contextWindowTokens: options.contextWindowTokens };
+  }
 
   static async start(options: FakeLlmOptions): Promise<FakeLlm> {
     const llm = new FakeLlm(options);
@@ -150,6 +285,9 @@ export class FakeLlm {
     this.requests.length = 0;
     this.unexpected.length = 0;
     this.faults.length = 0;
+    this.runtime.mode = 'normal';
+    this.runtime.contextWindowTokens = this.options.contextWindowTokens;
+    this.config.noteWords = 10;
   }
 
   countOf(graph: Graph): number {
@@ -171,11 +309,13 @@ export class FakeLlm {
     };
 
     try {
+      if (this.runtime.mode === 'down') return json(503, { error: { message: 'fake-llm: runtime non raggiungibile (simulato)', type: 'fake_llm_fault' } });
       if (req.method === 'GET' && path === '/v1/models') {
-        return json(200, { object: 'list', data: [{ id: this.options.modelId, object: 'model', status: { value: 'loaded', args: ['llama-server'] } }] });
+        const data = this.runtime.mode === 'missing' ? [{ id: 'altro-modello', object: 'model' }] : [{ id: this.options.modelId, object: 'model', status: { value: this.runtime.mode === 'unloaded' ? 'unloaded' : 'loaded', args: ['llama-server'] } }];
+        return json(200, { object: 'list', data });
       }
       if (req.method === 'GET' && path === '/props') {
-        return json(200, { default_generation_settings: { n_ctx: this.options.contextWindowTokens, params: { n_predict: -1 } }, total_slots: 1 });
+        return json(200, { default_generation_settings: { n_ctx: this.runtime.contextWindowTokens, params: { n_predict: -1 } }, total_slots: 1 });
       }
       if (req.method === 'GET' && path === '/slots') return json(404, { error: { message: 'slots non esposti' } });
       if (req.method === 'POST' && path === '/tokenize') {
@@ -221,7 +361,7 @@ export class FakeLlm {
       }
     }
 
-    const content = reply(graph, text);
+    const content = reply(graph, text, this.config);
     if (content === null) {
       record.outcome = 'error:501';
       return unexpected(`grafo non riconosciuto (sistema: ${norm(system).slice(0, 80)})`);
