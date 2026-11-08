@@ -21,6 +21,25 @@ public sealed record MaxOutputTokensView(int? Value, bool Confirmed);
 
 public sealed record ReasoningView(bool Requested, string Effective);
 
+/// <summary>Impronta (T102) del modello effettivo di una chiamata: modello e finestra verificata persistiti con la chiamata, più l'hash stabile dei due.</summary>
+public sealed record ModelFingerprintView(string ModelId, TokenValue ContextWindowTokens, string Hash);
+
+/// <summary>
+/// Tentativo di un lavoro logico (T102): outcome winning|failed|interrupted|rejected|unrecorded, stato peggiore fra le chiamate persistite (null se unrecorded),
+/// numero di chiamate, tempo attivo (unione, null se non osservabile), token misurati, finishReason e impronta del modello. Mai prompt, ragionamento, testo di trasporto
+/// né fencing token.
+/// </summary>
+public sealed record AttemptView(
+    int Attempt,
+    string Outcome,
+    string? State,
+    int Calls,
+    long? ActiveMs,
+    TokenValue PromptTokens,
+    TokenValue CompletionTokens,
+    string? FinishReason,
+    ModelFingerprintView? Model);
+
 public sealed record SummaryCallsView(int SummaryCalls, TokenValue SummaryPromptTokens, TokenValue SummaryCompletionTokens);
 
 /// <summary>InferenceMetrics del contratto: chiamata finale del risultato logico, con il numero di chiamate e le sintesi del tentativo vincente.</summary>
@@ -99,6 +118,57 @@ public static class InferenceMetrics
             summaries.Count == 0
                 ? null
                 : new SummaryCallsView(summaries.Count, Sum(summaries.Select(s => s.PromptTokens)), Sum(summaries.Select(s => s.CompletionTokens))));
+    }
+
+    /// <summary>
+    /// Impronta del modello effettivo di una chiamata (T102): modello e finestra verificata letti dalla riga della chiamata, mai dalla configurazione corrente né dal monitor
+    /// del runtime. Hash = primi 16 esadecimali minuscoli di SHA-256 di «modelId|finestra» (finestra «unavailable» se non verificata).
+    /// </summary>
+    internal static ModelFingerprintView Fingerprint(InferenceCall call)
+    {
+        var input = $"{call.ModelId}|{call.ContextWindowTokens?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unavailable"}";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input))).ToLowerInvariant()[..16];
+        return new ModelFingerprintView(call.ModelId, TokenValue.Measured(call.ContextWindowTokens), hash);
+    }
+
+    /// <summary>
+    /// Tentativi dello stesso lavoro logico (stesso proprietario: mai righe di altri root, di figli o di fratelli), distinti per (tentativo, fencing token) e
+    /// ordinati per numero: il vincente è quello della chiamata finale; gli altri sono falliti, interrotti o rifiutati dal validatore secondo gli stati persistiti.
+    /// Un tentativo numerato fino a <paramref name="attemptsMade"/> senza alcuna riga (lease scaduto prima della scrittura) è «unrecorded»: nessun tempo, token
+    /// o modello inventato. Il tempo attivo è l'unione degli intervalli delle chiamate del tentativo (null se una durata manca): non si somma mai fra tentativi né a recupero e coda.
+    /// </summary>
+    internal static IReadOnlyList<AttemptView> Attempts(InferenceCall final, IReadOnlyCollection<InferenceCall> ownerRows, int attemptsMade)
+    {
+        var groups = ownerRows.GroupBy(r => (r.Attempt, r.FencingToken))
+            .OrderBy(g => g.Key.Attempt).ThenBy(g => g.Min(r => r.StartedAt))
+            .Select(g => AttemptOf(g.Key, g.OrderBy(r => r.StartedAt).ToList(), final))
+            .ToList();
+        var recorded = groups.Select(g => g.Attempt).ToHashSet();
+        groups.AddRange(Enumerable.Range(1, Math.Max(0, attemptsMade)).Where(a => !recorded.Contains(a))
+            .Select(a => new AttemptView(a, "unrecorded", null, 0, null, TokenValue.Unavailable, TokenValue.Unavailable, null, null)));
+        return [.. groups.OrderBy(a => a.Attempt)];
+    }
+
+    private static AttemptView AttemptOf((int Attempt, long FencingToken) key, IReadOnlyList<InferenceCall> calls, InferenceCall final)
+    {
+        var winning = key.Attempt == final.Attempt && key.FencingToken == final.FencingToken;
+        var state = calls.Any(c => c.State == InferenceCallState.Failed) ? InferenceCallState.Failed
+            : calls.Any(c => c.State is InferenceCallState.Interrupted or InferenceCallState.Running) ? InferenceCallState.Interrupted
+            : InferenceCallState.Completed;
+        var outcome = winning ? "winning" : state switch
+        {
+            InferenceCallState.Failed => "failed",
+            InferenceCallState.Interrupted => "interrupted",
+            _ => "rejected",
+        };
+        // Chiamata che rappresenta il tentativo: la finale del vincente, altrimenti l'ultima non di sintesi (la compattazione ha un proprio modello di fase).
+        var main = winning ? final : calls.LastOrDefault(c => c.Phase != AiPhase.Compaction) ?? calls[^1];
+        long? active = calls.Any(c => c.DurationMs is null)
+            ? null
+            : ExecutionTelemetry.UnionLength([.. calls.Select(c => (c.StartedAt.ToUnixTimeMilliseconds(), c.StartedAt.ToUnixTimeMilliseconds() + c.DurationMs!.Value))]);
+        return new AttemptView(
+            key.Attempt, outcome, state.ToString().ToLowerInvariant(), calls.Count, active,
+            Sum(calls.Select(c => c.PromptTokens)), Sum(calls.Select(c => c.CompletionTokens)), main.FinishReason, Fingerprint(main));
     }
 
     /// <summary>Somma di valori misurati: measured se è uno solo, calculated se più d'uno, unavailable se ne manca anche uno.</summary>

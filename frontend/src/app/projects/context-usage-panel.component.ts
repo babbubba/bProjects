@@ -137,6 +137,8 @@ export class ContextUsagePanelComponent {
       metrics: last.metrics,
       stale: last.staleReason === 'newer_messages',
       execution: last.execution ?? null,
+      attempts: last.attempts ?? null,
+      modelFingerprint: last.modelFingerprint ?? null,
     };
   });
 

@@ -1,9 +1,12 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { ContextUsageStore } from './context-usage.store';
 import {
+  AttemptOutcome,
+  AttemptView,
   ExecutionView,
   InferenceMetrics,
   InferencePhase,
+  ModelFingerprint,
   TokenSource,
   TokenValue,
 } from './project-api.service';
@@ -31,6 +34,22 @@ const provenance: Record<TokenSource, string> = {
   estimated: 'stima',
   unavailable: 'non disponibile',
 };
+
+const outcomeLabels: Record<AttemptOutcome, string> = {
+  winning: 'Vincente',
+  failed: 'Fallito',
+  interrupted: 'Interrotto',
+  rejected: 'Rifiutato',
+  unrecorded: 'Non registrato',
+};
+
+interface AttemptRow {
+  attempt: number;
+  outcome: AttemptOutcome;
+  /** Riga leggibile: tempo attivo (null = indisponibile, mai zero), chiamate e modello della chiamata. */
+  text: string;
+  available: boolean;
+}
 
 interface Timing {
   id: 'elapsed' | 'queue' | 'preflight' | 'processing' | 'backoff' | 'recovery';
@@ -60,6 +79,41 @@ export class InferenceMetricsComponent {
   readonly phase = input<InferencePhase>('chat');
   /** Regime e tempi del root (002); assente o null = record 001 o senza telemetria: nessun tempo mostrato. */
   readonly execution = input<ExecutionView | null | undefined>(null);
+
+  /** Tentativi dello stesso lavoro (002 T102): server precedenti o record storici senza dati = nessun elenco. */
+  readonly attempts = input<AttemptView[] | null | undefined>(null);
+  /** Impronta del modello effettivo della chiamata finale, letta dalla chiamata e non dalla configurazione. */
+  readonly modelFingerprint = input<ModelFingerprint | null | undefined>(null);
+
+  protected readonly fingerprint = computed(() => {
+    const f = this.modelFingerprint();
+    if (!f) return null;
+    const window = hasValue(f.contextWindowTokens)
+      ? formatCount(f.contextWindowTokens.value)
+      : 'n/d';
+    return `Modello effettivo ${f.modelId} · finestra ${window} · impronta ${f.hash}`;
+  });
+
+  /** Elenco solo se c'è più di un tentativo: un unico vincente non aggiunge informazione oltre all'impronta. */
+  protected readonly attemptRows = computed<AttemptRow[] | null>(() => {
+    const list = this.attempts();
+    if (!list || list.length < 2) return null;
+    return list.map((a) => {
+      const parts = [
+        `Tentativo ${a.attempt}`,
+        outcomeLabels[a.outcome] ?? a.outcome,
+        `Tempo attivo ${formatDuration(a.activeMs)}`,
+      ];
+      if (a.calls > 0) parts.push(a.calls === 1 ? '1 chiamata' : `${a.calls} chiamate`);
+      parts.push(`Modello ${a.model ? a.model.modelId : 'indisponibile'}`);
+      return {
+        attempt: a.attempt,
+        outcome: a.outcome,
+        text: parts.join(' · '),
+        available: a.outcome !== 'unrecorded' && a.activeMs !== null && a.activeMs !== undefined,
+      };
+    });
+  });
 
   /** Tempi per fase, uno per intervallo esclusivo del server: coda, preflight, calcolo, backoff e recupero. */
   protected readonly timings = computed<Timing[] | null>(() => {

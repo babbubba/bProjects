@@ -51,3 +51,29 @@
     }
   </dl>
 }
+@if (fingerprint(); as f) {
+  <p
+    class="model-fingerprint small text-secondary mb-0"
+    data-testid="model-fingerprint"
+    title="Modello e finestra letti dalla chiamata, non dalla configurazione corrente"
+  >
+    {{ f }}
+  </p>
+}
+@if (attemptRows(); as rows) {
+  <ol
+    class="attempts small text-secondary"
+    aria-label="Tentativi della richiesta AI"
+    data-testid="attempts"
+  >
+    @for (a of rows; track a.attempt) {
+      <li
+        [attr.data-testid]="'attempt-' + a.attempt"
+        [attr.data-outcome]="a.outcome"
+        [attr.data-available]="a.available"
+      >
+        {{ a.text }}
+      </li>
+    }
+  </ol>
+}

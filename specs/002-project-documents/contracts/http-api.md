@@ -72,6 +72,15 @@ Evento `document.state` sullo stream progetto esistente, payload job/versionId/p
 
 `context-usage` conserva campi e provenienza dei valori, aggiunge composizione document_sources e snapshot fonti; quando modello di fase differisce mostra snapshot runtime pertinente, non cifra del globale attribuita al modello diverso. `InferenceMetrics` aggrega le chiamate del tentativo vincente, esponendo anche dettaglio per unità/fase; tentativi falliti restano diagnostica redatta. Storici null restano unavailable, nessun backfill inventato.
 
+### Delta T102 — tentativi e impronta del modello in `context-usage` (2026-11-08)
+
+`last` di GET `/api/projects/{p}/context-usage` aggiunge due campi **opzionali e additivi** (client precedenti invariati; nessun endpoint, tabella o migrazione nuovi: sola lettura delle righe `InferenceCalls` già persistite e di `AttemptCount` del root):
+
+- `modelFingerprint:{modelId,contextWindowTokens:TokenValue,hash}`: modello e finestra verificata **della chiamata finale** come persistiti con la chiamata, mai la configurazione corrente né il modello del monitor `runtime`. `hash` = primi 16 esadecimali minuscoli di SHA-256 di `modelId|finestra` (`unavailable` se la finestra non fu verificata; in tal caso `contextWindowTokens` è `unavailable`).
+- `attempts:[{attempt,outcome,state,calls,activeMs,promptTokens,completionTokens,finishReason,model}]`, ordinati per `attempt`, relativi allo stesso proprietario della chiamata finale (turno, run o job documentale): mai righe di altri root, di job fratelli o figli, né fencing token. `outcome`: `winning` (quello della chiamata finale), `failed`, `interrupted` o `rejected` (completato ma non finale, per esempio rifiutato dal validatore) secondo gli stati persistiti; `unrecorded` per un tentativo numerato fino ad `AttemptCount` senza alcuna riga (lease scaduto prima della scrittura): `state`, `activeMs`, `finishReason` e `model` null, `calls` 0, token `unavailable`. `state` è il peggiore fra le chiamate persistite (failed > interrupted > completed). `activeMs` è l'unione degli intervalli delle chiamate del tentativo, null se una durata manca (mai zero inventato); è distinto da `execution.queueMs`/`backoffMs`/`recoveryMs` e non si somma ad essi né fra tentativi. `model` è l'impronta della chiamata rappresentativa del tentativo (finale per il vincente, altrimenti l'ultima non di sintesi).
+
+`execution.elapsedMs` (t0) resta il solo tempo totale autorevole. Dati storici senza telemetria restano null/`unavailable`, senza backfill. Nessun prompt, ragionamento, testo di trasporto, credenziale o endpoint compare in questi campi; i tentativi falliti restano diagnostica redatta.
+
 GET `/api/admin/document-limits`, PUT stesso percorso con If-Match e ruolo Admin espongono soltanto limiti non segreti di plan; applicazione atomica e validazione positività/coerenza. Nuovi lavori congelano config; quote correnti controllate a ogni acquisizione. Nessun endpoint può cambiare modello, path storage o parser command tramite contenuto documentale. Nessun endpoint delete, KB, ricerca o pubblicazione aggiunto.
 
 

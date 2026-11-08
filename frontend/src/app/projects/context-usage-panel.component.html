@@ -107,7 +107,12 @@
       @if (summary(); as s) {
         <section class="usage-section" aria-label="Ultima richiesta AI">
           <h3 class="h6">Ultima richiesta AI</h3>
-          <app-inference-metrics [metrics]="s.metrics" [execution]="s.execution" />
+          <app-inference-metrics
+            [metrics]="s.metrics"
+            [execution]="s.execution"
+            [attempts]="s.attempts"
+            [modelFingerprint]="s.modelFingerprint"
+          />
         </section>
 
         <section

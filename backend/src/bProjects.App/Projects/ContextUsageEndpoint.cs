@@ -33,7 +33,9 @@ public sealed record LastInferenceView(
     int SafetyMarginTokens,
     TokenValue RemainingTokens,
     string? StaleReason,
-    ExecutionView? Execution = null);
+    ExecutionView? Execution = null,
+    IReadOnlyList<AttemptView>? Attempts = null,
+    ModelFingerprintView? ModelFingerprint = null);
 
 public sealed record CompositionItemView(string Key, string Label, TokenValue Tokens, int? MessageCount);
 
@@ -136,11 +138,14 @@ public static class ContextUsageEndpoint
 
     private static async Task<LastInferenceView> LastAsync(AppDbContext db, Guid projectId, Guid conversationId, InferenceCall final, CancellationToken ct)
     {
-        var attempt = await db.InferenceCalls.AsNoTracking()
-            .Where(c => c.ProjectId == projectId && c.Attempt == final.Attempt && c.FencingToken == final.FencingToken
+        // Tutte le righe del solo proprietario della chiamata finale (turno, run o job documentale: mai root diversi né fratelli); il vincente ne è il sottoinsieme.
+        var ownerRows = await db.InferenceCalls.AsNoTracking()
+            .Where(c => c.ProjectId == projectId
                 && (final.ChatTurnId != null ? c.ChatTurnId == final.ChatTurnId
                     : final.DocumentJobId != null ? c.DocumentJobId == final.DocumentJobId : c.ProcessingRunId == final.ProcessingRunId))
             .ToListAsync(ct);
+        var attempt = ownerRows.Where(c => c.Attempt == final.Attempt && c.FencingToken == final.FencingToken).ToList();
+        int attemptsMade;
 
         // Riferimento e cutoff del risultato logico: il messaggio assistant del turno, oppure il run (il documento eredita il cutoff dell'analisi).
         string refId;
@@ -151,6 +156,7 @@ public static class ContextUsageEndpoint
             var turn = await db.ChatTurns.AsNoTracking().SingleAsync(t => t.Id == turnId, ct);
             refId = (turn.ResultMessageId ?? turn.Id).ToString();
             cutoff = turn.SourceCutoffSequence;
+            attemptsMade = turn.AttemptCount;
             execution = (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.ChatTurn, turn.Id, ct))?.Execution;
         }
         else if (final.DocumentJobId is { } jobId)
@@ -158,13 +164,16 @@ public static class ContextUsageEndpoint
             // Lavoro documentale: il riferimento è il job, il root del regime è la sua preparazione; nessun cutoff di dialogo.
             refId = jobId.ToString();
             cutoff = null;
-            var preparationId = await db.DocumentJobs.AsNoTracking().Where(j => j.Id == jobId && j.ProjectId == projectId).Select(j => j.PreparationId).SingleAsync(ct);
+            var job = await db.DocumentJobs.AsNoTracking().Where(j => j.Id == jobId && j.ProjectId == projectId).Select(j => new { j.PreparationId, j.AttemptCount }).SingleAsync(ct);
+            var preparationId = job.PreparationId;
+            attemptsMade = job.AttemptCount;
             execution = (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.DocumentPreparation, preparationId, ct))?.Execution;
         }
         else
         {
             var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == final.ProcessingRunId && r.ProjectId == projectId, ct);
             refId = run.Id.ToString();
+            attemptsMade = run.AttemptCount;
             cutoff = run.Kind == ProcessingRunKind.Analysis
                 ? run.SourceCutoffSequence
                 : await db.ProcessingRuns.AsNoTracking().Where(a => a.Id == run.AnalysisId).Select(a => a.SourceCutoffSequence).SingleOrDefaultAsync(ct);
@@ -189,7 +198,9 @@ public static class ContextUsageEndpoint
             margin,
             prompt is { } used && ctx is { } window ? TokenValue.Calculated(window - used - reserved - margin) : TokenValue.Unavailable,
             stale ? "newer_messages" : null,
-            execution);
+            execution,
+            InferenceMetrics.Attempts(final, ownerRows, attemptsMade),
+            InferenceMetrics.Fingerprint(final));
     }
 
     /// <summary>Composizione della chiamata finale: token per categoria (tokenizer reale) e quota non attribuita = prompt - attribuiti.</summary>

@@ -67,6 +67,29 @@ export interface ExecutionView {
 
 export type ContextUsageKind = 'chat' | 'analysis' | 'document';
 
+/** Impronta (002 T102) del modello effettivo di una chiamata: letta dalla chiamata, mai dalla configurazione o dal monitor. */
+export interface ModelFingerprint {
+  modelId: string;
+  contextWindowTokens: TokenValue;
+  /** Primi 16 esadecimali di SHA-256 di «modelId|finestra». */
+  hash: string;
+}
+
+export type AttemptOutcome = 'winning' | 'failed' | 'interrupted' | 'rejected' | 'unrecorded';
+
+/** Tentativo dello stesso lavoro logico (002 T102); `unrecorded` = nessuna riga persistita: tempi, token e modello null. */
+export interface AttemptView {
+  attempt: number;
+  outcome: AttemptOutcome;
+  state: 'completed' | 'failed' | 'interrupted' | null;
+  calls: number;
+  activeMs: number | null;
+  promptTokens: TokenValue;
+  completionTokens: TokenValue;
+  finishReason: string | null;
+  model: ModelFingerprint | null;
+}
+
 export interface ContextCompositionItem {
   key: string;
   label: string;
@@ -105,6 +128,9 @@ export interface ContextUsage {
     staleReason: null | 'newer_messages';
     /** 002: regime, ricevuta e tempi del root; assente o null nei record 001 e senza telemetria. */
     execution?: ExecutionView | null;
+    /** 002 T102: tentativi del lavoro logico e impronta del modello effettivo; assenti nei server precedenti. */
+    attempts?: AttemptView[] | null;
+    modelFingerprint?: ModelFingerprint | null;
   };
   composition: null | {
     promptTokens: TokenValue;
