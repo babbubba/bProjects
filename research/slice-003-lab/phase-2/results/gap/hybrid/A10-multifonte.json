@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "T083-multi-c942",
+        "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

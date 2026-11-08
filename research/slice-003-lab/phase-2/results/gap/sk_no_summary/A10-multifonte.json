@@ -1,0 +1,19 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C. Nello specifico, per ogni giorno di ritardo si applica una penale dell'1,5% del valore dell'ordine, con un tetto massimo del 15%.",
+    "citations": [
+      {
+        "id": "T083-multi-190",
+        "quote": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C."
+      },
+      {
+        "id": "T083-multi-150",
+        "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

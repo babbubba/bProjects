@@ -1,0 +1,21 @@
+{
+  "phase1": "cd0dae3695e80f62d8abb6a1acf549a952c0902f",
+  "skrag": "39b2b19024f32cc22922b80215c2ac5b81eed004",
+  "sha256": {
+    "a-input.json": "328cce92414dc5818804a20051f6888161912c98dcb83d9a893d9e748055aa02",
+    "a-gold.json": "3c94fdc438ee8183f02e2196ef22026723d8a2b5d7eee31ea61e5e5de7360fa0",
+    "b-input.json": "985cc1be1395abd44da2584986d48c8f5edaa4827dd9e3b7767326e5cd3620ca",
+    "b-gold.json": "b122b679f8ff962f8f3db962c94dce1cca3b5d2b4433d07169275f3ce0bfc881",
+    "b-selection-audit.json": "c9064858c167fff7dbf556aaca1370e11d1bfbe5b9e5573ad5d0c19af282b523",
+    "protocol.json": "08247bda16800b3b257a7f8bdab1081c6e5884d16d90719e5fc8e29a5bcc3e74",
+    "../retrieval-cases.json": "ded3345c91b978b7fea71d2f459a94d958841a88ecb392668ebe64078357e59b",
+    "../indexes/N4-fixtures--block_parent.json": "a0b2c18e1341e3bfbe5215f62f97094ae642fb5ca6cfb2659102d7d1ccde2f79",
+    "../indexes/T082-single--block_parent.json": "3d9202b5e0aac10f6fc2207be7cf05501575e223385f2b287cbeded1a607b8d9",
+    "../indexes/T083-multi--block_parent.json": "359f8818658a079e75a500fe833bfd221fcbac4fc7ee0f2d28d5a53296e690d1",
+    "../corpus/T082-single/capitolato-aurora.txt": "a926fb1da97b8b01edfa61e67e87967a8249f6bd37e22d239fd642eb491530f6",
+    "../corpus/T082-single/gold.json": "d14f17c997eacbd925b77ad7575b0d21f7a96f87b7682adbe4990012b1fc28f0",
+    "../results/N4-fixtures--block_parent.json": "19a82569d041ff3828d6e80aeddf58fe21a53be884c5d33bd420e6e353e9cb5c",
+    "../results/T082-single--block_parent.json": "e4a1d837957aa7e8251db4225b6365951ca0292b4481a166e82489f9ddf4d457",
+    "../results/T083-multi--block_parent.json": "fde514599b956c32a9314c1b94217399a0bf0959681e46cceb328e5a26695f66"
+  }
+}

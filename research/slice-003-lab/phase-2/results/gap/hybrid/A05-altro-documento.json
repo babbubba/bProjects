@@ -1,0 +1,10 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "assente",
+    "answer": null,
+    "citations": [],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

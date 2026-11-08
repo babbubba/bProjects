@@ -1,0 +1,161 @@
+[
+  {
+    "id": "A09-PM",
+    "phase1_id": "N4-doc-title",
+    "scenario": "N4-fixtures",
+    "contexts": {
+      "hybrid": {
+        "chars": 1918,
+        "included": [
+          "N4-doc-title",
+          "N4-PM"
+        ]
+      },
+      "expanded": {
+        "chars": 1668,
+        "included": [
+          "N4-doc-title",
+          "N4-PM"
+        ]
+      },
+      "sk_child_parent_no_rerank": {
+        "chars": 1668,
+        "included": [
+          "N4-doc-title",
+          "N4-PM"
+        ]
+      }
+    }
+  },
+  {
+    "id": "A01-completa",
+    "phase1_id": "M01",
+    "scenario": "T083-multi",
+    "contexts": {
+      "hybrid": {
+        "chars": 1877,
+        "included": [
+          "M01"
+        ]
+      },
+      "expanded": {
+        "chars": 11815,
+        "included": [
+          "M01"
+        ]
+      },
+      "sk_child_parent_no_rerank": {
+        "chars": 9324,
+        "included": [
+          "M01"
+        ]
+      }
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "phase1_id": "M12",
+    "scenario": "T083-multi",
+    "contexts": {
+      "hybrid": {
+        "chars": 2523,
+        "included": [
+          "M12"
+        ]
+      },
+      "expanded": {
+        "chars": 9219,
+        "included": [
+          "M12"
+        ]
+      },
+      "sk_child_parent_no_rerank": {
+        "chars": 9451,
+        "included": [
+          "M12"
+        ]
+      }
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "phase1_id": "M17",
+    "scenario": "T083-multi",
+    "contexts": {
+      "hybrid": {
+        "chars": 3242,
+        "included": [
+          "M17"
+        ]
+      },
+      "expanded": {
+        "chars": 11998,
+        "included": [
+          "M17"
+        ]
+      },
+      "sk_child_parent_no_rerank": {
+        "chars": 9162,
+        "included": [
+          "M17"
+        ]
+      }
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "phase1_id": "all-warranty",
+    "scenario": "T083-multi",
+    "contexts": {
+      "hybrid": {
+        "chars": 2565,
+        "included": [
+          "M04",
+          "M13"
+        ]
+      },
+      "expanded": {
+        "chars": 9936,
+        "included": [
+          "M04",
+          "M13"
+        ]
+      },
+      "sk_child_parent_no_rerank": {
+        "chars": 9564,
+        "included": [
+          "M04",
+          "M13"
+        ]
+      }
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "phase1_id": "penalty-reference",
+    "scenario": "T083-multi",
+    "contexts": {
+      "hybrid": {
+        "chars": 2908,
+        "included": [
+          "M06",
+          "M11"
+        ]
+      },
+      "expanded": {
+        "chars": 11742,
+        "included": [
+          "M06",
+          "M11"
+        ]
+      },
+      "sk_child_parent_no_rerank": {
+        "chars": 11791,
+        "included": [
+          "M06",
+          "M11"
+        ]
+      }
+    }
+  }
+]

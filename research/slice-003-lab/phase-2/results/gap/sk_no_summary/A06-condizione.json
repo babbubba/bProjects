@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+    "citations": [
+      {
+        "id": "T083-multi-460 | verbale-collaudo-zefiro.docx",
+        "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

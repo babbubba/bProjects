@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "T083-multi-80 | allegato-tecnico-zefiro.md | Document | Allegato tecnico Zefiro / I sentieri | bc6241773ff7ed471c9194e5c981fad17dc3fa9a3a5672e1af8eef289c5e65e1",
+        "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

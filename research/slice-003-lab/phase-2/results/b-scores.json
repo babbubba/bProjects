@@ -1,0 +1,2174 @@
+{
+  "B1": {
+    "completed_calls": 6,
+    "planned_calls": 6,
+    "invalid_or_truncated_calls": 3,
+    "fenced_json_calls": 3,
+    "exact_or_adjudicated": {
+      "S01": "B1/00/0",
+      "S02": "B1/00/1",
+      "S03": "B1/00/2",
+      "R020": "B1/00/3",
+      "R021": "B1/00/4",
+      "R022": "B1/00/5",
+      "R023": "B1/00/6",
+      "R024": "B1/00/7",
+      "R025": "B1/00/8",
+      "R026": "B1/00/9",
+      "S04": "B1/01/0",
+      "S13": "B1/01/1",
+      "R052": "B1/01/2",
+      "R066": "B1/02/0",
+      "R067": "B1/02/1",
+      "R068": "B1/02/2",
+      "R069": "B1/02/3",
+      "R070": "B1/02/4",
+      "R071": "B1/02/5",
+      "R111": "B1/02/6",
+      "R112": "B1/02/7",
+      "R113": "B1/02/8",
+      "R114": "B1/02/9",
+      "R115": "B1/02/10",
+      "R116": "B1/02/11",
+      "R117": "B1/02/12",
+      "S05": "B1/02/13",
+      "S06": "B1/03/1",
+      "S07": "B1/03/2",
+      "S08": "B1/03/4",
+      "S15": "B1/03/6",
+      "R170": "B1/04/0",
+      "R171": "B1/04/1",
+      "R172": "B1/04/2",
+      "R173": "B1/04/3",
+      "R174": "B1/04/4",
+      "R175": "B1/04/5",
+      "R196": "B1/04/6",
+      "R197": "B1/04/7",
+      "R198": "B1/04/8",
+      "R199": "B1/04/9",
+      "R200": "B1/04/10",
+      "R201": "B1/04/11",
+      "S09": "B1/04/12",
+      "S10": "B1/04/13",
+      "S11": "B1/04/14",
+      "S14": "B1/05/1",
+      "S16": "B1/05/2"
+    },
+    "missing": [
+      "S12"
+    ],
+    "missing_from_selection": [],
+    "invalid_sources": 1,
+    "wrapped_ids": 37,
+    "irrelevant": 0,
+    "pending_semantic_review": 0,
+    "rows": [
+      {
+        "key": "B1/00/0",
+        "entry": {
+          "id": "[b117]",
+          "quote": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione.",
+          "statement": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S01"
+        ],
+        "exact_meaning": [
+          "S01"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/1",
+        "entry": {
+          "id": "[b197]",
+          "quote": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa.",
+          "statement": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S02"
+        ],
+        "exact_meaning": [
+          "S02"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/2",
+        "entry": {
+          "id": "[b275]",
+          "quote": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+          "statement": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S03"
+        ],
+        "exact_meaning": [
+          "S03"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/3",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi.",
+          "statement": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R020"
+        ],
+        "exact_meaning": [
+          "R020"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/4",
+        "entry": {
+          "id": "[b315]",
+          "quote": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R021"
+        ],
+        "exact_meaning": [
+          "R021"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/5",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi.",
+          "statement": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R022"
+        ],
+        "exact_meaning": [
+          "R022"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/6",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi.",
+          "statement": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R023"
+        ],
+        "exact_meaning": [
+          "R023"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/7",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi.",
+          "statement": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R024"
+        ],
+        "exact_meaning": [
+          "R024"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/8",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi.",
+          "statement": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R025"
+        ],
+        "exact_meaning": [
+          "R025"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/00/9",
+        "entry": {
+          "id": "[b316]",
+          "quote": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi.",
+          "statement": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R026"
+        ],
+        "exact_meaning": [
+          "R026"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/01/0",
+        "entry": {
+          "id": "[b356]",
+          "quote": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+          "statement": "Nei mesi di agosto e dicembre, il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S04"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S04"
+          ],
+          "note": "Preserva il termine del decimo giorno lavorativo e limita la regola ad agosto e dicembre. S03 conserva il termine generale."
+        }
+      },
+      {
+        "key": "B1/01/1",
+        "entry": {
+          "id": "[b434]",
+          "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+          "statement": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S13"
+        ],
+        "exact_meaning": [
+          "S13"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/01/2",
+        "entry": {
+          "id": "[b629]",
+          "quote": "Per la linea Gomuco il lotto minimo di rifornimento è di 250 pezzi.",
+          "statement": "Per la linea Gomuco, il lotto minimo di rifornimento è di 250 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R052"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R052"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/02/0",
+        "entry": {
+          "id": "[b864]",
+          "quote": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi.",
+          "statement": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R066"
+        ],
+        "exact_meaning": [
+          "R066"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/1",
+        "entry": {
+          "id": "[b864]",
+          "quote": "La scheda tecnica della linea Tivipu prevede un imballo da 653 pezzi per scatola.",
+          "statement": "Per la linea Tivipu l'imballo è di 653 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R067"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R067"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/02/2",
+        "entry": {
+          "id": "[b864]",
+          "quote": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi.",
+          "statement": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R068"
+        ],
+        "exact_meaning": [
+          "R068"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/3",
+        "entry": {
+          "id": "[b864]",
+          "quote": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi.",
+          "statement": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R069"
+        ],
+        "exact_meaning": [
+          "R069"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/4",
+        "entry": {
+          "id": "[b864]",
+          "quote": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi.",
+          "statement": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R070"
+        ],
+        "exact_meaning": [
+          "R070"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/5",
+        "entry": {
+          "id": "[b864]",
+          "quote": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi.",
+          "statement": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R071"
+        ],
+        "exact_meaning": [
+          "R071"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/6",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola.",
+          "statement": "Per la linea Tisore l'imballo è di 613 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R111"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R111"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/02/7",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi.",
+          "statement": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R112"
+        ],
+        "exact_meaning": [
+          "R112"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/8",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola.",
+          "statement": "Per la linea Burala l'imballo è di 606 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R113"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R113"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/02/9",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola.",
+          "statement": "Per la linea Mugace l'imballo è di 353 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R114"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R114"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/02/10",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi.",
+          "statement": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R115"
+        ],
+        "exact_meaning": [
+          "R115"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/11",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+          "statement": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R116"
+        ],
+        "exact_meaning": [
+          "R116"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/12",
+        "entry": {
+          "id": "[b1403]",
+          "quote": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+          "statement": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R117"
+        ],
+        "exact_meaning": [
+          "R117"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/02/13",
+        "entry": {
+          "id": "[b1517]",
+          "quote": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+          "statement": "Le segnalazioni di guasto con priorità alta devono essere prese in carico entro 40 minuti, esclusi i giorni festivi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S05"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S05"
+          ],
+          "note": "Nel contesto del capitolato conserva l'obbligo di presa in carico, il limite di 40 minuti e l'esclusione dei festivi."
+        }
+      },
+      {
+        "key": "B1/03/0",
+        "entry": {
+          "id": "[b1595]",
+          "quote": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+          "statement": "Per gli ordini urgenti, il limite di spesa è di 1850 euro."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S06"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "category": "component",
+          "linked": "B1/03/1",
+          "note": "Componente della stessa clausola, valutato in coppia."
+        }
+      },
+      {
+        "key": "B1/03/1",
+        "entry": {
+          "id": "[b1595]",
+          "quote": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+          "statement": "Gli importi superiori a 1850 euro per ordini urgenti richiedono l'autorizzazione scritta del responsabile di magazzino."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S06"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S06"
+          ],
+          "note": "Le due righe insieme preservano limite, condizione e autorizzazione scritta del responsabile di magazzino.",
+          "linked": "B1/03/0"
+        }
+      },
+      {
+        "key": "B1/03/2",
+        "entry": {
+          "id": "[b1672]",
+          "quote": "Il magazzino di Verona non accetta resi di merce deperibile.",
+          "statement": "Il magazzino di Verona non accetta resi di merce deperibile."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S07"
+        ],
+        "exact_meaning": [
+          "S07"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/03/3",
+        "entry": {
+          "id": "[b1751]",
+          "quote": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+          "statement": "Le copie di sicurezza sono eseguite ogni notte alle 02:30."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S08"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "category": "component",
+          "linked": "B1/03/4",
+          "note": "Componente della stessa clausola, valutato in coppia."
+        }
+      },
+      {
+        "key": "B1/03/4",
+        "entry": {
+          "id": "[b1751]",
+          "quote": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+          "statement": "Le copie di sicurezza sono conservate per 31 giorni."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S08"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S08"
+          ],
+          "note": "Le due righe insieme preservano frequenza, ora e conservazione delle copie.",
+          "linked": "B1/03/3"
+        }
+      },
+      {
+        "key": "B1/03/5",
+        "entry": {
+          "id": "[b1828]",
+          "quote": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+          "statement": "La finestra di manutenzione programmata cade il primo sabato di ogni mese."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S15"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "category": "component",
+          "linked": "B1/03/6",
+          "note": "Componente della stessa clausola, valutato in coppia."
+        }
+      },
+      {
+        "key": "B1/03/6",
+        "entry": {
+          "id": "[b1828]",
+          "quote": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+          "statement": "La finestra di manutenzione programmata dura dalle 22:00 alle 02:00."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S15"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S15"
+          ],
+          "note": "Le due righe con la stessa citazione preservano ricorrenza mensile e orario della finestra.",
+          "linked": "B1/03/5"
+        }
+      },
+      {
+        "key": "B1/04/0",
+        "entry": {
+          "id": "b2097",
+          "quote": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi.",
+          "statement": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R170"
+        ],
+        "exact_meaning": [
+          "R170"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/1",
+        "entry": {
+          "id": "b2097",
+          "quote": "La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola.",
+          "statement": "Per la linea Nocobo l'imballo è di 239 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R171"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R171"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/04/2",
+        "entry": {
+          "id": "b2097",
+          "quote": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi.",
+          "statement": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R172"
+        ],
+        "exact_meaning": [
+          "R172"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/3",
+        "entry": {
+          "id": "b2097",
+          "quote": "La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola.",
+          "statement": "Per la linea Sitato l'imballo è di 42 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R173"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R173"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/04/4",
+        "entry": {
+          "id": "b2097",
+          "quote": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi.",
+          "statement": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R174"
+        ],
+        "exact_meaning": [
+          "R174"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/5",
+        "entry": {
+          "id": "b2097",
+          "quote": "La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola.",
+          "statement": "Per la linea Sacotu l'imballo è di 247 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R175"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R175"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/04/6",
+        "entry": {
+          "id": "b2410",
+          "quote": "Nel reparto Boliro la temperatura di conservazione è fissata a 28 gradi.",
+          "statement": "Nel reparto Boliro la temperatura di conservazione è fissata a 28 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R196"
+        ],
+        "exact_meaning": [
+          "R196"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/7",
+        "entry": {
+          "id": "b2410",
+          "quote": "La scheda tecnica della linea Gicacu prevede un imballo da 782 pezzi per scatola.",
+          "statement": "Per la linea Gicacu l'imballo è di 782 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R197"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R197"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/04/8",
+        "entry": {
+          "id": "b2410",
+          "quote": "La scheda tecnica della linea Mimitu prevede un imballo da 508 pezzi per scatola.",
+          "statement": "Per la linea Mimitu l'imballo è di 508 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R198"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "R198"
+          ],
+          "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+        }
+      },
+      {
+        "key": "B1/04/9",
+        "entry": {
+          "id": "b2410",
+          "quote": "Nel reparto Tefova la temperatura di conservazione è fissata a 3 gradi.",
+          "statement": "Nel reparto Tefova la temperatura di conservazione è fissata a 3 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R199"
+        ],
+        "exact_meaning": [
+          "R199"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/10",
+        "entry": {
+          "id": "b2410",
+          "quote": "Per la linea Ravela il lotto minimo di rifornimento è di 648 pezzi.",
+          "statement": "Per la linea Ravela il lotto minimo di rifornimento è di 648 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R200"
+        ],
+        "exact_meaning": [
+          "R200"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/11",
+        "entry": {
+          "id": "b2410",
+          "quote": "Nel reparto Liriba la temperatura di conservazione è fissata a 29 gradi.",
+          "statement": "Nel reparto Liriba la temperatura di conservazione è fissata a 29 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R201"
+        ],
+        "exact_meaning": [
+          "R201"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/12",
+        "entry": {
+          "id": "b2527",
+          "quote": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+          "statement": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S09"
+        ],
+        "exact_meaning": [
+          "S09"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/04/13",
+        "entry": {
+          "id": "b2606",
+          "quote": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+          "statement": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori se questi sono stati comunicati almeno 48 ore prima della consegna."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S10"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S10"
+          ],
+          "note": "Preserva negazione, causa, preavviso minimo e riferimento alla consegna."
+        }
+      },
+      {
+        "key": "B1/04/14",
+        "entry": {
+          "id": "b2686",
+          "quote": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+          "statement": "La reperibilità notturna è garantita soltanto per il sito di Padova."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S11"
+        ],
+        "exact_meaning": [
+          "S11"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B1/05/0",
+        "entry": {
+          "id": "[b2658]",
+          "quote": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+          "statement": "Tutte le comunicazioni contrattuali devono essere inviate esclusivamente tramite posta elettronica certificata."
+        },
+        "exact_source": false,
+        "unwrapped_id": true,
+        "candidates": [],
+        "exact_meaning": [],
+        "decision": {
+          "category": "wrong_locator",
+          "note": "Lo statement contiene il requisito PEC ma l'identificativo non ancorava la citazione nel batch. Escluso dalla copertura verificabile."
+        }
+      },
+      {
+        "key": "B1/05/1",
+        "entry": {
+          "id": "[b2843]",
+          "quote": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+          "statement": "Il termine di pagamento delle fatture è di 60 giorni dalla data della fattura."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S14"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S14"
+          ],
+          "note": "Preserva durata e decorrenza dalla data della fattura nel medesimo documento."
+        }
+      },
+      {
+        "key": "B1/05/2",
+        "entry": {
+          "id": "[b2921]",
+          "quote": "La finestra di manutenzione programmata cade la terza domenica di ogni mese.",
+          "statement": "La finestra di manutenzione programmata si svolge la terza domenica di ogni mese."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S16"
+        ],
+        "exact_meaning": [],
+        "decision": {
+          "credit": [
+            "S16"
+          ],
+          "note": "Preserva la ricorrenza della terza domenica di ogni mese."
+        }
+      }
+    ]
+  },
+  "B2": {
+    "completed_calls": 4,
+    "planned_calls": 4,
+    "invalid_or_truncated_calls": 2,
+    "fenced_json_calls": 1,
+    "exact_or_adjudicated": {
+      "S01": "B2/00/0",
+      "S02": "B2/00/2",
+      "S03": "B2/00/5",
+      "R020": "B2/00/6",
+      "R021": "B2/00/7",
+      "R022": "B2/00/8",
+      "R023": "B2/00/9",
+      "R024": "B2/00/10",
+      "R025": "B2/00/11",
+      "R026": "B2/00/12",
+      "S13": "B2/00/14",
+      "R052": "B2/00/15",
+      "R066": "B2/01/0",
+      "R067": "B2/01/1",
+      "R068": "B2/01/2",
+      "R069": "B2/01/3",
+      "R070": "B2/01/4",
+      "R071": "B2/01/5",
+      "R111": "B2/01/6",
+      "R112": "B2/01/7",
+      "R113": "B2/01/8",
+      "R114": "B2/01/9",
+      "R115": "B2/01/10",
+      "R116": "B2/01/11",
+      "R117": "B2/01/12",
+      "S05": "B2/01/13",
+      "S06": "B2/01/14",
+      "S09": "B2/03/0",
+      "S10": "B2/03/1",
+      "S11": "B2/03/2",
+      "S14": "B2/03/4"
+    },
+    "missing": [
+      "S04",
+      "S07",
+      "S08",
+      "S12",
+      "S15",
+      "S16",
+      "R170",
+      "R171",
+      "R172",
+      "R173",
+      "R174",
+      "R175",
+      "R196",
+      "R197",
+      "R198",
+      "R199",
+      "R200",
+      "R201"
+    ],
+    "missing_from_selection": [
+      "S04",
+      "S16"
+    ],
+    "invalid_sources": 1,
+    "wrapped_ids": 16,
+    "irrelevant": 4,
+    "pending_semantic_review": 0,
+    "rows": [
+      {
+        "key": "B2/00/0",
+        "entry": {
+          "id": "[b117]",
+          "quote": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione.",
+          "statement": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S01"
+        ],
+        "exact_meaning": [
+          "S01"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/1",
+        "entry": {
+          "id": "[b195]",
+          "quote": "La vecchia fornace trasformata in spazio per le mostre conserva ancora le panche di legno scelte dai primi fondatori.",
+          "statement": "La vecchia fornace trasformata in spazio per le mostre conserva ancora le panche di legno scelte dai primi fondatori."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [],
+        "exact_meaning": [],
+        "decision": {
+          "category": "irrelevant",
+          "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+        }
+      },
+      {
+        "key": "B2/00/2",
+        "entry": {
+          "id": "[b197]",
+          "quote": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa.",
+          "statement": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S02"
+        ],
+        "exact_meaning": [
+          "S02"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/3",
+        "entry": {
+          "id": "[b271]",
+          "quote": "La vecchia fornace trasformata in spazio per le mostre è il luogo preferito dai colleghi per una pausa all'aria aperta.",
+          "statement": "La vecchia fornace trasformata in spazio per le mostre è il luogo preferito dai colleghi per una pausa all'aria aperta."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [],
+        "exact_meaning": [],
+        "decision": {
+          "category": "irrelevant",
+          "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+        }
+      },
+      {
+        "key": "B2/00/4",
+        "entry": {
+          "id": "[b274]",
+          "quote": "La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta.",
+          "statement": "La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [],
+        "exact_meaning": [],
+        "decision": {
+          "category": "irrelevant",
+          "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+        }
+      },
+      {
+        "key": "B2/00/5",
+        "entry": {
+          "id": "[b275]",
+          "quote": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+          "statement": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S03"
+        ],
+        "exact_meaning": [
+          "S03"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/6",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi.",
+          "statement": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R020"
+        ],
+        "exact_meaning": [
+          "R020"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/7",
+        "entry": {
+          "id": "[b315]",
+          "quote": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R021"
+        ],
+        "exact_meaning": [
+          "R021"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/8",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi.",
+          "statement": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R022"
+        ],
+        "exact_meaning": [
+          "R022"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/9",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi.",
+          "statement": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R023"
+        ],
+        "exact_meaning": [
+          "R023"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/10",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi.",
+          "statement": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R024"
+        ],
+        "exact_meaning": [
+          "R024"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/11",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi.",
+          "statement": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R025"
+        ],
+        "exact_meaning": [
+          "R025"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/12",
+        "entry": {
+          "id": "[b316]",
+          "quote": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi.",
+          "statement": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R026"
+        ],
+        "exact_meaning": [
+          "R026"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/13",
+        "entry": {
+          "id": "[b355]",
+          "quote": "Il murale dipinto dagli studenti del liceo vicino è il luogo preferito dai colleghi per una pausa all'aria aperta.",
+          "statement": "Il murale dipinto dagli studenti del liceo vicino è il luogo preferito dai colleghi per una pausa all'aria aperta."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [],
+        "exact_meaning": [],
+        "decision": {
+          "category": "irrelevant",
+          "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+        }
+      },
+      {
+        "key": "B2/00/14",
+        "entry": {
+          "id": "[b434]",
+          "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+          "statement": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S13"
+        ],
+        "exact_meaning": [
+          "S13"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/00/15",
+        "entry": {
+          "id": "[b629]",
+          "quote": "Per la linea Gomuco il lotto minimo di rifornimento è di 250 pezzi.",
+          "statement": "Per la linea Gomuco il lotto minimo di rifornimento è di 250 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R052"
+        ],
+        "exact_meaning": [
+          "R052"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/0",
+        "entry": {
+          "id": "b864",
+          "quote": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi.",
+          "statement": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R066"
+        ],
+        "exact_meaning": [
+          "R066"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/1",
+        "entry": {
+          "id": "b864",
+          "quote": "La scheda tecnica della linea Tivipu prevede un imballo da 653 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Tivipu prevede un imballo da 653 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R067"
+        ],
+        "exact_meaning": [
+          "R067"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/2",
+        "entry": {
+          "id": "b864",
+          "quote": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi.",
+          "statement": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R068"
+        ],
+        "exact_meaning": [
+          "R068"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/3",
+        "entry": {
+          "id": "b864",
+          "quote": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi.",
+          "statement": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R069"
+        ],
+        "exact_meaning": [
+          "R069"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/4",
+        "entry": {
+          "id": "b864",
+          "quote": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi.",
+          "statement": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R070"
+        ],
+        "exact_meaning": [
+          "R070"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/5",
+        "entry": {
+          "id": "b864",
+          "quote": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi.",
+          "statement": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R071"
+        ],
+        "exact_meaning": [
+          "R071"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/6",
+        "entry": {
+          "id": "b1402",
+          "quote": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R111"
+        ],
+        "exact_meaning": [
+          "R111"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/7",
+        "entry": {
+          "id": "b1402",
+          "quote": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi.",
+          "statement": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R112"
+        ],
+        "exact_meaning": [
+          "R112"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/8",
+        "entry": {
+          "id": "b1402",
+          "quote": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R113"
+        ],
+        "exact_meaning": [
+          "R113"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/9",
+        "entry": {
+          "id": "b1402",
+          "quote": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R114"
+        ],
+        "exact_meaning": [
+          "R114"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/10",
+        "entry": {
+          "id": "b1402",
+          "quote": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi.",
+          "statement": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R115"
+        ],
+        "exact_meaning": [
+          "R115"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/11",
+        "entry": {
+          "id": "b1402",
+          "quote": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+          "statement": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R116"
+        ],
+        "exact_meaning": [
+          "R116"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/12",
+        "entry": {
+          "id": "b1403",
+          "quote": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+          "statement": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "R117"
+        ],
+        "exact_meaning": [
+          "R117"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/13",
+        "entry": {
+          "id": "b1517",
+          "quote": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+          "statement": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S05"
+        ],
+        "exact_meaning": [
+          "S05"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/01/14",
+        "entry": {
+          "id": "b1595",
+          "quote": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+          "statement": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S06"
+        ],
+        "exact_meaning": [
+          "S06"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/03/0",
+        "entry": {
+          "id": "b2527",
+          "quote": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+          "statement": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S09"
+        ],
+        "exact_meaning": [
+          "S09"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/03/1",
+        "entry": {
+          "id": "b2606",
+          "quote": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+          "statement": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S10"
+        ],
+        "exact_meaning": [
+          "S10"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/03/2",
+        "entry": {
+          "id": "b2686",
+          "quote": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+          "statement": "La reperibilità notturna è garantita soltanto per il sito di Padova."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S11"
+        ],
+        "exact_meaning": [
+          "S11"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B2/03/3",
+        "entry": {
+          "id": "b2758",
+          "quote": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+          "statement": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata."
+        },
+        "exact_source": false,
+        "unwrapped_id": false,
+        "candidates": [],
+        "exact_meaning": [],
+        "decision": {
+          "category": "wrong_locator",
+          "note": "Lo statement contiene il requisito PEC ma l'identificativo non ancorava la citazione nel batch. Escluso dalla copertura verificabile."
+        }
+      },
+      {
+        "key": "B2/03/4",
+        "entry": {
+          "id": "b2843",
+          "quote": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+          "statement": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura."
+        },
+        "exact_source": true,
+        "unwrapped_id": false,
+        "candidates": [
+          "S14"
+        ],
+        "exact_meaning": [
+          "S14"
+        ],
+        "decision": {}
+      }
+    ]
+  },
+  "B3": {
+    "completed_calls": 2,
+    "planned_calls": 2,
+    "invalid_or_truncated_calls": 0,
+    "fenced_json_calls": 0,
+    "exact_or_adjudicated": {
+      "S03": "B3/00/0",
+      "R020": "B3/00/1",
+      "R021": "B3/00/2",
+      "R022": "B3/00/3",
+      "R023": "B3/00/4",
+      "R024": "B3/00/5",
+      "R025": "B3/00/6",
+      "R026": "B3/00/7",
+      "R111": "B3/00/8",
+      "R112": "B3/00/9",
+      "R113": "B3/00/10",
+      "R114": "B3/00/11",
+      "R115": "B3/00/12",
+      "R116": "B3/00/13",
+      "R117": "B3/00/14",
+      "R170": "B3/00/15",
+      "R171": "B3/00/16",
+      "R172": "B3/00/17",
+      "R173": "B3/00/18",
+      "R174": "B3/00/19",
+      "R175": "B3/00/20",
+      "S09": "B3/01/0",
+      "S10": "B3/01/1"
+    },
+    "missing": [
+      "S01",
+      "S02",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "S11",
+      "S12",
+      "S13",
+      "S14",
+      "S15",
+      "S16",
+      "R052",
+      "R066",
+      "R067",
+      "R068",
+      "R069",
+      "R070",
+      "R071",
+      "R196",
+      "R197",
+      "R198",
+      "R199",
+      "R200",
+      "R201"
+    ],
+    "missing_from_selection": [
+      "S01",
+      "S02",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "S11",
+      "S12",
+      "S13",
+      "S14",
+      "S15",
+      "S16",
+      "R052",
+      "R066",
+      "R067",
+      "R068",
+      "R069",
+      "R070",
+      "R071",
+      "R196",
+      "R197",
+      "R198",
+      "R199",
+      "R200",
+      "R201"
+    ],
+    "invalid_sources": 0,
+    "wrapped_ids": 23,
+    "irrelevant": 0,
+    "pending_semantic_review": 0,
+    "rows": [
+      {
+        "key": "B3/00/0",
+        "entry": {
+          "id": "[b275]",
+          "quote": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+          "statement": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S03"
+        ],
+        "exact_meaning": [
+          "S03"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/1",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi.",
+          "statement": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R020"
+        ],
+        "exact_meaning": [
+          "R020"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/2",
+        "entry": {
+          "id": "[b315]",
+          "quote": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R021"
+        ],
+        "exact_meaning": [
+          "R021"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/3",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi.",
+          "statement": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R022"
+        ],
+        "exact_meaning": [
+          "R022"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/4",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi.",
+          "statement": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R023"
+        ],
+        "exact_meaning": [
+          "R023"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/5",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi.",
+          "statement": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R024"
+        ],
+        "exact_meaning": [
+          "R024"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/6",
+        "entry": {
+          "id": "[b315]",
+          "quote": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi.",
+          "statement": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R025"
+        ],
+        "exact_meaning": [
+          "R025"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/7",
+        "entry": {
+          "id": "[b316]",
+          "quote": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi.",
+          "statement": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R026"
+        ],
+        "exact_meaning": [
+          "R026"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/8",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R111"
+        ],
+        "exact_meaning": [
+          "R111"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/9",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi.",
+          "statement": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R112"
+        ],
+        "exact_meaning": [
+          "R112"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/10",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R113"
+        ],
+        "exact_meaning": [
+          "R113"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/11",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R114"
+        ],
+        "exact_meaning": [
+          "R114"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/12",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi.",
+          "statement": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R115"
+        ],
+        "exact_meaning": [
+          "R115"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/13",
+        "entry": {
+          "id": "[b1402]",
+          "quote": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+          "statement": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R116"
+        ],
+        "exact_meaning": [
+          "R116"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/14",
+        "entry": {
+          "id": "[b1403]",
+          "quote": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+          "statement": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R117"
+        ],
+        "exact_meaning": [
+          "R117"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/15",
+        "entry": {
+          "id": "[b2097]",
+          "quote": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi.",
+          "statement": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R170"
+        ],
+        "exact_meaning": [
+          "R170"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/16",
+        "entry": {
+          "id": "[b2097]",
+          "quote": "La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R171"
+        ],
+        "exact_meaning": [
+          "R171"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/17",
+        "entry": {
+          "id": "[b2097]",
+          "quote": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi.",
+          "statement": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R172"
+        ],
+        "exact_meaning": [
+          "R172"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/18",
+        "entry": {
+          "id": "[b2097]",
+          "quote": "La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R173"
+        ],
+        "exact_meaning": [
+          "R173"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/19",
+        "entry": {
+          "id": "[b2097]",
+          "quote": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi.",
+          "statement": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R174"
+        ],
+        "exact_meaning": [
+          "R174"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/00/20",
+        "entry": {
+          "id": "[b2097]",
+          "quote": "La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola.",
+          "statement": "La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "R175"
+        ],
+        "exact_meaning": [
+          "R175"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/01/0",
+        "entry": {
+          "id": "[b2527]",
+          "quote": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+          "statement": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S09"
+        ],
+        "exact_meaning": [
+          "S09"
+        ],
+        "decision": {}
+      },
+      {
+        "key": "B3/01/1",
+        "entry": {
+          "id": "[b2606]",
+          "quote": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+          "statement": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna."
+        },
+        "exact_source": true,
+        "unwrapped_id": true,
+        "candidates": [
+          "S10"
+        ],
+        "exact_meaning": [
+          "S10"
+        ],
+        "decision": {}
+      }
+    ]
+  }
+}

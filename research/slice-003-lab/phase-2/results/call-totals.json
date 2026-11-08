@@ -1,0 +1,200 @@
+{
+  "extract-B2": {
+    "calls": 4,
+    "errors": 0,
+    "total_http_s": 111.985,
+    "p50_http_ms": 18809.4,
+    "usage_rows": 4,
+    "input_tokens": 8837,
+    "output_tokens": 6714
+  },
+  "extract-B1": {
+    "calls": 6,
+    "errors": 0,
+    "total_http_s": 68.327,
+    "p50_http_ms": 11138.2,
+    "usage_rows": 6,
+    "input_tokens": 18148,
+    "output_tokens": 3747
+  },
+  "ac-child-index": {
+    "calls": 1,
+    "errors": 0,
+    "total_http_s": 1.075,
+    "p50_http_ms": 1075.1,
+    "usage_rows": 1,
+    "input_tokens": 315,
+    "output_tokens": null
+  },
+  "ac-hybrid": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 6.109,
+    "p50_http_ms": 395.3,
+    "usage_rows": 12,
+    "input_tokens": 47078,
+    "output_tokens": null
+  },
+  "ac-sk_no_summary": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 5.634,
+    "p50_http_ms": 421.1,
+    "usage_rows": 12,
+    "input_tokens": 101116,
+    "output_tokens": null
+  },
+  "ac-query": {
+    "calls": 6,
+    "errors": 0,
+    "total_http_s": 0.576,
+    "p50_http_ms": 93.6,
+    "usage_rows": 6,
+    "input_tokens": 122,
+    "output_tokens": null
+  },
+  "ac-summary": {
+    "calls": 28,
+    "errors": 0,
+    "total_http_s": 47.491,
+    "p50_http_ms": 1889.3,
+    "usage_rows": 28,
+    "input_tokens": 9863,
+    "output_tokens": 2443
+  },
+  "ac-summary-embedding": {
+    "calls": 7,
+    "errors": 0,
+    "total_http_s": 1.023,
+    "p50_http_ms": 129.9,
+    "usage_rows": 7,
+    "input_tokens": 2497,
+    "output_tokens": null
+  },
+  "ac-sk_full": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 4.945,
+    "p50_http_ms": 406.6,
+    "usage_rows": 12,
+    "input_tokens": 103650,
+    "output_tokens": null
+  },
+  "gap-hybrid": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 30.459,
+    "p50_http_ms": 2312.4,
+    "usage_rows": 12,
+    "input_tokens": 17096,
+    "output_tokens": 1418
+  },
+  "gap-expanded": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 43.797,
+    "p50_http_ms": 3556.6,
+    "usage_rows": 12,
+    "input_tokens": 36512,
+    "output_tokens": 1772
+  },
+  "gap-sk_no_summary": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 39.981,
+    "p50_http_ms": 3461.1,
+    "usage_rows": 12,
+    "input_tokens": 36201,
+    "output_tokens": 1593
+  },
+  "gap-sk_full": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 31.719,
+    "p50_http_ms": 2669.8,
+    "usage_rows": 12,
+    "input_tokens": 36441,
+    "output_tokens": 1593
+  },
+  "b3-summary": {
+    "calls": 24,
+    "errors": 0,
+    "total_http_s": 47.402,
+    "p50_http_ms": 1996.1,
+    "usage_rows": 24,
+    "input_tokens": 9461,
+    "output_tokens": 2532
+  },
+  "b3-summary-embedding": {
+    "calls": 6,
+    "errors": 0,
+    "total_http_s": 0.759,
+    "p50_http_ms": 126.0,
+    "usage_rows": 6,
+    "input_tokens": 2619,
+    "output_tokens": null
+  },
+  "b3-probe": {
+    "calls": 4,
+    "errors": 0,
+    "total_http_s": 0.345,
+    "p50_http_ms": 86.0,
+    "usage_rows": 4,
+    "input_tokens": 51,
+    "output_tokens": null
+  },
+  "extract-B3": {
+    "calls": 2,
+    "errors": 0,
+    "total_http_s": 29.077,
+    "p50_http_ms": 14538.7,
+    "usage_rows": 2,
+    "input_tokens": 4800,
+    "output_tokens": 1658
+  },
+  "diagnostic-rerank-A04-discordante": {
+    "calls": 1,
+    "errors": 0,
+    "total_http_s": 1.776,
+    "p50_http_ms": 1776.4,
+    "usage_rows": 1,
+    "input_tokens": 11010,
+    "output_tokens": null
+  },
+  "ac-sk_lucene_no_summary": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 5.057,
+    "p50_http_ms": 424.5,
+    "usage_rows": 12,
+    "input_tokens": 104645,
+    "output_tokens": null
+  },
+  "ac-sk_lucene_full": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 5.14,
+    "p50_http_ms": 427.9,
+    "usage_rows": 12,
+    "input_tokens": 110180,
+    "output_tokens": null
+  },
+  "gap-sk_lucene_full": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 41.831,
+    "p50_http_ms": 3477.1,
+    "usage_rows": 12,
+    "input_tokens": 36687,
+    "output_tokens": 1612
+  },
+  "gap-sk_lucene_no_summary": {
+    "calls": 12,
+    "errors": 0,
+    "total_http_s": 35.201,
+    "p50_http_ms": 2609.4,
+    "usage_rows": 12,
+    "input_tokens": 36851,
+    "output_tokens": 1547
+  }
+}

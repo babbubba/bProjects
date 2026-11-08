@@ -1,0 +1,32 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "N4-fixtures-3 | txt-conflict-a.txt",
+        "quote": "Il termine di pagamento e' 30 giorni."
+      }
+    ],
+    "conflicts": [
+      {
+        "sides": [
+          {
+            "id": "N4-fixtures-5 | txt-negations.txt",
+            "quote": "Il termine e' di 45 giorni, non 30."
+          },
+          {
+            "id": "T083-multi-321 | pm-message.txt",
+            "quote": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni."
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento."
+          }
+        ]
+      }
+    ]
+  },
+  "finish_reason": "stop"
+}

@@ -1,0 +1,4286 @@
+[
+  {
+    "id": "A01-completa",
+    "method": "hybrid",
+    "rank_positions": {
+      "M01": 1
+    },
+    "packed": [
+      "M01"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2590,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "48 mesi dalla data di firma.",
+      "expected_answer": "48 mesi dalla firma",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-c1120",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M01"
+          ],
+          "gold_ids_after_header": [
+            "M01"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A01-completa",
+    "method": "expanded",
+    "rank_positions": {
+      "M01": 1
+    },
+    "packed": [
+      "M01"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9518,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "48 mesi",
+      "expected_answer": "48 mesi dalla firma",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M01"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A01-completa",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "M01": 1
+    },
+    "packed": [
+      "M01"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10107,
+    "native_packed": [
+      "M01"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "48 mesi",
+      "expected_answer": "48 mesi dalla firma",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M01"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A02-assente",
+    "method": "hybrid",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 3176,
+    "native_packed": null,
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A02-assente",
+    "method": "expanded",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 9620,
+    "native_packed": null,
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A02-assente",
+    "method": "sk_no_summary",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10638,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A03-parziale",
+    "method": "hybrid",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2140,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni, decorrenza assente",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-c10 | txt-conflict-a.txt",
+          "quote": "Scheda A",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        },
+        {
+          "id": "T083-multi-c1566 | contratto-quadro-zefiro.txt",
+          "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-c11 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-c2619 | verbale-collaudo-zefiro.docx",
+            "quote": "Il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A03-parziale",
+    "method": "expanded",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10785,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni, decorrenza assente",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "N4-doc-title"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "N4-fixtures-4 | txt-conflict-b.txt",
+            "quote": "Il termine di pagamento e' 60 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-396 | verbale-collaudo-zefiro.docx",
+            "quote": "Il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 5,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A03-parziale",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10742,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni, decorrenza assente",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "N4-doc-title"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 3,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "method": "hybrid",
+    "rank_positions": {
+      "M04": 2,
+      "M13": 1
+    },
+    "packed": [
+      "M04",
+      "M13"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2117,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "conflitto",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-c2184 | verbale-collaudo-zefiro.docx",
+          "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M13"
+          ]
+        },
+        {
+          "id": "T083-multi-c1611 | contratto-quadro-zefiro.txt",
+          "quote": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M04"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "T083-multi-c2184 | verbale-collaudo-zefiro.docx",
+            "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "M13"
+            ]
+          },
+          {
+            "id": "T083-multi-c1611 | contratto-quadro-zefiro.txt",
+            "quote": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "M04"
+            ]
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "method": "expanded",
+    "rank_positions": {
+      "M04": 2,
+      "M13": 1
+    },
+    "packed": [
+      "M04",
+      "M13"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10961,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+          "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M13"
+          ]
+        },
+        {
+          "id": "T083-multi-246 | contratto-quadro-zefiro.txt",
+          "quote": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M04"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+            "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "M13"
+            ]
+          },
+          {
+            "id": "T083-multi-246 | contratto-quadro-zefiro.txt",
+            "quote": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "M04"
+            ]
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "M04": 19,
+      "M13": 1
+    },
+    "packed": [
+      "M13"
+    ],
+    "missing": [
+      "M04"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 0.5,
+      "20": 1.0
+    },
+    "context_utf16": 9927,
+    "native_packed": [
+      "M13"
+    ],
+    "all_expected_packed": false,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+          "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M13"
+          ]
+        },
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 2,
+      "conflicts_lost": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "hybrid",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2411,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "expanded",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10873,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-80 | allegato-tecnico-zefiro.md | Document | Allegato tecnico Zefiro / I sentieri | bc6241773ff7ed471c9194e5c981fad17dc3fa9a3a5672e1af8eef289c5e65e1",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9752,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "method": "hybrid",
+    "rank_positions": {
+      "M17": 1
+    },
+    "packed": [
+      "M17"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2107,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "expected_answer": "Seconda rata sospesa se il collaudo fallisce",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-c3056 | verbale-collaudo-zefiro.docx | Document",
+          "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "method": "expanded",
+    "rank_positions": {
+      "M17": 1
+    },
+    "packed": [
+      "M17"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 11660,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "expected_answer": "Seconda rata sospesa se il collaudo fallisce",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-460 | verbale-collaudo-zefiro.docx",
+          "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M17"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "M17": 1
+    },
+    "packed": [
+      "M17"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9929,
+    "native_packed": [
+      "M17"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "expected_answer": "Seconda rata sospesa se il collaudo fallisce",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-460 | verbale-collaudo-zefiro.docx",
+          "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M17"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "hybrid",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2366,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "expected_answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-c504",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M12"
+          ],
+          "gold_ids_after_header": [
+            "M12"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "expanded",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9408,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "expected_answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-80 | allegato-tecnico-zefiro.md",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M12"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9711,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "expected_answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-80 | allegato-tecnico-zefiro.md",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M12"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "hybrid",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 1969,
+    "native_packed": null,
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "expanded",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10156,
+    "native_packed": null,
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Scheda A\nIl termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "sk_no_summary",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10742,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-5 | txt-negations.txt",
+            "quote": "Il termine e' di 45 giorni, non 30.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-321 | pm-message.txt",
+            "quote": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A09-PM",
+    "method": "hybrid",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": 7
+    },
+    "packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 0.5,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2173,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni secondo la Scheda A",
+      "status_correct": false,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-c10 | txt-conflict-a.txt",
+          "quote": "Scheda A",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-c11 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-c1566 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 3,
+      "conflicts_lost": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A09-PM",
+    "method": "expanded",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": 6
+    },
+    "packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 0.5,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9972,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Il termine di pagamento è 30 giorni.",
+      "expected_answer": "30 giorni secondo la Scheda A",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt | Document |  | af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A09-PM",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": 4
+    },
+    "packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10493,
+    "native_packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Il termine di pagamento è 30 giorni.",
+      "expected_answer": "30 giorni secondo la Scheda A",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt | Document |  | af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "hybrid",
+    "rank_positions": {
+      "M06": 1,
+      "M11": 2
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2054,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+      "status_correct": false,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-c942",
+          "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M11"
+          ],
+          "gold_ids_after_header": [
+            "M11"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "expanded",
+    "rank_positions": {
+      "M06": 1,
+      "M11": 2
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 11921,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C (T083-multi-190). Nello specifico, per ogni giorno di ritardo si applica una penale dell'1,5% del valore dell'ordine, con un tetto massimo del 15% (T083-multi-150).",
+      "expected_answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-190",
+          "quote": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M06"
+          ],
+          "gold_ids_after_header": [
+            "M06"
+          ]
+        },
+        {
+          "id": "T083-multi-150",
+          "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M11"
+          ],
+          "gold_ids_after_header": [
+            "M11"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "M06": 1,
+      "M11": 2
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10216,
+    "native_packed": [
+      "M06",
+      "M11"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C. Nello specifico, per ogni giorno di ritardo si applica una penale dell'1,5% del valore dell'ordine, con un tetto massimo del 15%.",
+      "expected_answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-190",
+          "quote": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M06"
+          ],
+          "gold_ids_after_header": [
+            "M06"
+          ]
+        },
+        {
+          "id": "T083-multi-150",
+          "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M11"
+          ],
+          "gold_ids_after_header": [
+            "M11"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "hybrid",
+    "rank_positions": {
+      "LATE": 1
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2370,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+      "expected_answer": "73 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "late-c1",
+          "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "LATE"
+          ],
+          "gold_ids_after_header": [
+            "LATE"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "expanded",
+    "rank_positions": {
+      "LATE": 1
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9897,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+      "expected_answer": "73 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "d0e4bf9e74fdf89657f5ac38eff2a8ad77ae4ab01fe819c8174b03c23e6323e4",
+          "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "LATE": 1
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "LATE"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+      "expected_answer": "73 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "d0e4bf9e74fdf89657f5ac38eff2a8ad77ae4ab01fe819c8174b03c23e6323e4",
+          "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "hybrid",
+    "rank_positions": {
+      "EARLY": 1
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 2370,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+      "expected_answer": "91 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "early-c0 | vega.txt | Document |  | b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+          "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "expanded",
+    "rank_positions": {
+      "EARLY": 1
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10279,
+    "native_packed": null,
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+      "expected_answer": "91 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+          "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "sk_no_summary",
+    "rank_positions": {
+      "EARLY": 1
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9635,
+    "native_packed": [
+      "EARLY"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+      "expected_answer": "91 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+          "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A01-completa",
+    "method": "sk_full",
+    "rank_positions": {
+      "M01": 1
+    },
+    "packed": [
+      "M01"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10448,
+    "native_packed": [
+      "M01"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "48 mesi dalla data di firma",
+      "expected_answer": "48 mesi dalla firma",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M01"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A01-completa",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "M01": 8
+    },
+    "packed": [],
+    "missing": [
+      "M01"
+    ],
+    "recall": {
+      "5": 0.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9564,
+    "native_packed": [],
+    "all_expected_packed": false,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A02-assente",
+    "method": "sk_full",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 11683,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A02-assente",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 11941,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A03-parziale",
+    "method": "sk_full",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10742,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni, decorrenza assente",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "N4-doc-title"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 3,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A03-parziale",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10260,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A04-discordante",
+    "method": "sk_full",
+    "rank_positions": {
+      "M04": 19,
+      "M13": 1
+    },
+    "packed": [
+      "M13"
+    ],
+    "missing": [
+      "M04"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 0.5,
+      "20": 1.0
+    },
+    "context_utf16": 9927,
+    "native_packed": [
+      "M13"
+    ],
+    "all_expected_packed": false,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+          "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M13"
+          ]
+        },
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 2,
+      "conflicts_lost": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "M04": 5,
+      "M13": 6
+    },
+    "packed": [],
+    "missing": [
+      "M04",
+      "M13"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 11842,
+    "native_packed": [],
+    "all_expected_packed": false,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "sk_full",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9642,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "M12": 2
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9756,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A06-condizione",
+    "method": "sk_full",
+    "rank_positions": {
+      "M17": 1
+    },
+    "packed": [
+      "M17"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9929,
+    "native_packed": [
+      "M17"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "expected_answer": "Seconda rata sospesa se il collaudo fallisce",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-460 | verbale-collaudo-zefiro.docx",
+          "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M17"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "M17": 14
+    },
+    "packed": [],
+    "missing": [
+      "M17"
+    ],
+    "recall": {
+      "5": 0.0,
+      "10": 0.0,
+      "20": 1.0
+    },
+    "context_utf16": 10093,
+    "native_packed": [],
+    "all_expected_packed": false,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "sk_full",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9815,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "expected_answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-80 | allegato-tecnico-zefiro.md",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M12"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "M12": 7
+    },
+    "packed": [],
+    "missing": [
+      "M12"
+    ],
+    "recall": {
+      "5": 0.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9686,
+    "native_packed": [],
+    "all_expected_packed": false,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "sk_full",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10742,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-5 | txt-negations.txt",
+            "quote": "Il termine e' di 45 giorni, non 30.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-321 | pm-message.txt",
+            "quote": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10330,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A09-PM",
+    "method": "sk_full",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": 4
+    },
+    "packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10493,
+    "native_packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Il termine di pagamento è 30 giorni.",
+      "expected_answer": "30 giorni secondo la Scheda A",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt | Document |  | af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A09-PM",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": 11
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [
+      "N4-PM"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 0.5,
+      "20": 1.0
+    },
+    "context_utf16": 10260,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": false,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "sk_full",
+    "rank_positions": {
+      "M06": 1,
+      "M11": 2
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9937,
+    "native_packed": [
+      "M06",
+      "M11"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Le penali di consegna sono definite nell'Allegato C del contratto quadro. Il calcolo prevede l'applicazione di una penale pari all'1,5% del valore dell'ordine per ogni giorno di ritardo, con un tetto massimo del 15%.",
+      "expected_answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-190",
+          "quote": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M06"
+          ],
+          "gold_ids_after_header": [
+            "M06"
+          ]
+        },
+        {
+          "id": "T083-multi-150",
+          "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M11"
+          ],
+          "gold_ids_after_header": [
+            "M11"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "M06": 4,
+      "M11": 3
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10188,
+    "native_packed": [
+      "M06",
+      "M11"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "sk_full",
+    "rank_positions": {
+      "LATE": 1
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "LATE"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+      "expected_answer": "73 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "d0e4bf9e74fdf89657f5ac38eff2a8ad77ae4ab01fe819c8174b03c23e6323e4",
+          "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "LATE": 4
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9684,
+    "native_packed": [
+      "LATE"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "sk_full",
+    "rank_positions": {
+      "EARLY": 1
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "EARLY"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+      "expected_answer": "91 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+          "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "sk_full_no_rerank",
+    "rank_positions": {
+      "EARLY": 3
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9741,
+    "native_packed": [
+      "EARLY"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false
+  },
+  {
+    "id": "A01-completa",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "M01": 1
+    },
+    "packed": [
+      "M01"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10270,
+    "native_packed": [
+      "M01"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "48 mesi",
+      "expected_answer": "48 mesi dalla firma",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M01"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A01-completa",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "M01": 1
+    },
+    "packed": [
+      "M01"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10171,
+    "native_packed": [
+      "M01"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "48 mesi",
+      "expected_answer": "48 mesi dalla firma",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M01"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A02-assente",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 11782,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A02-assente",
+    "method": "sk_lucene_full",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 11300,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A03-parziale",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10742,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni, decorrenza assente",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "N4-doc-title"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 3,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A03-parziale",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "N4-doc-title": 1
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10260,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni, decorrenza assente",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "N4-doc-title"
+          ]
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": [
+              "N4-doc-title"
+            ]
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 3,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "M04": 18,
+      "M13": 1
+    },
+    "packed": [
+      "M13"
+    ],
+    "missing": [
+      "M04"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 0.5,
+      "20": 1.0
+    },
+    "context_utf16": 9589,
+    "native_packed": [
+      "M13"
+    ],
+    "all_expected_packed": false,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+          "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M13"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A04-discordante",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "M04": 19,
+      "M13": 1
+    },
+    "packed": [
+      "M13"
+    ],
+    "missing": [
+      "M04"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 0.5,
+      "20": 1.0
+    },
+    "context_utf16": 9927,
+    "native_packed": [
+      "M13"
+    ],
+    "all_expected_packed": false,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+          "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M13"
+          ]
+        },
+        {
+          "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+          "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 2,
+      "conflicts_lost": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "M04",
+          "M13"
+        ]
+      ],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10148,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A05-altro-documento",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9666,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "assente",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "M17": 1
+    },
+    "packed": [
+      "M17"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9929,
+    "native_packed": [
+      "M17"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "expected_answer": "Seconda rata sospesa se il collaudo fallisce",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-460",
+          "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M17"
+          ],
+          "gold_ids_after_header": [
+            "M17"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A06-condizione",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "M17": 1
+    },
+    "packed": [
+      "M17"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 11453,
+    "native_packed": [
+      "M17"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "expected_answer": "Seconda rata sospesa se il collaudo fallisce",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-460 | verbale-collaudo-zefiro.docx",
+          "quote": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M17"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 11238,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "expected_answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-80 | allegato-tecnico-zefiro.md",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M12"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A07-eccezione",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "M12": 1
+    },
+    "packed": [
+      "M12"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 11339,
+    "native_packed": [
+      "M12"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "expected_answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-80 | allegato-tecnico-zefiro.md",
+          "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": [
+            "M12"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10742,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-5 | txt-negations.txt",
+            "quote": "Il termine e' di 45 giorni, non 30.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-321 | pm-message.txt",
+            "quote": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A08-esclusa",
+    "method": "sk_lucene_full",
+    "rank_positions": {},
+    "packed": [],
+    "missing": [],
+    "recall": {
+      "5": null,
+      "10": null,
+      "20": null
+    },
+    "context_utf16": 10260,
+    "native_packed": [],
+    "all_expected_packed": null,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": null,
+      "status_correct": true,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": true,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-5 | txt-negations.txt",
+            "quote": "Il termine e' di 45 giorni, non 30.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-396 | verbale-collaudo-zefiro.docx",
+            "quote": "Il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "exact_original": false,
+            "exact_after_header": true,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 4,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A09-PM",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": 4
+    },
+    "packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 10742,
+    "native_packed": [
+      "N4-doc-title",
+      "N4-PM"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La Scheda A stabilisce che il termine di pagamento è di 30 giorni.",
+      "expected_answer": "30 giorni secondo la Scheda A",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt | Document | af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A09-PM",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "N4-doc-title": 1,
+      "N4-PM": null
+    },
+    "packed": [
+      "N4-doc-title"
+    ],
+    "missing": [
+      "N4-PM"
+    ],
+    "recall": {
+      "5": 0.5,
+      "10": 0.5,
+      "20": 0.5
+    },
+    "context_utf16": 11784,
+    "native_packed": [
+      "N4-doc-title"
+    ],
+    "all_expected_packed": false,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "Open",
+      "reason": "parziale",
+      "answer": null,
+      "expected_answer": "30 giorni secondo la Scheda A",
+      "status_correct": false,
+      "reason_correct": false,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "N4-fixtures-3 | txt-conflict-a.txt | Document",
+          "quote": "Il termine di pagamento e' 30 giorni.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [
+        [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt | Document",
+            "quote": "Il termine di pagamento e' 30 giorni.",
+            "exact_original": false,
+            "exact_after_header": false,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt | Document",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "exact_original": false,
+            "exact_after_header": false,
+            "gold_ids": [],
+            "gold_ids_after_header": []
+          }
+        ]
+      ],
+      "invalid_citations": 3,
+      "conflicts_lost": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "conflicts_lost_after_header": [
+        [
+          "N4-PM",
+          "N4-doc-title"
+        ]
+      ],
+      "invalid_citations_after_header": 3,
+      "unmatched_reported_conflicts": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "M06": 1,
+      "M11": 2
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9937,
+    "native_packed": [
+      "M06",
+      "M11"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Le penali di consegna sono definite nell'Allegato C del contratto quadro. Il calcolo prevede l'applicazione di una penale pari all'1,5% del valore dell'ordine per ogni giorno di ritardo, con un tetto massimo del 15%.",
+      "expected_answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-190",
+          "quote": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M06"
+          ],
+          "gold_ids_after_header": [
+            "M06"
+          ]
+        },
+        {
+          "id": "T083-multi-150",
+          "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M11"
+          ],
+          "gold_ids_after_header": [
+            "M11"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "A10-multifonte",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "M06": 1,
+      "M11": 2
+    },
+    "packed": [
+      "M06",
+      "M11"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9937,
+    "native_packed": [
+      "M06",
+      "M11"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "Le penali di consegna sono definite nell'Allegato C del contratto quadro. Il calcolo prevede l'applicazione di una penale pari all'1,5% del valore dell'ordine per ogni giorno di ritardo, con un tetto massimo del 15%.",
+      "expected_answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "T083-multi-190",
+          "quote": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M06"
+          ],
+          "gold_ids_after_header": [
+            "M06"
+          ]
+        },
+        {
+          "id": "T083-multi-150",
+          "quote": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+          "exact_original": true,
+          "exact_after_header": true,
+          "gold_ids": [
+            "M11"
+          ],
+          "gold_ids_after_header": [
+            "M11"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 0,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 0,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "LATE": 1
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "LATE"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+      "expected_answer": "73 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "d0e4bf9e74fdf89657f5ac38eff2a8ad77ae4ab01fe819c8174b03c23e6323e4",
+          "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "LATE": 1
+    },
+    "packed": [
+      "LATE"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "LATE"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+      "expected_answer": "73 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "d0e4bf9e74fdf89657f5ac38eff2a8ad77ae4ab01fe819c8174b03c23e6323e4",
+          "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "sk_lucene_no_summary",
+    "rank_positions": {
+      "EARLY": 1
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "EARLY"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+      "expected_answer": "91 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+          "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "method": "sk_lucene_full",
+    "rank_positions": {
+      "EARLY": 1
+    },
+    "packed": [
+      "EARLY"
+    ],
+    "missing": [],
+    "recall": {
+      "5": 1.0,
+      "10": 1.0,
+      "20": 1.0
+    },
+    "context_utf16": 9821,
+    "native_packed": [
+      "EARLY"
+    ],
+    "all_expected_packed": true,
+    "excluded_in_context": false,
+    "gap": {
+      "valid_json": true,
+      "unwrapped_json": false,
+      "status": "AnsweredInSnapshot",
+      "reason": null,
+      "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+      "expected_answer": "91 ore di funzionamento",
+      "status_correct": true,
+      "reason_correct": true,
+      "false_answered": false,
+      "citations": [
+        {
+          "id": "b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+          "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento.",
+          "exact_original": false,
+          "exact_after_header": false,
+          "gold_ids": [],
+          "gold_ids_after_header": []
+        }
+      ],
+      "conflicts": [],
+      "invalid_citations": 1,
+      "conflicts_lost": [],
+      "conflicts_lost_after_header": [],
+      "invalid_citations_after_header": 1,
+      "unmatched_reported_conflicts": []
+    }
+  }
+]

@@ -1,0 +1,152 @@
+{
+  "B1/01/0": {
+    "credit": [
+      "S04"
+    ],
+    "note": "Preserva il termine del decimo giorno lavorativo e limita la regola ad agosto e dicembre. S03 conserva il termine generale."
+  },
+  "B1/01/2": {
+    "credit": [
+      "R052"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/02/1": {
+    "credit": [
+      "R067"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/02/6": {
+    "credit": [
+      "R111"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/02/8": {
+    "credit": [
+      "R113"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/02/9": {
+    "credit": [
+      "R114"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/04/1": {
+    "credit": [
+      "R171"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/04/3": {
+    "credit": [
+      "R173"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/04/5": {
+    "credit": [
+      "R175"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/04/7": {
+    "credit": [
+      "R197"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/04/8": {
+    "credit": [
+      "R198"
+    ],
+    "note": "Parafrasi fedele della regola. Identità della linea, oggetto, quantità e unità restano nella proposizione."
+  },
+  "B1/02/13": {
+    "credit": [
+      "S05"
+    ],
+    "note": "Nel contesto del capitolato conserva l'obbligo di presa in carico, il limite di 40 minuti e l'esclusione dei festivi."
+  },
+  "B1/03/0": {
+    "category": "component",
+    "linked": "B1/03/1",
+    "note": "Componente della stessa clausola, valutato in coppia."
+  },
+  "B1/03/1": {
+    "credit": [
+      "S06"
+    ],
+    "note": "Le due righe insieme preservano limite, condizione e autorizzazione scritta del responsabile di magazzino.",
+    "linked": "B1/03/0"
+  },
+  "B1/03/3": {
+    "category": "component",
+    "linked": "B1/03/4",
+    "note": "Componente della stessa clausola, valutato in coppia."
+  },
+  "B1/03/4": {
+    "credit": [
+      "S08"
+    ],
+    "note": "Le due righe insieme preservano frequenza, ora e conservazione delle copie.",
+    "linked": "B1/03/3"
+  },
+  "B1/03/5": {
+    "category": "component",
+    "linked": "B1/03/6",
+    "note": "Componente della stessa clausola, valutato in coppia."
+  },
+  "B1/03/6": {
+    "credit": [
+      "S15"
+    ],
+    "note": "Le due righe con la stessa citazione preservano ricorrenza mensile e orario della finestra.",
+    "linked": "B1/03/5"
+  },
+  "B1/04/13": {
+    "credit": [
+      "S10"
+    ],
+    "note": "Preserva negazione, causa, preavviso minimo e riferimento alla consegna."
+  },
+  "B1/05/1": {
+    "credit": [
+      "S14"
+    ],
+    "note": "Preserva durata e decorrenza dalla data della fattura nel medesimo documento."
+  },
+  "B1/05/2": {
+    "credit": [
+      "S16"
+    ],
+    "note": "Preserva la ricorrenza della terza domenica di ogni mese."
+  },
+  "B1/05/0": {
+    "category": "wrong_locator",
+    "note": "Lo statement contiene il requisito PEC ma l'identificativo non ancorava la citazione nel batch. Escluso dalla copertura verificabile."
+  },
+  "B2/03/3": {
+    "category": "wrong_locator",
+    "note": "Lo statement contiene il requisito PEC ma l'identificativo non ancorava la citazione nel batch. Escluso dalla copertura verificabile."
+  },
+  "B2/00/1": {
+    "category": "irrelevant",
+    "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+  },
+  "B2/00/3": {
+    "category": "irrelevant",
+    "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+  },
+  "B2/00/4": {
+    "category": "irrelevant",
+    "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+  },
+  "B2/00/13": {
+    "category": "irrelevant",
+    "note": "Dettaglio narrativo del riempitivo privo di una regola applicabile al progetto."
+  }
+}

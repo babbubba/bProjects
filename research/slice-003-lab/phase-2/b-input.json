@@ -1,0 +1,3508 @@
+{
+  "original_sha256": "a926fb1da97b8b01edfa61e67e87967a8249f6bd37e22d239fd642eb491530f6",
+  "parents": [
+    17,
+    28,
+    39,
+    45,
+    51,
+    62,
+    91,
+    108,
+    125,
+    205,
+    214,
+    222,
+    233,
+    245,
+    256,
+    268,
+    308,
+    353,
+    370,
+    382,
+    394,
+    405,
+    417,
+    428
+  ],
+  "blocks": [
+    {
+      "id": "b117",
+      "text": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 235,
+        "lineEnd": 235,
+        "sourceStart": 49861,
+        "sourceEnd": 49949
+      },
+      "block_ref": "b118",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b118",
+      "text": "Il viale di tigli davanti al cancello racconta con discrezione il carattere tranquillo della comunità. La fontana al centro della piazza viene sistemata ogni primavera da un gruppo di volontari. Il murale dipinto dagli studenti del liceo vicino ospita da molti anni una piccola mostra di fotografie, come accade da molte stagioni. Il corridoio dei laboratori si affaccia su una strada ombreggiata frequentata da ciclisti. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 237,
+        "lineEnd": 237,
+        "sourceStart": 49951,
+        "sourceEnd": 50423
+      },
+      "block_ref": "b119",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b119",
+      "text": "La vecchia fornace trasformata in spazio per le mostre è stata ricostruita con pietre recuperate da una cascina abbandonata, nonostante il passare degli anni. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il murale dipinto dagli studenti del liceo vicino ha visto crescere generazioni di famiglie del posto. La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta, tra la curiosità dei passanti. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 239,
+        "lineEnd": 239,
+        "sourceStart": 50425,
+        "sourceEnd": 50952
+      },
+      "block_ref": "b120",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b120",
+      "text": "Il cortile interno dello stabilimento ricorda a chi arriva la storia artigiana del territorio, nonostante il passare degli anni. La fontana al centro della piazza ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. La terrazza panoramica dell'ultimo piano si affaccia su una strada ombreggiata frequentata da ciclisti. La piccola cappella accanto al parcheggio si affaccia su una strada ombreggiata frequentata da ciclisti, tra la curiosità dei passanti. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 241,
+        "lineEnd": 241,
+        "sourceStart": 50954,
+        "sourceEnd": 51508
+      },
+      "block_ref": "b121",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b121",
+      "text": "Gli abitanti del quartiere ne parlano con affetto. Il viale di tigli davanti al cancello ricorda a chi arriva la storia artigiana del territorio. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il murale dipinto dagli studenti del liceo vicino racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 243,
+        "lineEnd": 243,
+        "sourceStart": 51510,
+        "sourceEnd": 51927
+      },
+      "block_ref": "b122",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b122",
+      "text": "Dalle finestre si vedono le colline e i tetti rossi del borgo. Dalle finestre si vedono le colline e i tetti rossi del borgo. Il cortile interno dello stabilimento è il luogo preferito dai colleghi per una pausa all'aria aperta. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 245,
+        "lineEnd": 245,
+        "sourceStart": 51929,
+        "sourceEnd": 52278
+      },
+      "block_ref": "b123",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b123",
+      "text": "La vecchia fornace trasformata in spazio per le mostre ha visto crescere generazioni di famiglie del posto, nonostante il passare degli anni. Il cortile interno dello stabilimento è stata dipinta di un colore caldo che ricorda le sere d'estate, come accade da molte stagioni. Il campanile del paese viene sistemata ogni primavera da un gruppo di volontari. L'orto condiviso dai colleghi ricorda a chi arriva la storia artigiana del territorio, come accade da molte stagioni. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 247,
+        "lineEnd": 247,
+        "sourceStart": 52280,
+        "sourceEnd": 52820
+      },
+      "block_ref": "b124",
+      "parents": [
+        17
+      ]
+    },
+    {
+      "id": "b194",
+      "text": "Durante le feste di paese diventa il punto d'incontro di tutti. Gli studenti in visita lo disegnano spesso sui loro quaderni. Nelle giornate di vento si sente il profumo dei tigli. Dalle finestre si vedono le colline e i tetti rossi del borgo. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 389,
+        "lineEnd": 389,
+        "sourceStart": 81848,
+        "sourceEnd": 82142
+      },
+      "block_ref": "b195",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b195",
+      "text": "La vecchia fornace trasformata in spazio per le mostre conserva ancora le panche di legno scelte dai primi fondatori. L'ingresso principale dell'edificio racconta con discrezione il carattere tranquillo della comunità, come raccontano i più anziani. La vecchia fornace trasformata in spazio per le mostre si riempie di luce nelle mattine limpide. Gli studenti in visita lo disegnano spesso sui loro quaderni. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 391,
+        "lineEnd": 391,
+        "sourceStart": 82144,
+        "sourceEnd": 82618
+      },
+      "block_ref": "b196",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b196",
+      "text": "La fontana al centro della piazza ricorda a chi arriva la storia artigiana del territorio. Chi visita l'edificio per la prima volta se ne ricorda a lungo. La mensa del secondo piano si riempie di luce nelle mattine limpide, senza fare rumore. La biblioteca dei dipendenti è stata ricostruita con pietre recuperate da una cascina abbandonata. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 393,
+        "lineEnd": 393,
+        "sourceStart": 82620,
+        "sourceEnd": 83025
+      },
+      "block_ref": "b197",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b197",
+      "text": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 395,
+        "lineEnd": 395,
+        "sourceStart": 83027,
+        "sourceEnd": 83116
+      },
+      "block_ref": "b198",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b198",
+      "text": "La vecchia fornace trasformata in spazio per le mostre racconta con discrezione il carattere tranquillo della comunità, nonostante il passare degli anni. Gli studenti in visita lo disegnano spesso sui loro quaderni. Gli abitanti del quartiere ne parlano con affetto. Il corridoio dei laboratori è il luogo preferito dai colleghi per una pausa all'aria aperta. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 397,
+        "lineEnd": 397,
+        "sourceStart": 83118,
+        "sourceEnd": 83532
+      },
+      "block_ref": "b199",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b199",
+      "text": "Un anziano giardiniere ama raccontarne gli aneddoti. Un anziano giardiniere ama raccontarne gli aneddoti. L'orto condiviso dai colleghi è stata dipinta di un colore caldo che ricorda le sere d'estate. Il campanile del paese racconta con discrezione il carattere tranquillo della comunità. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 399,
+        "lineEnd": 399,
+        "sourceStart": 83534,
+        "sourceEnd": 83873
+      },
+      "block_ref": "b200",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b200",
+      "text": "Un anziano giardiniere ama raccontarne gli aneddoti. Il campanile del paese è stata ripresa in un documentario girato da una giovane regista. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Gli abitanti del quartiere ne parlano con affetto. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 401,
+        "lineEnd": 401,
+        "sourceStart": 83875,
+        "sourceEnd": 84199
+      },
+      "block_ref": "b201",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b201",
+      "text": "L'ingresso principale dell'edificio è stata ripresa in un documentario girato da una giovane regista. Il cortile interno dello stabilimento si riempie di luce nelle mattine limpide, come accade da molte stagioni. La vecchia fornace trasformata in spazio per le mostre conserva ancora le panche di legno scelte dai primi fondatori. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 403,
+        "lineEnd": 403,
+        "sourceStart": 84201,
+        "sourceEnd": 84652
+      },
+      "block_ref": "b202",
+      "parents": [
+        28
+      ]
+    },
+    {
+      "id": "b270",
+      "text": "La terrazza panoramica dell'ultimo piano conserva ancora le panche di legno scelte dai primi fondatori, con grande orgoglio di chi ci lavora. Un anziano giardiniere ama raccontarne gli aneddoti. Gli abitanti del quartiere ne parlano con affetto. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 541,
+        "lineEnd": 541,
+        "sourceStart": 113341,
+        "sourceEnd": 113712
+      },
+      "block_ref": "b271",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b271",
+      "text": "La vecchia fornace trasformata in spazio per le mostre è il luogo preferito dai colleghi per una pausa all'aria aperta. L'ingresso principale dell'edificio viene sistemata ogni primavera da un gruppo di volontari, come accade da molte stagioni. Nelle giornate di vento si sente il profumo dei tigli. Dalle finestre si vedono le colline e i tetti rossi del borgo. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 543,
+        "lineEnd": 543,
+        "sourceStart": 113714,
+        "sourceEnd": 114140
+      },
+      "block_ref": "b272",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b272",
+      "text": "La storica palazzina dell'azienda ha visto crescere generazioni di famiglie del posto, senza fare rumore. Gli abitanti del quartiere ne parlano con affetto. La piccola cappella accanto al parcheggio ricorda a chi arriva la storia artigiana del territorio. L'ingresso principale dell'edificio conserva ancora le panche di legno scelte dai primi fondatori, con grande orgoglio di chi ci lavora. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 545,
+        "lineEnd": 545,
+        "sourceStart": 114142,
+        "sourceEnd": 114585
+      },
+      "block_ref": "b273",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b273",
+      "text": "L'ingresso principale dell'edificio viene sistemata ogni primavera da un gruppo di volontari, come accade da molte stagioni. Gli studenti in visita lo disegnano spesso sui loro quaderni. La piccola cappella accanto al parcheggio viene sistemata ogni primavera da un gruppo di volontari. Gli studenti in visita lo disegnano spesso sui loro quaderni. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 547,
+        "lineEnd": 547,
+        "sourceStart": 114587,
+        "sourceEnd": 114988
+      },
+      "block_ref": "b274",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b274",
+      "text": "Il campanile del paese conserva ancora le panche di legno scelte dai primi fondatori. La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta. La biblioteca dei dipendenti viene sistemata ogni primavera da un gruppo di volontari. La biblioteca dei dipendenti ha visto crescere generazioni di famiglie del posto, nonostante il passare degli anni. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 549,
+        "lineEnd": 549,
+        "sourceStart": 114990,
+        "sourceEnd": 115448
+      },
+      "block_ref": "b275",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b275",
+      "text": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 551,
+        "lineEnd": 551,
+        "sourceStart": 115450,
+        "sourceEnd": 115537
+      },
+      "block_ref": "b276",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b276",
+      "text": "Dalle finestre si vedono le colline e i tetti rossi del borgo. Gli studenti in visita lo disegnano spesso sui loro quaderni. L'ingresso principale dell'edificio è stata ripresa in un documentario girato da una giovane regista, tra la curiosità dei passanti. Nelle giornate di vento si sente il profumo dei tigli. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 553,
+        "lineEnd": 553,
+        "sourceStart": 115539,
+        "sourceEnd": 115906
+      },
+      "block_ref": "b277",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b277",
+      "text": "La biblioteca dei dipendenti è il luogo preferito dai colleghi per una pausa all'aria aperta. Nelle giornate di vento si sente il profumo dei tigli. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il murale dipinto dagli studenti del liceo vicino ricorda a chi arriva la storia artigiana del territorio. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 555,
+        "lineEnd": 555,
+        "sourceStart": 115908,
+        "sourceEnd": 116278
+      },
+      "block_ref": "b278",
+      "parents": [
+        39
+      ]
+    },
+    {
+      "id": "b312",
+      "text": "La sala più grande dell'edificio ha visto crescere generazioni di famiglie del posto, nonostante il passare degli anni. L'orto condiviso dai colleghi conserva ancora le panche di legno scelte dai primi fondatori. Il corridoio dei laboratori conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 625,
+        "lineEnd": 625,
+        "sourceStart": 131062,
+        "sourceEnd": 131518
+      },
+      "block_ref": "b313",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b313",
+      "text": "Il murale dipinto dagli studenti del liceo vicino ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. Gli studenti in visita lo disegnano spesso sui loro quaderni. Gli abitanti del quartiere ne parlano con affetto. Gli abitanti del quartiere ne parlano con affetto. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 627,
+        "lineEnd": 627,
+        "sourceStart": 131520,
+        "sourceEnd": 131885
+      },
+      "block_ref": "b314",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b314",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli abitanti del quartiere ne parlano con affetto. Gli abitanti del quartiere ne parlano con affetto. Nelle giornate di vento si sente il profumo dei tigli. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 629,
+        "lineEnd": 629,
+        "sourceStart": 131887,
+        "sourceEnd": 132160
+      },
+      "block_ref": "b315",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b315",
+      "text": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi. La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola. Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi. Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi. Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi. Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 631,
+        "lineEnd": 631,
+        "sourceStart": 132162,
+        "sourceEnd": 132597
+      },
+      "block_ref": "b316",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b316",
+      "text": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 633,
+        "lineEnd": 633,
+        "sourceStart": 132599,
+        "sourceEnd": 132666
+      },
+      "block_ref": "b317",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b317",
+      "text": "Le stagioni",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 635,
+        "lineEnd": 635,
+        "sourceStart": 132668,
+        "sourceEnd": 132679
+      },
+      "block_ref": "b318",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b318",
+      "text": "Il viale di tigli davanti al cancello è il luogo preferito dai colleghi per una pausa all'aria aperta, come raccontano i più anziani. Nelle giornate di vento si sente il profumo dei tigli. Un anziano giardiniere ama raccontarne gli aneddoti. L'orto condiviso dai colleghi è il luogo preferito dai colleghi per una pausa all'aria aperta. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 637,
+        "lineEnd": 637,
+        "sourceStart": 132681,
+        "sourceEnd": 133081
+      },
+      "block_ref": "b319",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b319",
+      "text": "Il murale dipinto dagli studenti del liceo vicino è il luogo preferito dai colleghi per una pausa all'aria aperta. Un anziano giardiniere ama raccontarne gli aneddoti. Il viale di tigli davanti al cancello è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. La piccola cappella accanto al parcheggio si affaccia su una strada ombreggiata frequentata da ciclisti. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 639,
+        "lineEnd": 639,
+        "sourceStart": 133083,
+        "sourceEnd": 133552
+      },
+      "block_ref": "b320",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b320",
+      "text": "L'ingresso principale dell'edificio ospita da molti anni una piccola mostra di fotografie. Gli studenti in visita lo disegnano spesso sui loro quaderni. La sala più grande dell'edificio si affaccia su una strada ombreggiata frequentata da ciclisti. Gli studenti in visita lo disegnano spesso sui loro quaderni. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 641,
+        "lineEnd": 641,
+        "sourceStart": 133554,
+        "sourceEnd": 133928
+      },
+      "block_ref": "b321",
+      "parents": [
+        45
+      ]
+    },
+    {
+      "id": "b353",
+      "text": "La sala più grande dell'edificio viene sistemata ogni primavera da un gruppo di volontari, come accade da molte stagioni. La fontana al centro della piazza è il luogo preferito dai colleghi per una pausa all'aria aperta. La storica palazzina dell'azienda è il luogo preferito dai colleghi per una pausa all'aria aperta. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 707,
+        "lineEnd": 707,
+        "sourceStart": 147905,
+        "sourceEnd": 148354
+      },
+      "block_ref": "b354",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b354",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Un anziano giardiniere ama raccontarne gli aneddoti. Il viale di tigli davanti al cancello conserva ancora le panche di legno scelte dai primi fondatori. La vecchia fornace trasformata in spazio per le mostre è stata ripresa in un documentario girato da una giovane regista. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 709,
+        "lineEnd": 709,
+        "sourceStart": 148356,
+        "sourceEnd": 148748
+      },
+      "block_ref": "b355",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b355",
+      "text": "Il campanile del paese conserva ancora le panche di legno scelte dai primi fondatori, come raccontano i più anziani. La storica palazzina dell'azienda ospita da molti anni una piccola mostra di fotografie. La mensa del secondo piano ospita da molti anni una piccola mostra di fotografie, tra la curiosità dei passanti. Il murale dipinto dagli studenti del liceo vicino è il luogo preferito dai colleghi per una pausa all'aria aperta. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 711,
+        "lineEnd": 711,
+        "sourceStart": 148750,
+        "sourceEnd": 149247
+      },
+      "block_ref": "b356",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b356",
+      "text": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 713,
+        "lineEnd": 713,
+        "sourceStart": 149249,
+        "sourceEnd": 149387
+      },
+      "block_ref": "b357",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b357",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Il giardino sul retro si affaccia su una strada ombreggiata frequentata da ciclisti. La biblioteca dei dipendenti è stata dipinta di un colore caldo che ricorda le sere d'estate, come accade da molte stagioni. Durante le feste di paese diventa il punto d'incontro di tutti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 715,
+        "lineEnd": 715,
+        "sourceStart": 149389,
+        "sourceEnd": 149781
+      },
+      "block_ref": "b358",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b358",
+      "text": "Il cortile interno dello stabilimento viene sistemata ogni primavera da un gruppo di volontari. La biblioteca dei dipendenti viene sistemata ogni primavera da un gruppo di volontari, come raccontano i più anziani. Il campanile del paese si riempie di luce nelle mattine limpide, nonostante il passare degli anni. L'orto condiviso dai colleghi è il luogo preferito dai colleghi per una pausa all'aria aperta, senza fare rumore. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 717,
+        "lineEnd": 717,
+        "sourceStart": 149783,
+        "sourceEnd": 150260
+      },
+      "block_ref": "b359",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b359",
+      "text": "Gli studenti in visita lo disegnano spesso sui loro quaderni. Il giardino sul retro racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. Il corridoio dei laboratori ha visto crescere generazioni di famiglie del posto. L'orto condiviso dai colleghi si riempie di luce nelle mattine limpide. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 719,
+        "lineEnd": 719,
+        "sourceStart": 150262,
+        "sourceEnd": 150645
+      },
+      "block_ref": "b360",
+      "parents": [
+        51
+      ]
+    },
+    {
+      "id": "b429",
+      "text": "La fontana al centro della piazza è il luogo preferito dai colleghi per una pausa all'aria aperta. Il cortile interno dello stabilimento è stata dipinta di un colore caldo che ricorda le sere d'estate. L'orto condiviso dai colleghi è il luogo preferito dai colleghi per una pausa all'aria aperta. Gli studenti in visita lo disegnano spesso sui loro quaderni. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 859,
+        "lineEnd": 859,
+        "sourceStart": 180106,
+        "sourceEnd": 180515
+      },
+      "block_ref": "b430",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b430",
+      "text": "Il cortile interno dello stabilimento si affaccia su una strada ombreggiata frequentata da ciclisti. Nelle giornate di vento si sente il profumo dei tigli. Il viale di tigli davanti al cancello è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. Il cortile interno dello stabilimento ha visto crescere generazioni di famiglie del posto, come raccontano i più anziani. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 861,
+        "lineEnd": 861,
+        "sourceStart": 180517,
+        "sourceEnd": 181000
+      },
+      "block_ref": "b431",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b431",
+      "text": "La sala più grande dell'edificio ha visto crescere generazioni di famiglie del posto. L'ingresso principale dell'edificio è il luogo preferito dai colleghi per una pausa all'aria aperta, come raccontano i più anziani. La terrazza panoramica dell'ultimo piano si riempie di luce nelle mattine limpide. Durante le feste di paese diventa il punto d'incontro di tutti. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 863,
+        "lineEnd": 863,
+        "sourceStart": 181002,
+        "sourceEnd": 181428
+      },
+      "block_ref": "b432",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b432",
+      "text": "Gli studenti in visita lo disegnano spesso sui loro quaderni. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il viale di tigli davanti al cancello è il luogo preferito dai colleghi per una pausa all'aria aperta, nonostante il passare degli anni. Nelle giornate di vento si sente il profumo dei tigli. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 865,
+        "lineEnd": 865,
+        "sourceStart": 181430,
+        "sourceEnd": 181796
+      },
+      "block_ref": "b433",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b433",
+      "text": "La piccola cappella accanto al parcheggio ha visto crescere generazioni di famiglie del posto. La fontana al centro della piazza viene sistemata ogni primavera da un gruppo di volontari, tra la curiosità dei passanti. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il corridoio dei laboratori racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 867,
+        "lineEnd": 867,
+        "sourceStart": 181798,
+        "sourceEnd": 182269
+      },
+      "block_ref": "b434",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b434",
+      "text": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 869,
+        "lineEnd": 869,
+        "sourceStart": 182271,
+        "sourceEnd": 182350
+      },
+      "block_ref": "b435",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b435",
+      "text": "Dalle finestre si vedono le colline e i tetti rossi del borgo. Il murale dipinto dagli studenti del liceo vicino racconta con discrezione il carattere tranquillo della comunità, nonostante il passare degli anni. La storica palazzina dell'azienda racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. La fontana al centro della piazza racconta con discrezione il carattere tranquillo della comunità. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 871,
+        "lineEnd": 871,
+        "sourceStart": 182352,
+        "sourceEnd": 182858
+      },
+      "block_ref": "b436",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b436",
+      "text": "La terrazza panoramica dell'ultimo piano è stata ripresa in un documentario girato da una giovane regista, tra la curiosità dei passanti. Il campanile del paese ospita da molti anni una piccola mostra di fotografie. Gli studenti in visita lo disegnano spesso sui loro quaderni. Dalle finestre si vedono le colline e i tetti rossi del borgo. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 873,
+        "lineEnd": 873,
+        "sourceStart": 182860,
+        "sourceEnd": 183264
+      },
+      "block_ref": "b437",
+      "parents": [
+        62
+      ]
+    },
+    {
+      "id": "b629",
+      "text": "Per la linea Gomuco il lotto minimo di rifornimento è di 250 pezzi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1259,
+        "lineEnd": 1259,
+        "sourceStart": 264913,
+        "sourceEnd": 264980
+      },
+      "block_ref": "b630",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b630",
+      "text": "Gli spazi comuni",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1261,
+        "lineEnd": 1261,
+        "sourceStart": 264982,
+        "sourceEnd": 264998
+      },
+      "block_ref": "b631",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b631",
+      "text": "La sala più grande dell'edificio ospita da molti anni una piccola mostra di fotografie, come accade da molte stagioni. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il campanile del paese ricorda a chi arriva la storia artigiana del territorio. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1263,
+        "lineEnd": 1263,
+        "sourceStart": 265000,
+        "sourceEnd": 265394
+      },
+      "block_ref": "b632",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b632",
+      "text": "L'ingresso principale dell'edificio si affaccia su una strada ombreggiata frequentata da ciclisti. Il campanile del paese è il luogo preferito dai colleghi per una pausa all'aria aperta. Dalle finestre si vedono le colline e i tetti rossi del borgo. Il viale di tigli davanti al cancello ha visto crescere generazioni di famiglie del posto. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1265,
+        "lineEnd": 1265,
+        "sourceStart": 265396,
+        "sourceEnd": 265800
+      },
+      "block_ref": "b633",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b633",
+      "text": "Il giardino sul retro si affaccia su una strada ombreggiata frequentata da ciclisti. Il giardino sul retro è il luogo preferito dai colleghi per una pausa all'aria aperta. Dalle finestre si vedono le colline e i tetti rossi del borgo. Il campanile del paese si riempie di luce nelle mattine limpide. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1267,
+        "lineEnd": 1267,
+        "sourceStart": 265802,
+        "sourceEnd": 266154
+      },
+      "block_ref": "b634",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b634",
+      "text": "Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il cortile interno dello stabilimento ha visto crescere generazioni di famiglie del posto. Il viale di tigli davanti al cancello ospita da molti anni una piccola mostra di fotografie. La storica palazzina dell'azienda conserva ancora le panche di legno scelte dai primi fondatori, con grande orgoglio di chi ci lavora. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1269,
+        "lineEnd": 1269,
+        "sourceStart": 266156,
+        "sourceEnd": 266602
+      },
+      "block_ref": "b635",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b635",
+      "text": "L'ingresso principale dell'edificio è stata dipinta di un colore caldo che ricorda le sere d'estate. Il corridoio dei laboratori ricorda a chi arriva la storia artigiana del territorio. Gli studenti in visita lo disegnano spesso sui loro quaderni. La fontana al centro della piazza si riempie di luce nelle mattine limpide, come accade da molte stagioni. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1271,
+        "lineEnd": 1271,
+        "sourceStart": 266604,
+        "sourceEnd": 267011
+      },
+      "block_ref": "b636",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b636",
+      "text": "L'ingresso principale dell'edificio viene sistemata ogni primavera da un gruppo di volontari. La storica palazzina dell'azienda è stata ripresa in un documentario girato da una giovane regista. Un anziano giardiniere ama raccontarne gli aneddoti. Il cortile interno dello stabilimento è stata ricostruita con pietre recuperate da una cascina abbandonata, come raccontano i più anziani. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1273,
+        "lineEnd": 1273,
+        "sourceStart": 267013,
+        "sourceEnd": 267449
+      },
+      "block_ref": "b637",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b637",
+      "text": "La vecchia fornace trasformata in spazio per le mostre si affaccia su una strada ombreggiata frequentata da ciclisti. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Durante le feste di paese diventa il punto d'incontro di tutti. L'orto condiviso dai colleghi conserva ancora le panche di legno scelte dai primi fondatori, tra la curiosità dei passanti. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1275,
+        "lineEnd": 1275,
+        "sourceStart": 267451,
+        "sourceEnd": 267871
+      },
+      "block_ref": "b638",
+      "parents": [
+        91
+      ]
+    },
+    {
+      "id": "b745",
+      "text": "Una vecchia fotografia in bianco e nero lo mostra quasi identico. La biblioteca dei dipendenti è il luogo preferito dai colleghi per una pausa all'aria aperta. La vecchia fornace trasformata in spazio per le mostre è il luogo preferito dai colleghi per una pausa all'aria aperta. La sala più grande dell'edificio si riempie di luce nelle mattine limpide, nonostante il passare degli anni. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1491,
+        "lineEnd": 1491,
+        "sourceStart": 313551,
+        "sourceEnd": 314003
+      },
+      "block_ref": "b746",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b746",
+      "text": "La vecchia fornace trasformata in spazio per le mostre si riempie di luce nelle mattine limpide. Gli abitanti del quartiere ne parlano con affetto. La storica palazzina dell'azienda è stata ricostruita con pietre recuperate da una cascina abbandonata. Gli abitanti del quartiere ne parlano con affetto. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1493,
+        "lineEnd": 1493,
+        "sourceStart": 314005,
+        "sourceEnd": 314373
+      },
+      "block_ref": "b747",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b747",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. L'ingresso principale dell'edificio ricorda a chi arriva la storia artigiana del territorio, come accade da molte stagioni. La sala più grande dell'edificio si riempie di luce nelle mattine limpide, come accade da molte stagioni. La mensa del secondo piano conserva ancora le panche di legno scelte dai primi fondatori. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1495,
+        "lineEnd": 1495,
+        "sourceStart": 314375,
+        "sourceEnd": 314813
+      },
+      "block_ref": "b748",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b748",
+      "text": "Il cortile interno dello stabilimento racconta con discrezione il carattere tranquillo della comunità. Nelle giornate di vento si sente il profumo dei tigli. Gli studenti in visita lo disegnano spesso sui loro quaderni. La sala più grande dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata, nonostante il passare degli anni. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1497,
+        "lineEnd": 1497,
+        "sourceStart": 314815,
+        "sourceEnd": 315237
+      },
+      "block_ref": "b749",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b749",
+      "text": "Gli studenti in visita lo disegnano spesso sui loro quaderni. La terrazza panoramica dell'ultimo piano è il luogo preferito dai colleghi per una pausa all'aria aperta, nonostante il passare degli anni. L'orto condiviso dai colleghi è stata ripresa in un documentario girato da una giovane regista, come raccontano i più anziani. La storica palazzina dell'azienda si affaccia su una strada ombreggiata frequentata da ciclisti. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1499,
+        "lineEnd": 1499,
+        "sourceStart": 315239,
+        "sourceEnd": 315715
+      },
+      "block_ref": "b750",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b750",
+      "text": "Il murale dipinto dagli studenti del liceo vicino racconta con discrezione il carattere tranquillo della comunità. Gli abitanti del quartiere ne parlano con affetto. La piccola cappella accanto al parcheggio è stata dipinta di un colore caldo che ricorda le sere d'estate. La sala più grande dell'edificio conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1501,
+        "lineEnd": 1501,
+        "sourceStart": 315717,
+        "sourceEnd": 316185
+      },
+      "block_ref": "b751",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b751",
+      "text": "Il campanile del paese viene sistemata ogni primavera da un gruppo di volontari. Un anziano giardiniere ama raccontarne gli aneddoti. La fontana al centro della piazza ricorda a chi arriva la storia artigiana del territorio, come accade da molte stagioni. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1503,
+        "lineEnd": 1503,
+        "sourceStart": 316187,
+        "sourceEnd": 316574
+      },
+      "block_ref": "b752",
+      "parents": [
+        108
+      ]
+    },
+    {
+      "id": "b863",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Il cortile interno dello stabilimento racconta con discrezione il carattere tranquillo della comunità. La mensa del secondo piano è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. L'orto condiviso dai colleghi è stata ripresa in un documentario girato da una giovane regista. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1727,
+        "lineEnd": 1727,
+        "sourceStart": 363439,
+        "sourceEnd": 363889
+      },
+      "block_ref": "b864",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b864",
+      "text": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi. La scheda tecnica della linea Tivipu prevede un imballo da 653 pezzi per scatola. Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi. Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi. Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi. Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1729,
+        "lineEnd": 1729,
+        "sourceStart": 363891,
+        "sourceEnd": 364316
+      },
+      "block_ref": "b865",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b865",
+      "text": "I sentieri",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1731,
+        "lineEnd": 1731,
+        "sourceStart": 364318,
+        "sourceEnd": 364328
+      },
+      "block_ref": "b866",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b866",
+      "text": "Il giardino sul retro ha visto crescere generazioni di famiglie del posto, senza fare rumore. Gli abitanti del quartiere ne parlano con affetto. L'ingresso principale dell'edificio ricorda a chi arriva la storia artigiana del territorio, come accade da molte stagioni. La fontana al centro della piazza ospita da molti anni una piccola mostra di fotografie, tra la curiosità dei passanti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1733,
+        "lineEnd": 1733,
+        "sourceStart": 364330,
+        "sourceEnd": 364782
+      },
+      "block_ref": "b867",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b867",
+      "text": "Il cortile interno dello stabilimento conserva ancora le panche di legno scelte dai primi fondatori, senza fare rumore. Un anziano giardiniere ama raccontarne gli aneddoti. Il murale dipinto dagli studenti del liceo vicino racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. Dalle finestre si vedono le colline e i tetti rossi del borgo. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1735,
+        "lineEnd": 1735,
+        "sourceStart": 364784,
+        "sourceEnd": 365231
+      },
+      "block_ref": "b868",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b868",
+      "text": "L'ingresso principale dell'edificio è il luogo preferito dai colleghi per una pausa all'aria aperta. Il corridoio dei laboratori ha visto crescere generazioni di famiglie del posto, tra la curiosità dei passanti. Il murale dipinto dagli studenti del liceo vicino conserva ancora le panche di legno scelte dai primi fondatori, tra la curiosità dei passanti. Dalle finestre si vedono le colline e i tetti rossi del borgo. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1737,
+        "lineEnd": 1737,
+        "sourceStart": 365233,
+        "sourceEnd": 365707
+      },
+      "block_ref": "b869",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b869",
+      "text": "Il giardino sul retro ospita da molti anni una piccola mostra di fotografie. La storica palazzina dell'azienda ha visto crescere generazioni di famiglie del posto, come accade da molte stagioni. La sala più grande dell'edificio si riempie di luce nelle mattine limpide. La mensa del secondo piano è il luogo preferito dai colleghi per una pausa all'aria aperta. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1739,
+        "lineEnd": 1739,
+        "sourceStart": 365709,
+        "sourceEnd": 366133
+      },
+      "block_ref": "b870",
+      "parents": [
+        125
+      ]
+    },
+    {
+      "id": "b1400",
+      "text": "Il cortile interno dello stabilimento viene sistemata ogni primavera da un gruppo di volontari, senza fare rumore. La storica palazzina dell'azienda è il luogo preferito dai colleghi per una pausa all'aria aperta. Un anziano giardiniere ama raccontarne gli aneddoti. Gli studenti in visita lo disegnano spesso sui loro quaderni. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2801,
+        "lineEnd": 2801,
+        "sourceStart": 594201,
+        "sourceEnd": 594582
+      },
+      "block_ref": "b1401",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1401",
+      "text": "La mensa del secondo piano è stata ripresa in un documentario girato da una giovane regista, nonostante il passare degli anni. Il viale di tigli davanti al cancello viene sistemata ogni primavera da un gruppo di volontari. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il viale di tigli davanti al cancello è il luogo preferito dai colleghi per una pausa all'aria aperta. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2803,
+        "lineEnd": 2803,
+        "sourceStart": 594584,
+        "sourceEnd": 595041
+      },
+      "block_ref": "b1402",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1402",
+      "text": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola. Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi. La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola. La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola. Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi. Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2805,
+        "lineEnd": 2805,
+        "sourceStart": 595043,
+        "sourceEnd": 595497
+      },
+      "block_ref": "b1403",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1403",
+      "text": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2807,
+        "lineEnd": 2807,
+        "sourceStart": 595499,
+        "sourceEnd": 595571
+      },
+      "block_ref": "b1404",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1404",
+      "text": "La comunità II",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2809,
+        "lineEnd": 2809,
+        "sourceStart": 595573,
+        "sourceEnd": 595587
+      },
+      "block_ref": "b1405",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1405",
+      "text": "L'ingresso principale dell'edificio è stata ripresa in un documentario girato da una giovane regista. Nelle giornate di vento si sente il profumo dei tigli. Un anziano giardiniere ama raccontarne gli aneddoti. Il viale di tigli davanti al cancello è stata ripresa in un documentario girato da una giovane regista, senza fare rumore. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2811,
+        "lineEnd": 2811,
+        "sourceStart": 595589,
+        "sourceEnd": 595983
+      },
+      "block_ref": "b1406",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1406",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Il viale di tigli davanti al cancello è stata dipinta di un colore caldo che ricorda le sere d'estate, come raccontano i più anziani. L'ingresso principale dell'edificio racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. Nelle giornate di vento si sente il profumo dei tigli. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2813,
+        "lineEnd": 2813,
+        "sourceStart": 595985,
+        "sourceEnd": 596433
+      },
+      "block_ref": "b1407",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1407",
+      "text": "Il corridoio dei laboratori racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. Gli abitanti del quartiere ne parlano con affetto. Nelle giornate di vento si sente il profumo dei tigli. Durante le feste di paese diventa il punto d'incontro di tutti. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2815,
+        "lineEnd": 2815,
+        "sourceStart": 596435,
+        "sourceEnd": 596790
+      },
+      "block_ref": "b1408",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1408",
+      "text": "Un anziano giardiniere ama raccontarne gli aneddoti. La mensa del secondo piano ricorda a chi arriva la storia artigiana del territorio. Il corridoio dei laboratori viene sistemata ogni primavera da un gruppo di volontari, nonostante il passare degli anni. Gli abitanti del quartiere ne parlano con affetto. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2817,
+        "lineEnd": 2817,
+        "sourceStart": 596792,
+        "sourceEnd": 597154
+      },
+      "block_ref": "b1409",
+      "parents": [
+        205
+      ]
+    },
+    {
+      "id": "b1460",
+      "text": "Il viale di tigli davanti al cancello è stata ripresa in un documentario girato da una giovane regista. La mensa del secondo piano si affaccia su una strada ombreggiata frequentata da ciclisti. La storica palazzina dell'azienda si affaccia su una strada ombreggiata frequentata da ciclisti, nonostante il passare degli anni. La mensa del secondo piano è il luogo preferito dai colleghi per una pausa all'aria aperta. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2921,
+        "lineEnd": 2921,
+        "sourceStart": 620247,
+        "sourceEnd": 620714
+      },
+      "block_ref": "b1461",
+      "parents": [
+        214
+      ]
+    },
+    {
+      "id": "b1461",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Il viale di tigli davanti al cancello racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. La biblioteca dei dipendenti ospita da molti anni una piccola mostra di fotografie. Un anziano giardiniere ama raccontarne gli aneddoti. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2923,
+        "lineEnd": 2923,
+        "sourceStart": 620716,
+        "sourceEnd": 621101
+      },
+      "block_ref": "b1462",
+      "parents": [
+        214
+      ]
+    },
+    {
+      "id": "b1462",
+      "text": "Il cortile interno dello stabilimento è il luogo preferito dai colleghi per una pausa all'aria aperta, nonostante il passare degli anni. La mensa del secondo piano conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. Il cortile interno dello stabilimento ha visto crescere generazioni di famiglie del posto, senza fare rumore. Il viale di tigli davanti al cancello è stata ricostruita con pietre recuperate da una cascina abbandonata, nonostante il passare degli anni. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2925,
+        "lineEnd": 2925,
+        "sourceStart": 621103,
+        "sourceEnd": 621666
+      },
+      "block_ref": "b1463",
+      "parents": [
+        214
+      ]
+    },
+    {
+      "id": "b1463",
+      "text": "Il cortile interno dello stabilimento racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Il campanile del paese si affaccia su una strada ombreggiata frequentata da ciclisti, come raccontano i più anziani. La fontana al centro della piazza è il luogo preferito dai colleghi per una pausa all'aria aperta, come raccontano i più anziani. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2927,
+        "lineEnd": 2927,
+        "sourceStart": 621668,
+        "sourceEnd": 622176
+      },
+      "block_ref": "b1464",
+      "parents": [
+        214
+      ]
+    },
+    {
+      "id": "b1464",
+      "text": "Il campanile del paese ricorda a chi arriva la storia artigiana del territorio. Durante le feste di paese diventa il punto d'incontro di tutti. Durante le feste di paese diventa il punto d'incontro di tutti. La biblioteca dei dipendenti è stata ripresa in un documentario girato da una giovane regista, come raccontano i più anziani. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2929,
+        "lineEnd": 2929,
+        "sourceStart": 622178,
+        "sourceEnd": 622566
+      },
+      "block_ref": "b1465",
+      "parents": [
+        214
+      ]
+    },
+    {
+      "id": "b1465",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Il giardino sul retro è stata ripresa in un documentario girato da una giovane regista. La mensa del secondo piano ricorda a chi arriva la storia artigiana del territorio. La biblioteca dei dipendenti si riempie di luce nelle mattine limpide, nonostante il passare degli anni. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 2931,
+        "lineEnd": 2931,
+        "sourceStart": 622568,
+        "sourceEnd": 622962
+      },
+      "block_ref": "b1466",
+      "parents": [
+        214
+      ]
+    },
+    {
+      "id": "b1514",
+      "text": "L'orto condiviso dai colleghi è il luogo preferito dai colleghi per una pausa all'aria aperta. L'ingresso principale dell'edificio è stata ripresa in un documentario girato da una giovane regista, come raccontano i più anziani. La sala più grande dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata. La sala più grande dell'edificio è il luogo preferito dai colleghi per una pausa all'aria aperta. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3029,
+        "lineEnd": 3029,
+        "sourceStart": 643744,
+        "sourceEnd": 644236
+      },
+      "block_ref": "b1515",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1515",
+      "text": "Durante le feste di paese diventa il punto d'incontro di tutti. Il giardino sul retro ospita da molti anni una piccola mostra di fotografie, senza fare rumore. Il cortile interno dello stabilimento si affaccia su una strada ombreggiata frequentata da ciclisti, con grande orgoglio di chi ci lavora. Dalle finestre si vedono le colline e i tetti rossi del borgo. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3031,
+        "lineEnd": 3031,
+        "sourceStart": 644238,
+        "sourceEnd": 644661
+      },
+      "block_ref": "b1516",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1516",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. La terrazza panoramica dell'ultimo piano è il luogo preferito dai colleghi per una pausa all'aria aperta, tra la curiosità dei passanti. L'orto condiviso dai colleghi racconta con discrezione il carattere tranquillo della comunità. La piccola cappella accanto al parcheggio viene sistemata ogni primavera da un gruppo di volontari. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3033,
+        "lineEnd": 3033,
+        "sourceStart": 644663,
+        "sourceEnd": 645115
+      },
+      "block_ref": "b1517",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1517",
+      "text": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3035,
+        "lineEnd": 3035,
+        "sourceStart": 645117,
+        "sourceEnd": 645224
+      },
+      "block_ref": "b1518",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1518",
+      "text": "L'ingresso principale dell'edificio ha visto crescere generazioni di famiglie del posto, nonostante il passare degli anni. La piccola cappella accanto al parcheggio racconta con discrezione il carattere tranquillo della comunità, con grande orgoglio di chi ci lavora. Il giardino sul retro si affaccia su una strada ombreggiata frequentata da ciclisti, con grande orgoglio di chi ci lavora. Dalle finestre si vedono le colline e i tetti rossi del borgo. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3037,
+        "lineEnd": 3037,
+        "sourceStart": 645226,
+        "sourceEnd": 645745
+      },
+      "block_ref": "b1519",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1519",
+      "text": "Il cortile interno dello stabilimento viene sistemata ogni primavera da un gruppo di volontari. La vecchia fornace trasformata in spazio per le mostre si riempie di luce nelle mattine limpide. Il campanile del paese ricorda a chi arriva la storia artigiana del territorio. La fontana al centro della piazza è il luogo preferito dai colleghi per una pausa all'aria aperta. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3039,
+        "lineEnd": 3039,
+        "sourceStart": 645747,
+        "sourceEnd": 646169
+      },
+      "block_ref": "b1520",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1520",
+      "text": "La sala più grande dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata, tra la curiosità dei passanti. L'orto condiviso dai colleghi è stata ripresa in un documentario girato da una giovane regista, nonostante il passare degli anni. La biblioteca dei dipendenti è stata ripresa in un documentario girato da una giovane regista, senza fare rumore. Dalle finestre si vedono le colline e i tetti rossi del borgo. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3041,
+        "lineEnd": 3041,
+        "sourceStart": 646171,
+        "sourceEnd": 646664
+      },
+      "block_ref": "b1521",
+      "parents": [
+        222
+      ]
+    },
+    {
+      "id": "b1589",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. La piccola cappella accanto al parcheggio conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. Gli abitanti del quartiere ne parlano con affetto. Durante le feste di paese diventa il punto d'incontro di tutti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3179,
+        "lineEnd": 3179,
+        "sourceStart": 675388,
+        "sourceEnd": 675760
+      },
+      "block_ref": "b1590",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1590",
+      "text": "L'orto condiviso dai colleghi è stata ripresa in un documentario girato da una giovane regista, come accade da molte stagioni. La sala più grande dell'edificio è stata ripresa in un documentario girato da una giovane regista. Durante le feste di paese diventa il punto d'incontro di tutti. La fontana al centro della piazza è stata ripresa in un documentario girato da una giovane regista. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3181,
+        "lineEnd": 3181,
+        "sourceStart": 675762,
+        "sourceEnd": 676206
+      },
+      "block_ref": "b1591",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1591",
+      "text": "L'orto condiviso dai colleghi ricorda a chi arriva la storia artigiana del territorio, senza fare rumore. Dalle finestre si vedono le colline e i tetti rossi del borgo. Una vecchia fotografia in bianco e nero lo mostra quasi identico. La storica palazzina dell'azienda è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3183,
+        "lineEnd": 3183,
+        "sourceStart": 676208,
+        "sourceEnd": 676644
+      },
+      "block_ref": "b1592",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1592",
+      "text": "Il corridoio dei laboratori è il luogo preferito dai colleghi per una pausa all'aria aperta. La piccola cappella accanto al parcheggio ospita da molti anni una piccola mostra di fotografie. La biblioteca dei dipendenti è stata ricostruita con pietre recuperate da una cascina abbandonata, tra la curiosità dei passanti. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3185,
+        "lineEnd": 3185,
+        "sourceStart": 676646,
+        "sourceEnd": 677091
+      },
+      "block_ref": "b1593",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1593",
+      "text": "Gli abitanti del quartiere ne parlano con affetto. Il cortile interno dello stabilimento conserva ancora le panche di legno scelte dai primi fondatori, come raccontano i più anziani. Dalle finestre si vedono le colline e i tetti rossi del borgo. Nelle giornate di vento si sente il profumo dei tigli. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3187,
+        "lineEnd": 3187,
+        "sourceStart": 677093,
+        "sourceEnd": 677457
+      },
+      "block_ref": "b1594",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1594",
+      "text": "L'ingresso principale dell'edificio è il luogo preferito dai colleghi per una pausa all'aria aperta, nonostante il passare degli anni. Il viale di tigli davanti al cancello ospita da molti anni una piccola mostra di fotografie, nonostante il passare degli anni. La terrazza panoramica dell'ultimo piano ha visto crescere generazioni di famiglie del posto. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3189,
+        "lineEnd": 3189,
+        "sourceStart": 677459,
+        "sourceEnd": 677929
+      },
+      "block_ref": "b1595",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1595",
+      "text": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3191,
+        "lineEnd": 3191,
+        "sourceStart": 677931,
+        "sourceEnd": 678077
+      },
+      "block_ref": "b1596",
+      "parents": [
+        233
+      ]
+    },
+    {
+      "id": "b1670",
+      "text": "Il murale dipinto dagli studenti del liceo vicino viene sistemata ogni primavera da un gruppo di volontari. La biblioteca dei dipendenti conserva ancora le panche di legno scelte dai primi fondatori, tra la curiosità dei passanti. Il campanile del paese si affaccia su una strada ombreggiata frequentata da ciclisti. La terrazza panoramica dell'ultimo piano si riempie di luce nelle mattine limpide. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3341,
+        "lineEnd": 3341,
+        "sourceStart": 710067,
+        "sourceEnd": 710519
+      },
+      "block_ref": "b1671",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1671",
+      "text": "L'ingresso principale dell'edificio racconta con discrezione il carattere tranquillo della comunità. Il giardino sul retro è stata ricostruita con pietre recuperate da una cascina abbandonata. La fontana al centro della piazza ricorda a chi arriva la storia artigiana del territorio. Il viale di tigli davanti al cancello è stata ricostruita con pietre recuperate da una cascina abbandonata. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3343,
+        "lineEnd": 3343,
+        "sourceStart": 710521,
+        "sourceEnd": 710976
+      },
+      "block_ref": "b1672",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1672",
+      "text": "Il magazzino di Verona non accetta resi di merce deperibile.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3345,
+        "lineEnd": 3345,
+        "sourceStart": 710978,
+        "sourceEnd": 711038
+      },
+      "block_ref": "b1673",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1673",
+      "text": "Gli studenti in visita lo disegnano spesso sui loro quaderni. Durante le feste di paese diventa il punto d'incontro di tutti. La biblioteca dei dipendenti è stata ripresa in un documentario girato da una giovane regista. Durante le feste di paese diventa il punto d'incontro di tutti. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3347,
+        "lineEnd": 3347,
+        "sourceStart": 711040,
+        "sourceEnd": 711390
+      },
+      "block_ref": "b1674",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1674",
+      "text": "Il giardino sul retro ricorda a chi arriva la storia artigiana del territorio. La mensa del secondo piano conserva ancora le panche di legno scelte dai primi fondatori, senza fare rumore. La biblioteca dei dipendenti si affaccia su una strada ombreggiata frequentata da ciclisti, tra la curiosità dei passanti. Il viale di tigli davanti al cancello viene sistemata ogni primavera da un gruppo di volontari, come accade da molte stagioni. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3349,
+        "lineEnd": 3349,
+        "sourceStart": 711392,
+        "sourceEnd": 711893
+      },
+      "block_ref": "b1675",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1675",
+      "text": "La vecchia fornace trasformata in spazio per le mostre è stata ripresa in un documentario girato da una giovane regista, come raccontano i più anziani. La terrazza panoramica dell'ultimo piano conserva ancora le panche di legno scelte dai primi fondatori. Gli abitanti del quartiere ne parlano con affetto. Il giardino sul retro ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3351,
+        "lineEnd": 3351,
+        "sourceStart": 711895,
+        "sourceEnd": 712374
+      },
+      "block_ref": "b1676",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1676",
+      "text": "La terrazza panoramica dell'ultimo piano è il luogo preferito dai colleghi per una pausa all'aria aperta, senza fare rumore. La fontana al centro della piazza ospita da molti anni una piccola mostra di fotografie. La piccola cappella accanto al parcheggio è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. Il murale dipinto dagli studenti del liceo vicino ospita da molti anni una piccola mostra di fotografie, come raccontano i più anziani. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3353,
+        "lineEnd": 3353,
+        "sourceStart": 712376,
+        "sourceEnd": 712935
+      },
+      "block_ref": "b1677",
+      "parents": [
+        245
+      ]
+    },
+    {
+      "id": "b1745",
+      "text": "Gli studenti in visita lo disegnano spesso sui loro quaderni. Il cortile interno dello stabilimento viene sistemata ogni primavera da un gruppo di volontari, senza fare rumore. La storica palazzina dell'azienda ricorda a chi arriva la storia artigiana del territorio. Durante le feste di paese diventa il punto d'incontro di tutti. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3491,
+        "lineEnd": 3491,
+        "sourceStart": 742314,
+        "sourceEnd": 742700
+      },
+      "block_ref": "b1746",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1746",
+      "text": "L'orto condiviso dai colleghi ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. La sala più grande dell'edificio è stata dipinta di un colore caldo che ricorda le sere d'estate. Il corridoio dei laboratori ospita da molti anni una piccola mostra di fotografie, come raccontano i più anziani. La fontana al centro della piazza è il luogo preferito dai colleghi per una pausa all'aria aperta. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3493,
+        "lineEnd": 3493,
+        "sourceStart": 742702,
+        "sourceEnd": 743194
+      },
+      "block_ref": "b1747",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1747",
+      "text": "Il viale di tigli davanti al cancello conserva ancora le panche di legno scelte dai primi fondatori. L'orto condiviso dai colleghi viene sistemata ogni primavera da un gruppo di volontari, nonostante il passare degli anni. La storica palazzina dell'azienda è il luogo preferito dai colleghi per una pausa all'aria aperta. Durante le feste di paese diventa il punto d'incontro di tutti. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3495,
+        "lineEnd": 3495,
+        "sourceStart": 743196,
+        "sourceEnd": 743632
+      },
+      "block_ref": "b1748",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1748",
+      "text": "La mensa del secondo piano si affaccia su una strada ombreggiata frequentata da ciclisti, come accade da molte stagioni. Il cortile interno dello stabilimento è stata dipinta di un colore caldo che ricorda le sere d'estate. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Un anziano giardiniere ama raccontarne gli aneddoti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3497,
+        "lineEnd": 3497,
+        "sourceStart": 743634,
+        "sourceEnd": 744040
+      },
+      "block_ref": "b1749",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1749",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Dalle finestre si vedono le colline e i tetti rossi del borgo. Gli studenti in visita lo disegnano spesso sui loro quaderni. La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3499,
+        "lineEnd": 3499,
+        "sourceStart": 744042,
+        "sourceEnd": 744403
+      },
+      "block_ref": "b1750",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1750",
+      "text": "Il cortile interno dello stabilimento racconta con discrezione il carattere tranquillo della comunità. Gli abitanti del quartiere ne parlano con affetto. Gli abitanti del quartiere ne parlano con affetto. La mensa del secondo piano è il luogo preferito dai colleghi per una pausa all'aria aperta. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3501,
+        "lineEnd": 3501,
+        "sourceStart": 744405,
+        "sourceEnd": 744767
+      },
+      "block_ref": "b1751",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1751",
+      "text": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3503,
+        "lineEnd": 3503,
+        "sourceStart": 744769,
+        "sourceEnd": 744854
+      },
+      "block_ref": "b1752",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1752",
+      "text": "Il murale dipinto dagli studenti del liceo vicino si riempie di luce nelle mattine limpide. La piccola cappella accanto al parcheggio ha visto crescere generazioni di famiglie del posto. La vecchia fornace trasformata in spazio per le mostre è stata dipinta di un colore caldo che ricorda le sere d'estate. Dalle finestre si vedono le colline e i tetti rossi del borgo. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3505,
+        "lineEnd": 3505,
+        "sourceStart": 744856,
+        "sourceEnd": 745280
+      },
+      "block_ref": "b1753",
+      "parents": [
+        256
+      ]
+    },
+    {
+      "id": "b1827",
+      "text": "Gli abitanti del quartiere ne parlano con affetto. Il viale di tigli davanti al cancello racconta con discrezione il carattere tranquillo della comunità, come raccontano i più anziani. La biblioteca dei dipendenti ha visto crescere generazioni di famiglie del posto. La mensa del secondo piano è stata dipinta di un colore caldo che ricorda le sere d'estate. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3655,
+        "lineEnd": 3655,
+        "sourceStart": 776711,
+        "sourceEnd": 777132
+      },
+      "block_ref": "b1828",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b1828",
+      "text": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3657,
+        "lineEnd": 3657,
+        "sourceStart": 777134,
+        "sourceEnd": 777232
+      },
+      "block_ref": "b1829",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b1829",
+      "text": "Durante le feste di paese diventa il punto d'incontro di tutti. L'ingresso principale dell'edificio conserva ancora le panche di legno scelte dai primi fondatori, senza fare rumore. La mensa del secondo piano conserva ancora le panche di legno scelte dai primi fondatori. Il cortile interno dello stabilimento ricorda a chi arriva la storia artigiana del territorio. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3659,
+        "lineEnd": 3659,
+        "sourceStart": 777234,
+        "sourceEnd": 777655
+      },
+      "block_ref": "b1830",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b1830",
+      "text": "La sala più grande dell'edificio ha visto crescere generazioni di famiglie del posto. La piccola cappella accanto al parcheggio conserva ancora le panche di legno scelte dai primi fondatori. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il viale di tigli davanti al cancello ha visto crescere generazioni di famiglie del posto. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3661,
+        "lineEnd": 3661,
+        "sourceStart": 777657,
+        "sourceEnd": 778064
+      },
+      "block_ref": "b1831",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b1831",
+      "text": "Il campanile del paese ospita da molti anni una piccola mostra di fotografie. La piccola cappella accanto al parcheggio racconta con discrezione il carattere tranquillo della comunità, con grande orgoglio di chi ci lavora. La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta, come accade da molte stagioni. Durante le feste di paese diventa il punto d'incontro di tutti. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3663,
+        "lineEnd": 3663,
+        "sourceStart": 778066,
+        "sourceEnd": 778556
+      },
+      "block_ref": "b1832",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b1832",
+      "text": "La mensa del secondo piano è stata ricostruita con pietre recuperate da una cascina abbandonata, tra la curiosità dei passanti. Un anziano giardiniere ama raccontarne gli aneddoti. La terrazza panoramica dell'ultimo piano racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. Il giardino sul retro ha visto crescere generazioni di famiglie del posto, nonostante il passare degli anni. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3665,
+        "lineEnd": 3665,
+        "sourceStart": 778558,
+        "sourceEnd": 779047
+      },
+      "block_ref": "b1833",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b1833",
+      "text": "Il murale dipinto dagli studenti del liceo vicino è stata ricostruita con pietre recuperate da una cascina abbandonata, come accade da molte stagioni. La piccola cappella accanto al parcheggio ricorda a chi arriva la storia artigiana del territorio. L'orto condiviso dai colleghi si affaccia su una strada ombreggiata frequentata da ciclisti, nonostante il passare degli anni. La storica palazzina dell'azienda si affaccia su una strada ombreggiata frequentata da ciclisti, con grande orgoglio di chi ci lavora. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3667,
+        "lineEnd": 3667,
+        "sourceStart": 779049,
+        "sourceEnd": 779615
+      },
+      "block_ref": "b1834",
+      "parents": [
+        268
+      ]
+    },
+    {
+      "id": "b2093",
+      "text": "Gli abitanti del quartiere ne parlano con affetto. Il giardino sul retro ricorda a chi arriva la storia artigiana del territorio, come accade da molte stagioni. Il murale dipinto dagli studenti del liceo vicino è stata ripresa in un documentario girato da una giovane regista, come raccontano i più anziani. L'orto condiviso dai colleghi si riempie di luce nelle mattine limpide, senza fare rumore. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4187,
+        "lineEnd": 4187,
+        "sourceStart": 891740,
+        "sourceEnd": 892191
+      },
+      "block_ref": "b2094",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2094",
+      "text": "Il cortile interno dello stabilimento ricorda a chi arriva la storia artigiana del territorio. La piccola cappella accanto al parcheggio racconta con discrezione il carattere tranquillo della comunità. Una vecchia fotografia in bianco e nero lo mostra quasi identico. La biblioteca dei dipendenti conserva ancora le panche di legno scelte dai primi fondatori, senza fare rumore. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4189,
+        "lineEnd": 4189,
+        "sourceStart": 892193,
+        "sourceEnd": 892624
+      },
+      "block_ref": "b2095",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2095",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. La terrazza panoramica dell'ultimo piano si riempie di luce nelle mattine limpide. Il murale dipinto dagli studenti del liceo vicino si riempie di luce nelle mattine limpide. Nelle giornate di vento si sente il profumo dei tigli. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4191,
+        "lineEnd": 4191,
+        "sourceStart": 892626,
+        "sourceEnd": 892974
+      },
+      "block_ref": "b2096",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2096",
+      "text": "La sala più grande dell'edificio viene sistemata ogni primavera da un gruppo di volontari, tra la curiosità dei passanti. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Dalle finestre si vedono le colline e i tetti rossi del borgo. Il viale di tigli davanti al cancello racconta con discrezione il carattere tranquillo della comunità. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4193,
+        "lineEnd": 4193,
+        "sourceStart": 892976,
+        "sourceEnd": 893391
+      },
+      "block_ref": "b2097",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2097",
+      "text": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi. La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola. Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi. La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola. Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi. La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4195,
+        "lineEnd": 4195,
+        "sourceStart": 893393,
+        "sourceEnd": 893841
+      },
+      "block_ref": "b2098",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2098",
+      "text": "I sentieri II",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4197,
+        "lineEnd": 4197,
+        "sourceStart": 893843,
+        "sourceEnd": 893856
+      },
+      "block_ref": "b2099",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2099",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli abitanti del quartiere ne parlano con affetto. Gli studenti in visita lo disegnano spesso sui loro quaderni. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4199,
+        "lineEnd": 4199,
+        "sourceStart": 893858,
+        "sourceEnd": 894155
+      },
+      "block_ref": "b2100",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2100",
+      "text": "Un anziano giardiniere ama raccontarne gli aneddoti. Il murale dipinto dagli studenti del liceo vicino si affaccia su una strada ombreggiata frequentata da ciclisti. Gli abitanti del quartiere ne parlano con affetto. Il corridoio dei laboratori ricorda a chi arriva la storia artigiana del territorio. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4201,
+        "lineEnd": 4201,
+        "sourceStart": 894157,
+        "sourceEnd": 894511
+      },
+      "block_ref": "b2101",
+      "parents": [
+        308
+      ]
+    },
+    {
+      "id": "b2405",
+      "text": "La sala più grande dell'edificio racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. Il cortile interno dello stabilimento ricorda a chi arriva la storia artigiana del territorio. Nelle giornate di vento si sente il profumo dei tigli. La storica palazzina dell'azienda è il luogo preferito dai colleghi per una pausa all'aria aperta, come raccontano i più anziani. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4811,
+        "lineEnd": 4811,
+        "sourceStart": 1023307,
+        "sourceEnd": 1023779
+      },
+      "block_ref": "b2406",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2406",
+      "text": "La sala più grande dell'edificio ha visto crescere generazioni di famiglie del posto. Il giardino sul retro è stata ripresa in un documentario girato da una giovane regista. La storica palazzina dell'azienda è stata ricostruita con pietre recuperate da una cascina abbandonata. L'ingresso principale dell'edificio ha visto crescere generazioni di famiglie del posto. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4813,
+        "lineEnd": 4813,
+        "sourceStart": 1023781,
+        "sourceEnd": 1024211
+      },
+      "block_ref": "b2407",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2407",
+      "text": "Dalle finestre si vedono le colline e i tetti rossi del borgo. La mensa del secondo piano racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. Una vecchia fotografia in bianco e nero lo mostra quasi identico. La storica palazzina dell'azienda racconta con discrezione il carattere tranquillo della comunità, tra la curiosità dei passanti. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4815,
+        "lineEnd": 4815,
+        "sourceStart": 1024213,
+        "sourceEnd": 1024657
+      },
+      "block_ref": "b2408",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2408",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Dalle finestre si vedono le colline e i tetti rossi del borgo. La biblioteca dei dipendenti ospita da molti anni una piccola mostra di fotografie. Nelle giornate di vento si sente il profumo dei tigli. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4817,
+        "lineEnd": 4817,
+        "sourceStart": 1024659,
+        "sourceEnd": 1024970
+      },
+      "block_ref": "b2409",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2409",
+      "text": "Gli abitanti del quartiere ne parlano con affetto. La vecchia fornace trasformata in spazio per le mostre si affaccia su una strada ombreggiata frequentata da ciclisti, come accade da molte stagioni. La fontana al centro della piazza è stata ripresa in un documentario girato da una giovane regista. Il cortile interno dello stabilimento racconta con discrezione il carattere tranquillo della comunità, nonostante il passare degli anni. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4819,
+        "lineEnd": 4819,
+        "sourceStart": 1024972,
+        "sourceEnd": 1025471
+      },
+      "block_ref": "b2410",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2410",
+      "text": "Nel reparto Boliro la temperatura di conservazione è fissata a 28 gradi. La scheda tecnica della linea Gicacu prevede un imballo da 782 pezzi per scatola. La scheda tecnica della linea Mimitu prevede un imballo da 508 pezzi per scatola. Nel reparto Tefova la temperatura di conservazione è fissata a 3 gradi. Per la linea Ravela il lotto minimo di rifornimento è di 648 pezzi. Nel reparto Liriba la temperatura di conservazione è fissata a 29 gradi.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4821,
+        "lineEnd": 4821,
+        "sourceStart": 1025473,
+        "sourceEnd": 1025922
+      },
+      "block_ref": "b2411",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2411",
+      "text": "La piazza II",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4823,
+        "lineEnd": 4823,
+        "sourceStart": 1025924,
+        "sourceEnd": 1025936
+      },
+      "block_ref": "b2412",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2412",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Il murale dipinto dagli studenti del liceo vicino è il luogo preferito dai colleghi per una pausa all'aria aperta. Gli abitanti del quartiere ne parlano con affetto. La vecchia fornace trasformata in spazio per le mostre si riempie di luce nelle mattine limpide. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 4825,
+        "lineEnd": 4825,
+        "sourceStart": 1025938,
+        "sourceEnd": 1026318
+      },
+      "block_ref": "b2413",
+      "parents": [
+        353
+      ]
+    },
+    {
+      "id": "b2521",
+      "text": "La storica palazzina dell'azienda è il luogo preferito dai colleghi per una pausa all'aria aperta, come raccontano i più anziani. La vecchia fornace trasformata in spazio per le mostre viene sistemata ogni primavera da un gruppo di volontari, come accade da molte stagioni. Dalle finestre si vedono le colline e i tetti rossi del borgo. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5043,
+        "lineEnd": 5043,
+        "sourceStart": 1072344,
+        "sourceEnd": 1072808
+      },
+      "block_ref": "b2522",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2522",
+      "text": "L'ingresso principale dell'edificio conserva ancora le panche di legno scelte dai primi fondatori. La biblioteca dei dipendenti viene sistemata ogni primavera da un gruppo di volontari, senza fare rumore. Il viale di tigli davanti al cancello si affaccia su una strada ombreggiata frequentata da ciclisti. Un anziano giardiniere ama raccontarne gli aneddoti. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5045,
+        "lineEnd": 5045,
+        "sourceStart": 1072810,
+        "sourceEnd": 1073234
+      },
+      "block_ref": "b2523",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2523",
+      "text": "L'ingresso principale dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata. La terrazza panoramica dell'ultimo piano ospita da molti anni una piccola mostra di fotografie. La mensa del secondo piano si riempie di luce nelle mattine limpide. La storica palazzina dell'azienda è stata ricostruita con pietre recuperate da una cascina abbandonata, tra la curiosità dei passanti. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5047,
+        "lineEnd": 5047,
+        "sourceStart": 1073236,
+        "sourceEnd": 1073694
+      },
+      "block_ref": "b2524",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2524",
+      "text": "L'ingresso principale dell'edificio conserva ancora le panche di legno scelte dai primi fondatori. Il murale dipinto dagli studenti del liceo vicino racconta con discrezione il carattere tranquillo della comunità, nonostante il passare degli anni. Il giardino sul retro è il luogo preferito dai colleghi per una pausa all'aria aperta. Il campanile del paese ha visto crescere generazioni di famiglie del posto, come raccontano i più anziani. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5049,
+        "lineEnd": 5049,
+        "sourceStart": 1073696,
+        "sourceEnd": 1074203
+      },
+      "block_ref": "b2525",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2525",
+      "text": "La terrazza panoramica dell'ultimo piano è stata ripresa in un documentario girato da una giovane regista. Una vecchia fotografia in bianco e nero lo mostra quasi identico. La mensa del secondo piano ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. L'orto condiviso dai colleghi ospita da molti anni una piccola mostra di fotografie, con grande orgoglio di chi ci lavora. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5051,
+        "lineEnd": 5051,
+        "sourceStart": 1074205,
+        "sourceEnd": 1074681
+      },
+      "block_ref": "b2526",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2526",
+      "text": "Durante le feste di paese diventa il punto d'incontro di tutti. Il giardino sul retro conserva ancora le panche di legno scelte dai primi fondatori, come raccontano i più anziani. Il viale di tigli davanti al cancello conserva ancora le panche di legno scelte dai primi fondatori, senza fare rumore. La storica palazzina dell'azienda ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5053,
+        "lineEnd": 5053,
+        "sourceStart": 1074683,
+        "sourceEnd": 1075159
+      },
+      "block_ref": "b2527",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2527",
+      "text": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5055,
+        "lineEnd": 5055,
+        "sourceStart": 1075161,
+        "sourceEnd": 1075324
+      },
+      "block_ref": "b2528",
+      "parents": [
+        370
+      ]
+    },
+    {
+      "id": "b2602",
+      "text": "La piccola cappella accanto al parcheggio è stata ricostruita con pietre recuperate da una cascina abbandonata, come accade da molte stagioni. Il giardino sul retro è stata dipinta di un colore caldo che ricorda le sere d'estate. La mensa del secondo piano è il luogo preferito dai colleghi per una pausa all'aria aperta. Nelle giornate di vento si sente il profumo dei tigli. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5205,
+        "lineEnd": 5205,
+        "sourceStart": 1106326,
+        "sourceEnd": 1106768
+      },
+      "block_ref": "b2603",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2603",
+      "text": "Il campanile del paese si riempie di luce nelle mattine limpide, senza fare rumore. Il murale dipinto dagli studenti del liceo vicino è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. Il campanile del paese ha visto crescere generazioni di famiglie del posto, come accade da molte stagioni. La sala più grande dell'edificio si riempie di luce nelle mattine limpide. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5207,
+        "lineEnd": 5207,
+        "sourceStart": 1106770,
+        "sourceEnd": 1107252
+      },
+      "block_ref": "b2604",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2604",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. La terrazza panoramica dell'ultimo piano ricorda a chi arriva la storia artigiana del territorio, nonostante il passare degli anni. La sala più grande dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata, senza fare rumore. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5209,
+        "lineEnd": 5209,
+        "sourceStart": 1107254,
+        "sourceEnd": 1107688
+      },
+      "block_ref": "b2605",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2605",
+      "text": "L'orto condiviso dai colleghi è stata dipinta di un colore caldo che ricorda le sere d'estate. La storica palazzina dell'azienda ha visto crescere generazioni di famiglie del posto, senza fare rumore. Durante le feste di paese diventa il punto d'incontro di tutti. La mensa del secondo piano si affaccia su una strada ombreggiata frequentata da ciclisti, tra la curiosità dei passanti. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5211,
+        "lineEnd": 5211,
+        "sourceStart": 1107690,
+        "sourceEnd": 1108128
+      },
+      "block_ref": "b2606",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2606",
+      "text": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5213,
+        "lineEnd": 5213,
+        "sourceStart": 1108130,
+        "sourceEnd": 1108246
+      },
+      "block_ref": "b2607",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2607",
+      "text": "Gli studenti in visita lo disegnano spesso sui loro quaderni. Dalle finestre si vedono le colline e i tetti rossi del borgo. La fontana al centro della piazza viene sistemata ogni primavera da un gruppo di volontari, come raccontano i più anziani. La mensa del secondo piano è il luogo preferito dai colleghi per una pausa all'aria aperta, tra la curiosità dei passanti. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5215,
+        "lineEnd": 5215,
+        "sourceStart": 1108248,
+        "sourceEnd": 1108681
+      },
+      "block_ref": "b2608",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2608",
+      "text": "La piccola cappella accanto al parcheggio racconta con discrezione il carattere tranquillo della comunità. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Il viale di tigli davanti al cancello racconta con discrezione il carattere tranquillo della comunità. La sala più grande dell'edificio ricorda a chi arriva la storia artigiana del territorio. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5217,
+        "lineEnd": 5217,
+        "sourceStart": 1108683,
+        "sourceEnd": 1109110
+      },
+      "block_ref": "b2609",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2609",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. La piccola cappella accanto al parcheggio viene sistemata ogni primavera da un gruppo di volontari. Durante le feste di paese diventa il punto d'incontro di tutti. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5219,
+        "lineEnd": 5219,
+        "sourceStart": 1109112,
+        "sourceEnd": 1109447
+      },
+      "block_ref": "b2610",
+      "parents": [
+        382
+      ]
+    },
+    {
+      "id": "b2682",
+      "text": "La terrazza panoramica dell'ultimo piano è stata dipinta di un colore caldo che ricorda le sere d'estate, tra la curiosità dei passanti. L'ingresso principale dell'edificio racconta con discrezione il carattere tranquillo della comunità. L'orto condiviso dai colleghi si affaccia su una strada ombreggiata frequentata da ciclisti, senza fare rumore. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5365,
+        "lineEnd": 5365,
+        "sourceStart": 1140302,
+        "sourceEnd": 1140770
+      },
+      "block_ref": "b2683",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2683",
+      "text": "Il cortile interno dello stabilimento si riempie di luce nelle mattine limpide. La piccola cappella accanto al parcheggio ospita da molti anni una piccola mostra di fotografie. L'orto condiviso dai colleghi ha visto crescere generazioni di famiglie del posto. Nelle giornate di vento si sente il profumo dei tigli. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5367,
+        "lineEnd": 5367,
+        "sourceStart": 1140772,
+        "sourceEnd": 1141150
+      },
+      "block_ref": "b2684",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2684",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Dalle finestre si vedono le colline e i tetti rossi del borgo. La storica palazzina dell'azienda è il luogo preferito dai colleghi per una pausa all'aria aperta. Durante le feste di paese diventa il punto d'incontro di tutti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5369,
+        "lineEnd": 5369,
+        "sourceStart": 1141152,
+        "sourceEnd": 1141505
+      },
+      "block_ref": "b2685",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2685",
+      "text": "Il cortile interno dello stabilimento racconta con discrezione il carattere tranquillo della comunità, come accade da molte stagioni. Nelle giornate di vento si sente il profumo dei tigli. Un anziano giardiniere ama raccontarne gli aneddoti. L'ingresso principale dell'edificio ospita da molti anni una piccola mostra di fotografie. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5371,
+        "lineEnd": 5371,
+        "sourceStart": 1141507,
+        "sourceEnd": 1141905
+      },
+      "block_ref": "b2686",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2686",
+      "text": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5373,
+        "lineEnd": 5373,
+        "sourceStart": 1141907,
+        "sourceEnd": 1141975
+      },
+      "block_ref": "b2687",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2687",
+      "text": "Nelle giornate di vento si sente il profumo dei tigli. Nelle giornate di vento si sente il profumo dei tigli. Una vecchia fotografia in bianco e nero lo mostra quasi identico. La fontana al centro della piazza è il luogo preferito dai colleghi per una pausa all'aria aperta, come raccontano i più anziani. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5375,
+        "lineEnd": 5375,
+        "sourceStart": 1141977,
+        "sourceEnd": 1142348
+      },
+      "block_ref": "b2688",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2688",
+      "text": "Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il corridoio dei laboratori è stata dipinta di un colore caldo che ricorda le sere d'estate, tra la curiosità dei passanti. L'ingresso principale dell'edificio ospita da molti anni una piccola mostra di fotografie. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5377,
+        "lineEnd": 5377,
+        "sourceStart": 1142350,
+        "sourceEnd": 1142749
+      },
+      "block_ref": "b2689",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2689",
+      "text": "Il murale dipinto dagli studenti del liceo vicino conserva ancora le panche di legno scelte dai primi fondatori. Un anziano giardiniere ama raccontarne gli aneddoti. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il giardino sul retro viene sistemata ogni primavera da un gruppo di volontari, come accade da molte stagioni. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5379,
+        "lineEnd": 5379,
+        "sourceStart": 1142751,
+        "sourceEnd": 1143157
+      },
+      "block_ref": "b2690",
+      "parents": [
+        394
+      ]
+    },
+    {
+      "id": "b2758",
+      "text": "Il viale di tigli davanti al cancello è il luogo preferito dai colleghi per una pausa all'aria aperta, tra la curiosità dei passanti. L'orto condiviso dai colleghi si riempie di luce nelle mattine limpide. Il giardino sul retro ricorda a chi arriva la storia artigiana del territorio, nonostante il passare degli anni. Il murale dipinto dagli studenti del liceo vicino conserva ancora le panche di legno scelte dai primi fondatori, tra la curiosità dei passanti. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5517,
+        "lineEnd": 5517,
+        "sourceStart": 1171772,
+        "sourceEnd": 1172289
+      },
+      "block_ref": "b2759",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2759",
+      "text": "La mensa del secondo piano ricorda a chi arriva la storia artigiana del territorio. Un anziano giardiniere ama raccontarne gli aneddoti. Il murale dipinto dagli studenti del liceo vicino racconta con discrezione il carattere tranquillo della comunità. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5519,
+        "lineEnd": 5519,
+        "sourceStart": 1172291,
+        "sourceEnd": 1172668
+      },
+      "block_ref": "b2760",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2760",
+      "text": "Dalle finestre si vedono le colline e i tetti rossi del borgo. Il giardino sul retro ospita da molti anni una piccola mostra di fotografie, come accade da molte stagioni. La vecchia fornace trasformata in spazio per le mostre conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5521,
+        "lineEnd": 5521,
+        "sourceStart": 1172670,
+        "sourceEnd": 1173113
+      },
+      "block_ref": "b2761",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2761",
+      "text": "Una vecchia fotografia in bianco e nero lo mostra quasi identico. Gli studenti in visita lo disegnano spesso sui loro quaderni. Durante le feste di paese diventa il punto d'incontro di tutti. Il giardino sul retro è stata ripresa in un documentario girato da una giovane regista. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5523,
+        "lineEnd": 5523,
+        "sourceStart": 1173115,
+        "sourceEnd": 1173445
+      },
+      "block_ref": "b2762",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2762",
+      "text": "Il murale dipinto dagli studenti del liceo vicino è il luogo preferito dai colleghi per una pausa all'aria aperta. La piccola cappella accanto al parcheggio ricorda a chi arriva la storia artigiana del territorio. La mensa del secondo piano conserva ancora le panche di legno scelte dai primi fondatori, come raccontano i più anziani. La vecchia fornace trasformata in spazio per le mostre è stata ripresa in un documentario girato da una giovane regista. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5525,
+        "lineEnd": 5525,
+        "sourceStart": 1173447,
+        "sourceEnd": 1173966
+      },
+      "block_ref": "b2763",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2763",
+      "text": "L'ingresso principale dell'edificio è stata ripresa in un documentario girato da una giovane regista, come accade da molte stagioni. L'orto condiviso dai colleghi racconta con discrezione il carattere tranquillo della comunità. Durante le feste di paese diventa il punto d'incontro di tutti. Dalle finestre si vedono le colline e i tetti rossi del borgo. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5527,
+        "lineEnd": 5527,
+        "sourceStart": 1173968,
+        "sourceEnd": 1174375
+      },
+      "block_ref": "b2764",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2764",
+      "text": "Una vecchia fotografia in bianco e nero lo mostra quasi identico. La piccola cappella accanto al parcheggio ha visto crescere generazioni di famiglie del posto. Un anziano giardiniere ama raccontarne gli aneddoti. Il cortile interno dello stabilimento viene sistemata ogni primavera da un gruppo di volontari. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5529,
+        "lineEnd": 5529,
+        "sourceStart": 1174377,
+        "sourceEnd": 1174752
+      },
+      "block_ref": "b2765",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2765",
+      "text": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5531,
+        "lineEnd": 5531,
+        "sourceStart": 1174754,
+        "sourceEnd": 1174856
+      },
+      "block_ref": "b2766",
+      "parents": [
+        405
+      ]
+    },
+    {
+      "id": "b2842",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. La vecchia fornace trasformata in spazio per le mostre è stata ricostruita con pietre recuperate da una cascina abbandonata. La mensa del secondo piano ha visto crescere generazioni di famiglie del posto. Il corridoio dei laboratori ospita da molti anni una piccola mostra di fotografie, come accade da molte stagioni. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5685,
+        "lineEnd": 5685,
+        "sourceStart": 1207196,
+        "sourceEnd": 1207631
+      },
+      "block_ref": "b2843",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2843",
+      "text": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5687,
+        "lineEnd": 5687,
+        "sourceStart": 1207633,
+        "sourceEnd": 1207731
+      },
+      "block_ref": "b2844",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2844",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Il giardino sul retro ricorda a chi arriva la storia artigiana del territorio, nonostante il passare degli anni. La sala più grande dell'edificio si riempie di luce nelle mattine limpide, senza fare rumore. Gli studenti in visita lo disegnano spesso sui loro quaderni. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5689,
+        "lineEnd": 5689,
+        "sourceStart": 1207733,
+        "sourceEnd": 1208128
+      },
+      "block_ref": "b2845",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2845",
+      "text": "Il viale di tigli davanti al cancello ha visto crescere generazioni di famiglie del posto, tra la curiosità dei passanti. La fontana al centro della piazza ha visto crescere generazioni di famiglie del posto, come raccontano i più anziani. Gli studenti in visita lo disegnano spesso sui loro quaderni. Nelle giornate di vento si sente il profumo dei tigli. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5691,
+        "lineEnd": 5691,
+        "sourceStart": 1208130,
+        "sourceEnd": 1208552
+      },
+      "block_ref": "b2846",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2846",
+      "text": "La fontana al centro della piazza racconta con discrezione il carattere tranquillo della comunità. Il cortile interno dello stabilimento ha visto crescere generazioni di famiglie del posto. Il cortile interno dello stabilimento è il luogo preferito dai colleghi per una pausa all'aria aperta. Gli studenti in visita lo disegnano spesso sui loro quaderni. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5693,
+        "lineEnd": 5693,
+        "sourceStart": 1208554,
+        "sourceEnd": 1208972
+      },
+      "block_ref": "b2847",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2847",
+      "text": "Il corridoio dei laboratori si riempie di luce nelle mattine limpide. Durante le feste di paese diventa il punto d'incontro di tutti. Il cortile interno dello stabilimento viene sistemata ogni primavera da un gruppo di volontari, come raccontano i più anziani. Il giardino sul retro si affaccia su una strada ombreggiata frequentata da ciclisti. Gli abitanti del quartiere ne parlano con affetto.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5695,
+        "lineEnd": 5695,
+        "sourceStart": 1208974,
+        "sourceEnd": 1209370
+      },
+      "block_ref": "b2848",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2848",
+      "text": "Il viale di tigli davanti al cancello si riempie di luce nelle mattine limpide. Il cortile interno dello stabilimento si riempie di luce nelle mattine limpide, come accade da molte stagioni. Dalle finestre si vedono le colline e i tetti rossi del borgo. L'orto condiviso dai colleghi è il luogo preferito dai colleghi per una pausa all'aria aperta, nonostante il passare degli anni. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5697,
+        "lineEnd": 5697,
+        "sourceStart": 1209372,
+        "sourceEnd": 1209809
+      },
+      "block_ref": "b2849",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2849",
+      "text": "Chi visita l'edificio per la prima volta se ne ricorda a lungo. Il giardino sul retro ha visto crescere generazioni di famiglie del posto, con grande orgoglio di chi ci lavora. L'ingresso principale dell'edificio è stata dipinta di un colore caldo che ricorda le sere d'estate, come raccontano i più anziani. L'ingresso principale dell'edificio ricorda a chi arriva la storia artigiana del territorio. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5699,
+        "lineEnd": 5699,
+        "sourceStart": 1209811,
+        "sourceEnd": 1210265
+      },
+      "block_ref": "b2850",
+      "parents": [
+        417
+      ]
+    },
+    {
+      "id": "b2918",
+      "text": "La piccola cappella accanto al parcheggio si riempie di luce nelle mattine limpide, nonostante il passare degli anni. Durante le feste di paese diventa il punto d'incontro di tutti. La sala più grande dell'edificio ospita da molti anni una piccola mostra di fotografie, con grande orgoglio di chi ci lavora. Gli abitanti del quartiere ne parlano con affetto. Nelle giornate di vento si sente il profumo dei tigli.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5837,
+        "lineEnd": 5837,
+        "sourceStart": 1239624,
+        "sourceEnd": 1240037
+      },
+      "block_ref": "b2919",
+      "parents": [
+        428
+      ]
+    },
+    {
+      "id": "b2919",
+      "text": "La terrazza panoramica dell'ultimo piano è stata ripresa in un documentario girato da una giovane regista, come accade da molte stagioni. Gli abitanti del quartiere ne parlano con affetto. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il corridoio dei laboratori si affaccia su una strada ombreggiata frequentata da ciclisti. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5839,
+        "lineEnd": 5839,
+        "sourceStart": 1240039,
+        "sourceEnd": 1240444
+      },
+      "block_ref": "b2920",
+      "parents": [
+        428
+      ]
+    },
+    {
+      "id": "b2920",
+      "text": "Gli abitanti del quartiere ne parlano con affetto. Il campanile del paese si affaccia su una strada ombreggiata frequentata da ciclisti, come raccontano i più anziani. La mensa del secondo piano si riempie di luce nelle mattine limpide, nonostante il passare degli anni. L'ingresso principale dell'edificio è stata ripresa in un documentario girato da una giovane regista, con grande orgoglio di chi ci lavora. Chi visita l'edificio per la prima volta se ne ricorda a lungo.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5841,
+        "lineEnd": 5841,
+        "sourceStart": 1240446,
+        "sourceEnd": 1240920
+      },
+      "block_ref": "b2921",
+      "parents": [
+        428
+      ]
+    },
+    {
+      "id": "b2921",
+      "text": "La finestra di manutenzione programmata cade la terza domenica di ogni mese.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5843,
+        "lineEnd": 5843,
+        "sourceStart": 1240922,
+        "sourceEnd": 1240998
+      },
+      "block_ref": "b2922",
+      "parents": [
+        428
+      ]
+    },
+    {
+      "id": "b2922",
+      "text": "L'ingresso principale dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata, come accade da molte stagioni. Gli studenti in visita lo disegnano spesso sui loro quaderni. Nelle giornate di vento si sente il profumo dei tigli. La vecchia fornace trasformata in spazio per le mostre si riempie di luce nelle mattine limpide. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5845,
+        "lineEnd": 5845,
+        "sourceStart": 1241000,
+        "sourceEnd": 1241416
+      },
+      "block_ref": "b2923",
+      "parents": [
+        428
+      ]
+    },
+    {
+      "id": "b2923",
+      "text": "Dalle finestre si vedono le colline e i tetti rossi del borgo. La terrazza panoramica dell'ultimo piano conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. La biblioteca dei dipendenti ricorda a chi arriva la storia artigiana del territorio. L'orto condiviso dai colleghi conserva ancora le panche di legno scelte dai primi fondatori, tra la curiosità dei passanti. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5847,
+        "lineEnd": 5847,
+        "sourceStart": 1241418,
+        "sourceEnd": 1241894
+      },
+      "block_ref": "b2924",
+      "parents": [
+        428
+      ]
+    },
+    {
+      "id": "b2924",
+      "text": "L'ingresso principale dell'edificio si riempie di luce nelle mattine limpide. Un anziano giardiniere ama raccontarne gli aneddoti. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il cortile interno dello stabilimento si affaccia su una strada ombreggiata frequentata da ciclisti. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 5849,
+        "lineEnd": 5849,
+        "sourceStart": 1241896,
+        "sourceEnd": 1242255
+      },
+      "block_ref": "b2925",
+      "parents": [
+        428
+      ]
+    }
+  ]
+}

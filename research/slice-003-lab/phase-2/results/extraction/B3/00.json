@@ -1,0 +1,149 @@
+{
+  "parsed": {
+    "facts": [
+      {
+        "id": "[b275]",
+        "quote": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+        "statement": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo."
+      },
+      {
+        "id": "[b315]",
+        "quote": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi.",
+        "statement": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi."
+      },
+      {
+        "id": "[b315]",
+        "quote": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola."
+      },
+      {
+        "id": "[b315]",
+        "quote": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi.",
+        "statement": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi."
+      },
+      {
+        "id": "[b315]",
+        "quote": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi.",
+        "statement": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi."
+      },
+      {
+        "id": "[b315]",
+        "quote": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi.",
+        "statement": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi."
+      },
+      {
+        "id": "[b315]",
+        "quote": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi.",
+        "statement": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi."
+      },
+      {
+        "id": "[b316]",
+        "quote": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi.",
+        "statement": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi.",
+        "statement": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi.",
+        "statement": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+        "statement": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi."
+      },
+      {
+        "id": "[b1403]",
+        "quote": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+        "statement": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi."
+      },
+      {
+        "id": "[b2097]",
+        "quote": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi.",
+        "statement": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi."
+      },
+      {
+        "id": "[b2097]",
+        "quote": "La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola."
+      },
+      {
+        "id": "[b2097]",
+        "quote": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi.",
+        "statement": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi."
+      },
+      {
+        "id": "[b2097]",
+        "quote": "La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola."
+      },
+      {
+        "id": "[b2097]",
+        "quote": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi.",
+        "statement": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi."
+      },
+      {
+        "id": "[b2097]",
+        "quote": "La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola.",
+        "statement": "La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola."
+      }
+    ]
+  },
+  "finish_reason": "stop",
+  "blocks": [
+    "b270",
+    "b271",
+    "b272",
+    "b273",
+    "b274",
+    "b275",
+    "b276",
+    "b277",
+    "b312",
+    "b313",
+    "b314",
+    "b315",
+    "b316",
+    "b317",
+    "b318",
+    "b319",
+    "b320",
+    "b1400",
+    "b1401",
+    "b1402",
+    "b1403",
+    "b1404",
+    "b1405",
+    "b1406",
+    "b1407",
+    "b1408",
+    "b2093",
+    "b2094",
+    "b2095",
+    "b2096",
+    "b2097",
+    "b2098",
+    "b2099",
+    "b2100",
+    "b2521"
+  ]
+}

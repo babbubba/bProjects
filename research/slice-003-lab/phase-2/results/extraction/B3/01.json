@@ -1,0 +1,33 @@
+{
+  "parsed": {
+    "facts": [
+      {
+        "id": "[b2527]",
+        "quote": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+        "statement": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento."
+      },
+      {
+        "id": "[b2606]",
+        "quote": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+        "statement": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna."
+      }
+    ]
+  },
+  "finish_reason": "stop",
+  "blocks": [
+    "b2522",
+    "b2523",
+    "b2524",
+    "b2525",
+    "b2526",
+    "b2527",
+    "b2602",
+    "b2603",
+    "b2604",
+    "b2605",
+    "b2606",
+    "b2607",
+    "b2608",
+    "b2609"
+  ]
+}

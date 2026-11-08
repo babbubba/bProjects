@@ -1,0 +1,32 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "N4-fixtures-c10 | txt-conflict-a.txt",
+        "quote": "Scheda A"
+      },
+      {
+        "id": "T083-multi-c1566 | contratto-quadro-zefiro.txt",
+        "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento."
+      }
+    ],
+    "conflicts": [
+      {
+        "sides": [
+          {
+            "id": "N4-fixtures-c11 | txt-conflict-a.txt",
+            "quote": "Il termine di pagamento e' 30 giorni."
+          },
+          {
+            "id": "T083-multi-c2619 | verbale-collaudo-zefiro.docx",
+            "quote": "Il termine di pagamento delle fatture è di 60 giorni data fattura."
+          }
+        ]
+      }
+    ]
+  },
+  "finish_reason": "stop"
+}

@@ -1,0 +1,110 @@
+{
+  "parsed": {
+    "facts": [
+      {
+        "id": "[b864]",
+        "quote": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi.",
+        "statement": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi."
+      },
+      {
+        "id": "[b864]",
+        "quote": "La scheda tecnica della linea Tivipu prevede un imballo da 653 pezzi per scatola.",
+        "statement": "Per la linea Tivipu l'imballo è di 653 pezzi per scatola."
+      },
+      {
+        "id": "[b864]",
+        "quote": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi.",
+        "statement": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi."
+      },
+      {
+        "id": "[b864]",
+        "quote": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi.",
+        "statement": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi."
+      },
+      {
+        "id": "[b864]",
+        "quote": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi.",
+        "statement": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi."
+      },
+      {
+        "id": "[b864]",
+        "quote": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi.",
+        "statement": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola.",
+        "statement": "Per la linea Tisore l'imballo è di 613 pezzi per scatola."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi.",
+        "statement": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola.",
+        "statement": "Per la linea Burala l'imballo è di 606 pezzi per scatola."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola.",
+        "statement": "Per la linea Mugace l'imballo è di 353 pezzi per scatola."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi.",
+        "statement": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi."
+      },
+      {
+        "id": "[b1402]",
+        "quote": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+        "statement": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi."
+      },
+      {
+        "id": "[b1403]",
+        "quote": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+        "statement": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi."
+      },
+      {
+        "id": "[b1517]",
+        "quote": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+        "statement": "Le segnalazioni di guasto con priorità alta devono essere prese in carico entro 40 minuti, esclusi i giorni festivi."
+      }
+    ]
+  },
+  "finish_reason": "stop",
+  "blocks": [
+    "b864",
+    "b865",
+    "b866",
+    "b867",
+    "b868",
+    "b869",
+    "b1400",
+    "b1401",
+    "b1402",
+    "b1403",
+    "b1404",
+    "b1405",
+    "b1406",
+    "b1407",
+    "b1408",
+    "b1460",
+    "b1461",
+    "b1462",
+    "b1463",
+    "b1464",
+    "b1465",
+    "b1514",
+    "b1515",
+    "b1516",
+    "b1517",
+    "b1518",
+    "b1519",
+    "b1520",
+    "b1589",
+    "b1590",
+    "b1591"
+  ]
+}

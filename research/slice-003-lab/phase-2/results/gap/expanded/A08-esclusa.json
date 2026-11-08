@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "N4-fixtures-3 | txt-conflict-a.txt",
+        "quote": "Scheda A\nIl termine di pagamento e' 30 giorni."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

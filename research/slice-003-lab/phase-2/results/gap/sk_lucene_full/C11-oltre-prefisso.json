@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "La taratura del dispositivo Orione deve essere ripetuta ogni 73 ore di funzionamento.",
+    "citations": [
+      {
+        "id": "d0e4bf9e74fdf89657f5ac38eff2a8ad77ae4ab01fe819c8174b03c23e6323e4",
+        "quote": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

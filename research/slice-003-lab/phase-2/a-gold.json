@@ -1,0 +1,199 @@
+[
+  {
+    "id": "A01-completa",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "48 mesi dalla firma",
+    "evidence": [
+      {
+        "id": "M01",
+        "file": "contratto-quadro-zefiro.txt",
+        "contains": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+        "zone": 0,
+        "classification": "Documented"
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "A02-assente",
+    "status": "Open",
+    "reason": "assente",
+    "answer": null,
+    "evidence": [],
+    "conflicts": []
+  },
+  {
+    "id": "A03-parziale",
+    "status": "Open",
+    "reason": "parziale",
+    "answer": "30 giorni, decorrenza assente",
+    "evidence": [
+      {
+        "file": "txt-conflict-a.txt",
+        "contains": "termine di pagamento e' 30 giorni",
+        "id": "N4-doc-title"
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "A04-discordante",
+    "status": "Open",
+    "reason": "ambigua",
+    "answer": null,
+    "evidence": [
+      {
+        "id": "M04",
+        "file": "contratto-quadro-zefiro.txt",
+        "contains": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+        "zone": 1,
+        "classification": "Documented"
+      },
+      {
+        "id": "M13",
+        "file": "verbale-collaudo-zefiro.docx",
+        "contains": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+        "zone": 0,
+        "classification": "Documented"
+      }
+    ],
+    "conflicts": [
+      [
+        "M04",
+        "M13"
+      ]
+    ]
+  },
+  {
+    "id": "A05-altro-documento",
+    "status": "Open",
+    "reason": "non pertinente",
+    "answer": null,
+    "evidence": [
+      {
+        "id": "M12",
+        "file": "allegato-tecnico-zefiro.md",
+        "contains": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+        "zone": 1,
+        "classification": "Documented"
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "A06-condizione",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Seconda rata sospesa se il collaudo fallisce",
+    "evidence": [
+      {
+        "id": "M17",
+        "file": "verbale-collaudo-zefiro.docx",
+        "contains": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+        "zone": 2,
+        "classification": "Documented"
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "A07-eccezione",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Dopo le 16:00 non accettati salvo clienti Gold",
+    "evidence": [
+      {
+        "id": "M12",
+        "file": "allegato-tecnico-zefiro.md",
+        "contains": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+        "zone": 1,
+        "classification": "Documented"
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "A08-esclusa",
+    "status": "Open",
+    "reason": "assente",
+    "answer": null,
+    "evidence": [],
+    "conflicts": []
+  },
+  {
+    "id": "A09-PM",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "30 giorni secondo la Scheda A",
+    "evidence": [
+      {
+        "file": "txt-conflict-a.txt",
+        "contains": "termine di pagamento e' 30 giorni",
+        "id": "N4-doc-title"
+      },
+      {
+        "id": "N4-PM",
+        "file": "pm-message.txt",
+        "contains": "Il cliente mi ha confermato per telefono che il termine di pagamento e' di 45 giorni."
+      }
+    ],
+    "conflicts": [
+      [
+        "N4-doc-title",
+        "N4-PM"
+      ]
+    ]
+  },
+  {
+    "id": "A10-multifonte",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Allegato C, 1,5% del valore dell'ordine per giorno, tetto del 15%",
+    "evidence": [
+      {
+        "id": "M06",
+        "file": "contratto-quadro-zefiro.txt",
+        "contains": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+        "zone": 0,
+        "classification": "Documented"
+      },
+      {
+        "id": "M11",
+        "file": "allegato-tecnico-zefiro.md",
+        "contains": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+        "zone": 2,
+        "classification": "Documented"
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "C11-oltre-prefisso",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "73 ore di funzionamento",
+    "evidence": [
+      {
+        "id": "LATE",
+        "file": "orione.txt",
+        "contains": "Per il dispositivo Orione, la taratura deve essere ripetuta ogni 73 ore di funzionamento."
+      }
+    ],
+    "conflicts": []
+  },
+  {
+    "id": "C12-prima-del-prefisso",
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "91 ore di funzionamento",
+    "evidence": [
+      {
+        "id": "EARLY",
+        "file": "vega.txt",
+        "contains": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento."
+      }
+    ],
+    "conflicts": []
+  }
+]

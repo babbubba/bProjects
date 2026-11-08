@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Il termine di pagamento è 30 giorni.",
+    "citations": [
+      {
+        "id": "N4-fixtures-3 | txt-conflict-a.txt | Document |  | af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+        "quote": "Il termine di pagamento e' 30 giorni."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

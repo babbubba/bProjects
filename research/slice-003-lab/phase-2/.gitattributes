@@ -1,0 +1,5 @@
+# The freeze manifest hashes these inputs byte for byte.
+*-input.json -text
+*-gold.json -text
+b-selection-audit.json -text
+protocol.json -text

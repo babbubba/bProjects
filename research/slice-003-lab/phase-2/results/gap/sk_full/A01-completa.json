@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "48 mesi dalla data di firma",
+    "citations": [
+      {
+        "id": "T083-multi-177 | contratto-quadro-zefiro.txt",
+        "quote": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

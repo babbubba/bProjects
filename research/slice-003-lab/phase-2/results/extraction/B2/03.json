@@ -1,0 +1,53 @@
+{
+  "parsed": {
+    "facts": [
+      {
+        "id": "b2527",
+        "quote": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+        "statement": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento."
+      },
+      {
+        "id": "b2606",
+        "quote": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+        "statement": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna."
+      },
+      {
+        "id": "b2686",
+        "quote": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+        "statement": "La reperibilità notturna è garantita soltanto per il sito di Padova."
+      },
+      {
+        "id": "b2758",
+        "quote": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+        "statement": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata."
+      },
+      {
+        "id": "b2843",
+        "quote": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+        "statement": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura."
+      }
+    ]
+  },
+  "finish_reason": "stop",
+  "blocks": [
+    "b2527",
+    "b2604",
+    "b2606",
+    "b2608",
+    "b2684",
+    "b2686",
+    "b2689",
+    "b2758",
+    "b2759",
+    "b2760",
+    "b2762",
+    "b2765",
+    "b2842",
+    "b2843",
+    "b2844",
+    "b2849",
+    "b2919",
+    "b2920",
+    "b2923"
+  ]
+}

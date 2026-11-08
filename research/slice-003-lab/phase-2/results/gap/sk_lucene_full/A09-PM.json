@@ -1,0 +1,28 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "N4-fixtures-3 | txt-conflict-a.txt | Document",
+        "quote": "Il termine di pagamento e' 30 giorni."
+      }
+    ],
+    "conflicts": [
+      {
+        "sides": [
+          {
+            "id": "N4-fixtures-3 | txt-conflict-a.txt | Document",
+            "quote": "Il termine di pagamento e' 30 giorni."
+          },
+          {
+            "id": "T083-multi-240 | contratto-quadro-zefiro.txt | Document",
+            "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento."
+          }
+        ]
+      }
+    ]
+  },
+  "finish_reason": "stop"
+}

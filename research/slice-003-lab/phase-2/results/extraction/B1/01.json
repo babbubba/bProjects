@@ -1,0 +1,55 @@
+{
+  "parsed": {
+    "facts": [
+      {
+        "id": "[b356]",
+        "quote": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+        "statement": "Nei mesi di agosto e dicembre, il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo."
+      },
+      {
+        "id": "[b434]",
+        "quote": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+        "statement": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento."
+      },
+      {
+        "id": "[b629]",
+        "quote": "Per la linea Gomuco il lotto minimo di rifornimento è di 250 pezzi.",
+        "statement": "Per la linea Gomuco, il lotto minimo di rifornimento è di 250 pezzi."
+      }
+    ]
+  },
+  "finish_reason": "stop",
+  "blocks": [
+    "b354",
+    "b355",
+    "b356",
+    "b357",
+    "b358",
+    "b359",
+    "b429",
+    "b430",
+    "b431",
+    "b432",
+    "b433",
+    "b434",
+    "b435",
+    "b436",
+    "b629",
+    "b630",
+    "b631",
+    "b632",
+    "b633",
+    "b634",
+    "b635",
+    "b636",
+    "b637",
+    "b745",
+    "b746",
+    "b747",
+    "b748",
+    "b749",
+    "b750",
+    "b751",
+    "b863"
+  ]
+}

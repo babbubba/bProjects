@@ -1,0 +1,282 @@
+{
+  "request": {
+    "model": "bge-reranker-v2-m3",
+    "query": "Quale numero di reperibilità telefonica prevede il verbale di collaudo Zefiro?",
+    "documents": [
+      "Allegato tecnico Zefiro\nIl territorio\nIl limite di ordini per ciascuna sede è di 40 al giorno.",
+      "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+      "Il collaudo finale si svolgerà il 12 marzo 2027 presso la sede di Brescia.",
+      "Allegato tecnico Zefiro\nIl quartiere\nI pezzi di ricambio ordinari arrivano al più tardi entro una settimana lavorativa.",
+      "Allegato tecnico Zefiro\nLe botteghe\nNel pacchetto Ambra il monitoraggio degli ordini viene aggiornato ogni 15 minuti.",
+      "Piano di rilascio\nDettagli tecnici\n| Fase | Scadenza |\n| --- | --- |\n| Analisi | 2027-01-31 |\n| Collaudo | 2027-03-01 |",
+      "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+      "Allegato tecnico Zefiro\nLe persone II\nAllegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+      "Allegato tecnico Zefiro\nI sentieri\nGli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "Allegato tecnico Zefiro\nIl territorio\nL'ingresso principale dell'edificio ricorda a chi arriva la storia artigiana del territorio, senza fare rumore. La piccola cappella accanto al parcheggio si affaccia su una strada ombreggiata frequentata da ciclisti. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Gli abitanti del quartiere ne parlano con affetto. Gli abitanti del quartiere ne parlano con affetto.",
+      "Il portale non deve inviare mai email senza consenso.\nNon e' richiesta la gestione dei resi.\nE' vietato memorizzare il numero di carta.\nTutte le esportazioni sono consentite tranne quelle dei dati anagrafici.\nIl termine e' di 45 giorni, non 30.",
+      "Le modifiche ai listini non sono ammesse durante il periodo di collaudo.",
+      "Allegato tecnico Zefiro\nIl territorio\nLa piccola cappella accanto al parcheggio è stata ricostruita con pietre recuperate da una cascina abbandonata. Gli abitanti del quartiere ne parlano con affetto. Gli studenti in visita lo disegnano spesso sui loro quaderni. Un anziano giardiniere ama raccontarne gli aneddoti. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Allegato tecnico Zefiro\nI sentieri\nIl corridoio dei laboratori viene sistemata ogni primavera da un gruppo di volontari. L'ingresso principale dell'edificio si riempie di luce nelle mattine limpide. Gli studenti in visita lo disegnano spesso sui loro quaderni. Gli abitanti del quartiere ne parlano con affetto. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "Allegato tecnico Zefiro\nI sentieri\nLa biblioteca dei dipendenti ospita da molti anni una piccola mostra di fotografie. La biblioteca dei dipendenti è stata ripresa in un documentario girato da una giovane regista, come raccontano i più anziani. Il giardino sul retro racconta con discrezione il carattere tranquillo della comunità. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "Allegato tecnico Zefiro\nIl territorio\nChi visita l'edificio per la prima volta se ne ricorda a lungo. La vecchia fornace trasformata in spazio per le mostre è il luogo preferito dai colleghi per una pausa all'aria aperta. La storica palazzina dell'azienda è stata ripresa in un documentario girato da una giovane regista. Gli studenti in visita lo disegnano spesso sui loro quaderni. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "Allegato tecnico Zefiro\nIl territorio\nLa storica palazzina dell'azienda ha visto crescere generazioni di famiglie del posto. Il campanile del paese è il luogo preferito dai colleghi per una pausa all'aria aperta. Durante le feste di paese diventa il punto d'incontro di tutti. La piccola cappella accanto al parcheggio ha visto crescere generazioni di famiglie del posto, nonostante il passare degli anni. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "Il cliente mi ha confermato per telefono che il termine di pagamento e' di 45 giorni.",
+      "Allegato tecnico Zefiro\nCenni storici\nLa terrazza panoramica dell'ultimo piano si affaccia su una strada ombreggiata frequentata da ciclisti, come accade da molte stagioni. Il cortile interno dello stabilimento è stata ricostruita con pietre recuperate da una cascina abbandonata, nonostante il passare degli anni. Il corridoio dei laboratori conserva ancora le panche di legno scelte dai primi fondatori. Un anziano giardiniere ama raccontarne gli aneddoti. Nelle giornate di vento si sente il profumo dei tigli.",
+      "Allegato tecnico Zefiro\nCenni storici\nIl cortile interno dello stabilimento si affaccia su una strada ombreggiata frequentata da ciclisti. Il viale di tigli davanti al cancello ospita da molti anni una piccola mostra di fotografie, senza fare rumore. Il campanile del paese ha visto crescere generazioni di famiglie del posto. La fontana al centro della piazza ha visto crescere generazioni di famiglie del posto. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Allegato tecnico Zefiro\nIl quartiere\nIl cortile interno dello stabilimento è il luogo preferito dai colleghi per una pausa all'aria aperta. Il corridoio dei laboratori è stata ricostruita con pietre recuperate da una cascina abbandonata, nonostante il passare degli anni. Il giardino sul retro racconta con discrezione il carattere tranquillo della comunità, nonostante il passare degli anni. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Gli abitanti del quartiere ne parlano con affetto.",
+      "Piano di rilascio\nDettagli tecnici",
+      "Allegato tecnico Zefiro\nIl quartiere\nIl viale di tigli davanti al cancello viene sistemata ogni primavera da un gruppo di volontari. La piccola cappella accanto al parcheggio racconta con discrezione il carattere tranquillo della comunità. Il giardino sul retro è il luogo preferito dai colleghi per una pausa all'aria aperta. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "Allegato tecnico Zefiro\nLe stagioni\nGli abitanti del quartiere ne parlano con affetto. Dalle finestre si vedono le colline e i tetti rossi del borgo. La piccola cappella accanto al parcheggio racconta con discrezione il carattere tranquillo della comunità, con grande orgoglio di chi ci lavora. Nelle giornate di vento si sente il profumo dei tigli. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "Allegato tecnico Zefiro\nLe persone II\nIl corridoio dei laboratori è stata dipinta di un colore caldo che ricorda le sere d'estate. Gli studenti in visita lo disegnano spesso sui loro quaderni. La biblioteca dei dipendenti ricorda a chi arriva la storia artigiana del territorio. Il murale dipinto dagli studenti del liceo vicino ricorda a chi arriva la storia artigiana del territorio. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "Allegato tecnico Zefiro\nCenni storici\nL'orto condiviso dai colleghi si affaccia su una strada ombreggiata frequentata da ciclisti, nonostante il passare degli anni. Il corridoio dei laboratori ricorda a chi arriva la storia artigiana del territorio. Il cortile interno dello stabilimento si riempie di luce nelle mattine limpide. La piccola cappella accanto al parcheggio viene sistemata ogni primavera da un gruppo di volontari. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Il termine di pagamento e' 30 giorni.",
+      "Piano di rilascio\nDettagli tecnici\nSELECT id, stato FROM ordini WHERE cliente = :c;",
+      "Piano di rilascio",
+      "Allegato tecnico Zefiro\nI sentieri\nIl campanile del paese si riempie di luce nelle mattine limpide. Il giardino sul retro si riempie di luce nelle mattine limpide. La terrazza panoramica dell'ultimo piano è stata ricostruita con pietre recuperate da una cascina abbandonata. La mensa del secondo piano è stata dipinta di un colore caldo che ricorda le sere d'estate. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "Allegato tecnico Zefiro\nIl quartiere\nL'ingresso principale dell'edificio ricorda a chi arriva la storia artigiana del territorio, come raccontano i più anziani. La mensa del secondo piano è stata ripresa in un documentario girato da una giovane regista. L'ingresso principale dell'edificio è il luogo preferito dai colleghi per una pausa all'aria aperta. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Il termine di pagamento e' 60 giorni.",
+      "Allegato tecnico Zefiro\nCenni storici\nLa biblioteca dei dipendenti conserva ancora le panche di legno scelte dai primi fondatori. Il viale di tigli davanti al cancello è il luogo preferito dai colleghi per una pausa all'aria aperta, senza fare rumore. Il corridoio dei laboratori racconta con discrezione il carattere tranquillo della comunità. Il murale dipinto dagli studenti del liceo vicino ha visto crescere generazioni di famiglie del posto. Una vecchia fotografia in bianco e nero lo mostra quasi identico.",
+      "Allegato tecnico Zefiro\nI sentieri\nLa vecchia fornace trasformata in spazio per le mostre è stata ripresa in un documentario girato da una giovane regista. Il cortile interno dello stabilimento ricorda a chi arriva la storia artigiana del territorio, senza fare rumore. Gli studenti in visita lo disegnano spesso sui loro quaderni. Il giardino sul retro racconta con discrezione il carattere tranquillo della comunità. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "Piano di rilascio\nAmbito",
+      "Allegato tecnico Zefiro\nLe persone II\nIl corridoio dei laboratori ha visto crescere generazioni di famiglie del posto, come raccontano i più anziani. La mensa del secondo piano ha visto crescere generazioni di famiglie del posto. Il viale di tigli davanti al cancello ha visto crescere generazioni di famiglie del posto. Il corridoio dei laboratori ricorda a chi arriva la storia artigiana del territorio. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Piano di rilascio\nDettagli tecnici\nRiferimento: [Linee guida](http://example.invalid/guide) (collegamento non seguito).",
+      "Allegato tecnico Zefiro\nLe stagioni\nLa storica palazzina dell'azienda viene sistemata ogni primavera da un gruppo di volontari. Una vecchia fotografia in bianco e nero lo mostra quasi identico. La vecchia fornace trasformata in spazio per le mostre ha visto crescere generazioni di famiglie del posto, tra la curiosità dei passanti. La storica palazzina dell'azienda racconta con discrezione il carattere tranquillo della comunità. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "Allegato tecnico Zefiro\nCenni storici\nLa vecchia fornace trasformata in spazio per le mostre si riempie di luce nelle mattine limpide, senza fare rumore. Dalle finestre si vedono le colline e i tetti rossi del borgo. Chi visita l'edificio per la prima volta se ne ricorda a lungo. Un anziano giardiniere ama raccontarne gli aneddoti. Nelle giornate di vento si sente il profumo dei tigli.",
+      "Allegato tecnico Zefiro\nLe persone II\nLa biblioteca dei dipendenti si riempie di luce nelle mattine limpide, come accade da molte stagioni. La terrazza panoramica dell'ultimo piano ospita da molti anni una piccola mostra di fotografie. Nelle giornate di vento si sente il profumo dei tigli. La biblioteca dei dipendenti è il luogo preferito dai colleghi per una pausa all'aria aperta. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Allegato tecnico Zefiro\nIl territorio\nNelle giornate di vento si sente il profumo dei tigli. La piccola cappella accanto al parcheggio è il luogo preferito dai colleghi per una pausa all'aria aperta. La terrazza panoramica dell'ultimo piano ricorda a chi arriva la storia artigiana del territorio. L'ingresso principale dell'edificio si affaccia su una strada ombreggiata frequentata da ciclisti, senza fare rumore. Durante le feste di paese diventa il punto d'incontro di tutti.",
+      "Il pacchetto Ambra comprende il monitoraggio degli ordini.",
+      "Allegato tecnico Zefiro\nIl quartiere\nChi visita l'edificio per la prima volta se ne ricorda a lungo. L'orto condiviso dai colleghi conserva ancora le panche di legno scelte dai primi fondatori, con grande orgoglio di chi ci lavora. La piccola cappella accanto al parcheggio viene sistemata ogni primavera da un gruppo di volontari. La terrazza panoramica dell'ultimo piano si riempie di luce nelle mattine limpide. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "Allegato tecnico Zefiro\nLe persone II\nNelle giornate di vento si sente il profumo dei tigli. Il viale di tigli davanti al cancello è stata ricostruita con pietre recuperate da una cascina abbandonata. Un anziano giardiniere ama raccontarne gli aneddoti. L'ingresso principale dell'edificio conserva ancora le panche di legno scelte dai primi fondatori, con grande orgoglio di chi ci lavora. Un anziano giardiniere ama raccontarne gli aneddoti.",
+      "Allegato tecnico Zefiro\nLe stagioni\nChi visita l'edificio per la prima volta se ne ricorda a lungo. Il corridoio dei laboratori è stata ricostruita con pietre recuperate da una cascina abbandonata, come accade da molte stagioni. Il murale dipinto dagli studenti del liceo vicino ha visto crescere generazioni di famiglie del posto. La piccola cappella accanto al parcheggio conserva ancora le panche di legno scelte dai primi fondatori, senza fare rumore. Gli studenti in visita lo disegnano spesso sui loro quaderni.",
+      "Allegato tecnico Zefiro\nLe botteghe\nIl viale di tigli davanti al cancello è stata ripresa in un documentario girato da una giovane regista, tra la curiosità dei passanti. Il campanile del paese ricorda a chi arriva la storia artigiana del territorio, con grande orgoglio di chi ci lavora. Una vecchia fotografia in bianco e nero lo mostra quasi identico. Il cortile interno dello stabilimento conserva ancora le panche di legno scelte dai primi fondatori. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Allegato tecnico Zefiro\nIl quartiere\nLa fontana al centro della piazza ospita da molti anni una piccola mostra di fotografie, tra la curiosità dei passanti. L'orto condiviso dai colleghi si riempie di luce nelle mattine limpide, tra la curiosità dei passanti. Il giardino sul retro si affaccia su una strada ombreggiata frequentata da ciclisti. L'ingresso principale dell'edificio è stata ricostruita con pietre recuperate da una cascina abbandonata. Nelle giornate di vento si sente il profumo dei tigli.",
+      "Allegato tecnico Zefiro\nLe botteghe\nLa storica palazzina dell'azienda è stata dipinta di un colore caldo che ricorda le sere d'estate. Il campanile del paese si riempie di luce nelle mattine limpide, nonostante il passare degli anni. Il campanile del paese viene sistemata ogni primavera da un gruppo di volontari. La sala più grande dell'edificio si riempie di luce nelle mattine limpide, come accade da molte stagioni. Dalle finestre si vedono le colline e i tetti rossi del borgo.",
+      "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+      "Allegato tecnico Zefiro\nLe stagioni\nLa fontana al centro della piazza ha visto crescere generazioni di famiglie del posto. La biblioteca dei dipendenti è stata ricostruita con pietre recuperate da una cascina abbandonata. La biblioteca dei dipendenti conserva ancora le panche di legno scelte dai primi fondatori, nonostante il passare degli anni. La terrazza panoramica dell'ultimo piano viene sistemata ogni primavera da un gruppo di volontari, senza fare rumore. Gli abitanti del quartiere ne parlano con affetto."
+    ],
+    "top_n": 50
+  },
+  "response": {
+    "model": "bge-reranker-v2-m3",
+    "object": "list",
+    "usage": {
+      "prompt_tokens": 4688,
+      "total_tokens": 4688
+    },
+    "results": [
+      {
+        "index": 1,
+        "relevance_score": -3.9253478050231934
+      },
+      {
+        "index": 0,
+        "relevance_score": -5.363247871398926
+      },
+      {
+        "index": 7,
+        "relevance_score": -6.2693257331848145
+      },
+      {
+        "index": 4,
+        "relevance_score": -6.393633842468262
+      },
+      {
+        "index": 8,
+        "relevance_score": -6.461044788360596
+      },
+      {
+        "index": 3,
+        "relevance_score": -6.802079677581787
+      },
+      {
+        "index": 2,
+        "relevance_score": -7.406638145446777
+      },
+      {
+        "index": 20,
+        "relevance_score": -7.514164924621582
+      },
+      {
+        "index": 16,
+        "relevance_score": -7.7211408615112305
+      },
+      {
+        "index": 5,
+        "relevance_score": -7.764383316040039
+      },
+      {
+        "index": 42,
+        "relevance_score": -7.828991889953613
+      },
+      {
+        "index": 40,
+        "relevance_score": -7.919337272644043
+      },
+      {
+        "index": 11,
+        "relevance_score": -8.018241882324219
+      },
+      {
+        "index": 15,
+        "relevance_score": -8.097042083740234
+      },
+      {
+        "index": 9,
+        "relevance_score": -8.175138473510742
+      },
+      {
+        "index": 37,
+        "relevance_score": -8.387723922729492
+      },
+      {
+        "index": 35,
+        "relevance_score": -8.540351867675781
+      },
+      {
+        "index": 17,
+        "relevance_score": -8.54086971282959
+      },
+      {
+        "index": 44,
+        "relevance_score": -8.57645320892334
+      },
+      {
+        "index": 47,
+        "relevance_score": -8.624486923217773
+      },
+      {
+        "index": 22,
+        "relevance_score": -8.702406883239746
+      },
+      {
+        "index": 30,
+        "relevance_score": -8.704437255859375
+      },
+      {
+        "index": 25,
+        "relevance_score": -8.722498893737793
+      },
+      {
+        "index": 33,
+        "relevance_score": -8.727252960205078
+      },
+      {
+        "index": 23,
+        "relevance_score": -8.737686157226562
+      },
+      {
+        "index": 19,
+        "relevance_score": -8.741294860839844
+      },
+      {
+        "index": 18,
+        "relevance_score": -8.758581161499023
+      },
+      {
+        "index": 49,
+        "relevance_score": -8.793451309204102
+      },
+      {
+        "index": 39,
+        "relevance_score": -8.829509735107422
+      },
+      {
+        "index": 43,
+        "relevance_score": -8.84815502166748
+      },
+      {
+        "index": 12,
+        "relevance_score": -8.879083633422852
+      },
+      {
+        "index": 6,
+        "relevance_score": -8.886417388916016
+      },
+      {
+        "index": 32,
+        "relevance_score": -8.888726234436035
+      },
+      {
+        "index": 45,
+        "relevance_score": -8.95595645904541
+      },
+      {
+        "index": 48,
+        "relevance_score": -8.957866668701172
+      },
+      {
+        "index": 46,
+        "relevance_score": -9.038847923278809
+      },
+      {
+        "index": 38,
+        "relevance_score": -9.166865348815918
+      },
+      {
+        "index": 29,
+        "relevance_score": -9.224225997924805
+      },
+      {
+        "index": 14,
+        "relevance_score": -9.298604965209961
+      },
+      {
+        "index": 24,
+        "relevance_score": -9.357227325439453
+      },
+      {
+        "index": 13,
+        "relevance_score": -9.681478500366211
+      },
+      {
+        "index": 10,
+        "relevance_score": -9.755599021911621
+      },
+      {
+        "index": 36,
+        "relevance_score": -10.175951957702637
+      },
+      {
+        "index": 27,
+        "relevance_score": -10.616876602172852
+      },
+      {
+        "index": 31,
+        "relevance_score": -10.72840690612793
+      },
+      {
+        "index": 34,
+        "relevance_score": -10.730445861816406
+      },
+      {
+        "index": 21,
+        "relevance_score": -10.761688232421875
+      },
+      {
+        "index": 26,
+        "relevance_score": -10.78073501586914
+      },
+      {
+        "index": 28,
+        "relevance_score": -10.807635307312012
+      },
+      {
+        "index": 41,
+        "relevance_score": -10.815176010131836
+      }
+    ]
+  },
+  "measurement": {
+    "stage": "ac-hybrid-A02-assente",
+    "path": "/v1/rerank",
+    "model": "bge-reranker-v2-m3",
+    "input_sha256": "342dbf0c589ef3c67d3ee939bf6558aa76b16d4436679b7590bbba97722aadde",
+    "status": "OK",
+    "usage": {
+      "prompt_tokens": 4688,
+      "total_tokens": 4688
+    },
+    "response_sha256": "9c103e0081e401bffcb32d9a65ad5505d869202e6a22226bf549187b8de23d50",
+    "milliseconds": 456.90439990721643
+  }
+}

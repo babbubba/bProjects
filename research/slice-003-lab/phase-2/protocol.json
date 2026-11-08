@@ -1,0 +1,44 @@
+{
+  "model": "Qwen3.6-35B-Smart",
+  "temperature": 0,
+  "seed": 20261109,
+  "thinking": false,
+  "summaryTemperature": 0.1,
+  "summaryMaxTokens": 512,
+  "summaryMaxUtf16": 1200,
+  "rerankMaxUtf16": 2400,
+  "topK": 20,
+  "branchK": 40,
+  "rerankTopN": 10,
+  "rrfK": 60,
+  "weights": {
+    "summary": 0.3,
+    "child": 0.3,
+    "bm25": 0.4
+  },
+  "rewrite": false,
+  "gap": {
+    "maxContextUtf16": 12000,
+    "maxOutputTokens": 800,
+    "methods": [
+      "hybrid",
+      "expanded",
+      "sk_no_summary",
+      "sk_full",
+      "sk_full_no_rerank"
+    ]
+  },
+  "extract": {
+    "b1MaxChars": 12500,
+    "b2MaxChars": 9500,
+    "b2MaxBlocks": 24,
+    "maxOutputTokens": 4096,
+    "b3Probes": [
+      "obblighi operativi, requisiti e azioni richieste",
+      "divieti, esclusioni, limiti e vincoli",
+      "condizioni, eccezioni, scadenze e frequenze",
+      "quantità, soglie, durate e regole applicabili"
+    ],
+    "b3ParentsPerProbePerZone": 1
+  }
+}

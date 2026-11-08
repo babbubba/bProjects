@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "La taratura del dispositivo Vega deve essere ripetuta ogni 91 ore di funzionamento.",
+    "citations": [
+      {
+        "id": "b93c41cd8d97d39f28ef3bf53ddee0689f3d6927dd796d63fd8eff0ff229e60a",
+        "quote": "Per il dispositivo Vega, la taratura deve essere ripetuta ogni 91 ore di funzionamento."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}

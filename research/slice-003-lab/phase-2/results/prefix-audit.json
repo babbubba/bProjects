@@ -1,0 +1,384 @@
+{
+  "N4-fixtures": {
+    "N4-doc-title": [
+      {
+        "parent": "txt-conflict-a.txt/c1",
+        "full_chars": 46,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "N4-doc-30": [
+      {
+        "parent": "txt-conflict-a.txt/c1",
+        "full_chars": 46,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "N4-doc-B": [
+      {
+        "parent": "txt-conflict-b.txt/c1",
+        "full_chars": 46,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "N4-doc-B-60": [
+      {
+        "parent": "txt-conflict-b.txt/c1",
+        "full_chars": 46,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "neg-consent": [
+      {
+        "parent": "txt-negations.txt/c1",
+        "full_chars": 261,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "neg-returns": [
+      {
+        "parent": "txt-negations.txt/c1",
+        "full_chars": 261,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "neg-card": [
+      {
+        "parent": "txt-negations.txt/c1",
+        "full_chars": 261,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "neg-export": [
+      {
+        "parent": "txt-negations.txt/c1",
+        "full_chars": 261,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "neg-45": [
+      {
+        "parent": "txt-negations.txt/c1",
+        "full_chars": 261,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "md-release": [
+      {
+        "parent": "md-basic.md/c1",
+        "full_chars": 116,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "md-excluded": [
+      {
+        "parent": "md-basic.md/c1",
+        "full_chars": 116,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "md-collaudo": [
+      {
+        "parent": "md-basic.md/c2",
+        "full_chars": 307,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ]
+  },
+  "T082-single": {
+    "S01": [
+      {
+        "parent": "capitolato-aurora.txt/c18",
+        "full_chars": 2953,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S02": [
+      {
+        "parent": "capitolato-aurora.txt/c29",
+        "full_chars": 2797,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S03": [
+      {
+        "parent": "capitolato-aurora.txt/c40",
+        "full_chars": 2930,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S04": [
+      {
+        "parent": "capitolato-aurora.txt/c52",
+        "full_chars": 2734,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S05": [
+      {
+        "parent": "capitolato-aurora.txt/c223",
+        "full_chars": 2914,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S06": [
+      {
+        "parent": "capitolato-aurora.txt/c234",
+        "full_chars": 2683,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "S07": [
+      {
+        "parent": "capitolato-aurora.txt/c246",
+        "full_chars": 2862,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S08": [
+      {
+        "parent": "capitolato-aurora.txt/c257",
+        "full_chars": 2959,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "S09": [
+      {
+        "parent": "capitolato-aurora.txt/c371",
+        "full_chars": 2974,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "S10": [
+      {
+        "parent": "capitolato-aurora.txt/c383",
+        "full_chars": 3114,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S11": [
+      {
+        "parent": "capitolato-aurora.txt/c395",
+        "full_chars": 2848,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S12": [
+      {
+        "parent": "capitolato-aurora.txt/c406",
+        "full_chars": 3077,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "S13": [
+      {
+        "parent": "capitolato-aurora.txt/c63",
+        "full_chars": 3151,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S14": [
+      {
+        "parent": "capitolato-aurora.txt/c418",
+        "full_chars": 3062,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S15": [
+      {
+        "parent": "capitolato-aurora.txt/c269",
+        "full_chars": 2898,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "S16": [
+      {
+        "parent": "capitolato-aurora.txt/c429",
+        "full_chars": 2625,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ]
+  },
+  "T083-multi": {
+    "M01": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c10",
+        "full_chars": 3059,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M02": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c16",
+        "full_chars": 2909,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "M06": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c23",
+        "full_chars": 2688,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M07": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c29",
+        "full_chars": 2674,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M03": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c73",
+        "full_chars": 3002,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M04": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c79",
+        "full_chars": 3134,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "M05": [
+      {
+        "parent": "contratto-quadro-zefiro.txt/c137",
+        "full_chars": 2761,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M08": [
+      {
+        "parent": "allegato-tecnico-zefiro.md/c10",
+        "full_chars": 3007,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": false
+      }
+    ],
+    "M12": [
+      {
+        "parent": "allegato-tecnico-zefiro.md/c81",
+        "full_chars": 2725,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M09": [
+      {
+        "parent": "allegato-tecnico-zefiro.md/c88",
+        "full_chars": 2837,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M10": [
+      {
+        "parent": "allegato-tecnico-zefiro.md/c95",
+        "full_chars": 2883,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M11": [
+      {
+        "parent": "allegato-tecnico-zefiro.md/c151",
+        "full_chars": 2648,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M13": [
+      {
+        "parent": "verbale-collaudo-zefiro.docx/c10",
+        "full_chars": 3011,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M14": [
+      {
+        "parent": "verbale-collaudo-zefiro.docx/c75",
+        "full_chars": 2688,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M15": [
+      {
+        "parent": "verbale-collaudo-zefiro.docx/c82",
+        "full_chars": 2865,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M16": [
+      {
+        "parent": "verbale-collaudo-zefiro.docx/c133",
+        "full_chars": 3080,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "M17": [
+      {
+        "parent": "verbale-collaudo-zefiro.docx/c139",
+        "full_chars": 2766,
+        "summary_prefix_contains": false,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "P1": [
+      {
+        "parent": "pm-message.txt/message",
+        "full_chars": 160,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ],
+    "P2": [
+      {
+        "parent": "pm-message.txt/message",
+        "full_chars": 160,
+        "summary_prefix_contains": true,
+        "rerank_prefix_contains": true
+      }
+    ]
+  }
+}

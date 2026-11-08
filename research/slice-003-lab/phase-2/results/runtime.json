@@ -1,0 +1,33 @@
+{
+  "build": "b10703-0b5be7e4a",
+  "models": {
+    "Qwen3.6-35B-Smart": {
+      "state": "loaded",
+      "parameters": {
+        "--ctx-size": "131072",
+        "--parallel": "1",
+        "--batch-size": "2048",
+        "--ubatch-size": "1024"
+      }
+    },
+    "bge-m3-Q5": {
+      "state": "loaded",
+      "parameters": {
+        "--ctx-size": "8192",
+        "--parallel": "2",
+        "--batch-size": "8192",
+        "--ubatch-size": "8192"
+      }
+    },
+    "bge-reranker-v2-m3": {
+      "state": "loaded",
+      "parameters": {
+        "--ctx-size": "8192",
+        "--parallel": "1",
+        "--batch-size": "2048",
+        "--ubatch-size": "2048",
+        "--pooling": "rank"
+      }
+    }
+  }
+}

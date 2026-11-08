@@ -1,0 +1,1934 @@
+[
+  {
+    "id": "S01",
+    "text": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 49861
+  },
+  {
+    "id": "S02",
+    "text": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa.",
+    "negative": true,
+    "pilot": true,
+    "source_offset_utf16": 83027
+  },
+  {
+    "id": "S03",
+    "text": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 115450
+  },
+  {
+    "id": "S04",
+    "text": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 149249
+  },
+  {
+    "id": "S05",
+    "text": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 645117
+  },
+  {
+    "id": "S06",
+    "text": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 677931
+  },
+  {
+    "id": "S07",
+    "text": "Il magazzino di Verona non accetta resi di merce deperibile.",
+    "negative": true,
+    "pilot": true,
+    "source_offset_utf16": 710978
+  },
+  {
+    "id": "S08",
+    "text": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 744769
+  },
+  {
+    "id": "S09",
+    "text": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1075161
+  },
+  {
+    "id": "S10",
+    "text": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+    "negative": true,
+    "pilot": true,
+    "source_offset_utf16": 1108130
+  },
+  {
+    "id": "S11",
+    "text": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1141907
+  },
+  {
+    "id": "S12",
+    "text": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1174754
+  },
+  {
+    "id": "S13",
+    "text": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 182271
+  },
+  {
+    "id": "S14",
+    "text": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1207633
+  },
+  {
+    "id": "S15",
+    "text": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 777134
+  },
+  {
+    "id": "S16",
+    "text": "La finestra di manutenzione programmata cade la terza domenica di ogni mese.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1240922
+  },
+  {
+    "id": "R001",
+    "text": "Per la linea Gimugo il lotto minimo di rifornimento è di 730 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 32649
+  },
+  {
+    "id": "R002",
+    "text": "La scheda tecnica della linea Nereni prevede un imballo da 100 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 32717
+  },
+  {
+    "id": "R003",
+    "text": "Per la linea Tidara il lotto minimo di rifornimento è di 815 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 32799
+  },
+  {
+    "id": "R004",
+    "text": "Nel reparto Madici la temperatura di conservazione è fissata a 37 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 32867
+  },
+  {
+    "id": "R005",
+    "text": "Per la linea Cisago il lotto minimo di rifornimento è di 730 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 32940
+  },
+  {
+    "id": "R006",
+    "text": "Nel reparto Mudeto la temperatura di conservazione è fissata a 25 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 33008
+  },
+  {
+    "id": "R007",
+    "text": "La scheda tecnica della linea Muparu prevede un imballo da 660 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66169
+  },
+  {
+    "id": "R008",
+    "text": "La scheda tecnica della linea Pirube prevede un imballo da 597 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66251
+  },
+  {
+    "id": "R009",
+    "text": "La scheda tecnica della linea Voveci prevede un imballo da 450 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66333
+  },
+  {
+    "id": "R010",
+    "text": "Per la linea Risono il lotto minimo di rifornimento è di 696 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66415
+  },
+  {
+    "id": "R011",
+    "text": "La scheda tecnica della linea Cosuce prevede un imballo da 692 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66483
+  },
+  {
+    "id": "R012",
+    "text": "Per la linea Fonado il lotto minimo di rifornimento è di 559 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66565
+  },
+  {
+    "id": "R013",
+    "text": "La scheda tecnica della linea Sivogu prevede un imballo da 404 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 66634
+  },
+  {
+    "id": "R014",
+    "text": "Per la linea Tetico il lotto minimo di rifornimento è di 298 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 99154
+  },
+  {
+    "id": "R015",
+    "text": "La scheda tecnica della linea Pedule prevede un imballo da 720 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 99222
+  },
+  {
+    "id": "R016",
+    "text": "La scheda tecnica della linea Miname prevede un imballo da 483 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 99304
+  },
+  {
+    "id": "R017",
+    "text": "Nel reparto Godupe la temperatura di conservazione è fissata a 36 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 99386
+  },
+  {
+    "id": "R018",
+    "text": "Per la linea Patelo il lotto minimo di rifornimento è di 107 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 99459
+  },
+  {
+    "id": "R019",
+    "text": "Nel reparto Docime la temperatura di conservazione è fissata a 37 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 99527
+  },
+  {
+    "id": "R020",
+    "text": "Per la linea Beruda il lotto minimo di rifornimento è di 628 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132162
+  },
+  {
+    "id": "R021",
+    "text": "La scheda tecnica della linea Punume prevede un imballo da 495 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132230
+  },
+  {
+    "id": "R022",
+    "text": "Nel reparto Vefari la temperatura di conservazione è fissata a 22 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132312
+  },
+  {
+    "id": "R023",
+    "text": "Per la linea Nogoci il lotto minimo di rifornimento è di 429 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132385
+  },
+  {
+    "id": "R024",
+    "text": "Nel reparto Dofepu la temperatura di conservazione è fissata a 5 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132453
+  },
+  {
+    "id": "R025",
+    "text": "Nel reparto Paviro la temperatura di conservazione è fissata a 22 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132525
+  },
+  {
+    "id": "R026",
+    "text": "Per la linea Temisi il lotto minimo di rifornimento è di 813 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 132599
+  },
+  {
+    "id": "R027",
+    "text": "Nel reparto Bumupi la temperatura di conservazione è fissata a 13 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 165522
+  },
+  {
+    "id": "R028",
+    "text": "Nel reparto Caliru la temperatura di conservazione è fissata a 29 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 165595
+  },
+  {
+    "id": "R029",
+    "text": "Per la linea Lunutu il lotto minimo di rifornimento è di 861 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 165668
+  },
+  {
+    "id": "R030",
+    "text": "Per la linea Seluvo il lotto minimo di rifornimento è di 57 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 165736
+  },
+  {
+    "id": "R031",
+    "text": "Per la linea Dedici il lotto minimo di rifornimento è di 848 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 165803
+  },
+  {
+    "id": "R032",
+    "text": "Nel reparto Nevecu la temperatura di conservazione è fissata a 36 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 165871
+  },
+  {
+    "id": "R033",
+    "text": "Nel reparto Mireni la temperatura di conservazione è fissata a 2 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 198655
+  },
+  {
+    "id": "R034",
+    "text": "Per la linea Miduvu il lotto minimo di rifornimento è di 443 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 198727
+  },
+  {
+    "id": "R035",
+    "text": "Nel reparto Letoru la temperatura di conservazione è fissata a 40 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 198795
+  },
+  {
+    "id": "R036",
+    "text": "La scheda tecnica della linea Ramuge prevede un imballo da 570 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 198868
+  },
+  {
+    "id": "R037",
+    "text": "La scheda tecnica della linea Bimale prevede un imballo da 248 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 198950
+  },
+  {
+    "id": "R038",
+    "text": "Per la linea Gilusi il lotto minimo di rifornimento è di 630 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 199032
+  },
+  {
+    "id": "R039",
+    "text": "Per la linea Nonada il lotto minimo di rifornimento è di 382 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 199101
+  },
+  {
+    "id": "R040",
+    "text": "Nel reparto Pugavi la temperatura di conservazione è fissata a 23 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 231753
+  },
+  {
+    "id": "R041",
+    "text": "Per la linea Doraru il lotto minimo di rifornimento è di 506 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 231826
+  },
+  {
+    "id": "R042",
+    "text": "La scheda tecnica della linea Teginu prevede un imballo da 527 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 231894
+  },
+  {
+    "id": "R043",
+    "text": "La scheda tecnica della linea Cirisa prevede un imballo da 669 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 231976
+  },
+  {
+    "id": "R044",
+    "text": "Per la linea Cobudu il lotto minimo di rifornimento è di 489 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 232058
+  },
+  {
+    "id": "R045",
+    "text": "La scheda tecnica della linea Nafega prevede un imballo da 851 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 232126
+  },
+  {
+    "id": "R046",
+    "text": "La scheda tecnica della linea Navovo prevede un imballo da 203 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 264453
+  },
+  {
+    "id": "R047",
+    "text": "Per la linea Debubu il lotto minimo di rifornimento è di 447 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 264535
+  },
+  {
+    "id": "R048",
+    "text": "La scheda tecnica della linea Vugida prevede un imballo da 661 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 264603
+  },
+  {
+    "id": "R049",
+    "text": "La scheda tecnica della linea Dobovu prevede un imballo da 78 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 264685
+  },
+  {
+    "id": "R050",
+    "text": "Nel reparto Padagu la temperatura di conservazione è fissata a 19 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 264766
+  },
+  {
+    "id": "R051",
+    "text": "Nel reparto Lupibu la temperatura di conservazione è fissata a 15 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 264839
+  },
+  {
+    "id": "R052",
+    "text": "Per la linea Gomuco il lotto minimo di rifornimento è di 250 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 264913
+  },
+  {
+    "id": "R053",
+    "text": "Nel reparto Topalo la temperatura di conservazione è fissata a 38 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 297776
+  },
+  {
+    "id": "R054",
+    "text": "Nel reparto Vulino la temperatura di conservazione è fissata a 41 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 297849
+  },
+  {
+    "id": "R055",
+    "text": "Per la linea Fapide il lotto minimo di rifornimento è di 329 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 297922
+  },
+  {
+    "id": "R056",
+    "text": "Per la linea Gonelu il lotto minimo di rifornimento è di 336 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 297990
+  },
+  {
+    "id": "R057",
+    "text": "La scheda tecnica della linea Pitine prevede un imballo da 216 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 298058
+  },
+  {
+    "id": "R058",
+    "text": "Nel reparto Tudopo la temperatura di conservazione è fissata a 39 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 298140
+  },
+  {
+    "id": "R059",
+    "text": "Nel reparto Panumu la temperatura di conservazione è fissata a 2 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 330905
+  },
+  {
+    "id": "R060",
+    "text": "La scheda tecnica della linea Liniro prevede un imballo da 17 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 330977
+  },
+  {
+    "id": "R061",
+    "text": "La scheda tecnica della linea Ninagu prevede un imballo da 231 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 331058
+  },
+  {
+    "id": "R062",
+    "text": "Nel reparto Pomava la temperatura di conservazione è fissata a 12 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 331140
+  },
+  {
+    "id": "R063",
+    "text": "La scheda tecnica della linea Nisoca prevede un imballo da 214 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 331213
+  },
+  {
+    "id": "R064",
+    "text": "Nel reparto Bomalu la temperatura di conservazione è fissata a 35 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 331295
+  },
+  {
+    "id": "R065",
+    "text": "Nel reparto Sudifi la temperatura di conservazione è fissata a 25 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 331369
+  },
+  {
+    "id": "R066",
+    "text": "Per la linea Dinube il lotto minimo di rifornimento è di 508 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 363891
+  },
+  {
+    "id": "R067",
+    "text": "La scheda tecnica della linea Tivipu prevede un imballo da 653 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 363959
+  },
+  {
+    "id": "R068",
+    "text": "Per la linea Pisivi il lotto minimo di rifornimento è di 200 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 364041
+  },
+  {
+    "id": "R069",
+    "text": "Per la linea Malidi il lotto minimo di rifornimento è di 756 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 364109
+  },
+  {
+    "id": "R070",
+    "text": "Per la linea Vilane il lotto minimo di rifornimento è di 65 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 364177
+  },
+  {
+    "id": "R071",
+    "text": "Nel reparto Cebugi la temperatura di conservazione è fissata a 18 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 364244
+  },
+  {
+    "id": "R072",
+    "text": "Nel reparto Gefenu la temperatura di conservazione è fissata a 35 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 396886
+  },
+  {
+    "id": "R073",
+    "text": "Per la linea Cepomu il lotto minimo di rifornimento è di 658 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 396959
+  },
+  {
+    "id": "R074",
+    "text": "Nel reparto Mibole la temperatura di conservazione è fissata a 26 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 397027
+  },
+  {
+    "id": "R075",
+    "text": "La scheda tecnica della linea Bolefe prevede un imballo da 292 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 397100
+  },
+  {
+    "id": "R076",
+    "text": "Nel reparto Nogigu la temperatura di conservazione è fissata a 41 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 397182
+  },
+  {
+    "id": "R077",
+    "text": "La scheda tecnica della linea Pegeba prevede un imballo da 739 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 397255
+  },
+  {
+    "id": "R078",
+    "text": "Nel reparto Tafibo la temperatura di conservazione è fissata a 26 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 397338
+  },
+  {
+    "id": "R079",
+    "text": "Per la linea Cimari il lotto minimo di rifornimento è di 187 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 429885
+  },
+  {
+    "id": "R080",
+    "text": "La scheda tecnica della linea Seloru prevede un imballo da 797 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 429953
+  },
+  {
+    "id": "R081",
+    "text": "La scheda tecnica della linea Fatopo prevede un imballo da 724 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 430035
+  },
+  {
+    "id": "R082",
+    "text": "Per la linea Vudiru il lotto minimo di rifornimento è di 710 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 430117
+  },
+  {
+    "id": "R083",
+    "text": "Nel reparto Topupo la temperatura di conservazione è fissata a 30 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 430185
+  },
+  {
+    "id": "R084",
+    "text": "Per la linea Nelati il lotto minimo di rifornimento è di 413 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 430258
+  },
+  {
+    "id": "R085",
+    "text": "La scheda tecnica della linea Gerigo prevede un imballo da 350 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463049
+  },
+  {
+    "id": "R086",
+    "text": "Nel reparto Daludu la temperatura di conservazione è fissata a 18 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463131
+  },
+  {
+    "id": "R087",
+    "text": "Nel reparto Solote la temperatura di conservazione è fissata a 26 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463204
+  },
+  {
+    "id": "R088",
+    "text": "Per la linea Pivovo il lotto minimo di rifornimento è di 127 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463277
+  },
+  {
+    "id": "R089",
+    "text": "La scheda tecnica della linea Secara prevede un imballo da 273 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463345
+  },
+  {
+    "id": "R090",
+    "text": "Per la linea Todogo il lotto minimo di rifornimento è di 296 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463427
+  },
+  {
+    "id": "R091",
+    "text": "Nel reparto Lobodu la temperatura di conservazione è fissata a 40 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 463496
+  },
+  {
+    "id": "R092",
+    "text": "La scheda tecnica della linea Conisi prevede un imballo da 860 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 495987
+  },
+  {
+    "id": "R093",
+    "text": "La scheda tecnica della linea Bilumu prevede un imballo da 399 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 496069
+  },
+  {
+    "id": "R094",
+    "text": "La scheda tecnica della linea Pufari prevede un imballo da 341 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 496151
+  },
+  {
+    "id": "R095",
+    "text": "Nel reparto Pimimo la temperatura di conservazione è fissata a 12 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 496233
+  },
+  {
+    "id": "R096",
+    "text": "Per la linea Genala il lotto minimo di rifornimento è di 838 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 496306
+  },
+  {
+    "id": "R097",
+    "text": "Nel reparto Votimo la temperatura di conservazione è fissata a 32 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 496374
+  },
+  {
+    "id": "R098",
+    "text": "Nel reparto Dosita la temperatura di conservazione è fissata a 19 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529203
+  },
+  {
+    "id": "R099",
+    "text": "Per la linea Lugodo il lotto minimo di rifornimento è di 25 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529276
+  },
+  {
+    "id": "R100",
+    "text": "Per la linea Rusocu il lotto minimo di rifornimento è di 864 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529343
+  },
+  {
+    "id": "R101",
+    "text": "La scheda tecnica della linea Vadene prevede un imballo da 857 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529411
+  },
+  {
+    "id": "R102",
+    "text": "Per la linea Cepebo il lotto minimo di rifornimento è di 398 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529493
+  },
+  {
+    "id": "R103",
+    "text": "La scheda tecnica della linea Berili prevede un imballo da 313 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529561
+  },
+  {
+    "id": "R104",
+    "text": "Per la linea Cefiro il lotto minimo di rifornimento è di 216 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 529644
+  },
+  {
+    "id": "R105",
+    "text": "Per la linea Nelusu il lotto minimo di rifornimento è di 165 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 562029
+  },
+  {
+    "id": "R106",
+    "text": "Nel reparto Bicabe la temperatura di conservazione è fissata a 40 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 562097
+  },
+  {
+    "id": "R107",
+    "text": "La scheda tecnica della linea Gerore prevede un imballo da 583 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 562170
+  },
+  {
+    "id": "R108",
+    "text": "Nel reparto Gitofi la temperatura di conservazione è fissata a 10 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 562252
+  },
+  {
+    "id": "R109",
+    "text": "Per la linea Fomocu il lotto minimo di rifornimento è di 432 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 562325
+  },
+  {
+    "id": "R110",
+    "text": "La scheda tecnica della linea Murega prevede un imballo da 753 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 562393
+  },
+  {
+    "id": "R111",
+    "text": "La scheda tecnica della linea Tisore prevede un imballo da 613 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595043
+  },
+  {
+    "id": "R112",
+    "text": "Per la linea Gutilu il lotto minimo di rifornimento è di 279 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595125
+  },
+  {
+    "id": "R113",
+    "text": "La scheda tecnica della linea Burala prevede un imballo da 606 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595193
+  },
+  {
+    "id": "R114",
+    "text": "La scheda tecnica della linea Mugace prevede un imballo da 353 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595275
+  },
+  {
+    "id": "R115",
+    "text": "Per la linea Gunaru il lotto minimo di rifornimento è di 320 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595357
+  },
+  {
+    "id": "R116",
+    "text": "Nel reparto Fudoci la temperatura di conservazione è fissata a 19 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595425
+  },
+  {
+    "id": "R117",
+    "text": "Nel reparto Radudi la temperatura di conservazione è fissata a 11 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 595499
+  },
+  {
+    "id": "R118",
+    "text": "Nel reparto Sufibe la temperatura di conservazione è fissata a 37 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 628532
+  },
+  {
+    "id": "R119",
+    "text": "Nel reparto Leloda la temperatura di conservazione è fissata a 10 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 628605
+  },
+  {
+    "id": "R120",
+    "text": "Per la linea Levode il lotto minimo di rifornimento è di 705 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 628678
+  },
+  {
+    "id": "R121",
+    "text": "Per la linea Ratira il lotto minimo di rifornimento è di 271 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 628746
+  },
+  {
+    "id": "R122",
+    "text": "La scheda tecnica della linea Delula prevede un imballo da 208 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 628814
+  },
+  {
+    "id": "R123",
+    "text": "La scheda tecnica della linea Decaco prevede un imballo da 397 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 628896
+  },
+  {
+    "id": "R124",
+    "text": "Nel reparto Fosube la temperatura di conservazione è fissata a 21 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661440
+  },
+  {
+    "id": "R125",
+    "text": "La scheda tecnica della linea Recatu prevede un imballo da 758 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661513
+  },
+  {
+    "id": "R126",
+    "text": "Nel reparto Tebuvo la temperatura di conservazione è fissata a 21 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661595
+  },
+  {
+    "id": "R127",
+    "text": "La scheda tecnica della linea Rirasa prevede un imballo da 339 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661668
+  },
+  {
+    "id": "R128",
+    "text": "Per la linea Feboda il lotto minimo di rifornimento è di 785 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661750
+  },
+  {
+    "id": "R129",
+    "text": "Nel reparto Lenega la temperatura di conservazione è fissata a 27 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661818
+  },
+  {
+    "id": "R130",
+    "text": "Nel reparto Fonefo la temperatura di conservazione è fissata a 16 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 661892
+  },
+  {
+    "id": "R131",
+    "text": "Per la linea Litufe il lotto minimo di rifornimento è di 575 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 694667
+  },
+  {
+    "id": "R132",
+    "text": "La scheda tecnica della linea Lalula prevede un imballo da 626 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 694735
+  },
+  {
+    "id": "R133",
+    "text": "Per la linea Tedeti il lotto minimo di rifornimento è di 668 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 694817
+  },
+  {
+    "id": "R134",
+    "text": "Per la linea Remufa il lotto minimo di rifornimento è di 641 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 694885
+  },
+  {
+    "id": "R135",
+    "text": "Nel reparto Nivila la temperatura di conservazione è fissata a 9 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 694953
+  },
+  {
+    "id": "R136",
+    "text": "Nel reparto Selali la temperatura di conservazione è fissata a 15 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 695025
+  },
+  {
+    "id": "R137",
+    "text": "Nel reparto Nedelo la temperatura di conservazione è fissata a 30 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 727728
+  },
+  {
+    "id": "R138",
+    "text": "Nel reparto Gupote la temperatura di conservazione è fissata a 28 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 727801
+  },
+  {
+    "id": "R139",
+    "text": "La scheda tecnica della linea Pufena prevede un imballo da 48 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 727874
+  },
+  {
+    "id": "R140",
+    "text": "Nel reparto Mepebe la temperatura di conservazione è fissata a 8 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 727955
+  },
+  {
+    "id": "R141",
+    "text": "Per la linea Pemamu il lotto minimo di rifornimento è di 256 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 728027
+  },
+  {
+    "id": "R142",
+    "text": "Per la linea Bonibe il lotto minimo di rifornimento è di 688 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 728095
+  },
+  {
+    "id": "R143",
+    "text": "La scheda tecnica della linea Cegate prevede un imballo da 349 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 728164
+  },
+  {
+    "id": "R144",
+    "text": "Nel reparto Cufofi la temperatura di conservazione è fissata a 17 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 761183
+  },
+  {
+    "id": "R145",
+    "text": "La scheda tecnica della linea Copufo prevede un imballo da 601 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 761256
+  },
+  {
+    "id": "R146",
+    "text": "Nel reparto Lonadu la temperatura di conservazione è fissata a 7 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 761338
+  },
+  {
+    "id": "R147",
+    "text": "Per la linea Lotunu il lotto minimo di rifornimento è di 577 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 761410
+  },
+  {
+    "id": "R148",
+    "text": "Nel reparto Bimadi la temperatura di conservazione è fissata a 39 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 761478
+  },
+  {
+    "id": "R149",
+    "text": "Nel reparto Rufuli la temperatura di conservazione è fissata a 7 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 761551
+  },
+  {
+    "id": "R150",
+    "text": "Nel reparto Runate la temperatura di conservazione è fissata a 28 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 793873
+  },
+  {
+    "id": "R151",
+    "text": "Per la linea Domoso il lotto minimo di rifornimento è di 726 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 793946
+  },
+  {
+    "id": "R152",
+    "text": "Nel reparto Talofo la temperatura di conservazione è fissata a 16 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 794014
+  },
+  {
+    "id": "R153",
+    "text": "Nel reparto Vivoti la temperatura di conservazione è fissata a 25 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 794087
+  },
+  {
+    "id": "R154",
+    "text": "Nel reparto Sugoge la temperatura di conservazione è fissata a 15 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 794160
+  },
+  {
+    "id": "R155",
+    "text": "Per la linea Tupava il lotto minimo di rifornimento è di 686 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 794233
+  },
+  {
+    "id": "R156",
+    "text": "Nel reparto Falome la temperatura di conservazione è fissata a 35 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 794302
+  },
+  {
+    "id": "R157",
+    "text": "La scheda tecnica della linea Belepi prevede un imballo da 726 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 827059
+  },
+  {
+    "id": "R158",
+    "text": "Per la linea Tofigu il lotto minimo di rifornimento è di 311 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 827141
+  },
+  {
+    "id": "R159",
+    "text": "La scheda tecnica della linea Ralagu prevede un imballo da 516 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 827209
+  },
+  {
+    "id": "R160",
+    "text": "La scheda tecnica della linea Fusami prevede un imballo da 90 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 827291
+  },
+  {
+    "id": "R161",
+    "text": "La scheda tecnica della linea Falodu prevede un imballo da 391 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 827372
+  },
+  {
+    "id": "R162",
+    "text": "Nel reparto Gofovi la temperatura di conservazione è fissata a 20 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 827454
+  },
+  {
+    "id": "R163",
+    "text": "Per la linea Rudigi il lotto minimo di rifornimento è di 561 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860167
+  },
+  {
+    "id": "R164",
+    "text": "Per la linea Pifibu il lotto minimo di rifornimento è di 170 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860235
+  },
+  {
+    "id": "R165",
+    "text": "Nel reparto Gisola la temperatura di conservazione è fissata a 23 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860303
+  },
+  {
+    "id": "R166",
+    "text": "Per la linea Subure il lotto minimo di rifornimento è di 175 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860376
+  },
+  {
+    "id": "R167",
+    "text": "La scheda tecnica della linea Susida prevede un imballo da 428 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860444
+  },
+  {
+    "id": "R168",
+    "text": "Nel reparto Sisanu la temperatura di conservazione è fissata a 34 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860526
+  },
+  {
+    "id": "R169",
+    "text": "Nel reparto Virufi la temperatura di conservazione è fissata a 31 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 860600
+  },
+  {
+    "id": "R170",
+    "text": "Per la linea Sofetu il lotto minimo di rifornimento è di 372 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 893393
+  },
+  {
+    "id": "R171",
+    "text": "La scheda tecnica della linea Nocobo prevede un imballo da 239 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 893461
+  },
+  {
+    "id": "R172",
+    "text": "Per la linea Lasita il lotto minimo di rifornimento è di 682 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 893543
+  },
+  {
+    "id": "R173",
+    "text": "La scheda tecnica della linea Sitato prevede un imballo da 42 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 893611
+  },
+  {
+    "id": "R174",
+    "text": "Per la linea Goloba il lotto minimo di rifornimento è di 152 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 893692
+  },
+  {
+    "id": "R175",
+    "text": "La scheda tecnica della linea Sacotu prevede un imballo da 247 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 893760
+  },
+  {
+    "id": "R176",
+    "text": "Nel reparto Gasati la temperatura di conservazione è fissata a 7 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926225
+  },
+  {
+    "id": "R177",
+    "text": "Nel reparto Petuni la temperatura di conservazione è fissata a 18 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926297
+  },
+  {
+    "id": "R178",
+    "text": "Nel reparto Getipo la temperatura di conservazione è fissata a 25 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926370
+  },
+  {
+    "id": "R179",
+    "text": "Nel reparto Vedasa la temperatura di conservazione è fissata a 8 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926443
+  },
+  {
+    "id": "R180",
+    "text": "Nel reparto Nesubi la temperatura di conservazione è fissata a 36 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926515
+  },
+  {
+    "id": "R181",
+    "text": "Per la linea Cunedo il lotto minimo di rifornimento è di 754 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926588
+  },
+  {
+    "id": "R182",
+    "text": "Per la linea Movida il lotto minimo di rifornimento è di 84 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 926657
+  },
+  {
+    "id": "R183",
+    "text": "Per la linea Rolopo il lotto minimo di rifornimento è di 500 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 959314
+  },
+  {
+    "id": "R184",
+    "text": "La scheda tecnica della linea Fetodo prevede un imballo da 806 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 959382
+  },
+  {
+    "id": "R185",
+    "text": "La scheda tecnica della linea Sadige prevede un imballo da 856 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 959464
+  },
+  {
+    "id": "R186",
+    "text": "La scheda tecnica della linea Pabole prevede un imballo da 404 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 959546
+  },
+  {
+    "id": "R187",
+    "text": "Nel reparto Ragodu la temperatura di conservazione è fissata a 31 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 959628
+  },
+  {
+    "id": "R188",
+    "text": "Per la linea Satiba il lotto minimo di rifornimento è di 263 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 959701
+  },
+  {
+    "id": "R189",
+    "text": "Per la linea Goreva il lotto minimo di rifornimento è di 282 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992367
+  },
+  {
+    "id": "R190",
+    "text": "La scheda tecnica della linea Sidatu prevede un imballo da 776 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992435
+  },
+  {
+    "id": "R191",
+    "text": "Nel reparto Laveso la temperatura di conservazione è fissata a 18 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992517
+  },
+  {
+    "id": "R192",
+    "text": "Per la linea Ravosa il lotto minimo di rifornimento è di 105 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992590
+  },
+  {
+    "id": "R193",
+    "text": "La scheda tecnica della linea Nalumo prevede un imballo da 367 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992658
+  },
+  {
+    "id": "R194",
+    "text": "Per la linea Begifo il lotto minimo di rifornimento è di 373 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992740
+  },
+  {
+    "id": "R195",
+    "text": "Per la linea Musape il lotto minimo di rifornimento è di 81 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 992809
+  },
+  {
+    "id": "R196",
+    "text": "Nel reparto Boliro la temperatura di conservazione è fissata a 28 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1025473
+  },
+  {
+    "id": "R197",
+    "text": "La scheda tecnica della linea Gicacu prevede un imballo da 782 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1025546
+  },
+  {
+    "id": "R198",
+    "text": "La scheda tecnica della linea Mimitu prevede un imballo da 508 pezzi per scatola.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1025628
+  },
+  {
+    "id": "R199",
+    "text": "Nel reparto Tefova la temperatura di conservazione è fissata a 3 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1025710
+  },
+  {
+    "id": "R200",
+    "text": "Per la linea Ravela il lotto minimo di rifornimento è di 648 pezzi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1025782
+  },
+  {
+    "id": "R201",
+    "text": "Nel reparto Liriba la temperatura di conservazione è fissata a 29 gradi.",
+    "negative": false,
+    "pilot": true,
+    "source_offset_utf16": 1025850
+  },
+  {
+    "id": "R202",
+    "text": "Nel reparto Limibo la temperatura di conservazione è fissata a 10 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058473
+  },
+  {
+    "id": "R203",
+    "text": "La scheda tecnica della linea Sugedo prevede un imballo da 711 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058546
+  },
+  {
+    "id": "R204",
+    "text": "Per la linea Tilele il lotto minimo di rifornimento è di 294 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058628
+  },
+  {
+    "id": "R205",
+    "text": "Nel reparto Dugova la temperatura di conservazione è fissata a 28 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058696
+  },
+  {
+    "id": "R206",
+    "text": "La scheda tecnica della linea Redove prevede un imballo da 860 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058769
+  },
+  {
+    "id": "R207",
+    "text": "Per la linea Levafu il lotto minimo di rifornimento è di 786 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058851
+  },
+  {
+    "id": "R208",
+    "text": "Nel reparto Godulu la temperatura di conservazione è fissata a 34 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1058920
+  },
+  {
+    "id": "R209",
+    "text": "Per la linea Vuvisu il lotto minimo di rifornimento è di 196 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1091627
+  },
+  {
+    "id": "R210",
+    "text": "Per la linea Lacamu il lotto minimo di rifornimento è di 269 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1091695
+  },
+  {
+    "id": "R211",
+    "text": "Nel reparto Solomu la temperatura di conservazione è fissata a 20 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1091763
+  },
+  {
+    "id": "R212",
+    "text": "Nel reparto Tesidu la temperatura di conservazione è fissata a 36 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1091836
+  },
+  {
+    "id": "R213",
+    "text": "La scheda tecnica della linea Dirino prevede un imballo da 808 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1091909
+  },
+  {
+    "id": "R214",
+    "text": "Nel reparto Megofu la temperatura di conservazione è fissata a 9 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1091991
+  },
+  {
+    "id": "R215",
+    "text": "Per la linea Cigego il lotto minimo di rifornimento è di 534 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125053
+  },
+  {
+    "id": "R216",
+    "text": "Per la linea Sumige il lotto minimo di rifornimento è di 554 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125121
+  },
+  {
+    "id": "R217",
+    "text": "Per la linea Daveta il lotto minimo di rifornimento è di 304 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125189
+  },
+  {
+    "id": "R218",
+    "text": "Nel reparto Bucara la temperatura di conservazione è fissata a 34 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125257
+  },
+  {
+    "id": "R219",
+    "text": "La scheda tecnica della linea Pabugo prevede un imballo da 124 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125330
+  },
+  {
+    "id": "R220",
+    "text": "Per la linea Recafo il lotto minimo di rifornimento è di 335 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125412
+  },
+  {
+    "id": "R221",
+    "text": "Nel reparto Pacuro la temperatura di conservazione è fissata a 2 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1125481
+  },
+  {
+    "id": "R222",
+    "text": "Per la linea Rabemi il lotto minimo di rifornimento è di 348 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1158182
+  },
+  {
+    "id": "R223",
+    "text": "La scheda tecnica della linea Lovamu prevede un imballo da 735 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1158250
+  },
+  {
+    "id": "R224",
+    "text": "Nel reparto Tolomi la temperatura di conservazione è fissata a 10 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1158332
+  },
+  {
+    "id": "R225",
+    "text": "Nel reparto Guseci la temperatura di conservazione è fissata a 5 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1158405
+  },
+  {
+    "id": "R226",
+    "text": "Nel reparto Segeco la temperatura di conservazione è fissata a 3 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1158477
+  },
+  {
+    "id": "R227",
+    "text": "Per la linea Ledesa il lotto minimo di rifornimento è di 327 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1158549
+  },
+  {
+    "id": "R228",
+    "text": "Nel reparto Nomici la temperatura di conservazione è fissata a 38 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191154
+  },
+  {
+    "id": "R229",
+    "text": "Per la linea Pimane il lotto minimo di rifornimento è di 524 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191227
+  },
+  {
+    "id": "R230",
+    "text": "Per la linea Rilolu il lotto minimo di rifornimento è di 306 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191295
+  },
+  {
+    "id": "R231",
+    "text": "Per la linea Vimavu il lotto minimo di rifornimento è di 600 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191363
+  },
+  {
+    "id": "R232",
+    "text": "La scheda tecnica della linea Toduse prevede un imballo da 858 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191431
+  },
+  {
+    "id": "R233",
+    "text": "Per la linea Vamume il lotto minimo di rifornimento è di 713 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191513
+  },
+  {
+    "id": "R234",
+    "text": "Per la linea Cadesi il lotto minimo di rifornimento è di 561 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1191582
+  },
+  {
+    "id": "R235",
+    "text": "Per la linea Lagemi il lotto minimo di rifornimento è di 652 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1224268
+  },
+  {
+    "id": "R236",
+    "text": "Per la linea Cifoma il lotto minimo di rifornimento è di 814 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1224336
+  },
+  {
+    "id": "R237",
+    "text": "Nel reparto Sifovo la temperatura di conservazione è fissata a 5 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1224404
+  },
+  {
+    "id": "R238",
+    "text": "Nel reparto Dacabo la temperatura di conservazione è fissata a 10 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1224476
+  },
+  {
+    "id": "R239",
+    "text": "Per la linea Menepa il lotto minimo di rifornimento è di 527 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1224549
+  },
+  {
+    "id": "R240",
+    "text": "Nel reparto Vemage la temperatura di conservazione è fissata a 34 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1224617
+  },
+  {
+    "id": "R241",
+    "text": "Per la linea Vilaro il lotto minimo di rifornimento è di 702 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1257604
+  },
+  {
+    "id": "R242",
+    "text": "Nel reparto Bufopi la temperatura di conservazione è fissata a 41 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1257672
+  },
+  {
+    "id": "R243",
+    "text": "Nel reparto Tuvigu la temperatura di conservazione è fissata a 13 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1257745
+  },
+  {
+    "id": "R244",
+    "text": "Nel reparto Dudare la temperatura di conservazione è fissata a 13 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1257818
+  },
+  {
+    "id": "R245",
+    "text": "La scheda tecnica della linea Vadafi prevede un imballo da 476 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1257891
+  },
+  {
+    "id": "R246",
+    "text": "Nel reparto Satomu la temperatura di conservazione è fissata a 27 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1257973
+  },
+  {
+    "id": "R247",
+    "text": "Per la linea Goconu il lotto minimo di rifornimento è di 670 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1258047
+  },
+  {
+    "id": "R248",
+    "text": "Nel reparto Solife la temperatura di conservazione è fissata a 18 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1290790
+  },
+  {
+    "id": "R249",
+    "text": "Nel reparto Muceme la temperatura di conservazione è fissata a 22 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1290863
+  },
+  {
+    "id": "R250",
+    "text": "Nel reparto Piteni la temperatura di conservazione è fissata a 4 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1290936
+  },
+  {
+    "id": "R251",
+    "text": "La scheda tecnica della linea Necume prevede un imballo da 316 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1291008
+  },
+  {
+    "id": "R252",
+    "text": "Nel reparto Gufimu la temperatura di conservazione è fissata a 41 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1291090
+  },
+  {
+    "id": "R253",
+    "text": "Nel reparto Laduro la temperatura di conservazione è fissata a 15 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1291163
+  },
+  {
+    "id": "R254",
+    "text": "Nel reparto Gecivu la temperatura di conservazione è fissata a 5 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323485
+  },
+  {
+    "id": "R255",
+    "text": "Nel reparto Matalo la temperatura di conservazione è fissata a 35 gradi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323557
+  },
+  {
+    "id": "R256",
+    "text": "Per la linea Damara il lotto minimo di rifornimento è di 281 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323630
+  },
+  {
+    "id": "R257",
+    "text": "Per la linea Sacuda il lotto minimo di rifornimento è di 860 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323698
+  },
+  {
+    "id": "R258",
+    "text": "Per la linea Tatuta il lotto minimo di rifornimento è di 86 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323766
+  },
+  {
+    "id": "R259",
+    "text": "La scheda tecnica della linea Pibere prevede un imballo da 588 pezzi per scatola.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323833
+  },
+  {
+    "id": "R260",
+    "text": "Per la linea Licela il lotto minimo di rifornimento è di 309 pezzi.",
+    "negative": false,
+    "pilot": false,
+    "source_offset_utf16": 1323916
+  }
+]

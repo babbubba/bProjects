@@ -1,0 +1,32 @@
+{
+  "parsed": {
+    "status": "Open",
+    "reason": "parziale",
+    "answer": null,
+    "citations": [
+      {
+        "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+        "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna."
+      },
+      {
+        "id": "T083-multi-246 | contratto-quadro-zefiro.txt",
+        "quote": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna."
+      }
+    ],
+    "conflicts": [
+      {
+        "sides": [
+          {
+            "id": "T083-multi-331 | verbale-collaudo-zefiro.docx",
+            "quote": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna."
+          },
+          {
+            "id": "T083-multi-246 | contratto-quadro-zefiro.txt",
+            "quote": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna."
+          }
+        ]
+      }
+    ]
+  },
+  "finish_reason": "stop"
+}

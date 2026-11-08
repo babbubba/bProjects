@@ -1,0 +1,74 @@
+{
+  "parsed": {
+    "facts": [
+      {
+        "id": "[b1595]",
+        "quote": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+        "statement": "Per gli ordini urgenti, il limite di spesa è di 1850 euro."
+      },
+      {
+        "id": "[b1595]",
+        "quote": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+        "statement": "Gli importi superiori a 1850 euro per ordini urgenti richiedono l'autorizzazione scritta del responsabile di magazzino."
+      },
+      {
+        "id": "[b1672]",
+        "quote": "Il magazzino di Verona non accetta resi di merce deperibile.",
+        "statement": "Il magazzino di Verona non accetta resi di merce deperibile."
+      },
+      {
+        "id": "[b1751]",
+        "quote": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+        "statement": "Le copie di sicurezza sono eseguite ogni notte alle 02:30."
+      },
+      {
+        "id": "[b1751]",
+        "quote": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+        "statement": "Le copie di sicurezza sono conservate per 31 giorni."
+      },
+      {
+        "id": "[b1828]",
+        "quote": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+        "statement": "La finestra di manutenzione programmata cade il primo sabato di ogni mese."
+      },
+      {
+        "id": "[b1828]",
+        "quote": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+        "statement": "La finestra di manutenzione programmata dura dalle 22:00 alle 02:00."
+      }
+    ]
+  },
+  "finish_reason": "stop",
+  "blocks": [
+    "b1592",
+    "b1593",
+    "b1594",
+    "b1595",
+    "b1670",
+    "b1671",
+    "b1672",
+    "b1673",
+    "b1674",
+    "b1675",
+    "b1676",
+    "b1745",
+    "b1746",
+    "b1747",
+    "b1748",
+    "b1749",
+    "b1750",
+    "b1751",
+    "b1752",
+    "b1827",
+    "b1828",
+    "b1829",
+    "b1830",
+    "b1831",
+    "b1832",
+    "b1833",
+    "b2093",
+    "b2094",
+    "b2095",
+    "b2096"
+  ]
+}

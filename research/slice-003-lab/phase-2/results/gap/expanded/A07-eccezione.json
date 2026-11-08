@@ -1,0 +1,15 @@
+{
+  "parsed": {
+    "status": "AnsweredInSnapshot",
+    "reason": null,
+    "answer": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+    "citations": [
+      {
+        "id": "T083-multi-80 | allegato-tecnico-zefiro.md",
+        "quote": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold."
+      }
+    ],
+    "conflicts": []
+  },
+  "finish_reason": "stop"
+}
