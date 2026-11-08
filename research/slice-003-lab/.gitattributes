@@ -1,0 +1,9 @@
+# Preserve the measured bytes: SHA-256 values include the original line endings.
+corpus/** -text
+parsed/** -text
+indexes/** -text
+results/** -text
+input-hashes.json -text
+retrieval-cases.json -text
+nli-english-cases.json -text
+nli-extended-cases.json -text

@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "id": "exact-conflict",
+      "premise": "The contractual payment term is exactly 45 days.",
+      "hypothesis": "The contractual payment term is exactly 30 days.",
+      "expected": "contradiction"
+    },
+    {
+      "id": "language-paraphrase",
+      "premise": "The invoice must be paid within 30 days of its issue date.",
+      "hypothesis": "Payment of the invoice cannot take place later than 30 days after it is issued.",
+      "expected": "entailment"
+    },
+    {
+      "id": "different-scopes",
+      "premise": "For Italian customers, payment is due within 30 days.",
+      "hypothesis": "For foreign customers, payment is due within 45 days.",
+      "expected": "neutral"
+    },
+    {
+      "id": "numerical-entailment",
+      "premise": "Payment must be made within 30 days.",
+      "hypothesis": "Payment must be made within 60 days.",
+      "expected": "entailment"
+    },
+    {
+      "id": "reverse-non-entailment",
+      "premise": "Payment must be made within 45 days.",
+      "hypothesis": "Payment must be made within 30 days.",
+      "expected": "neutral"
+    },
+    {
+      "id": "retrieved-warranty",
+      "premise": "The warranty on spare parts lasts 24 months from delivery.",
+      "hypothesis": "The warranty on spare parts lasts 36 months from delivery.",
+      "expected": "contradiction"
+    },
+    {
+      "id": "retrieved-equivalence",
+      "premise": "Spare parts requested through the standard procedure are delivered within 5 working days.",
+      "hypothesis": "Standard spare parts arrive no later than within one working week.",
+      "expected": "entailment"
+    },
+    {
+      "id": "retrieved-neutral",
+      "premise": "The Zefiro framework contract lasts 48 months from the date of signing.",
+      "hypothesis": "Final acceptance testing will take place on 12 March 2027 at the Brescia site.",
+      "expected": "neutral"
+    },
+    {
+      "id": "retrieved-condition-preserved",
+      "premise": "If acceptance testing is not passed, payment of the second instalment is suspended.",
+      "hypothesis": "If acceptance testing is not passed, payment of the second instalment is not made.",
+      "expected": "entailment"
+    },
+    {
+      "id": "retrieved-condition-dropped",
+      "premise": "If acceptance testing is not passed, payment of the second instalment is suspended.",
+      "hypothesis": "Payment of the second instalment is suspended.",
+      "expected": "neutral"
+    },
+    {
+      "id": "retrieved-exception-dropped",
+      "premise": "Urgent orders are not accepted after 16:00, except those from Gold-category customers.",
+      "hypothesis": "No urgent order is accepted after 16:00.",
+      "expected": "contradiction"
+    },
+    {
+      "id": "retrieved-numerical-compatible",
+      "premise": "High-priority fault reports are taken in hand within 40 minutes, excluding public holidays.",
+      "hypothesis": "High-priority fault reports are taken in hand within 60 minutes, excluding public holidays.",
+      "expected": "entailment"
+    }
+  ],
+  "translation": "Authored by the research agent; not independently reviewed. Same labels and case IDs as Italian; not a general language benchmark."
+}

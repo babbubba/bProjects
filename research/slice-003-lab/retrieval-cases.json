@@ -1,0 +1,786 @@
+{
+  "version": "real-fixtures-1",
+  "note": "Original gold sentences unchanged. Research queries authored before inference; binary evidence relevance, no graded nDCG judgments.",
+  "scenarios": {
+    "N4-fixtures": [
+      {
+        "id": "N4-doc-title",
+        "query": "Cosa dice la Scheda A sul termine di pagamento?",
+        "gold": [
+          {
+            "file": "txt-conflict-a.txt",
+            "contains": "termine di pagamento e' 30 giorni",
+            "id": "N4-doc-title"
+          }
+        ]
+      },
+      {
+        "id": "N4-doc-30",
+        "query": "In quale scheda il termine di pagamento è 30 giorni?",
+        "gold": [
+          {
+            "file": "txt-conflict-a.txt",
+            "contains": "termine di pagamento e' 30 giorni",
+            "id": "N4-doc-30"
+          }
+        ]
+      },
+      {
+        "id": "N4-doc-B",
+        "query": "Cosa riporta la Scheda B sul termine di pagamento?",
+        "gold": [
+          {
+            "file": "txt-conflict-b.txt",
+            "contains": "termine di pagamento e' 60 giorni",
+            "id": "N4-doc-B"
+          }
+        ]
+      },
+      {
+        "id": "N4-doc-B-60",
+        "query": "Quale documento stabilisce pagamento a 60 giorni?",
+        "gold": [
+          {
+            "file": "txt-conflict-b.txt",
+            "contains": "termine di pagamento e' 60 giorni",
+            "id": "N4-doc-B-60"
+          }
+        ]
+      },
+      {
+        "id": "neg-consent",
+        "query": "È consentito inviare email senza consenso?",
+        "gold": [
+          {
+            "file": "txt-negations.txt",
+            "contains": "non deve inviare mai email senza consenso",
+            "id": "neg-consent"
+          }
+        ]
+      },
+      {
+        "id": "neg-returns",
+        "query": "Il progetto richiede la gestione dei resi?",
+        "gold": [
+          {
+            "file": "txt-negations.txt",
+            "contains": "Non e' richiesta la gestione dei resi",
+            "id": "neg-returns"
+          }
+        ]
+      },
+      {
+        "id": "neg-card",
+        "query": "Possiamo memorizzare il numero della carta?",
+        "gold": [
+          {
+            "file": "txt-negations.txt",
+            "contains": "vietato memorizzare il numero di carta",
+            "id": "neg-card"
+          }
+        ]
+      },
+      {
+        "id": "neg-export",
+        "query": "Quali esportazioni di dati sono vietate?",
+        "gold": [
+          {
+            "file": "txt-negations.txt",
+            "contains": "esportazioni sono consentite tranne",
+            "id": "neg-export"
+          }
+        ]
+      },
+      {
+        "id": "neg-45",
+        "query": "Il termine dei pagamenti è 45 oppure 30 giorni?",
+        "gold": [
+          {
+            "file": "txt-negations.txt",
+            "contains": "termine e' di 45 giorni",
+            "id": "neg-45"
+          }
+        ]
+      },
+      {
+        "id": "md-release",
+        "query": "Che cosa include il rilascio 1?",
+        "gold": [
+          {
+            "file": "md-basic.md",
+            "contains": "rilascio 1 include la consultazione degli ordini",
+            "id": "md-release"
+          }
+        ]
+      },
+      {
+        "id": "md-excluded",
+        "query": "Sono comprese le modifiche agli ordini?",
+        "gold": [
+          {
+            "file": "md-basic.md",
+            "contains": "Le modifiche agli ordini sono escluse",
+            "id": "md-excluded"
+          }
+        ]
+      },
+      {
+        "id": "md-collaudo",
+        "query": "Qual è la scadenza del collaudo?",
+        "gold": [
+          {
+            "file": "md-basic.md",
+            "contains": "Collaudo | 2027-03-01",
+            "id": "md-collaudo"
+          }
+        ]
+      }
+    ],
+    "T082-single": [
+      {
+        "id": "S01",
+        "query": "Per quanto tempo si conservano i documenti di trasporto?",
+        "gold": [
+          {
+            "id": "S01",
+            "file": "capitolato-aurora.txt",
+            "contains": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S02",
+        "query": "Chi può accedere al portale Aurora?",
+        "gold": [
+          {
+            "id": "S02",
+            "file": "capitolato-aurora.txt",
+            "contains": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S03",
+        "query": "Quando si emette la fattura elettronica nei mesi ordinari?",
+        "gold": [
+          {
+            "id": "S03",
+            "file": "capitolato-aurora.txt",
+            "contains": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S04",
+        "query": "Quali eccezioni stagionali si applicano alla scadenza di fatturazione?",
+        "gold": [
+          {
+            "id": "S04",
+            "file": "capitolato-aurora.txt",
+            "contains": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S05",
+        "query": "Quali tempi e quali esclusioni valgono per la presa in carico dei guasti urgenti?",
+        "gold": [
+          {
+            "id": "S05",
+            "file": "capitolato-aurora.txt",
+            "contains": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S06",
+        "query": "Quali autorizzazioni servono per acquistare con procedura urgente?",
+        "gold": [
+          {
+            "id": "S06",
+            "file": "capitolato-aurora.txt",
+            "contains": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S07",
+        "query": "Quali resi rifiuta il magazzino di Verona?",
+        "gold": [
+          {
+            "id": "S07",
+            "file": "capitolato-aurora.txt",
+            "contains": "Il magazzino di Verona non accetta resi di merce deperibile.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S08",
+        "query": "Quando si effettuano i backup e per quanto tempo vengono mantenuti?",
+        "gold": [
+          {
+            "id": "S08",
+            "file": "capitolato-aurora.txt",
+            "contains": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S09",
+        "query": "Come si calcola la penale per consegne tardive e qual è il suo tetto?",
+        "gold": [
+          {
+            "id": "S09",
+            "file": "capitolato-aurora.txt",
+            "contains": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S10",
+        "query": "In quali condizioni il fornitore è esonerato per uno sciopero dei trasportatori?",
+        "gold": [
+          {
+            "id": "S10",
+            "file": "capitolato-aurora.txt",
+            "contains": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S11",
+        "query": "Quale sede dispone di assistenza durante la notte?",
+        "gold": [
+          {
+            "id": "S11",
+            "file": "capitolato-aurora.txt",
+            "contains": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S12",
+        "query": "Quale canale deve essere usato per le comunicazioni contrattuali?",
+        "gold": [
+          {
+            "id": "S12",
+            "file": "capitolato-aurora.txt",
+            "contains": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S13",
+        "query": "Quale termine di pagamento decorre dal ricevimento delle fatture?",
+        "gold": [
+          {
+            "id": "S13",
+            "file": "capitolato-aurora.txt",
+            "contains": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S14",
+        "query": "Quale termine di pagamento decorre dalla data fattura?",
+        "gold": [
+          {
+            "id": "S14",
+            "file": "capitolato-aurora.txt",
+            "contains": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S15",
+        "query": "Qual è la finestra di manutenzione prevista al sabato?",
+        "gold": [
+          {
+            "id": "S15",
+            "file": "capitolato-aurora.txt",
+            "contains": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "S16",
+        "query": "Qual è la finestra di manutenzione prevista alla domenica?",
+        "gold": [
+          {
+            "id": "S16",
+            "file": "capitolato-aurora.txt",
+            "contains": "La finestra di manutenzione programmata cade la terza domenica di ogni mese.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "all-payments",
+        "query": "Quali termini di pagamento sono presenti nel capitolato?",
+        "gold": [
+          {
+            "id": "S13",
+            "file": "capitolato-aurora.txt",
+            "contains": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "zone": 0,
+            "classification": "Documented"
+          },
+          {
+            "id": "S14",
+            "file": "capitolato-aurora.txt",
+            "contains": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "all-maintenance",
+        "query": "Quali finestre di manutenzione sono indicate?",
+        "gold": [
+          {
+            "id": "S15",
+            "file": "capitolato-aurora.txt",
+            "contains": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+            "zone": 1,
+            "classification": "Documented"
+          },
+          {
+            "id": "S16",
+            "file": "capitolato-aurora.txt",
+            "contains": "La finestra di manutenzione programmata cade la terza domenica di ogni mese.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "invoice-exceptions",
+        "query": "Quando si emette la fattura, incluse le eccezioni?",
+        "gold": [
+          {
+            "id": "S03",
+            "file": "capitolato-aurora.txt",
+            "contains": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+            "zone": 0,
+            "classification": "Documented"
+          },
+          {
+            "id": "S04",
+            "file": "capitolato-aurora.txt",
+            "contains": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      }
+    ],
+    "T083-multi": [
+      {
+        "id": "M01",
+        "query": "Quanto dura il contratto quadro Zefiro?",
+        "gold": [
+          {
+            "id": "M01",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M02",
+        "query": "Il contratto si rinnova automaticamente?",
+        "gold": [
+          {
+            "id": "M02",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Il rinnovo tacito del contratto non è previsto.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M06",
+        "query": "Dove sono definite le penali previste dal contratto quadro?",
+        "gold": [
+          {
+            "id": "M06",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M07",
+        "query": "Che cosa comprende il pacchetto Ambra?",
+        "gold": [
+          {
+            "id": "M07",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Il pacchetto Ambra comprende il monitoraggio degli ordini.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M03",
+        "query": "Quale termine di pagamento prevede il contratto quadro?",
+        "gold": [
+          {
+            "id": "M03",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M04",
+        "query": "Quanto dura la garanzia nel contratto quadro?",
+        "gold": [
+          {
+            "id": "M04",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M05",
+        "query": "Quanto si attende per ricevere i ricambi ordinari secondo il contratto quadro?",
+        "gold": [
+          {
+            "id": "M05",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "I ricambi richiesti con la procedura ordinaria sono consegnati entro 5 giorni lavorativi.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M08",
+        "query": "Quanti ordini al giorno sono consentiti per sede secondo l’allegato tecnico?",
+        "gold": [
+          {
+            "id": "M08",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Il limite di ordini per ciascuna sede è di 40 al giorno.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M12",
+        "query": "Quali eccezioni all’orario limite esistono per gli ordini urgenti?",
+        "gold": [
+          {
+            "id": "M12",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M09",
+        "query": "Entro quando arrivano i ricambi secondo l’allegato tecnico?",
+        "gold": [
+          {
+            "id": "M09",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "I pezzi di ricambio ordinari arrivano al più tardi entro una settimana lavorativa.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M10",
+        "query": "Con quale frequenza viene aggiornato il monitoraggio nel pacchetto Ambra?",
+        "gold": [
+          {
+            "id": "M10",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Nel pacchetto Ambra il monitoraggio degli ordini viene aggiornato ogni 15 minuti.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M11",
+        "query": "Come si calcolano le penali di ritardo dell’Allegato C?",
+        "gold": [
+          {
+            "id": "M11",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M13",
+        "query": "Quanto dura la garanzia secondo il verbale di collaudo?",
+        "gold": [
+          {
+            "id": "M13",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M14",
+        "query": "Quale termine di pagamento prevede il verbale di collaudo?",
+        "gold": [
+          {
+            "id": "M14",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "Il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M15",
+        "query": "Quando e dove si svolgerà il collaudo finale?",
+        "gold": [
+          {
+            "id": "M15",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "Il collaudo finale si svolgerà il 12 marzo 2027 presso la sede di Brescia.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M16",
+        "query": "Si possono modificare i listini durante il collaudo?",
+        "gold": [
+          {
+            "id": "M16",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "Le modifiche ai listini non sono ammesse durante il periodo di collaudo.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "M17",
+        "query": "Che cosa succede alla seconda rata se il collaudo fallisce?",
+        "gold": [
+          {
+            "id": "M17",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "Se il collaudo non viene superato, il pagamento della seconda rata è sospeso.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "P1",
+        "query": "Quale limite giornaliero di ordini ha comunicato il PM?",
+        "gold": [
+          {
+            "id": "P1",
+            "file": "pm-message.txt",
+            "contains": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "zone": 0,
+            "classification": "Declared"
+          }
+        ]
+      },
+      {
+        "id": "P2",
+        "query": "Quale termine di pagamento ha comunicato il PM?",
+        "gold": [
+          {
+            "id": "P2",
+            "file": "pm-message.txt",
+            "contains": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "zone": 0,
+            "classification": "Declared"
+          }
+        ]
+      },
+      {
+        "id": "all-payments",
+        "query": "Quali termini di pagamento risultano dai documenti e dal PM?",
+        "gold": [
+          {
+            "id": "M03",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+            "zone": 1,
+            "classification": "Documented"
+          },
+          {
+            "id": "M14",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "Il termine di pagamento delle fatture è di 60 giorni data fattura.",
+            "zone": 1,
+            "classification": "Documented"
+          },
+          {
+            "id": "P2",
+            "file": "pm-message.txt",
+            "contains": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "zone": 0,
+            "classification": "Declared"
+          }
+        ]
+      },
+      {
+        "id": "all-warranty",
+        "query": "Quali durate della garanzia risultano dai documenti?",
+        "gold": [
+          {
+            "id": "M04",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+            "zone": 1,
+            "classification": "Documented"
+          },
+          {
+            "id": "M13",
+            "file": "verbale-collaudo-zefiro.docx",
+            "contains": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+            "zone": 0,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "all-limits",
+        "query": "Quali limiti giornalieri di ordini per sede risultano da documenti e PM?",
+        "gold": [
+          {
+            "id": "M08",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Il limite di ordini per ciascuna sede è di 40 al giorno.",
+            "zone": 0,
+            "classification": "Documented"
+          },
+          {
+            "id": "P1",
+            "file": "pm-message.txt",
+            "contains": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+            "zone": 0,
+            "classification": "Declared"
+          }
+        ]
+      },
+      {
+        "id": "equivalent-delivery",
+        "query": "Quali tempi di consegna sono previsti per i ricambi ordinari?",
+        "gold": [
+          {
+            "id": "M05",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "I ricambi richiesti con la procedura ordinaria sono consegnati entro 5 giorni lavorativi.",
+            "zone": 2,
+            "classification": "Documented"
+          },
+          {
+            "id": "M09",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "I pezzi di ricambio ordinari arrivano al più tardi entro una settimana lavorativa.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "penalty-reference",
+        "query": "Dove sono definite e come si calcolano le penali di consegna?",
+        "gold": [
+          {
+            "id": "M06",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell'Allegato C.",
+            "zone": 0,
+            "classification": "Documented"
+          },
+          {
+            "id": "M11",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell'1,5 per cento del valore dell'ordine, con un tetto del 15 per cento.",
+            "zone": 2,
+            "classification": "Documented"
+          }
+        ]
+      },
+      {
+        "id": "ambra-complements",
+        "query": "Quali funzioni comprende Ambra e con quale frequenza sono aggiornate?",
+        "gold": [
+          {
+            "id": "M07",
+            "file": "contratto-quadro-zefiro.txt",
+            "contains": "Il pacchetto Ambra comprende il monitoraggio degli ordini.",
+            "zone": 0,
+            "classification": "Documented"
+          },
+          {
+            "id": "M10",
+            "file": "allegato-tecnico-zefiro.md",
+            "contains": "Nel pacchetto Ambra il monitoraggio degli ordini viene aggiornato ogni 15 minuti.",
+            "zone": 1,
+            "classification": "Documented"
+          }
+        ]
+      }
+    ]
+  }
+}
