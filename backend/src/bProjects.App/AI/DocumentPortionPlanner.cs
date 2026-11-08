@@ -63,6 +63,31 @@ public sealed class DocumentPortionPlanner(PlannerLimits limits)
     /// </summary>
     public async ValueTask<ExtractionPartition> PartitionAsync(IReadOnlyList<PlannedPortion> portions, UnitMeasurer measure, CancellationToken ct)
     {
+        // Via rapida (T082): se l'INTERO insieme dei range proprietari entra nel budget in un solo payload misurato, la partizione è un unico batch. È lo stesso
+        // risultato del packing incrementale (che parte da pezzi che entrano da soli e aggiunge finché il payload completo misurato entra: con l'insieme completo
+        // dentro il budget nessuna aggiunta può essere rifiutata né nessun pezzo dividersi), ma costa UNA misura invece di 2n-1: ogni misura sono diverse richieste
+        // al runtime (apply-template e tokenize), serializzate. Se non entra, o la misura non è utilizzabile, si prosegue con l'algoritmo invariato.
+        var everything = new List<Atom>();
+        foreach (var portion in portions)
+        {
+            var portionContext = portion.Context.Select(c => c with { Owned = false }).ToList();
+            foreach (var range in portion.Owned)
+            {
+                everything.Add(new Atom(portion.Ordinal, range.RangeKey, range with { Owned = true }, portionContext, null!));
+            }
+        }
+
+        if (everything.Count > 1)
+        {
+            var whole = await measure(Assemble(everything), ct);
+            if (whole.Quality != TokenCountQuality.Unavailable && limits.Fits(whole))
+            {
+                var single = new ExtractionPartition([Close(0, everything, whole)]);
+                VerifyExhaustive(portions, single);
+                return single;
+            }
+        }
+
         var atoms = new List<Atom>();
         foreach (var portion in portions)
         {

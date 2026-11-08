@@ -290,4 +290,54 @@ public sealed class DocumentPortionPlannerTests
             }
         }
     }
+
+    // ------------------------------------------------------------------ via rapida: una sola misura quando tutto entra (T082)
+
+    [Fact]
+    public async Task When_the_whole_unit_fits_it_costs_one_measure_and_gives_the_same_single_batch_as_the_incremental_packing()
+    {
+        var portions = Enumerable.Range(0, 12).Select(i => Portion(i, Words(10, $"u{i}w"))).ToArray();
+        var attempts = new List<int>();
+
+        var partition = await Planner(input: 1000).PartitionAsync(portions, Measurer(attempts: attempts), Ct);
+
+        Assert.Single(attempts);   // prima: 12 misure dei pezzi + 11 dei candidati
+        var batch = Assert.Single(partition.Batches);
+        Assert.Equal(Enumerable.Range(0, 12), batch.PortionOrdinals);
+        Assert.Equal(12, batch.Owned.Count());
+        Assert.Equal(portions.Select(p => p.Owned[0].RangeKey), batch.Owned.Select(r => r.RangeKey));   // ordine di lettura
+        Assert.Equal(attempts[0], batch.Measure.Tokens);   // la misura del batch e quella del payload completo
+
+        // Riferimento: ogni prefisso entra nel budget con lo stesso misuratore, quindi il packing incrementale non avrebbe rifiutato nessuna aggiunta.
+        var reference = new List<DocumentSourceRange>();
+        foreach (var portion in portions)
+        {
+            reference.AddRange(portion.Owned);
+            Assert.True((await Measurer()(reference, Ct)).Tokens <= 1000);
+        }
+    }
+
+    [Fact]
+    public async Task When_the_whole_unit_does_not_fit_the_incremental_packing_is_unchanged_after_the_one_extra_measure()
+    {
+        var portions = Enumerable.Range(0, 6).Select(i => Portion(i, Words(60, $"u{i}w"))).ToArray();
+        var attempts = new List<int>();
+
+        var partition = await Planner(input: 300).PartitionAsync(portions, Measurer(attempts: attempts), Ct);
+
+        Assert.True(partition.Batches.Count > 1);
+        Assert.True(attempts[0] > 300, "la prima misura e quella dell'insieme completo e non entra");
+        Assert.All(partition.Batches, b => Assert.True(b.Measure.Tokens <= 300));
+        Assert.Equal(Enumerable.Range(0, 6), partition.Batches.SelectMany(b => b.PortionOrdinals));
+        Assert.Equal(portions.Select(p => p.Owned[0].RangeKey), partition.Batches.SelectMany(b => b.Owned).Select(r => r.RangeKey));
+    }
+
+    [Fact]
+    public async Task An_unusable_measure_of_the_whole_unit_never_takes_the_fast_path()
+    {
+        var portions = new[] { Portion(0, Words(5, "a")), Portion(1, Words(5, "b")) };
+
+        await Assert.ThrowsAsync<RuntimeUnverifiedException>(async () =>
+            await Planner().PartitionAsync(portions, Measurer(TokenCountQuality.Unavailable), Ct));
+    }
 }
