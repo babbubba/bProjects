@@ -33,6 +33,13 @@ export interface Fault {
   delayMs?: number;
 }
 
+/** Risposta imposta alle prossime 	imes richieste del grafo (T106: un modello che obbedisce al documento ostile). I validatori del backend restano attivi. */
+export interface Override {
+  graph: Graph | '*';
+  times: number;
+  content: string;
+}
+
 export interface FakeLlmOptions {
   host?: string;
   port?: number;
@@ -256,6 +263,7 @@ export class FakeLlm {
   /** Richieste fuori dal protocollo o di grafi non riconosciuti: devono restare vuote (le prove lo verificano). */
   readonly unexpected: string[] = [];
   readonly faults: Fault[] = [];
+  readonly overrides: Override[] = [];
   private server!: Server;
   private readonly sockets = new Set<import('node:net').Socket>();
   private seq = 0;
@@ -296,6 +304,7 @@ export class FakeLlm {
     this.requests.length = 0;
     this.unexpected.length = 0;
     this.faults.length = 0;
+    this.overrides.length = 0;
     this.runtime.mode = 'normal';
     this.runtime.contextWindowTokens = this.options.contextWindowTokens;
     this.config.noteWords = 10;
@@ -372,7 +381,13 @@ export class FakeLlm {
       }
     }
 
-    const content = reply(graph, text, this.config);
+    let content = reply(graph, text, this.config);
+    const override = this.overrides.find((o) => (o.graph === '*' || o.graph === graph) && o.times > 0);
+    if (override) {
+      override.times--;
+      content = override.content;
+      record.outcome = 'override';
+    }
     if (content === null) {
       record.outcome = 'error:501';
       return unexpected(`grafo non riconosciuto (sistema: ${norm(system).slice(0, 80)})`);

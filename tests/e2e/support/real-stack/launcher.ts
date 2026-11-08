@@ -4,7 +4,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, 
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize, resolve } from 'node:path';
-import { FakeLlm, type Fault } from '../fake-llm';
+import { FakeLlm, type Fault, type Override } from '../fake-llm';
 
 // HARNESS UNICO dello stack reale con modello FINTO (T092 meta reale e T103). Avvia, e al termine ferma con pulizia garantita:
 //   - un database PostgreSQL ISOLATO nel container di test esistente (mai i dati reali), migrato con `migrate` e con un account PM creato da `bootstrap-accounts`;
@@ -316,6 +316,8 @@ export class RealStack {
             case 'POST /llm/runtime': Object.assign(this.llm.runtime, body); return out({ ok: true, runtime: this.llm.runtime });
             case 'POST /llm/config': Object.assign(this.llm.config, body); return out({ ok: true, config: this.llm.config });
             case 'POST /llm/clear-faults': this.llm.faults.length = 0; return out({ ok: true });
+            case 'POST /llm/override': this.llm.overrides.push(body as unknown as Override); return out({ ok: true });
+            case 'POST /logs/scan': return out(this.scanLogs((body['needles'] as string[] | undefined) ?? []));
             default: return out({ error: 'non supportato' }, 404);
           }
         } catch (e) {
@@ -324,6 +326,26 @@ export class RealStack {
       })();
     });
     await new Promise<void>((ok) => this.control!.listen(PORTS.control, '127.0.0.1', ok));
+  }
+
+  // ---------------------------------------------------------------- scansione dei log del backend (T106)
+
+  /**
+   * Cerca nei log del backend (tutti i riavvii dell'esecuzione) i segreti dello stack e le stringhe fornite dalla prova. Restituisce SOLO conteggi: i valori dei segreti non lasciano mai
+   * questo processo e nessuna riga di log viene restituita.
+   */
+  scanLogs(needles: string[]) {
+    const text = readdirSync(logsDir).filter((f) => /^backend-\d+\.log$/.test(f)).map((f) => readFileSync(join(logsDir, f), 'utf8')).join('\n');
+    const count = (needle: string) => (needle.length < 4 ? -1 : text.split(needle).length - 1);
+    const builtIn: Record<string, number> = {
+      signingKey: count(this.signingKey), parserSecret: count(this.parserSecret), postgresPassword: count(this.pgPassword), pmPassword: count(this.password),
+      aiApiKey: count('fake-llm-dummy-key'), storageRoot: count(this.storageRoot), connectionString: count('Password='),
+    };
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    return {
+      builtIn, needles: needles.map(count), lines: lines.length, warningOrWorse: lines.filter((l) => /^(warn|fail|crit)/.test(l)).length,
+      /** Righe che iniziano con un livello di log: prova che la scansione ha davvero qualcosa da leggere. */ levelled: lines.filter((l) => /^(trce|dbug|info|warn|fail|crit):/.test(l)).length,
+    };
   }
 
   // ---------------------------------------------------------------- chiusura

@@ -1,4 +1,4 @@
-import type { RecordedRequest, Fault } from '../fake-llm';
+import type { RecordedRequest, Fault, Override } from '../fake-llm';
 
 // Client (lato prova) dell'API di controllo dello stack reale con modello finto, avviato da real-stack.global-setup.ts.
 
@@ -30,6 +30,10 @@ export const stack = {
   resetLlm: () => call('POST', '/llm/reset'),
   fault: (fault: Fault) => call('POST', '/llm/fault', fault),
   clearFaults: () => call('POST', '/llm/clear-faults'),
+  /** Il modello finto risponde con `content` alle prossime `times` richieste del grafo (modello che obbedisce a un'istruzione ostile); i validatori del backend restano attivi. */
+  override: (override: Override) => call('POST', '/llm/override', override),
+  /** Conteggi (mai valori) di segreti dello stack e di `needles` nei log del backend; `needles[i]` e il numero di occorrenze della i-esima stringa. */
+  scanLogs: (needles: string[] = []) => call<{ builtIn: Record<string, number>; needles: number[]; lines: number; warningOrWorse: number; levelled: number }>('POST', '/logs/scan', { needles }),
   /** Comportamento delle risposte (es. `noteWords` per forzare la riduzione gerarchica della chat). */
   llmConfig: (config: { noteWords?: number }) => call('POST', '/llm/config', config),
   /** Readiness del runtime simulato: normal | down | missing | unloaded (e/o finestra riportata). */
@@ -51,6 +55,9 @@ async function bearer(refresh = false): Promise<string> {
   token = ((await response.json()) as { accessToken: string }).accessToken;
   return token;
 }
+
+/** Token PM corrente dell'esecuzione (per chiamate non JSON: multipart, SSE, token manomessi). */
+export const authToken = () => bearer();
 
 /** Chiamata autenticata all'API reale (JSON). Restituisce stato e corpo senza lanciare sugli errori HTTP. */
 export async function api<T = unknown>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: T }> {
