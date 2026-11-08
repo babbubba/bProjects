@@ -10,7 +10,7 @@
 
 La 001 è [accettata con riserve per il pilota controllato](specs/001-project-draft/acceptance/decisione-accettazione.md); **T052/T053 restano aperti, non PASS**. Consultare [copertura, componenti riutilizzabili e incoerenze](docs/roadmap/implementation-coverage.md), oltre a backlog e HANDOFF della 001.
 
-Prossimo incremento previsto: `002-project-documents` (PDF testuali, DOCX, Markdown, TXT; parsing, provenienza e documenti oltre contesto). KB condivise e RAG esclusi. Non avviare ancora skill Spec Kit o implementazione: questa è solo preparazione del repository. I divieti di allegati/Docling presenti nella 001 ne delimitano il perimetro storico, non tutte le feature future.
+Incremento in corso: `002-project-documents` (PDF testuali, DOCX, Markdown, TXT; parsing, provenienza e documenti oltre contesto) è in implementazione sul branch `feature/002-implementation`; `specs/002-project-documents/tasks.md` è la baseline. KB condivise e RAG esclusi. Aperti: gate DGX/PM, parte umana di T107, T114; nessuna accettazione della 002. Istruzioni operative del delta (limiti, parser offline, backup/`migrate`, livelli di test, diagnosi): [operations.md](specs/002-project-documents/validation/operations.md). I divieti di allegati/Docling presenti nella 001 ne delimitano il perimetro storico, non tutte le feature future.
 
 ## Convenzioni
 
@@ -54,4 +54,4 @@ Stack Docker: copiare `infra/.env.example` in `infra/.env`, valorizzare `POSTGRE
 
 ## Commit
 
-Piccoli e coerenti, Conventional Commits (`feat(backend):`, `test:`, `build:`, `docs:`) con riferimento alla slice e al task quando applicabile (gli ID Txxx sono locali alla slice). Niente merge su `main` né push senza autorizzazione dell'autore. Branch previsto per il prossimo incremento: `feature/002-project-documents`; verificare sempre quello effettivo. Non creare cloni/worktree e non aggiungere `Co-Authored-By`. I file locali non tracciati in `docs/acceptance-trace/` vanno conservati ed esclusi dai commit; usare staging per percorsi espliciti.
+Piccoli e coerenti, Conventional Commits (`feat(backend):`, `test:`, `build:`, `docs:`) con riferimento alla slice e al task quando applicabile (gli ID Txxx sono locali alla slice). Niente merge su `main` né push senza autorizzazione dell'autore. Branch della 002: `feature/002-implementation`; verificare sempre quello effettivo. Non creare cloni/worktree e non aggiungere `Co-Authored-By`. I file locali non tracciati in `docs/acceptance-trace/` vanno conservati ed esclusi dai commit; usare staging per percorsi espliciti.

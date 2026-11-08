@@ -14,7 +14,7 @@ Assistente AI per trasformare il dialogo con un Project Manager in una bozza di 
 
 La slice `001-project-draft` implementa chat persistente, analisi correggibile e confermabile, generazione Markdown e registro atomico delle evidenze. È stata [accettata con riserve per il solo pilota controllato](specs/001-project-draft/acceptance/decisione-accettazione.md): **T052 e T053 restano aperti, non PASS**. Limiti, prove registrate e discrepanze sullo stato di T054–T073 sono nella [baseline di copertura](docs/roadmap/implementation-coverage.md).
 
-Prossimo incremento previsto: `002-project-documents`, branch `feature/002-project-documents`, per allegati PDF testuali, DOCX, Markdown e TXT, parsing, provenienza e documenti oltre contesto. KB condivise e RAG esclusi. Preparazione del repository soltanto: la slice 002 non è ancora avviata.
+Incremento in corso: `002-project-documents` (PDF testuali, DOCX, Markdown e TXT; parsing offline, provenienza, documenti oltre contesto), in implementazione sul branch `feature/002-implementation`. KB condivise e RAG esclusi. Restano aperti i gate DGX/PM, la parte umana di T107 e T114: nessuna accettazione della 002 è attestata. Il comportamento senza documenti resta quello della 001. Istruzioni operative del delta (limiti, parser offline, backup e `migrate`, livelli di test, diagnosi): [operations.md](specs/002-project-documents/validation/operations.md).
 
 ## Struttura
 
