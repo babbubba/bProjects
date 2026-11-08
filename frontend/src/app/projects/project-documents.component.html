@@ -9,6 +9,11 @@
   </header>
 
   <div role="status" aria-live="polite" data-testid="docs-live">
+    @if (progressNotice()) {
+      <div class="alert alert-info py-2 mb-0" data-testid="docs-progress-notice">
+        {{ progressNotice() }}
+      </div>
+    }
     @if (notice()) {
       <div
         class="alert alert-success py-2 mb-0"

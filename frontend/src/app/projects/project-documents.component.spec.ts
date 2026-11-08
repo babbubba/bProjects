@@ -1157,6 +1157,125 @@ describe('ProjectDocumentsComponent', () => {
     });
   });
 
+  // T107 (accessibilità): ogni stato ha un testo proprio (mai solo colore), gli errori hanno ruolo e focus, gli esiti da
+  // polling sono annunciati nella live region senza rubare il focus. La revisione con lettore di schermo reale resta umana.
+  describe('accessibilità (T107)', () => {
+    const statuses = [
+      'NotPrepared',
+      'Queued',
+      'Parsing',
+      'Extracting',
+      'Ready',
+      'Incomplete',
+      'Failed',
+    ] as const;
+
+    it('ogni stato di preparazione ha un testo distinto nel badge: il colore non è l’unico segnale', async () => {
+      const items = statuses.map((s, i) =>
+        item({
+          documentId: `d-${i}`,
+          displayName: `Doc ${i}`,
+          latestVersion: {
+            id: `v-${i}`,
+            version: 1,
+            processingStatus: s,
+            uploadedAt: '2030-01-01T10:00:00Z',
+          },
+        }),
+      );
+      await flushLoad(items, selection(1, { items: [] }));
+      const texts = [...el.querySelectorAll('[data-testid="docs-status"]')].map((n) =>
+        n.textContent!.trim(),
+      );
+      expect(texts).toHaveLength(statuses.length);
+      expect(texts.every((t) => t.length > 0)).toBe(true);
+      expect(new Set(texts).size).toBe(statuses.length);
+    });
+
+    it('un errore di caricamento riceve il focus ed è un alert con testo, senza dipendere dal colore', async () => {
+      await flushLoad([], selection(0, { items: [] }));
+      chooseFile(
+        q('docs-file') as HTMLInputElement,
+        new File(['abc'], 'a.exe', { lastModified: 1 }),
+      );
+      q('docs-upload')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents`).flush(null, { status: 415, statusText: 'x' });
+      await settle();
+      const alert = q('docs-upload-error')!;
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.textContent!.trim().length).toBeGreaterThan(10);
+      await settle(); // focusSoon (setTimeout 0) scatta dopo il primo render
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('l’esito di un caricamento è annunciato dalla live region e ne riceve il focus', async () => {
+      await flushLoad([], selection(0, { items: [] }));
+      chooseFile(q('docs-file') as HTMLInputElement, new File(['abc'], 'a.md', { lastModified: 1 }));
+      q('docs-upload')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents`).flush(version({ originalName: 'a.md' }), {
+        status: 201,
+        statusText: 'Created',
+      });
+      await settle();
+      await flushLoad([item()], selection());
+      const notice = q('docs-notice')!;
+      expect(q('docs-live')!.contains(notice)).toBe(true);
+      expect(q('docs-live')!.getAttribute('role')).toBe('status');
+      await settle();
+      expect(document.activeElement).toBe(notice);
+    });
+
+    it('un documento che termina la preparazione durante il polling è annunciato senza spostare il focus', async () => {
+      pollCfg.intervalMs = 5;
+      await flushLoad([item()], selection());
+      const toggle = q('docs-versions')!;
+      toggle.focus();
+      expect(q('docs-progress-notice')).toBeNull();
+
+      await new Promise((r) => setTimeout(r, 30));
+      const ready = item({
+        latestVersion: {
+          id: 'v-1',
+          version: 1,
+          processingStatus: 'Failed',
+          uploadedAt: '2030-01-01T10:00:00Z',
+        },
+      });
+      const polls = http.match((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+      expect(polls.length).toBeGreaterThan(0);
+      polls[0].flush({ items: [ready], nextCursor: null });
+      http.match((r) => r.url === `${BASE}/source-selection`).forEach((r) => r.flush(selection()));
+      await settle();
+      http.match(() => true);
+
+      const note = q('docs-progress-notice')!;
+      expect(q('docs-live')!.contains(note)).toBe(true);
+      expect(note.textContent).toContain('Capitolato');
+      expect(note.textContent).toContain('preparazione non riuscita');
+      expect(document.activeElement).toBe(toggle);
+    });
+
+    it('i comandi non hanno uno stato che si comunica solo con il colore: ogni pulsante e campo ha un nome', async () => {
+      await flushLoad();
+      q('docs-versions')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ processingStatus: 'Ready' })]));
+      await settle();
+      const unnamed = [...el.querySelectorAll<HTMLElement>('button, input, progress')].filter((n) => {
+        const label = n.id ? el.querySelector(`label[for="${n.id}"]`) : null;
+        return !(
+          n.textContent?.trim() ||
+          n.getAttribute('aria-label') ||
+          n.getAttribute('aria-labelledby') ||
+          label?.textContent?.trim()
+        );
+      });
+      expect(unnamed.map((n) => n.outerHTML)).toEqual([]);
+    });
+  });
+
   function component() {
     return fixture.componentInstance as unknown as { selectionRevision(): number | null };
   }

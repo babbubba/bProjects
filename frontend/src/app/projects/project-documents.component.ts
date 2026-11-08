@@ -116,6 +116,8 @@ export class ProjectDocumentsComponent implements OnDestroy {
   protected readonly uploadError = signal<DocumentFailure | null>(null);
   protected readonly uploadErrorTarget = signal<string | null>(null);
   protected readonly notice = signal('');
+  /** Esito di una preparazione terminata mentre il PM era altrove (da polling): annunciato nella live region, senza spostare il focus. */
+  protected readonly progressNotice = signal('');
   protected readonly actionError = signal('');
   protected readonly busy = signal(false);
 
@@ -151,6 +153,7 @@ export class ProjectDocumentsComponent implements OnDestroy {
       const id = this.projectId();
       untracked(() => {
         this.expanded.set(null);
+        this.progressNotice.set('');
         this.reading.set(null);
         this.detail.set(null);
         this.pending.clear();
@@ -329,6 +332,7 @@ export class ProjectDocumentsComponent implements OnDestroy {
       if (projectId !== this.projectId()) return;
       const fresh = new Map(page.items.map((d) => [d.documentId, d]));
       const known = new Set(this.documents().map((d) => d.documentId));
+      this.announceFinished(this.documents(), fresh);
       this.documents.update((items) => [
         ...items.map((d) => fresh.get(d.documentId) ?? d),
         ...page.items.filter((d) => !known.has(d.documentId)),
@@ -340,6 +344,19 @@ export class ProjectDocumentsComponent implements OnDestroy {
       // errore transitorio: il prossimo giro (limitato) riprova, nessuna azione con effetti
     }
     this.schedulePoll();
+  }
+
+  /** Il passaggio da lavorazione a esito è visibile solo nel badge: lo si dichiara anche a chi usa un lettore di schermo. */
+  private announceFinished(previous: DocumentListItem[], fresh: Map<string, DocumentListItem>): void {
+    const done: string[] = [];
+    for (const d of previous) {
+      const before = d.latestVersion?.processingStatus;
+      const after = fresh.get(d.documentId)?.latestVersion?.processingStatus;
+      if (before && after && inProgress.has(before) && !inProgress.has(after)) {
+        done.push(`«${d.displayName}»: ${this.processingLabel(after).toLowerCase()}`);
+      }
+    }
+    if (done.length > 0) this.progressNotice.set(`Preparazione terminata. ${done.join('; ')}.`);
   }
 
   private async loadSelection(projectId: string): Promise<void> {
