@@ -453,6 +453,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         var preparation = await Scalar<Guid>(RunSignalSql.LatestPreparation, ("d", document));
         await using var connection = await OpenConnection();
         await using var command = new Npgsql.NpgsqlCommand(RunSignalSql.Blocks, connection);
+        command.Parameters.AddWithValue("p", preparation);
         await using var reader = await command.ExecuteReaderAsync(Ct);
         var text = new StringBuilder();
         var offsets = new Dictionary<Guid, int>();
