@@ -911,16 +911,37 @@ export class AnalysisPreviewComponent {
       }
       this.applyView(view);
       this.previewError.set('');
+      this.loadRetries = 0;
     } catch {
       // L'ultima anteprima buona resta visibile; nessuna anteprima viene inventata.
-      if (gen === this.generation) this.previewError.set("Impossibile caricare l'anteprima.");
+      if (gen === this.generation) {
+        this.previewError.set("Impossibile caricare l'anteprima.");
+        this.retryLoad(projectId, analysisId, gen);
+      }
     }
+  }
+
+  private loadRetries = 0;
+
+  /** Rete caduta DOPO il completamento: la sola lettura dell'anteprima si ripete a intervalli (al piu 30 volte), mai come comando; senza analisi caricata non restano altre vie. */
+  private retryLoad(projectId: string, analysisId: string, gen: number): void {
+    if (this.pollMs <= 0 || this.timer || this.analysis() || this.loadRetries >= 30) return;
+    this.loadRetries++;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (gen === this.generation && !this.analysis()) void this.loadAnalysis(projectId, analysisId, gen);
+    }, this.pollMs);
   }
 
   private reconcile(projectId: string): void {
     const gen = this.generation;
     const run = this.run();
-    if (!run || run.status === 'Completed' || run.status === 'Failed') return;
+    if (!run || run.status === 'Failed') return;
+    if (run.status === 'Completed') {
+      // Il completamento e stato visto ma il GET dell'anteprima e fallito (es. rete caduta): a ogni (ri)connessione si riprova la sola lettura.
+      if (!this.analysis()) void this.loadAnalysis(projectId, run.analysisId ?? run.id, gen);
+      return;
+    }
     void this.refresh(projectId, run.id, gen);
   }
 

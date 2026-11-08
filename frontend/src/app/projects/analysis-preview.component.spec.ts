@@ -228,6 +228,60 @@ describe('AnalysisPreviewComponent', () => {
     expect(el.querySelector('.analysis')!.innerHTML).not.toContain('<pre');
   });
 
+  it("completamento visto ma GET dell'anteprima fallito (rete caduta): alla riconnessione dello stream la sola lettura viene ripetuta, senza comandi", async () => {
+    await setup();
+    await click();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ status: 'Completed', analysisId: 'r-1', resultRevisionId: 'rev-1' }),
+    });
+    await settle();
+    http
+      .expectOne(`${BASE}/analyses/r-1`)
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await settle();
+    expect(el.querySelector('[data-testid=preview]')).toBeNull();
+
+    handlers.onConnected();                                    // lo stream si riconnette: riconciliazione
+    await settle();
+    http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
+    await settle();
+    expect(el.querySelector('[data-testid=preview]')).not.toBeNull();
+    handlers.onConnected();                                    // gia caricata: nessuna richiesta ulteriore
+    await settle();
+    http.expectNone(`${BASE}/analyses/r-1`);
+    expect(http.match((r) => r.method !== 'GET')).toHaveLength(0);
+  });
+
+  it("completamento visto ma GET dell'anteprima fallito: la sola lettura si ripete a intervalli anche senza riconnessione dello stream, poi si ferma", async () => {
+    await setup({ pollMs: 5 });
+    await click();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ status: 'Completed', analysisId: 'r-1', resultRevisionId: 'rev-1' }),
+    });
+    await settle();
+    http
+      .expectOne(`${BASE}/analyses/r-1`)
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await settle();
+    await new Promise((r) => setTimeout(r, 20));
+    http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
+    await settle();
+    expect(el.querySelector('[data-testid=preview]')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    http.expectNone(`${BASE}/analyses/r-1`);
+    expect(http.match((r) => r.method !== 'GET')).toHaveLength(0);
+  });
+
   it('un evento di un altro run non cambia lo stato', async () => {
     await setup();
     await click();
