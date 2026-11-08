@@ -51,3 +51,24 @@ Cosa controlla ogni fase del percorso (documenti -> chat con fonti -> analisi co
 - Verifica visiva del contrasto e dello stato di focus su schermi e condizioni reali; dimensione dei bersagli touch su dispositivo reale.
 - Usabilita da parte di un PM (tempi, comprensibilita dei messaggi): il fake non e revisione PM.
 - Stack reale: non esercitato a 390 px.
+
+## (d) Checklist eseguibile per la revisione umana (2026-11-08, **da eseguire: nessuna casella spuntata**)
+
+Prerequisiti: stack avviato (`docker compose -f infra/compose.yaml up -d --build`), account PM creato con `bootstrap-accounts`, un progetto con 3 documenti (uno `Ready`, uno `Incomplete`, uno `Failed`; usare i fixture di `tests/fixtures/`), modello finto o reale a scelta del revisore (annotarlo). Esito per riga: `PASS` / `FAIL` / `N/A`, con revisore, data, ambiente (browser, lettore di schermo, dispositivo) e nota. Un `FAIL` apre un difetto: non si modificano test o criteri per farlo passare.
+
+| # | Verifica | Come | Esito |
+| --- | --- | --- | --- |
+| 1 | Percorso completo solo da tastiera (Tab/Maiusc+Tab/Invio/Spazio/Esc): login → documenti → upload → chat con fonte → Analizza → conferma → Genera → apertura fonte | Nessun mouse; nessuna trappola del focus; ordine logico | ☐ |
+| 2 | Focus visibile e mai perso dopo ogni azione (upload, retry, chiusura passaggio, errore) | Annotare dove va il focus dopo ciascuna azione | ☐ |
+| 3 | Lettore di schermo (NVDA o VoiceOver): ordine di lettura e nomi dei controlli | Leggere le sezioni documenti, versioni, chat, anteprima, bozza | ☐ |
+| 4 | Annunci: «Preparazione terminata», esito upload, risposta di chat nel `role=log`, errori `role=alert` | Contare gli annunci per azione: nessun doppio annuncio focus+alert, nessun flood in streaming | ☐ |
+| 5 | Marcatori di fonte `[F1]` nella bozza: nome/ruolo comprensibile, attivabili da tastiera | Con lettore di schermo | ☐ |
+| 6 | Zoom 200 % e 400 % e reflow a 320 px (WCAG 1.4.10): nessuna perdita di contenuto/funzione, nessuno scroll orizzontale della pagina | Browser desktop | ☐ |
+| 7 | Testo ingrandito del sistema e modalità alto contrasto/scuro | OS | ☐ |
+| 8 | Contrasto e stato di focus giudicati a vista su schermi diversi (badge `text-bg-*`, avvisi, campi con maniglia di ridimensionamento) | Schermo reale | ☐ |
+| 9 | Bersagli touch ≥ 24×24 px (WCAG 2.5.8) a 390 px su dispositivo reale | Telefono | ☐ |
+| 10 | Errori comprensibili senza colore: provocare `Failed`, `Incomplete`, limite superato, rete caduta | Il testo basta a capire cosa fare | ☐ |
+| 11 | Recupero dopo eventi persi: disconnettere la rete a metà analisi e riconnettere | Nessun comando duplicato, stato corretto, annuncio dell'esito | ☐ |
+| 12 | Usabilità PM (due PM): compiti 1–5 senza assistenza, tempi e punti di confusione | Registrare in `pm-results.md` (T111), non qui | ☐ |
+
+Stato: **NOT VERIFIED** (nessun revisore umano). Il task T107 resta aperto finché le righe 1–11 non hanno un esito registrato; i controlli automatici di (a) non le sostituiscono.
