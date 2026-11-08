@@ -287,9 +287,12 @@ export class ProjectDocumentsComponent implements OnDestroy {
       this.documents().some(
         (d) => !!d.latestVersion && inProgress.has(d.latestVersion.processingStatus),
       ) ||
-      // Una candidata in lavorazione non cambia lo stato della fonte corrente: si osserva dal dettaglio aperto (solo GET).
-      !!this.detail()?.versions.some((v) =>
-        (v.candidatePreparations ?? []).some((c) => inProgress.has(c.processingStatus)),
+      // Una candidata in lavorazione non cambia lo stato della fonte corrente: si osserva dal dettaglio aperto (solo GET). Anche una
+      // rielaborazione di una versione NON ultima è visibile solo nel dettaglio (processingStatus della versione), non nell'elenco.
+      !!this.detail()?.versions.some(
+        (v) =>
+          inProgress.has(v.processingStatus) ||
+          (v.candidatePreparations ?? []).some((c) => inProgress.has(c.processingStatus)),
       )
     );
   }

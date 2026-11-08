@@ -885,6 +885,37 @@ describe('ProjectDocumentsComponent', () => {
       expect(q('docs-poll-stopped')).not.toBeNull();
     });
 
+    it('continua a rileggere finché una versione NON ultima del dettaglio aperto è in lavorazione (rielaborazione), poi il dettaglio mostra la candidata', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 5 });
+      const ready = item({
+        latestVersion: { id: 'v-2', version: 2, processingStatus: 'Ready', uploadedAt: '2030-01-01T10:00:00Z' },
+        availability: 'Ready',
+        reason: null,
+        applicableVersionId: 'v-2',
+      });
+      await flushLoad([ready]);
+      q('docs-versions')!.click();
+      await settle();
+      // v1 e in rielaborazione (Queued) mentre l'elenco mostra solo l'ultima versione, gia Ready: l'elenco da solo non basterebbe a riavviare il polling.
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ id: 'v-1', version: 1, processingStatus: 'Queued' }), version({ id: 'v-2', version: 2, processingStatus: 'Ready' })]));
+      await settle();
+      await wait();
+      pollGet().flush({ items: [ready], nextCursor: null });
+      http.expectOne(`${BASE}/source-selection`).flush(selection(), { headers: { ETag: '"1"' } });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(
+        detail([
+          version({ id: 'v-1', version: 1, processingStatus: 'Ready', candidatePreparations: [{ preparationId: 'prep-2', generation: 2, processingStatus: 'Ready', evidenceVersionId: 'ev-2', createdAt: '2030-01-02T10:00:00Z', canPromote: true }] }),
+          version({ id: 'v-2', version: 2, processingStatus: 'Ready' }),
+        ]),
+      );
+      await settle();
+      expect(q('docs-candidate')).not.toBeNull();
+      await wait();
+      http.expectNone((r) => r.url === `${BASE}/documents`);   // tutto pronto: il polling si ferma
+      http.match(() => true);
+    });
+
     it('non invia mai richieste diverse da GET', async () => {
       mountWithPoll({ intervalMs: 5, maxPolls: 3 });
       await flushLoad([item()]);
