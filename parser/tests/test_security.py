@@ -429,3 +429,23 @@ def test_markdown_and_text_with_active_or_pathological_content_are_inert_bounded
         r = post_convert(client, fid, version_info=version_info, data=data, fmt=fmt, timeoutSeconds=90)
         assert time.monotonic() - started < 120
         _assert_clean_outcome(client, r, hp)
+
+
+def test_markdown_inline_images_are_declared_unprocessed_never_fetched_and_never_a_crash(client, version_info):
+    """Regressione T106: un'immagine DENTRO un paragrafo (testo + immagine) mandava in crash il parser (503 parser_crash, poi documento Failed)."""
+    from manifest_checks import validate_manifest
+
+    with Honeypot() as hp:
+        data = (f"# Titolo\n\nPrima ![logo]({hp.url}/logo.png) dopo il testo, e ancora ![fine]({hp.url}/fine.png)\n\n"
+                f"Un altro paragrafo con [un link]({hp.url}/link) e ![img]({hp.url}/x.png) in mezzo e poi altro testo.\n").encode()
+        r = post_convert(client, "md-basic", version_info=version_info, data=data)
+        assert r.status_code == 200, r.text[:200]
+        m = r.json()
+        assert hp.hits == [], "nessun fetch delle immagini"
+        assert validate_manifest(m, data) == []
+        assert m["status"] == "Incomplete", "immagini non elaborate = documento incompleto, come per le immagini isolate"
+        images = [i for i in m["issues"] if i["code"] == "unprocessed_markdown_image"]
+        assert len(images) == 3 and all(i["blockRef"] for i in images)
+        assert sum(1 for it in m["inventory"] if it["kind"] == "picture" and it["state"] == "unprocessed") == 3
+        text = "\n".join(b["text"] for b in m["blocks"])
+        assert "Prima" in text and "dopo il testo" in text and "altro testo" in text, "il testo attorno alle immagini resta"

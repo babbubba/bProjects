@@ -202,10 +202,11 @@ def convert_markdown(data: bytes, limits: dict) -> Parsed:
         elif btype == "picture":
             text, s, e = "", cursor, cursor  # immagini Markdown: mai scaricate
         else:
-            text = " ".join((i.text or "") for i in items).strip()
+            text = " ".join(_item_text(i) for i in items).strip()
             if not text:
                 continue
-            span = _locate(source, cursor, text, items[0].text or "", items[-1].text or "")
+            texts = [t for t in (_item_text(i) for i in items) if t]  # un'immagine inline (PictureItem) non ha testo: mai un estremo di ricerca
+            span = _locate(source, cursor, text, texts[0], texts[-1])
             if span is None:
                 s = e = None
             else:
@@ -237,11 +238,20 @@ def convert_markdown(data: bytes, limits: dict) -> Parsed:
             parsed.inventory.append({"itemRef": f"inv{n}", "kind": "picture", "state": "unprocessed", "blockRefs": [ref], "issueRefs": [iss]})
         else:
             parsed.inventory.append({"itemRef": f"inv{n}", "kind": btype, "state": "represented", "blockRefs": [ref], "issueRefs": []})
+            # immagini dentro un paragrafo: mai scaricate ne elaborate, dichiarate come quelle isolate (nessuna immagine informativa sparisce in silenzio)
+            for k, picture in enumerate(it for it in items if converters.block_type(it) == "picture"):
+                iss = new_issue(parsed.issues, "unprocessed_markdown_image", block_ref=ref,
+                                reason="Immagine di Markdown non scaricata ne elaborata.")
+                parsed.inventory.append({"itemRef": f"inv{n}-img{k + 1}", "kind": "picture", "state": "unprocessed", "blockRefs": [ref], "issueRefs": [iss]})
         if level is not None:
             hs.push(level, items[0].text or "", ref)
     if not parsed.blocks:
         parsed.inventory.append({"itemRef": "inv1", "kind": "document", "state": "empty", "blockRefs": [], "issueRefs": []})
     return parsed
+
+
+def _item_text(item) -> str:
+    return getattr(item, "text", None) or ""
 
 
 def _is_inline(doc, parent_ref) -> bool:
