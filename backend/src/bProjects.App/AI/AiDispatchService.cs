@@ -173,7 +173,11 @@ public sealed class AiDispatchService(
     /// Attesa a riposo: al massimo un intervallo di polling, interrotta subito da un endpoint che ha appena accodato un turno o un run.
     /// Il lavoro resta comunque letto dal database, quindi un segnale perso costa al più <see cref="PollInterval"/>.
     /// </summary>
-    private Task IdleAsync(CancellationToken ct) => wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct);
+    private async Task IdleAsync(CancellationToken ct)
+    {
+        using var span = DocumentTiming.Span("dispatch.idle");
+        await (wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct));
+    }
 
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
@@ -186,7 +190,7 @@ public sealed class AiDispatchService(
         // Classificazione iniziale dei root documentali (T124): preflight tecnico senza LLM, PRIMA di ogni claim. Finche un root e Pending
         // nessuna query di claim lo vede, quindi nessuna inferenza. Non e inferenza e non tiene lo slot AI; un root classificato non si riclassifica mai.
         if (classifier is not null
-            && await classifier.ClassifyNextAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct) is { } classified)
+            && await DocumentTiming.TimeAsync("dispatch.classify", () => classifier.ClassifyNextAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct)) is { } classified)
         {
             await PublishClassifiedAsync(classified);
             return true;
@@ -197,13 +201,14 @@ public sealed class AiDispatchService(
         using (var aggregationScope = scopes.CreateScope())
         {
             if (aggregationScope.ServiceProvider.GetService<Documents.DocumentAggregationRunner>() is { } aggregation
-                && await aggregation.RunNextAsync(_owner, ct) is not null)
+                && await DocumentTiming.TimeAsync("dispatch.aggregate", () => aggregation.RunNextAsync(_owner, ct)) is not null)
             {
                 return true;
             }
         }
 
         WorkClaim? work;
+        using (DocumentTiming.Span("dispatch.claim"))
         using (var scope = scopes.CreateScope())
         {
             work = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
@@ -216,7 +221,10 @@ public sealed class AiDispatchService(
             return false;
         }
 
-        await RecordQueueAsync(work, ct);
+        using (DocumentTiming.Span("dispatch.recordQueue"))
+        {
+            await RecordQueueAsync(work, ct);
+        }
         if (work.Turn is { } turn)
         {
             await RunTurnAsync(turn, ct);
@@ -231,7 +239,10 @@ public sealed class AiDispatchService(
         }
         else if (work.Unit is { } unit)
         {
-            await RunUnitAsync(unit, ct);
+            using (DocumentTiming.Span("dispatch.runUnit"))
+            {
+                await RunUnitAsync(unit, ct);
+            }
         }
         else
         {
@@ -385,6 +396,7 @@ public sealed class AiDispatchService(
         Func<Guid, Task>? publish = null)
     {
         publish ??= PublishRunState;
+        using var formalSpan = DocumentTiming.Span("formal.total");
         await publish(runId); // Running
         // Lo scope è ereditato dagli executor del workflow MAF: commit e Failed del validatore vi trovano le chiamate del tentativo.
         using var inferenceScope = InferenceScope.Begin();
@@ -396,7 +408,11 @@ public sealed class AiDispatchService(
         var completed = false;
         try
         {
-            await execute(leaseLost.Token);
+            using (DocumentTiming.Span("formal.execute"))
+            {
+                await execute(leaseLost.Token);
+            }
+
             completed = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

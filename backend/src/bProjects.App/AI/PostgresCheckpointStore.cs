@@ -85,6 +85,7 @@ public sealed class PostgresCheckpointStore(AppDbContext db, CheckpointWriter wr
 {
     public async ValueTask<IEnumerable<CheckpointInfo>> RetrieveIndexAsync(string runId, CheckpointInfo? withParent = null)
     {
+        using var span = DocumentTiming.Span("checkpoint.index");
         await using var command = await CommandAsync(
             $"""
             SELECT c."CheckpointKey" FROM "WorkflowCheckpoints" c
@@ -106,6 +107,7 @@ public sealed class PostgresCheckpointStore(AppDbContext db, CheckpointWriter wr
 
     public async ValueTask<CheckpointInfo> CreateCheckpointAsync(string runId, JsonElement value, CheckpointInfo? parent = null)
     {
+        using var span = DocumentTiming.Span("checkpoint.create");
         var key = Guid.NewGuid().ToString("N");
         var info = new CheckpointInfo(runId, key);
 
@@ -151,6 +153,7 @@ public sealed class PostgresCheckpointStore(AppDbContext db, CheckpointWriter wr
 
     public async ValueTask<JsonElement> RetrieveCheckpointAsync(string runId, CheckpointInfo key)
     {
+        using var span = DocumentTiming.Span("checkpoint.retrieve");
         await using var command = await CommandAsync(
             $"""
             SELECT "Payload"::text, "MafVersion", "WorkflowDefinitionVersion" FROM "WorkflowCheckpoints"

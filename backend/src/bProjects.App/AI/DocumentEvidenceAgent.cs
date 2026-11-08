@@ -117,7 +117,11 @@ public sealed class DocumentEvidenceAgent(
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var input = await UnitInputLoader.LoadAsync(db, claim, ct);
+        UnitInput input;
+        using (DocumentTiming.Span("agent.loadInput"))
+        {
+            input = await UnitInputLoader.LoadAsync(db, claim, ct);
+        }
 
         var definition = input.WorkflowDefinitionVersion ?? DefinitionVersion;
         if (definition != DefinitionVersion)
@@ -126,12 +130,18 @@ public sealed class DocumentEvidenceAgent(
             throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "La definizione del workflow dell'unità non è compatibile con quella corrente.");
         }
 
-        var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Extraction, ct);
+        DocumentRuntimeProfile profile;
+        using (DocumentTiming.Span("agent.resolveProfile"))
+        {
+            profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Extraction, ct);
+        }
         var limits = new PlannerLimits(profile.InputBudgetTokens, profile.OutputTokens);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
         var promptVersion = EffectivePromptVersion(claim.ConfigJson);
+        var partitionSpan = DocumentTiming.Span("agent.partition");
         var partition = await new DocumentPortionPlanner(limits).PartitionAsync(
             input.Portions, (ranges, token) => MeasureAsync(profile, structured, promptVersion, ranges, token), ct);
+        partitionSpan?.Dispose();
         if (partition.Batches.Count >= UnitOrdinalStride)
         {
             throw new DocumentWorkException(DocumentWorkException.DocumentIncomplete, "L'unità richiede troppi batch per essere identificata in modo univoco.");
@@ -141,12 +151,19 @@ public sealed class DocumentEvidenceAgent(
         var store = new DocumentWorkStore(db, writer);
         var plan = new DocumentExtractionPlan(
             claim, input, partition, profile, limits, factory.Options, client, structured, promptVersion,
-            (resultHash, portions, token) => new ValueTask(store.CompleteUnitAsync(resultHash, portions, claim.AttemptCount, token)));
+            async (resultHash, portions, token) =>
+            {
+                using var completeSpan = DocumentTiming.Span("agent.completeUnit");
+                await store.CompleteUnitAsync(resultHash, portions, claim.AttemptCount, token);
+            });
         var port = new DocumentBatchPort(store, db, writer, factory, plan, new RootCallCounterReservation(db, writer, FrozenMaxCalls(claim.ConfigJson, documents.Value)));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(db, writer));
         try
         {
-            await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, new BatchInvocationCounter()), checkpoints, SessionId(claim.JobId), null, ct);
+            using (DocumentTiming.Span("agent.workflow"))
+            {
+                await DocumentBatchWorkflow.RunAsync(DocumentBatchWorkflow.Build(port, new BatchInvocationCounter()), checkpoints, SessionId(claim.JobId), null, ct);
+            }
         }
         catch (Exception ex) when (IsLeaseLost(ex))
         {
@@ -207,6 +224,7 @@ public sealed class DocumentEvidenceAgent(
 
     private async ValueTask<UnitMeasure> MeasureAsync(DocumentRuntimeProfile profile, bool structured, string promptVersion, IReadOnlyList<DocumentSourceRange> ranges, CancellationToken ct)
     {
+        using var measureSpan = DocumentTiming.Span("agent.measure");
         var schema = structured ? DocumentEvidenceSchema.ForUnit(ranges.Select(r => r.RangeKey)).GetRawText() : null;
         var full = await factory.Preflight.MeasureAsync(
             new DocumentPayload(AiPhase.Extraction, InstructionsFor(promptVersion), BuildMessages(ranges), schema), ct, profile.Fingerprint);

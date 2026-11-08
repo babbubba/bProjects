@@ -194,6 +194,7 @@ public sealed class RootCallCounterReservation(AppDbContext db, CheckpointWriter
 {
     public async ValueTask ReserveAsync(BatchRef batch, CancellationToken ct)
     {
+        using var span = DocumentTiming.Span("port.reserveCall");
         await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
         await WorkOwnerGuard.LockAsync(db, writer, includeDeadline: true, ct);
 
@@ -246,12 +247,14 @@ public sealed class DocumentBatchPort(
 {
     public async ValueTask<int> LoadAsync(CancellationToken ct)
     {
+        using var span = DocumentTiming.Span("port.load");
         await store.PublishManifestAsync(plan.Manifest, ct);   // replay identico = nessun effetto; contenuto diverso = integrity_conflict
         return 0;                                               // i guard di Lookup saltano gli output già Committed
     }
 
     public async ValueTask<BatchRef> PrepareAsync(int cursor, CancellationToken ct)
     {
+        using var span = DocumentTiming.Span("port.prepare");
         var batch = await plan.PrepareAsync(cursor, this, ct);
         await store.PublishBatchesAsync([batch], ct);
         return new BatchRef(batch.Ordinal, batch.BatchId, batch.InputHash);
@@ -259,6 +262,7 @@ public sealed class DocumentBatchPort(
 
     public async ValueTask<bool> LookupAsync(BatchRef batch, CancellationToken ct)
     {
+        using var span = DocumentTiming.Span("port.lookup");
         if ((await store.LookupAsync(batch.BatchId, batch.InputHash, plan.Expectation, ct)).Kind == WorkLookupKind.Hit)
         {
             return true;
@@ -276,6 +280,7 @@ public sealed class DocumentBatchPort(
     /// </summary>
     public async ValueTask<TimeSpan?> CallTimeoutAsync(BatchRef batch, CancellationToken ct)
     {
+        using var span = DocumentTiming.Span("port.callTimeout");
         var authority = await DocumentDeadlineGuard.EvaluateAsync(db, writer.OwnerKind, writer.OwnerId, writer.LeaseOwner, writer.FencingToken, lockRow: false, ct);
         if (!authority.Allowed)
         {
@@ -297,6 +302,7 @@ public sealed class DocumentBatchPort(
 
     public async ValueTask PersistAsync(BatchRef batch, string responseText, CancellationToken ct)
     {
+        using var span = DocumentTiming.Span("port.persist");
         ValidatedBatch validated;
         try
         {

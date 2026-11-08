@@ -171,7 +171,10 @@ internal static class BatchSender
         AgentResponse response;
         try
         {
-            response = await AgentFactory.RunBatchAsync(port.CreateAgent(batch), input, call.Token);
+            using (DocumentTiming.Span("send.model"))
+            {
+                response = await AgentFactory.RunBatchAsync(port.CreateAgent(batch), input, call.Token);
+            }
         }
         catch (OperationCanceledException ex) when (call.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
