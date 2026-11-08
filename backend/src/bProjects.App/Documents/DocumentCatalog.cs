@@ -13,6 +13,9 @@ public sealed record IssuesSummary(string Code, string? Message)
     public const string FixedMessage = "La preparazione del documento non è riuscita";
 }
 
+/// <summary>Candidata del contratto HTTP (§Documenti): preparazione completa e non corrente della stessa versione file, promovibile con CAS sulla <c>bundleRevision</c>.</summary>
+public sealed record CandidatePreparationView(Guid PreparationId, int Generation, string ProcessingStatus, Guid? EvidenceVersionId, DateTimeOffset CreatedAt, bool CanPromote);
+
 /// <summary>DocumentVersionView del contratto HTTP (§Documenti). Nessuna chiave di storage né percorso: l'originale si scarica solo dalla route autenticata.</summary>
 public sealed record DocumentVersionView(
     Guid Id,
@@ -30,7 +33,7 @@ public sealed record DocumentVersionView(
     Guid? CurrentPreparationId,
     Guid? CurrentEvidenceVersionId,
     long BundleRevision,
-    IReadOnlyList<Guid> CandidatePreparations,
+    IReadOnlyList<CandidatePreparationView> CandidatePreparations,
     Guid? LatestJobId,
     bool Included,
     string SelectionMode,
@@ -183,7 +186,7 @@ public sealed class DocumentCatalog(AppDbContext db, SourceSelectionService sele
         var state = c.States.GetValueOrDefault(v.Id);
         var candidates = prepared.Where(p => p.Status == PreparationStatus.Ready && p.CurrentEvidenceVersionId is not null && p.Id != state?.CurrentPreparationId
                 && !c.FormerlyCurrent.Contains(p.Id))
-            .OrderBy(p => p.Generation).Select(p => p.Id).ToList();
+            .OrderBy(p => p.Generation).Select(p => new CandidatePreparationView(p.Id, p.Generation, p.Status.ToString(), p.CurrentEvidenceVersionId, p.CreatedAt, CanPromote: true)).ToList();
         var applicable = c.Entry.Availability == SourceAvailability.Ready && c.Entry.Resolved?.Id == v.Id;
         return new(
             v.Id, v.DocumentId, v.ProjectId, v.Version, v.OriginalName, v.MediaType, v.ByteLength, v.Sha256, v.UploadedBy, v.UploadedAt,

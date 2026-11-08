@@ -573,7 +573,14 @@ public sealed class DocumentVersionLifecycleTests : LifecycleTestBase
         Assert.Equal(g[0].Preparation, view.GetProperty("currentPreparationId").GetGuid());   // g1, non la g3 Ready con generazione massima
         Assert.Equal(g[0].EvidenceVersion, view.GetProperty("currentEvidenceVersionId").GetGuid());
         Assert.Equal(1, view.GetProperty("bundleRevision").GetInt32());
-        Assert.Equal(new[] { g[1].Preparation, g[2].Preparation }, view.GetProperty("candidatePreparations").EnumerateArray().Select(e => e.GetGuid()).ToArray());
+        Assert.Equal(new[] { g[1].Preparation, g[2].Preparation }, view.GetProperty("candidatePreparations").EnumerateArray().Select(e => e.GetProperty("preparationId").GetGuid()).ToArray());
+        Assert.All(view.GetProperty("candidatePreparations").EnumerateArray(), e =>
+        {
+            Assert.Equal("Ready", e.GetProperty("processingStatus").GetString());   // forma del contratto http-api.md: oggetti, non UUID nudi
+            Assert.True(e.GetProperty("canPromote").GetBoolean());
+            Assert.NotEqual(Guid.Empty, e.GetProperty("evidenceVersionId").GetGuid());
+            Assert.True(e.GetProperty("generation").GetInt32() > 1);
+        });
         var detail = await Json(await client.GetAsync($"/api/projects/{t.Project}/documents/{t.Document}", Ct));
         Assert.Equal(g[0].Preparation, detail.GetProperty("versions")[0].GetProperty("currentPreparationId").GetGuid());
     }
