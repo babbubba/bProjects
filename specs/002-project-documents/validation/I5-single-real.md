@@ -43,3 +43,24 @@ Condizioni: `Qwen3.6-35B-Smart` (router llama.cpp b10703), finestra 131072, pars
 - Analisi, gerarchia, copertura, semantica e citazioni: **NOT VERIFIED** (non raggiunte). T082 resta **FAILED/BLOCKED** per il cap temporale della preparazione; nessun aumento del cap o riduzione del corpus.
 
 **Versionamento (verifica richiesta).** Il passaggio globale a `document-extraction-v3` (`9b16759`) cambiava, per i job già creati, `configHash`, identità del manifesto e `batchId` (tutti includono `PromptVersion`/SHA delle istruzioni), perché la configurazione congelata dei job ExtractUnit non portava la versione. Correzione compatibile: la versione è congelata in `DocumentJobs.ConfigJson` (e in `ExtractorConfig` del job di aggregazione) alla creazione; una configurazione senza chiave, non valida o ignota riprende con **v2** (storico), quella con `promptVersion=document-extraction-v3` usa v3; il `PromptVersion` della versione Evidence segue la configurazione del job. Test: `T082DocumentExtractionPromptTests` (13/13) e `A_job_without_the_prompt_version_replays_as_historic_v2_and_a_new_job_freezes_v3_...` (PostgreSQL reale: versione dei batch, `configHash` e `batchId` diversi).
+
+## Scomposizione misurata della latenza fra due chiamate (2026-11-08, nessuna inferenza reale)
+
+**Sintomo** (sesta esecuzione): 165 unità in ~59 min, inferenza media 9,0 s, ma 12,7 s mediani di intervallo fra una chiamata e la successiva (2085 s su ~3550 s non sono inferenza).
+
+**Strumentazione** (`AI/DocumentTiming.cs`, `ActivitySource` senza listener = costo nullo; intervalli su dispatcher, claim, caricamento input, profilo, partizionamento/misura, workflow MAF, checkpoint, riserva chiamata, persistenza, completamento unità, invio al modello). **Benchmark** `DocumentLatencyBenchmarkTests` (PostgreSQL reale, dispatcher e agente reali, modello finto; si esegue solo con `BPROJECTS_BENCH=1`, parametri `BPROJECTS_BENCH_UNITS`, `BPROJECTS_BENCH_HTTP_MS` per simulare la latenza di ogni richiesta HTTP): 30 unità da 12 porzioni, 1 chiamata di inferenza per unità, latenza di inferenza 0.
+
+| Misura per unità | Prima della correzione | Dopo la correzione |
+| --- | --- | --- |
+| Latenza HTTP simulata 0 ms: tempo totale per unità | 212 ms | non rimisurato (cambiano solo le richieste) |
+| Latenza HTTP simulata 100 ms: tempo totale per unità | **13 721 ms** | **1 561 ms** |
+| di cui `agent.measure` (proprio) | **12 685 ms (92 %)** | 549 ms |
+| Richieste HTTP per unità: `/tokenize` + `/apply-template` | 73 + 47 = **120** | 7 + 3 = **10** |
+| Misure del payload per unità | 23 (= 2n−1, con n = 12 porzioni) | 1 |
+| Altro lavoro per unità (claim, input, checkpoint ×8, persistenza, completamento, workflow) | ~200 ms in totale | ~200 ms (invariato) |
+
+**Causa.** `DocumentPortionPlanner.PartitionAsync` misura ogni pezzo da solo (n misure) e poi ogni candidato incrementale (n−1): per 12 porzioni 23 misure. Ogni misura (`DocumentEvidenceAgent.MeasureAsync`) misura il payload completo (apply-template + tokenize) e quello proprietario (tokenize), ~5 richieste seriali. Con il tokenizer del DGX a 0,08–0,13 s per richiesta (misurato in sola lettura) sono ~10–12 s per unità: coincide con l'intervallo mediano osservato (12,7 s). Non sono attese di polling o backoff: il dispatcher non entra mai in idle (`dispatch.idle` assente), il lavoro di database è ~200 ms per unità, `ReadinessBackoff` non interviene a runtime sano.
+
+**Correzione** (`DocumentPortionPlanner.PartitionAsync`, via rapida): si misura prima il payload dell'intero insieme dei range proprietari; se entra nel budget con qualità utilizzabile, la partizione è un unico batch (stesso risultato del packing incrementale, perché con l'insieme completo dentro il budget nessuna aggiunta può essere rifiutata e nessun pezzo si divide), con UNA misura. Altrimenti, o se la misura non è utilizzabile (errore `RuntimeUnverified` invariato), si prosegue con l'algoritmo originale, costo +1 misura. Nessuna soglia, deadline, corpus o criterio modificato. Test: 13 test originali del pianificatore invariati e 3 nuovi (una sola misura, stesso batch/ordine/misura; fallback invariato; misura non utilizzabile non prende la via rapida).
+
+**Proiezione, non misura.** Con 250 unità, ~9 s di inferenza e ~1,5 s di overhead per unità: ≈ 44 minuti contro il cap di 60 (margine ~25 %). La conferma richiede una nuova prova reale, da eseguire solo dopo la tua autorizzazione.
