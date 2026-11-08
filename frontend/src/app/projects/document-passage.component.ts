@@ -22,6 +22,8 @@ export interface PassageHighlight {
   end: number;
 }
 
+let passageSeq = 0;
+
 /**
  * Contenuto preparato di una versione (002 T030): blocchi in ordine di lettura con pagina, sezione e righe solo se il parser le ha
  * fornite, e un passaggio con la citazione evidenziata. Il testo è sempre interpolato (mai HTML): l'escaping è del template.
@@ -33,6 +35,8 @@ export interface PassageHighlight {
   styleUrl: './document-passage.component.scss',
 })
 export class DocumentPassageComponent {
+  /** Id del titolo unico per istanza: più passaggi possono essere aperti insieme (chat, anteprima, documenti). */
+  protected readonly titleId = `passage-title-${++passageSeq}`;
   private readonly api = inject(DocumentsApiService);
 
   readonly projectId = input.required<string>();

@@ -99,6 +99,22 @@ describe('DocumentPassageComponent', () => {
 
   afterEach(() => http.verify());
 
+  // T107: più passaggi aperti insieme (chat, anteprima, documenti) non devono condividere l'id del titolo.
+  it('ogni istanza ha un titolo con id proprio e la regione punta al proprio titolo', () => {
+    mount();
+    const first = el;
+    const firstFixture = fixture;
+    mount();
+    const second = el;
+    const title = (root: HTMLElement) => root.querySelector('h4')!;
+    expect(title(first).id).not.toBe(title(second).id);
+    for (const root of [first, second]) {
+      expect(root.querySelector('section')!.getAttribute('aria-labelledby')).toBe(title(root).id);
+    }
+    http.match(() => true);
+    firstFixture.destroy();
+  });
+
   it('mostra i blocchi in ordine con pagina, sezione e righe solo se disponibili', async () => {
     mount();
     await flush([

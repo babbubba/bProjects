@@ -1,5 +1,5 @@
-<section class="passage" aria-labelledby="passage-title">
-  <h4 id="passage-title" class="h6 mb-0">
+<section class="passage" [attr.aria-labelledby]="titleId">
+  <h4 [id]="titleId" class="h6 mb-0">
     Contenuto del documento{{ prep() ? ' (v' + prep()!.version + ')' : '' }}
   </h4>
 
