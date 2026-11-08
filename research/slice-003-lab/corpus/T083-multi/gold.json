@@ -1,0 +1,370 @@
+{
+  "Name": "T083-multi",
+  "Seed": 20261106,
+  "FillerChars": 1300000,
+  "BulkRulesPerDocument": 90,
+  "Gold": [
+    {
+      "Id": "M01",
+      "DocKey": "d1",
+      "Zone": 0,
+      "Sentence": "Il contratto quadro Zefiro ha durata di 48 mesi dalla data di firma.",
+      "Text": [
+        "48",
+        "mesi"
+      ],
+      "Quote": [
+        "48 mesi"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M02",
+      "DocKey": "d1",
+      "Zone": 0,
+      "Sentence": "Il rinnovo tacito del contratto non \u00E8 previsto.",
+      "Text": [
+        "rinnov",
+        "tacit"
+      ],
+      "Quote": [
+        "rinnovo tacito"
+      ],
+      "Negative": true,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M06",
+      "DocKey": "d1",
+      "Zone": 0,
+      "Sentence": "Le penali per i ritardi di consegna sono determinate secondo la tabella dell\u0027Allegato C.",
+      "Text": [
+        "penal",
+        "allegato c"
+      ],
+      "Quote": [
+        "allegato c"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M07",
+      "DocKey": "d1",
+      "Zone": 0,
+      "Sentence": "Il pacchetto Ambra comprende il monitoraggio degli ordini.",
+      "Text": [
+        "ambra",
+        "monitoraggio"
+      ],
+      "Quote": [
+        "pacchetto ambra"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M03",
+      "DocKey": "d1",
+      "Zone": 1,
+      "Sentence": "Il termine di pagamento delle fatture \u00E8 di 30 giorni dalla data di ricevimento.",
+      "Text": [
+        "30",
+        "giorni"
+      ],
+      "Quote": [
+        "30 giorni"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M04",
+      "DocKey": "d1",
+      "Zone": 1,
+      "Sentence": "La garanzia sui ricambi ha durata di 24 mesi dalla consegna.",
+      "Text": [
+        "24",
+        "mesi"
+      ],
+      "Quote": [
+        "24 mesi"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M05",
+      "DocKey": "d1",
+      "Zone": 2,
+      "Sentence": "I ricambi richiesti con la procedura ordinaria sono consegnati entro 5 giorni lavorativi.",
+      "Text": [
+        "5",
+        "lavorativ"
+      ],
+      "Quote": [
+        "5 giorni lavorativi"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M08",
+      "DocKey": "d2",
+      "Zone": 0,
+      "Sentence": "Il limite di ordini per ciascuna sede \u00E8 di 40 al giorno.",
+      "Text": [
+        "40"
+      ],
+      "Quote": [
+        "40 al giorno"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M12",
+      "DocKey": "d2",
+      "Zone": 1,
+      "Sentence": "Gli ordini urgenti non sono accettati dopo le 16:00, tranne quelli dei clienti di categoria Gold.",
+      "Text": [
+        "gold"
+      ],
+      "Quote": [
+        "16:00"
+      ],
+      "Negative": true,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M09",
+      "DocKey": "d2",
+      "Zone": 1,
+      "Sentence": "I pezzi di ricambio ordinari arrivano al pi\u00F9 tardi entro una settimana lavorativa.",
+      "Text": [
+        "settimana"
+      ],
+      "Quote": [
+        "settimana lavorativa"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M10",
+      "DocKey": "d2",
+      "Zone": 1,
+      "Sentence": "Nel pacchetto Ambra il monitoraggio degli ordini viene aggiornato ogni 15 minuti.",
+      "Text": [
+        "ambra",
+        "15",
+        "minut"
+      ],
+      "Quote": [
+        "15 minuti"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M11",
+      "DocKey": "d2",
+      "Zone": 2,
+      "Sentence": "Allegato C: per ogni giorno di ritardo nella consegna si applica una penale dell\u00271,5 per cento del valore dell\u0027ordine, con un tetto del 15 per cento.",
+      "Text": [
+        "1,5|1.5",
+        "15"
+      ],
+      "Quote": [
+        "1,5 per cento"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M13",
+      "DocKey": "d3",
+      "Zone": 0,
+      "Sentence": "La garanzia sui ricambi ha durata di 36 mesi dalla consegna.",
+      "Text": [
+        "36",
+        "mesi"
+      ],
+      "Quote": [
+        "36 mesi"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M14",
+      "DocKey": "d3",
+      "Zone": 1,
+      "Sentence": "Il termine di pagamento delle fatture \u00E8 di 60 giorni data fattura.",
+      "Text": [
+        "60",
+        "giorni"
+      ],
+      "Quote": [
+        "60 giorni"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M15",
+      "DocKey": "d3",
+      "Zone": 1,
+      "Sentence": "Il collaudo finale si svolger\u00E0 il 12 marzo 2027 presso la sede di Brescia.",
+      "Text": [
+        "12 marzo 2027|2027-03-12|12/03/2027",
+        "brescia"
+      ],
+      "Quote": [
+        "12 marzo 2027"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M16",
+      "DocKey": "d3",
+      "Zone": 2,
+      "Sentence": "Le modifiche ai listini non sono ammesse durante il periodo di collaudo.",
+      "Text": [
+        "listin",
+        "collaud"
+      ],
+      "Quote": [
+        "listini"
+      ],
+      "Negative": true,
+      "Class": "Documented"
+    },
+    {
+      "Id": "M17",
+      "DocKey": "d3",
+      "Zone": 2,
+      "Sentence": "Se il collaudo non viene superato, il pagamento della seconda rata \u00E8 sospeso.",
+      "Text": [
+        "second",
+        "rata",
+        "sospes"
+      ],
+      "Quote": [
+        "seconda rata"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "P1",
+      "DocKey": "pm",
+      "Zone": 0,
+      "Sentence": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede \u00E8 di 25 al giorno e che il termine di pagamento delle fatture \u00E8 di 45 giorni.",
+      "Text": [
+        "25"
+      ],
+      "Quote": [
+        "25 al giorno"
+      ],
+      "Negative": false,
+      "Class": "Declared"
+    },
+    {
+      "Id": "P2",
+      "DocKey": "pm",
+      "Zone": 0,
+      "Sentence": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede \u00E8 di 25 al giorno e che il termine di pagamento delle fatture \u00E8 di 45 giorni.",
+      "Text": [
+        "45"
+      ],
+      "Quote": [
+        "45 giorni"
+      ],
+      "Negative": false,
+      "Class": "Declared"
+    }
+  ],
+  "Conflicts": [
+    {
+      "Id": "pagamento (doc/doc/PM)",
+      "Sides": [
+        [
+          "30 giorni"
+        ],
+        [
+          "60 giorni"
+        ],
+        [
+          "45 giorni"
+        ]
+      ],
+      "Topic": [
+        "pagament"
+      ]
+    },
+    {
+      "Id": "garanzia (doc/doc)",
+      "Sides": [
+        [
+          "24 mesi"
+        ],
+        [
+          "36 mesi"
+        ]
+      ],
+      "Topic": [
+        "garanzia"
+      ]
+    },
+    {
+      "Id": "limite ordini (doc/PM)",
+      "Sides": [
+        [
+          "40 al giorno"
+        ],
+        [
+          "25 al giorno"
+        ]
+      ],
+      "Topic": [
+        "limite",
+        "sede"
+      ]
+    }
+  ],
+  "Equivalents": [
+    {
+      "Id": "consegna ricambi: cinque giorni lavorativi / una settimana lavorativa",
+      "QuoteA": [
+        "5 giorni lavorativi"
+      ],
+      "QuoteB": [
+        "settimana lavorativa"
+      ]
+    }
+  ],
+  "PmStatement": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede \u00E8 di 25 al giorno e che il termine di pagamento delle fatture \u00E8 di 45 giorni.",
+  "Documents": [
+    {
+      "Key": "d1",
+      "FileName": "contratto-quadro-zefiro.txt",
+      "Sha256": "6f7d95b47a2405d4a375eb68d3b1f8477ff427445c38ae25e77a9abbf5341501",
+      "PlainTextSha256": "6f7d95b47a2405d4a375eb68d3b1f8477ff427445c38ae25e77a9abbf5341501"
+    },
+    {
+      "Key": "d2",
+      "FileName": "allegato-tecnico-zefiro.md",
+      "Sha256": "bc6241773ff7ed471c9194e5c981fad17dc3fa9a3a5672e1af8eef289c5e65e1",
+      "PlainTextSha256": "d0451cd9857ecb3d3bd35c55ee22267b063c0537a4ae7a0af92c89e6889f31df"
+    },
+    {
+      "Key": "d3",
+      "FileName": "verbale-collaudo-zefiro.docx",
+      "Sha256": "53964807e7208bcb3ae425cc6429cd241842a871db9047f9f2d848670f3b477f",
+      "PlainTextSha256": "f124b73c28c252333945b5ff62cc5741517773bda17ab782bb8dd35bc3c681ff"
+    }
+  ]
+}

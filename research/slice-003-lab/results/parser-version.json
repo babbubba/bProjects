@@ -1,0 +1,16 @@
+{
+  "schema": "document-parse-1",
+  "parserVersion": "1.0.0",
+  "doclingVersion": "2.129.0",
+  "doclingCoreVersion": "2.105.0",
+  "configHash": "463ab02e843ba57f7c86492773ee793b42dbb5e54932b8d96efc68284e0b7c31",
+  "dependencyLockHash": "b30ce354fbd83919e78074afa6663a41d8921fe2a64f9e6fd720891616da1bef",
+  "modelArtifactsHash": "c52bb8c0a43e172ffded91adfb13c833c3bac2add8e84a7de00d09281bd0ef51",
+  "formats": [
+    "pdf",
+    "docx",
+    "md",
+    "txt"
+  ],
+  "offsetConvention": "unicode-codepoint"
+}

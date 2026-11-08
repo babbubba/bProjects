@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "document-parse-1",
+  "originalSha256": "eefeeb81435230c20179558fe180108265b2fe59e08454b7ba38dee3647ff50f",
+  "parserVersion": "1.0.0",
+  "dependencyLockHash": "b30ce354fbd83919e78074afa6663a41d8921fe2a64f9e6fd720891616da1bef",
+  "modelArtifactsHash": "c52bb8c0a43e172ffded91adfb13c833c3bac2add8e84a7de00d09281bd0ef51",
+  "configHash": "463ab02e843ba57f7c86492773ee793b42dbb5e54932b8d96efc68284e0b7c31",
+  "status": "Complete",
+  "originFormat": "txt",
+  "originalByteLength": 263,
+  "pageCount": null,
+  "offsetConvention": "unicode-codepoint",
+  "document": {
+    "serialization": "text-lossless-1",
+    "content": "Note di progetto\n\nIl portale non deve inviare mai email senza consenso.\nNon e' richiesta la gestione dei resi.\nE' vietato memorizzare il numero di carta.\nTutte le esportazioni sono consentite tranne quelle dei dati anagrafici.\nIl termine e' di 45 giorni, non 30.\n"
+  },
+  "blocks": [
+    {
+      "ref": "b1",
+      "order": 0,
+      "parentRef": null,
+      "type": "paragraph",
+      "text": "Note di progetto",
+      "textSha256": "a3db79e765384d705d0efc16c431c52d938056dcce71a1d71f04740166f0e471",
+      "headingPath": [],
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1,
+        "lineEnd": 1,
+        "sourceStart": 0,
+        "sourceEnd": 16
+      }
+    },
+    {
+      "ref": "b2",
+      "order": 1,
+      "parentRef": null,
+      "type": "paragraph",
+      "text": "Il portale non deve inviare mai email senza consenso.\nNon e' richiesta la gestione dei resi.\nE' vietato memorizzare il numero di carta.\nTutte le esportazioni sono consentite tranne quelle dei dati anagrafici.\nIl termine e' di 45 giorni, non 30.",
+      "textSha256": "e612d66b95fde483e11a0ea926fc3d6cbcfdb5379ed311fdbfbf12e25ebb50dc",
+      "headingPath": [],
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3,
+        "lineEnd": 7,
+        "sourceStart": 18,
+        "sourceEnd": 262
+      }
+    }
+  ],
+  "inventory": [
+    {
+      "itemRef": "inv1",
+      "kind": "paragraph",
+      "state": "represented",
+      "blockRefs": [
+        "b1"
+      ],
+      "issueRefs": []
+    },
+    {
+      "itemRef": "inv2",
+      "kind": "paragraph",
+      "state": "represented",
+      "blockRefs": [
+        "b2"
+      ],
+      "issueRefs": []
+    }
+  ],
+  "chunks": [
+    {
+      "chunkKey": "c1",
+      "text": "Note di progetto\nIl portale non deve inviare mai email senza consenso.  \nNon e' richiesta la gestione dei resi.  \nE' vietato memorizzare il numero di carta.  \nTutte le esportazioni sono consentite tranne quelle dei dati anagrafici.  \nIl termine e' di 45 giorni, non 30.",
+      "contextualizedText": "Note di progetto\nIl portale non deve inviare mai email senza consenso.  \nNon e' richiesta la gestione dei resi.  \nE' vietato memorizzare il numero di carta.  \nTutte le esportazioni sono consentite tranne quelle dei dati anagrafici.  \nIl termine e' di 45 giorni, non 30.",
+      "headingPath": [],
+      "ranges": [
+        {
+          "rangeKey": "c1:1",
+          "blockRef": "b1",
+          "start": 0,
+          "end": 16,
+          "ownership": "Primary",
+          "sourceTextSha256": "a3db79e765384d705d0efc16c431c52d938056dcce71a1d71f04740166f0e471"
+        },
+        {
+          "rangeKey": "c1:2",
+          "blockRef": "b2",
+          "start": 0,
+          "end": 244,
+          "ownership": "Primary",
+          "sourceTextSha256": "e612d66b95fde483e11a0ea926fc3d6cbcfdb5379ed311fdbfbf12e25ebb50dc"
+        }
+      ],
+      "tokenCount": 88,
+      "tokenizerId": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "tokenSource": "estimated"
+    }
+  ],
+  "issues": []
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "scenario": "N4-fixtures",
+    "queries": 12,
+    "status": "PASS",
+    "check": "original index hash, both sets of metrics, exact parent links/context size, reranker candidate preservation"
+  },
+  {
+    "scenario": "T082-single",
+    "queries": 19,
+    "status": "PASS",
+    "check": "original index hash, both sets of metrics, exact parent links/context size, reranker candidate preservation"
+  },
+  {
+    "scenario": "T083-multi",
+    "queries": 25,
+    "status": "PASS",
+    "check": "original index hash, both sets of metrics, exact parent links/context size, reranker candidate preservation"
+  }
+]

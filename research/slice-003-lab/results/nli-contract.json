@@ -1,0 +1,254 @@
+{
+  "health": {
+    "status": "ok",
+    "model": "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli",
+    "device": "cuda:0"
+  },
+  "openapi": {
+    "openapi": "3.1.0",
+    "info": {
+      "title": "mDeBERTa NLI API",
+      "version": "0.1.0"
+    },
+    "paths": {
+      "/health": {
+        "get": {
+          "summary": "Health",
+          "operationId": "health_health_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "/v1/nli": {
+        "post": {
+          "summary": "Nli",
+          "operationId": "nli_v1_nli_post",
+          "parameters": [
+            {
+              "name": "authorization",
+              "in": "header",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Authorization"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NliReq"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/v1/classify": {
+        "post": {
+          "summary": "Classify",
+          "operationId": "classify_v1_classify_post",
+          "parameters": [
+            {
+              "name": "authorization",
+              "in": "header",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Authorization"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClsReq"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "ClsReq": {
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 20000,
+              "minLength": 1,
+              "title": "Text"
+            },
+            "labels": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "maxItems": 20,
+              "minItems": 2,
+              "title": "Labels"
+            },
+            "multi_label": {
+              "type": "boolean",
+              "title": "Multi Label",
+              "default": false
+            },
+            "hypothesis_template": {
+              "type": "string",
+              "title": "Hypothesis Template",
+              "default": "Questo testo riguarda: {}."
+            }
+          },
+          "type": "object",
+          "required": [
+            "text",
+            "labels"
+          ],
+          "title": "ClsReq"
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "type": "array",
+              "title": "Detail"
+            }
+          },
+          "type": "object",
+          "title": "HTTPValidationError"
+        },
+        "NliReq": {
+          "properties": {
+            "premise": {
+              "type": "string",
+              "maxLength": 20000,
+              "minLength": 1,
+              "title": "Premise"
+            },
+            "hypothesis": {
+              "type": "string",
+              "maxLength": 5000,
+              "minLength": 1,
+              "title": "Hypothesis"
+            }
+          },
+          "type": "object",
+          "required": [
+            "premise",
+            "hypothesis"
+          ],
+          "title": "NliReq"
+        },
+        "ValidationError": {
+          "properties": {
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array",
+              "title": "Location"
+            },
+            "msg": {
+              "type": "string",
+              "title": "Message"
+            },
+            "type": {
+              "type": "string",
+              "title": "Error Type"
+            },
+            "input": {
+              "title": "Input"
+            },
+            "ctx": {
+              "type": "object",
+              "title": "Context"
+            }
+          },
+          "type": "object",
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError"
+        }
+      }
+    }
+  }
+}

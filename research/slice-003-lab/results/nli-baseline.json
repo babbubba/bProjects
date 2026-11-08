@@ -1,0 +1,77 @@
+[
+  {
+    "id": "exact-conflict",
+    "premise": "Il termine contrattuale di pagamento Ã¨ esattamente di 45 giorni.",
+    "hypothesis": "Il termine contrattuale di pagamento Ã¨ esattamente di 30 giorni.",
+    "expected": "contradiction",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.0014140467392280698,
+        "neutral": 0.0008107399917207658,
+        "contradiction": 0.9977752566337585
+      }
+    },
+    "milliseconds": 111.42890003975481
+  },
+  {
+    "id": "language-paraphrase",
+    "premise": "La fattura deve essere saldata entro 30 giorni dalla data di emissione.",
+    "hypothesis": "Il pagamento della fattura non puÃ² avvenire oltre 30 giorni dalla sua emissione.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9978753328323364,
+        "neutral": 0.0019696534145623446,
+        "contradiction": 0.00015503917529713362
+      }
+    },
+    "milliseconds": 112.88519995287061
+  },
+  {
+    "id": "different-scopes",
+    "premise": "Per i clienti italiani il pagamento Ã¨ previsto entro 30 giorni.",
+    "hypothesis": "Per i clienti esteri il pagamento Ã¨ previsto entro 45 giorni.",
+    "expected": "neutral",
+    "response": {
+      "prediction": "neutral",
+      "scores": {
+        "entailment": 0.0014967570314183831,
+        "neutral": 0.9955230951309204,
+        "contradiction": 0.002980175893753767
+      }
+    },
+    "milliseconds": 110.84149999078363
+  },
+  {
+    "id": "numerical-entailment",
+    "premise": "Il pagamento deve essere effettuato entro 30 giorni.",
+    "hypothesis": "Il pagamento deve essere effettuato entro 60 giorni.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.013768679462373257,
+        "neutral": 0.004696814343333244,
+        "contradiction": 0.981534481048584
+      }
+    },
+    "milliseconds": 110.83810008130968
+  },
+  {
+    "id": "reverse-non-entailment",
+    "premise": "Il pagamento deve essere effettuato entro 45 giorni.",
+    "hypothesis": "Il pagamento deve essere effettuato entro 30 giorni.",
+    "expected": "neutral",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.01210098061710596,
+        "neutral": 0.003165538189932704,
+        "contradiction": 0.984733521938324
+      }
+    },
+    "milliseconds": 106.1553000472486
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "router_build": "b10703-0b5be7e4a",
+  "models": [
+    {
+      "id": "bge-m3-Q5",
+      "configuration": {
+        "--batch-size": "8192",
+        "--ctx-size": "8192",
+        "--cache-type-k": "q8_0",
+        "--cache-type-v": "q8_0",
+        "--flash-attn": "on",
+        "--model": "bge-m3-Q5_K_M.gguf",
+        "--parallel": "2",
+        "--ubatch-size": "8192"
+      },
+      "artifact_sha256": "not exposed by HTTP; unverified"
+    },
+    {
+      "id": "bge-reranker-v2-m3",
+      "configuration": {
+        "--pooling": "rank",
+        "--batch-size": "2048",
+        "--ctx-size": "8192",
+        "--cache-type-k": "q8_0",
+        "--cache-type-v": "q8_0",
+        "--flash-attn": "on",
+        "--model": "bge-reranker-v2-m3-Q5_K_M.gguf",
+        "--parallel": "1",
+        "--ubatch-size": "2048"
+      },
+      "artifact_sha256": "not exposed by HTTP; unverified"
+    }
+  ],
+  "revision_limit": "GGUF filename and quantization observed, exact weight revision unavailable via API",
+  "python": "3.13.18"
+}

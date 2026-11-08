@@ -1,0 +1,74 @@
+[
+  {
+    "scenario": "N4-fixtures",
+    "file": "md-basic.md",
+    "sha256": "63fc185f815fbb63f70ffc6ac65fa2d9f3b52d7d8381e2c6112f60aaea91f2a3",
+    "status": "Complete",
+    "blocks": 9,
+    "chunks": 2,
+    "seconds": 9.115107199992053
+  },
+  {
+    "scenario": "N4-fixtures",
+    "file": "txt-conflict-a.txt",
+    "sha256": "af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+    "status": "Complete",
+    "blocks": 2,
+    "chunks": 1,
+    "seconds": 3.940410599927418
+  },
+  {
+    "scenario": "N4-fixtures",
+    "file": "txt-conflict-b.txt",
+    "sha256": "a48cfc99db7e639217e206015c396f8244384f7d79fcad704f9d66eefad9e41c",
+    "status": "Complete",
+    "blocks": 2,
+    "chunks": 1,
+    "seconds": 3.637096600024961
+  },
+  {
+    "scenario": "N4-fixtures",
+    "file": "txt-negations.txt",
+    "sha256": "eefeeb81435230c20179558fe180108265b2fe59e08454b7ba38dee3647ff50f",
+    "status": "Complete",
+    "blocks": 2,
+    "chunks": 1,
+    "seconds": 3.0062783000757918
+  },
+  {
+    "scenario": "T082-single",
+    "file": "capitolato-aurora.txt",
+    "sha256": "a926fb1da97b8b01edfa61e67e87967a8249f6bd37e22d239fd642eb491530f6",
+    "status": "Complete",
+    "blocks": 3116,
+    "chunks": 458,
+    "seconds": 6.066447599907406
+  },
+  {
+    "scenario": "T083-multi",
+    "file": "allegato-tecnico-zefiro.md",
+    "sha256": "bc6241773ff7ed471c9194e5c981fad17dc3fa9a3a5672e1af8eef289c5e65e1",
+    "status": "Complete",
+    "blocks": 1052,
+    "chunks": 168,
+    "seconds": 5.819656200008467
+  },
+  {
+    "scenario": "T083-multi",
+    "file": "contratto-quadro-zefiro.txt",
+    "sha256": "6f7d95b47a2405d4a375eb68d3b1f8477ff427445c38ae25e77a9abbf5341501",
+    "status": "Complete",
+    "blocks": 1064,
+    "chunks": 153,
+    "seconds": 4.226914799888618
+  },
+  {
+    "scenario": "T083-multi",
+    "file": "verbale-collaudo-zefiro.docx",
+    "sha256": "53964807e7208bcb3ae425cc6429cd241842a871db9047f9f2d848670f3b477f",
+    "status": "Complete",
+    "blocks": 1047,
+    "chunks": 155,
+    "seconds": 5.941345700062811
+  }
+]

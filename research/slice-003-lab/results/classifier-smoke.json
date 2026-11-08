@@ -1,0 +1,12 @@
+{
+  "best_label": "pagamenti",
+  "labels": [
+    "pagamenti",
+    "assistenza"
+  ],
+  "scores": [
+    0.6301745772361755,
+    0.36982545256614685
+  ],
+  "multi_label": false
+}

@@ -60,3 +60,38 @@ Branch di ricerca isolato: `research/slice-003-lab`. Claude continua a lavorare 
 `results/` è ignorata nel lab solo in assenza di una decisione su quali output salvare. Per conservare esperimenti pubblicabili (solo dati sintetici), fare commit espliciti dei JSON/MD dopo aver verificato assenza di token, endpoint e dati riservati. Non salvare log HTTP completi contenenti header.
 
 Il documento [ricerca preliminare](research-preliminare.md) è conservato accanto ai file del laboratorio. Tutti i risultati successivi possono essere citati nella futura pianificazione Spec Kit.
+
+## Campagna DGX autorizzata dell'8 novembre 2026
+
+L'estensione è separata da `lab.py`, `cases.json`, `nli-cases.json` e dalla ricerca preliminare, che rimangono invariati. Il laboratorio è stato eseguito in un worktree di ricerca separato, senza modificare la 002. Gli output della campagna sono versionati esplicitamente.
+
+- [Report e lettura critica](report-finale.md).
+- [Confronto principale](results/comparison.md): quattro metodi sugli stessi input per ciascuna granularità.
+- [Blocchi e contesto padre](results/parent-comparison.md): esperimento aggiuntivo autorizzato, distinto dal confronto principale.
+- [Gold/query congelati](retrieval-cases.json), [hash degli input](input-hashes.json), [provenienza del parser](results/parser-code.json).
+- [Modelli osservati](results/models.json), [NLI italiano](results/nli.json), [confronto linguistico](results/nli-language.json).
+
+Gli script usano solo Python standard library; il piccolo progetto `materialize/` compila il generatore C# esistente, senza dipendenze applicative né framework di test. La campagna usa Python 3.13.18 e .NET SDK 10.0.403.
+
+Variabili richieste, valorizzate **fuori da Git**:
+
+- `BPROJECTS_TEST_DGX_ENDPOINT`, `BPROJECTS_TEST_DGX_API_KEY`: router llama.cpp già disponibile; il runner seleziona gli ID verificati `bge-m3-Q5` e `bge-reranker-v2-m3`.
+- `BPROJECTS_LAB_NLI_ENDPOINT`: URL completo dell'endpoint NLI esistente, per le sole prove NLI.
+- `BPROJECTS_TEST_PARSER_ENDPOINT` e, se disponibile, `BPROJECTS_TEST_PARSER_SECRET`: parser esistente, solo quando si rigenerano i manifest. In alternativa `prepare.py` legge in memoria il segreto del container indicato, senza stamparlo o salvarlo.
+
+Esecuzione dalla radice del worktree di ricerca:
+
+```text
+python research/slice-003-lab/experiment.py
+python research/slice-003-lab/experiment.py --nli
+python research/slice-003-lab/nli_language.py
+python research/slice-003-lab/parent_experiment.py
+python research/slice-003-lab/summarize.py
+python research/slice-003-lab/audit.py
+```
+
+Eseguire serialmente le campagne HTTP. `experiment.py` e `parent_experiment.py` conservano gli output già completati: per una nuova campagna archiviare prima la directory `results/` con un altro nome. `cache/` contiene vettori derivati, esclusi da Git; riusarla rende incrementale il costo di indicizzazione. Le query vengono comunque inviate al modello ad ogni nuova campagna. Rimuovere la sola cache del laboratorio se si vuole misurare un nuovo costo a freddo. Non confrontare i tempi di una cache calda con quelli di una costruzione completa.
+
+Gli originali sintetici e i manifest del parser sono già presenti: per ripetere il retrieval non serve rigenerarli. Per la materializzazione da zero, `dotnet run --project research/slice-003-lab/materialize -- <directory-output> 1300000` usa il generatore della 002 invariato. **Il T082 generato da questo comando non sostituisce il T082 storico usato nella campagna**: `prepare.py --single-original <originale-T082-conservato> --parser-container <container-esistente>` ripristina quell'originale e ne controlla l'hash fissato. Conservare l'originale prima di rigenerare gli output; il T083 usa 1.300.000 caratteri di riempitivo aggregati e 90 regole secondarie per documento.
+
+`audit.py` controlla integrità di hash, gold, ranking e metriche registrate. Non è un nuovo gate del prodotto e non certifica correttezza semantica. Le medesime cautele valgono per tutti i risultati del laboratorio.

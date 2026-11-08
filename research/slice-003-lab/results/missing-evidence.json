@@ -1,0 +1,1331 @@
+[
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "bm25",
+    "query_id": "S04",
+    "missing_at_10": [
+      "S04"
+    ],
+    "gold_ranks": {
+      "S04": 52
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "bm25",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 234
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "bm25",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 257
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "bm25",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 204
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S03",
+    "missing_at_10": [
+      "S03"
+    ],
+    "gold_ranks": {
+      "S03": 30
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S04",
+    "missing_at_10": [
+      "S04"
+    ],
+    "gold_ranks": {
+      "S04": 29
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 13
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 36
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S09",
+    "missing_at_10": [
+      "S09"
+    ],
+    "gold_ranks": {
+      "S09": 11
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S10",
+    "missing_at_10": [
+      "S10"
+    ],
+    "gold_ranks": {
+      "S10": 110
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 120
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S12",
+    "missing_at_10": [
+      "S12"
+    ],
+    "gold_ranks": {
+      "S12": 125
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "S13",
+    "missing_at_10": [
+      "S13"
+    ],
+    "gold_ranks": {
+      "S13": 29
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "all-payments",
+    "missing_at_10": [
+      "S13"
+    ],
+    "gold_ranks": {
+      "S13": 183,
+      "S14": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "invoice-exceptions",
+    "missing_at_10": [
+      "S03",
+      "S04"
+    ],
+    "gold_ranks": {
+      "S03": 19,
+      "S04": 37
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 30
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 81
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 174
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "all-payments",
+    "missing_at_10": [
+      "S13"
+    ],
+    "gold_ranks": {
+      "S13": 22,
+      "S14": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "hybrid_rerank",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": null
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_context",
+    "method": "hybrid_rerank",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": null
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "bm25",
+    "query_id": "S04",
+    "missing_at_10": [
+      "S04"
+    ],
+    "gold_ranks": {
+      "S04": 52
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "bm25",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 234
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "bm25",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 257
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "bm25",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 204
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S03",
+    "missing_at_10": [
+      "S03"
+    ],
+    "gold_ranks": {
+      "S03": 30
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S04",
+    "missing_at_10": [
+      "S04"
+    ],
+    "gold_ranks": {
+      "S04": 29
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 13
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 36
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S09",
+    "missing_at_10": [
+      "S09"
+    ],
+    "gold_ranks": {
+      "S09": 11
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S10",
+    "missing_at_10": [
+      "S10"
+    ],
+    "gold_ranks": {
+      "S10": 110
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 120
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S12",
+    "missing_at_10": [
+      "S12"
+    ],
+    "gold_ranks": {
+      "S12": 125
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "S13",
+    "missing_at_10": [
+      "S13"
+    ],
+    "gold_ranks": {
+      "S13": 29
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "all-payments",
+    "missing_at_10": [
+      "S13"
+    ],
+    "gold_ranks": {
+      "S13": 183,
+      "S14": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "invoice-exceptions",
+    "missing_at_10": [
+      "S03",
+      "S04"
+    ],
+    "gold_ranks": {
+      "S03": 19,
+      "S04": 37
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 30
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 81
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 174
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "all-payments",
+    "missing_at_10": [
+      "S13"
+    ],
+    "gold_ranks": {
+      "S13": 22,
+      "S14": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "hybrid_rerank",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": null
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "docling_text",
+    "method": "hybrid_rerank",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": null
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_context",
+    "method": "bm25",
+    "query_id": "S02",
+    "missing_at_10": [
+      "S02"
+    ],
+    "gold_ranks": {
+      "S02": 1604
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_context",
+    "method": "bm25",
+    "query_id": "S04",
+    "missing_at_10": [
+      "S04"
+    ],
+    "gold_ranks": {
+      "S04": 356
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_context",
+    "method": "bm25",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 1595
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_context",
+    "method": "bm25",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 1751
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_context",
+    "method": "bm25",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 2787
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_context",
+    "method": "hybrid_rrf",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 12
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_text",
+    "method": "bm25",
+    "query_id": "S04",
+    "missing_at_10": [
+      "S04"
+    ],
+    "gold_ranks": {
+      "S04": 356
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_text",
+    "method": "bm25",
+    "query_id": "S06",
+    "missing_at_10": [
+      "S06"
+    ],
+    "gold_ranks": {
+      "S06": 1595
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_text",
+    "method": "bm25",
+    "query_id": "S08",
+    "missing_at_10": [
+      "S08"
+    ],
+    "gold_ranks": {
+      "S08": 1751
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T082-single",
+    "variant": "line_text",
+    "method": "bm25",
+    "query_id": "S11",
+    "missing_at_10": [
+      "S11"
+    ],
+    "gold_ranks": {
+      "S11": 2787
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M01",
+    "missing_at_10": [
+      "M01"
+    ],
+    "gold_ranks": {
+      "M01": 175
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M02",
+    "missing_at_10": [
+      "M02"
+    ],
+    "gold_ranks": {
+      "M02": 15
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M06",
+    "missing_at_10": [
+      "M06"
+    ],
+    "gold_ranks": {
+      "M06": 71
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M03",
+    "missing_at_10": [
+      "M03"
+    ],
+    "gold_ranks": {
+      "M03": 38
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M04",
+    "missing_at_10": [
+      "M04"
+    ],
+    "gold_ranks": {
+      "M04": 69
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M05",
+    "missing_at_10": [
+      "M05"
+    ],
+    "gold_ranks": {
+      "M05": 195
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M08",
+    "missing_at_10": [
+      "M08"
+    ],
+    "gold_ranks": {
+      "M08": 47
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M12",
+    "missing_at_10": [
+      "M12"
+    ],
+    "gold_ranks": {
+      "M12": 26
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M09",
+    "missing_at_10": [
+      "M09"
+    ],
+    "gold_ranks": {
+      "M09": 19
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M13",
+    "missing_at_10": [
+      "M13"
+    ],
+    "gold_ranks": {
+      "M13": 36
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M14",
+    "missing_at_10": [
+      "M14"
+    ],
+    "gold_ranks": {
+      "M14": 54
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M16",
+    "missing_at_10": [
+      "M16"
+    ],
+    "gold_ranks": {
+      "M16": 426
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "M17",
+    "missing_at_10": [
+      "M17"
+    ],
+    "gold_ranks": {
+      "M17": 108
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "all-payments",
+    "missing_at_10": [
+      "M03",
+      "M14"
+    ],
+    "gold_ranks": {
+      "M03": 11,
+      "M14": 49,
+      "P2": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "all-warranty",
+    "missing_at_10": [
+      "M04",
+      "M13"
+    ],
+    "gold_ranks": {
+      "M04": 47,
+      "M13": 71
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "all-limits",
+    "missing_at_10": [
+      "M08"
+    ],
+    "gold_ranks": {
+      "M08": 84,
+      "P1": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "equivalent-delivery",
+    "missing_at_10": [
+      "M05",
+      "M09"
+    ],
+    "gold_ranks": {
+      "M05": 286,
+      "M09": 26
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "dense",
+    "query_id": "penalty-reference",
+    "missing_at_10": [
+      "M06"
+    ],
+    "gold_ranks": {
+      "M06": 38,
+      "M11": 2
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "M01",
+    "missing_at_10": [
+      "M01"
+    ],
+    "gold_ranks": {
+      "M01": 26
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "M04",
+    "missing_at_10": [
+      "M04"
+    ],
+    "gold_ranks": {
+      "M04": 17
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "M05",
+    "missing_at_10": [
+      "M05"
+    ],
+    "gold_ranks": {
+      "M05": 11
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "M08",
+    "missing_at_10": [
+      "M08"
+    ],
+    "gold_ranks": {
+      "M08": 12
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "M14",
+    "missing_at_10": [
+      "M14"
+    ],
+    "gold_ranks": {
+      "M14": 12
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "M16",
+    "missing_at_10": [
+      "M16"
+    ],
+    "gold_ranks": {
+      "M16": 26
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_context",
+    "method": "hybrid_rrf",
+    "query_id": "equivalent-delivery",
+    "missing_at_10": [
+      "M05"
+    ],
+    "gold_ranks": {
+      "M05": 26,
+      "M09": 3
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M01",
+    "missing_at_10": [
+      "M01"
+    ],
+    "gold_ranks": {
+      "M01": 14
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M02",
+    "missing_at_10": [
+      "M02"
+    ],
+    "gold_ranks": {
+      "M02": 20
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M06",
+    "missing_at_10": [
+      "M06"
+    ],
+    "gold_ranks": {
+      "M06": 43
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M03",
+    "missing_at_10": [
+      "M03"
+    ],
+    "gold_ranks": {
+      "M03": 32
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M04",
+    "missing_at_10": [
+      "M04"
+    ],
+    "gold_ranks": {
+      "M04": 75
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M05",
+    "missing_at_10": [
+      "M05"
+    ],
+    "gold_ranks": {
+      "M05": 181
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M08",
+    "missing_at_10": [
+      "M08"
+    ],
+    "gold_ranks": {
+      "M08": 137
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M12",
+    "missing_at_10": [
+      "M12"
+    ],
+    "gold_ranks": {
+      "M12": 21
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M09",
+    "missing_at_10": [
+      "M09"
+    ],
+    "gold_ranks": {
+      "M09": 30
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M13",
+    "missing_at_10": [
+      "M13"
+    ],
+    "gold_ranks": {
+      "M13": 48
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M14",
+    "missing_at_10": [
+      "M14"
+    ],
+    "gold_ranks": {
+      "M14": 66
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M16",
+    "missing_at_10": [
+      "M16"
+    ],
+    "gold_ranks": {
+      "M16": 430
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "M17",
+    "missing_at_10": [
+      "M17"
+    ],
+    "gold_ranks": {
+      "M17": 95
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "all-payments",
+    "missing_at_10": [
+      "M03",
+      "M14"
+    ],
+    "gold_ranks": {
+      "M03": 12,
+      "M14": 47,
+      "P2": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "all-warranty",
+    "missing_at_10": [
+      "M04",
+      "M13"
+    ],
+    "gold_ranks": {
+      "M04": 57,
+      "M13": 79
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "all-limits",
+    "missing_at_10": [
+      "M08"
+    ],
+    "gold_ranks": {
+      "M08": 192,
+      "P1": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "equivalent-delivery",
+    "missing_at_10": [
+      "M05",
+      "M09"
+    ],
+    "gold_ranks": {
+      "M05": 280,
+      "M09": 27
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "dense",
+    "query_id": "penalty-reference",
+    "missing_at_10": [
+      "M06"
+    ],
+    "gold_ranks": {
+      "M06": 38,
+      "M11": 2
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "M04",
+    "missing_at_10": [
+      "M04"
+    ],
+    "gold_ranks": {
+      "M04": 23
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "M14",
+    "missing_at_10": [
+      "M14"
+    ],
+    "gold_ranks": {
+      "M14": 18
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "M16",
+    "missing_at_10": [
+      "M16"
+    ],
+    "gold_ranks": {
+      "M16": 25
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "all-limits",
+    "missing_at_10": [
+      "M08"
+    ],
+    "gold_ranks": {
+      "M08": 16,
+      "P1": 1
+    },
+    "status": "MEASURED"
+  },
+  {
+    "scenario": "T083-multi",
+    "variant": "docling_text",
+    "method": "hybrid_rrf",
+    "query_id": "equivalent-delivery",
+    "missing_at_10": [
+      "M05"
+    ],
+    "gold_ranks": {
+      "M05": 26,
+      "M09": 3
+    },
+    "status": "MEASURED"
+  }
+]

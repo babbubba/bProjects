@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "document-parse-1",
+  "originalSha256": "af5535622c948fa9064f930fdbe032f7ab910f97fe5fc59ad47383a9e36af527",
+  "parserVersion": "1.0.0",
+  "dependencyLockHash": "b30ce354fbd83919e78074afa6663a41d8921fe2a64f9e6fd720891616da1bef",
+  "modelArtifactsHash": "c52bb8c0a43e172ffded91adfb13c833c3bac2add8e84a7de00d09281bd0ef51",
+  "configHash": "463ab02e843ba57f7c86492773ee793b42dbb5e54932b8d96efc68284e0b7c31",
+  "status": "Complete",
+  "originFormat": "txt",
+  "originalByteLength": 48,
+  "pageCount": null,
+  "offsetConvention": "unicode-codepoint",
+  "document": {
+    "serialization": "text-lossless-1",
+    "content": "Scheda A\n\nIl termine di pagamento e' 30 giorni.\n"
+  },
+  "blocks": [
+    {
+      "ref": "b1",
+      "order": 0,
+      "parentRef": null,
+      "type": "paragraph",
+      "text": "Scheda A",
+      "textSha256": "b5e1298611b4bdeb79853d3b6aaebe633a042c9f46eaf057faa9fa746eb0114d",
+      "headingPath": [],
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 1,
+        "lineEnd": 1,
+        "sourceStart": 0,
+        "sourceEnd": 8
+      }
+    },
+    {
+      "ref": "b2",
+      "order": 1,
+      "parentRef": null,
+      "type": "paragraph",
+      "text": "Il termine di pagamento e' 30 giorni.",
+      "textSha256": "07f15370211821b249c55fd3ce3ff1d4a82e51ca681e6233e8e91d27426e34a1",
+      "headingPath": [],
+      "locator": {
+        "page": null,
+        "pages": [],
+        "bbox": null,
+        "coordinateSystem": null,
+        "path": null,
+        "lineStart": 3,
+        "lineEnd": 3,
+        "sourceStart": 10,
+        "sourceEnd": 47
+      }
+    }
+  ],
+  "inventory": [
+    {
+      "itemRef": "inv1",
+      "kind": "paragraph",
+      "state": "represented",
+      "blockRefs": [
+        "b1"
+      ],
+      "issueRefs": []
+    },
+    {
+      "itemRef": "inv2",
+      "kind": "paragraph",
+      "state": "represented",
+      "blockRefs": [
+        "b2"
+      ],
+      "issueRefs": []
+    }
+  ],
+  "chunks": [
+    {
+      "chunkKey": "c1",
+      "text": "Scheda A\nIl termine di pagamento e' 30 giorni.",
+      "contextualizedText": "Scheda A\nIl termine di pagamento e' 30 giorni.",
+      "headingPath": [],
+      "ranges": [
+        {
+          "rangeKey": "c1:1",
+          "blockRef": "b1",
+          "start": 0,
+          "end": 8,
+          "ownership": "Primary",
+          "sourceTextSha256": "b5e1298611b4bdeb79853d3b6aaebe633a042c9f46eaf057faa9fa746eb0114d"
+        },
+        {
+          "rangeKey": "c1:2",
+          "blockRef": "b2",
+          "start": 0,
+          "end": 37,
+          "ownership": "Primary",
+          "sourceTextSha256": "07f15370211821b249c55fd3ce3ff1d4a82e51ca681e6233e8e91d27426e34a1"
+        }
+      ],
+      "tokenCount": 18,
+      "tokenizerId": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "tokenSource": "estimated"
+    }
+  ],
+  "issues": []
+}

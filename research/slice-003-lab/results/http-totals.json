@@ -1,0 +1,61 @@
+{
+  "totals": [
+    {
+      "model_or_endpoint": "/health",
+      "calls": 1,
+      "errors": 0,
+      "http_seconds": 0.11693799996282905,
+      "prompt_tokens": 0
+    },
+    {
+      "model_or_endpoint": "/openapi.json",
+      "calls": 1,
+      "errors": 0,
+      "http_seconds": 0.07232999999541789,
+      "prompt_tokens": 0
+    },
+    {
+      "model_or_endpoint": "/props",
+      "calls": 27,
+      "errors": 0,
+      "http_seconds": 2.3364075999706984,
+      "prompt_tokens": 0
+    },
+    {
+      "model_or_endpoint": "/v1/classify",
+      "calls": 1,
+      "errors": 0,
+      "http_seconds": 0.10436090000439435,
+      "prompt_tokens": 0
+    },
+    {
+      "model_or_endpoint": "/v1/models",
+      "calls": 27,
+      "errors": 0,
+      "http_seconds": 2.6255693001439795,
+      "prompt_tokens": 0
+    },
+    {
+      "model_or_endpoint": "/v1/nli",
+      "calls": 34,
+      "errors": 0,
+      "http_seconds": 3.9751494997181,
+      "prompt_tokens": 0
+    },
+    {
+      "model_or_endpoint": "bge-m3-Q5",
+      "calls": 4012,
+      "errors": 0,
+      "http_seconds": 683.6981938031968,
+      "prompt_tokens": 2129968
+    },
+    {
+      "model_or_endpoint": "bge-reranker-v2-m3",
+      "calls": 376,
+      "errors": 0,
+      "http_seconds": 307.71945529826917,
+      "prompt_tokens": 3406188
+    }
+  ],
+  "note": "Includes pilot and aborted preparation; not just final campaign. NLI token counts are not exposed (0 here means unavailable). Initial manual smoke probes are excluded."
+}

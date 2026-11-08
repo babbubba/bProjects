@@ -1,0 +1,122 @@
+[
+  {
+    "scenario": "N4-fixtures",
+    "method": "bm25",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 556.0,
+    "expanded_chars_p50": 622.0,
+    "latency_p50_ms": 0.20000006770715117,
+    "expansion_p50_ms": 0.03454997204244137
+  },
+  {
+    "scenario": "N4-fixtures",
+    "method": "dense",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 654.0,
+    "expanded_chars_p50": 866.0,
+    "latency_p50_ms": 117.05850006546825,
+    "expansion_p50_ms": 0.011650030501186848
+  },
+  {
+    "scenario": "N4-fixtures",
+    "method": "hybrid_rrf",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 612.0,
+    "expanded_chars_p50": 842.5,
+    "latency_p50_ms": 117.50870000105351,
+    "expansion_p50_ms": 0.005299982149153948
+  },
+  {
+    "scenario": "N4-fixtures",
+    "method": "hybrid_rerank",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 651.5,
+    "expanded_chars_p50": 780.0,
+    "latency_p50_ms": 415.8796000992879,
+    "expansion_p50_ms": 0.005549925845116377
+  },
+  {
+    "scenario": "T082-single",
+    "method": "bm25",
+    "child_recall10": 0.7894736842105263,
+    "expanded_recall10": 0.7894736842105263,
+    "child_chars_p50": 3115,
+    "expanded_chars_p50": 8630,
+    "latency_p50_ms": 25.568599929101765,
+    "expansion_p50_ms": 0.03509991802275181
+  },
+  {
+    "scenario": "T082-single",
+    "method": "dense",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 1972,
+    "expanded_chars_p50": 29012,
+    "latency_p50_ms": 248.72040003538132,
+    "expansion_p50_ms": 0.02629996743053198
+  },
+  {
+    "scenario": "T082-single",
+    "method": "hybrid_rrf",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 2653,
+    "expanded_chars_p50": 26120,
+    "latency_p50_ms": 276.90859988797456,
+    "expansion_p50_ms": 0.013699987903237343
+  },
+  {
+    "scenario": "T082-single",
+    "method": "hybrid_rerank",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 2028,
+    "expanded_chars_p50": 28963,
+    "latency_p50_ms": 1119.8748998576775,
+    "expansion_p50_ms": 0.01409999094903469
+  },
+  {
+    "scenario": "T083-multi",
+    "method": "bm25",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 2085,
+    "expanded_chars_p50": 26006,
+    "latency_p50_ms": 26.312800007872283,
+    "expansion_p50_ms": 0.04780001472681761
+  },
+  {
+    "scenario": "T083-multi",
+    "method": "dense",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 921,
+    "expanded_chars_p50": 25996,
+    "latency_p50_ms": 261.99989998713136,
+    "expansion_p50_ms": 0.024999957531690598
+  },
+  {
+    "scenario": "T083-multi",
+    "method": "hybrid_rrf",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 1870,
+    "expanded_chars_p50": 26082,
+    "latency_p50_ms": 291.2913999753073,
+    "expansion_p50_ms": 0.013100099749863148
+  },
+  {
+    "scenario": "T083-multi",
+    "method": "hybrid_rerank",
+    "child_recall10": 1.0,
+    "expanded_recall10": 1.0,
+    "child_chars_p50": 1435,
+    "expanded_chars_p50": 26364,
+    "latency_p50_ms": 1073.048499878496,
+    "expansion_p50_ms": 0.012699980288743973
+  }
+]

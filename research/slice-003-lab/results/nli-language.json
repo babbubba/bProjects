@@ -1,0 +1,278 @@
+[
+  {
+    "id": "exact-conflict",
+    "premise": "The contractual payment term is exactly 45 days.",
+    "hypothesis": "The contractual payment term is exactly 30 days.",
+    "expected": "contradiction",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.001861071097664535,
+        "neutral": 0.001861554803326726,
+        "contradiction": 0.996277391910553
+      }
+    },
+    "italian_response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.001445041038095951,
+        "neutral": 0.0008616411359980702,
+        "contradiction": 0.9976932406425476
+      }
+    },
+    "milliseconds": 164.0974999172613
+  },
+  {
+    "id": "language-paraphrase",
+    "premise": "The invoice must be paid within 30 days of its issue date.",
+    "hypothesis": "Payment of the invoice cannot take place later than 30 days after it is issued.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9892522692680359,
+        "neutral": 0.010252796113491058,
+        "contradiction": 0.0004949533613398671
+      }
+    },
+    "italian_response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9980087876319885,
+        "neutral": 0.0018395066726952791,
+        "contradiction": 0.00015171356790233403
+      }
+    },
+    "milliseconds": 123.33139998372644
+  },
+  {
+    "id": "different-scopes",
+    "premise": "For Italian customers, payment is due within 30 days.",
+    "hypothesis": "For foreign customers, payment is due within 45 days.",
+    "expected": "neutral",
+    "response": {
+      "prediction": "neutral",
+      "scores": {
+        "entailment": 0.016914701089262962,
+        "neutral": 0.9658464193344116,
+        "contradiction": 0.017238907516002655
+      }
+    },
+    "italian_response": {
+      "prediction": "neutral",
+      "scores": {
+        "entailment": 0.0015212740981951356,
+        "neutral": 0.9951981902122498,
+        "contradiction": 0.0032805290538817644
+      }
+    },
+    "milliseconds": 108.69299992918968
+  },
+  {
+    "id": "numerical-entailment",
+    "premise": "Payment must be made within 30 days.",
+    "hypothesis": "Payment must be made within 60 days.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.005618411581963301,
+        "neutral": 0.007909479551017284,
+        "contradiction": 0.9864721298217773
+      }
+    },
+    "italian_response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.013768679462373257,
+        "neutral": 0.004696814343333244,
+        "contradiction": 0.981534481048584
+      }
+    },
+    "milliseconds": 107.75450000073761
+  },
+  {
+    "id": "reverse-non-entailment",
+    "premise": "Payment must be made within 45 days.",
+    "hypothesis": "Payment must be made within 30 days.",
+    "expected": "neutral",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.00805579498410225,
+        "neutral": 0.005170275457203388,
+        "contradiction": 0.9867738485336304
+      }
+    },
+    "italian_response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.01210098061710596,
+        "neutral": 0.003165538189932704,
+        "contradiction": 0.984733521938324
+      }
+    },
+    "milliseconds": 121.14499998278916
+  },
+  {
+    "id": "retrieved-warranty",
+    "premise": "The warranty on spare parts lasts 24 months from delivery.",
+    "hypothesis": "The warranty on spare parts lasts 36 months from delivery.",
+    "expected": "contradiction",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.0016323027666658163,
+        "neutral": 0.00422779330983758,
+        "contradiction": 0.9941400289535522
+      }
+    },
+    "italian_response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.0022288374602794647,
+        "neutral": 0.0037930943071842194,
+        "contradiction": 0.9939780235290527
+      }
+    },
+    "milliseconds": 110.93840003013611
+  },
+  {
+    "id": "retrieved-equivalence",
+    "premise": "Spare parts requested through the standard procedure are delivered within 5 working days.",
+    "hypothesis": "Standard spare parts arrive no later than within one working week.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9461640119552612,
+        "neutral": 0.04234535992145538,
+        "contradiction": 0.011490616016089916
+      }
+    },
+    "italian_response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9988841414451599,
+        "neutral": 0.0007647644961252809,
+        "contradiction": 0.00035115377977490425
+      }
+    },
+    "milliseconds": 107.78710001613945
+  },
+  {
+    "id": "retrieved-neutral",
+    "premise": "The Zefiro framework contract lasts 48 months from the date of signing.",
+    "hypothesis": "Final acceptance testing will take place on 12 March 2027 at the Brescia site.",
+    "expected": "neutral",
+    "response": {
+      "prediction": "neutral",
+      "scores": {
+        "entailment": 0.0004971383605152369,
+        "neutral": 0.9901087284088135,
+        "contradiction": 0.009394189342856407
+      }
+    },
+    "italian_response": {
+      "prediction": "neutral",
+      "scores": {
+        "entailment": 0.00018879173148889095,
+        "neutral": 0.9963590502738953,
+        "contradiction": 0.0034521445631980896
+      }
+    },
+    "milliseconds": 117.61139996815473
+  },
+  {
+    "id": "retrieved-condition-preserved",
+    "premise": "If acceptance testing is not passed, payment of the second instalment is suspended.",
+    "hypothesis": "If acceptance testing is not passed, payment of the second instalment is not made.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.989371657371521,
+        "neutral": 0.009142694063484669,
+        "contradiction": 0.0014857043279334903
+      }
+    },
+    "italian_response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.998892605304718,
+        "neutral": 0.0009362889686599374,
+        "contradiction": 0.0001711094519123435
+      }
+    },
+    "milliseconds": 169.95410004165024
+  },
+  {
+    "id": "retrieved-condition-dropped",
+    "premise": "If acceptance testing is not passed, payment of the second instalment is suspended.",
+    "hypothesis": "Payment of the second instalment is suspended.",
+    "expected": "neutral",
+    "response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9943894743919373,
+        "neutral": 0.005032059270888567,
+        "contradiction": 0.000578456383664161
+      }
+    },
+    "italian_response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9990007281303406,
+        "neutral": 0.000854726938996464,
+        "contradiction": 0.00014459290832746774
+      }
+    },
+    "milliseconds": 129.4114999473095
+  },
+  {
+    "id": "retrieved-exception-dropped",
+    "premise": "Urgent orders are not accepted after 16:00, except those from Gold-category customers.",
+    "hypothesis": "No urgent order is accepted after 16:00.",
+    "expected": "contradiction",
+    "response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9902483820915222,
+        "neutral": 0.007659269962459803,
+        "contradiction": 0.002092419657856226
+      }
+    },
+    "italian_response": {
+      "prediction": "entailment",
+      "scores": {
+        "entailment": 0.9988158941268921,
+        "neutral": 0.0007792569813318551,
+        "contradiction": 0.00040488087688572705
+      }
+    },
+    "milliseconds": 122.90469999425113
+  },
+  {
+    "id": "retrieved-numerical-compatible",
+    "premise": "High-priority fault reports are taken in hand within 40 minutes, excluding public holidays.",
+    "hypothesis": "High-priority fault reports are taken in hand within 60 minutes, excluding public holidays.",
+    "expected": "entailment",
+    "response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.003291120519861579,
+        "neutral": 0.013187653385102749,
+        "contradiction": 0.9835212230682373
+      }
+    },
+    "italian_response": {
+      "prediction": "contradiction",
+      "scores": {
+        "entailment": 0.006462702061980963,
+        "neutral": 0.006955553777515888,
+        "contradiction": 0.9865818023681641
+      }
+    },
+    "milliseconds": 111.20030004531145
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "image_id": "sha256:68c89d2ab803850907ca224a7e02fd08c55b0d1ded2bacce3f1f76a363d9e7af",
+  "source_hashes": {
+    "common.py": "a56dbb0abc029ca723807dc562803a2afddcd14776b2205aa7936456cec0b7a0",
+    "converters.py": "070cc9b924888a09a20edfa515f95dc22f4ce6301abb8b9915e747e90adab2b2",
+    "chunk_manifest.py": "472366bd58d2ac410b10a85577484c5ddbfc384d76f2db5e869734a130020f0b",
+    "text_sources.py": "a0fac34f6326ace1b983c449d3c6047416f732d41c3134184858d23d0357d5f8",
+    "requirements.lock": "b30ce354fbd83919e78074afa6663a41d8921fe2a64f9e6fd720891616da1bef"
+  }
+}

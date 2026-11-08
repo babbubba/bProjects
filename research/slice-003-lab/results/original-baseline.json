@@ -1,0 +1,659 @@
+{
+  "lab": "slice-003-lab-v1",
+  "corpus": "C:\\source\\repos\\babbubba\\bProjects-slice-003-lab\\tests\\fixtures\\documents",
+  "corpus_hash": "d891912d5371b715a3cf351e47f7820bc7dca1929fd1003f46b0185d07fee571",
+  "chunks": 186,
+  "skipped_files": [
+    "docx-corrupt.docx: File is not a zip file",
+    "pdf-corrupt.pdf",
+    "pdf-mixed.pdf",
+    "pdf-protected.pdf",
+    "pdf-split-clause.pdf",
+    "pdf-table-multipage.pdf",
+    "pdf-text.pdf",
+    "txt-invalid.txt: 'utf-8' codec can't decode byte 0xff in position 13: invalid start byte",
+    "txt-utf16.txt: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte"
+  ],
+  "embed_model": null,
+  "cases": [
+    {
+      "id": "N4-doc-title",
+      "query": "Cosa dice la Scheda A sul termine di pagamento?",
+      "gold": {
+        "file": "txt-conflict-a.txt",
+        "contains": "termine di pagamento e' 30 giorni"
+      },
+      "status": "MEASURED",
+      "latency_ms": 4.0,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-conflict-a.txt",
+              "heading": "Scheda A",
+              "text": "Il termine di pagamento e' 30 giorni."
+            },
+            {
+              "file": "txt-conflict-b.txt",
+              "heading": "Scheda B",
+              "text": "Il termine di pagamento e' 60 giorni."
+            },
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il termine e' di 45 giorni, non 30."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Eccezioni"
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "N4-doc-30",
+      "query": "In quale scheda il termine di pagamento è 30 giorni?",
+      "gold": {
+        "file": "txt-conflict-a.txt",
+        "contains": "termine di pagamento e' 30 giorni"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.1,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-conflict-a.txt",
+              "heading": "Scheda A",
+              "text": "Il termine di pagamento e' 30 giorni."
+            },
+            {
+              "file": "txt-conflict-b.txt",
+              "heading": "Scheda B",
+              "text": "Il termine di pagamento e' 60 giorni."
+            },
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il termine e' di 45 giorni, non 30."
+            },
+            {
+              "file": "md-non-bmp.md",
+              "heading": "Messaggi di stato",
+              "text": "Il simbolo 𝕪 (U+1D56A) identifica i clienti premium, quindi serve il bonifico entro 30 giorni."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "Le fatture sono emesse entro 5 giorni lavorativi."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "N4-doc-B",
+      "query": "Cosa riporta la Scheda B sul termine di pagamento?",
+      "gold": {
+        "file": "txt-conflict-b.txt",
+        "contains": "termine di pagamento e' 60 giorni"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.0,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-conflict-b.txt",
+              "heading": "Scheda B",
+              "text": "Il termine di pagamento e' 60 giorni."
+            },
+            {
+              "file": "txt-conflict-a.txt",
+              "heading": "Scheda A",
+              "text": "Il termine di pagamento e' 30 giorni."
+            },
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il termine e' di 45 giorni, non 30."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Eccezioni"
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "N4-doc-B-60",
+      "query": "Quale documento stabilisce pagamento a 60 giorni?",
+      "gold": {
+        "file": "txt-conflict-b.txt",
+        "contains": "termine di pagamento e' 60 giorni"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.1,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-conflict-b.txt",
+              "heading": "Scheda B",
+              "text": "Il termine di pagamento e' 60 giorni."
+            },
+            {
+              "file": "txt-conflict-a.txt",
+              "heading": "Scheda A",
+              "text": "Il termine di pagamento e' 30 giorni."
+            },
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il termine e' di 45 giorni, non 30."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "Le fatture sono emesse entro 5 giorni lavorativi."
+            },
+            {
+              "file": "md-non-bmp.md",
+              "heading": "Messaggi di stato",
+              "text": "Il simbolo 𝕪 (U+1D56A) identifica i clienti premium, quindi serve il bonifico entro 30 giorni."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "neg-consent",
+      "query": "È consentito inviare email senza consenso?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "non deve inviare mai email senza consenso"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.0,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il portale non deve inviare mai email senza consenso."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "Le notifiche email sono inviate solo se l'utente ha dato il consenso."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Eccezioni"
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto non include gli ordini annullati dal cliente."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "neg-returns",
+      "query": "Il progetto richiede la gestione dei resi?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "Non e' richiesta la gestione dei resi"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.0,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Non e' richiesta la gestione dei resi."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Gestione utenti"
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "I resi non sono gestiti dal portale."
+            },
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "E' vietato memorizzare il numero di carta."
+            },
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il termine e' di 45 giorni, non 30."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "neg-card",
+      "query": "Possiamo memorizzare il numero della carta?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "vietato memorizzare il numero di carta"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.7,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "E' vietato memorizzare il numero di carta."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "I pagamenti con carta superiori a 1000 euro richiedono approvazione, salvo i clienti con contratto quadro."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Eccezioni"
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto non include gli ordini annullati dal cliente."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "neg-export",
+      "query": "Quali esportazioni di dati sono vietate?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "esportazioni sono consentite tranne"
+      },
+      "status": "MEASURED",
+      "latency_ms": 5.2,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Tutte le esportazioni sono consentite tranne quelle dei dati anagrafici."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Eccezioni"
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto non include gli ordini annullati dal cliente."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto e' inviato entro il quinto giorno lavorativo del mese successivo."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "neg-45",
+      "query": "Il termine dei pagamenti è 45 oppure 30 giorni?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "termine e' di 45 giorni"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.2,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "txt-negations.txt",
+              "heading": "Note di progetto",
+              "text": "Il termine e' di 45 giorni, non 30."
+            },
+            {
+              "file": "txt-conflict-a.txt",
+              "heading": "Scheda A",
+              "text": "Il termine di pagamento e' 30 giorni."
+            },
+            {
+              "file": "txt-conflict-b.txt",
+              "heading": "Scheda B",
+              "text": "Il termine di pagamento e' 60 giorni."
+            },
+            {
+              "file": "md-non-bmp.md",
+              "heading": "Messaggi di stato",
+              "text": "Il simbolo 𝕪 (U+1D56A) identifica i clienti premium, quindi serve il bonifico entro 30 giorni."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "I pagamenti con carta superiori a 1000 euro richiedono approvazione, salvo i clienti con contratto quadro."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "md-release",
+      "query": "Che cosa include il rilascio 1?",
+      "gold": {
+        "file": "md-basic.md",
+        "contains": "rilascio 1 include la consultazione degli ordini"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.2,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "md-basic.md",
+              "heading": "Ambito",
+              "text": "- Il rilascio 1 include la consultazione degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto non include gli ordini annullati dal cliente."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Introduzione",
+              "text": "[INT.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordin"
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Introduzione",
+              "text": "[int.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordin"
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Processi amministrativi",
+              "text": "[PRO.1] Il presente documento descrive il contesto organizzativo del progetto Portale Ordini Acme. Le parti concordano di revisionare periodicamente le attivita' svolte. La comunicazione tra i gruppi avviene durante le riunioni settimanali di coordin"
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "md-excluded",
+      "query": "Sono comprese le modifiche agli ordini?",
+      "gold": {
+        "file": "md-basic.md",
+        "contains": "Le modifiche agli ordini sono escluse"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.2,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "md-basic.md",
+              "heading": "Ambito",
+              "text": "- Le modifiche agli ordini sono escluse."
+            },
+            {
+              "file": "md-basic.md",
+              "heading": "Ambito",
+              "text": "- Il rilascio 1 include la consultazione degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto non include gli ordini annullati dal cliente."
+            },
+            {
+              "file": "txt-long.txt",
+              "heading": "Introduzione",
+              "text": "Lo storico degli ordini precedenti al 2020 e' escluso dalla migrazione."
+            }
+          ],
+          "hit1": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 1
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "md-collaudo",
+      "query": "Qual è la scadenza del collaudo?",
+      "gold": {
+        "file": "md-basic.md",
+        "contains": "Collaudo | 2027-03-01"
+      },
+      "status": "MEASURED",
+      "latency_ms": 3.5,
+      "methods": {
+        "bm25": {
+          "top5": [
+            {
+              "file": "md-basic.md",
+              "heading": "Dettagli tecnici",
+              "text": "| Fase | Scadenza |"
+            },
+            {
+              "file": "md-basic.md",
+              "heading": "Dettagli tecnici",
+              "text": "| Collaudo | 2027-03-01 |"
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il sistema deve generare un rapporto mensile degli ordini."
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Eccezioni"
+            },
+            {
+              "file": "docx-basic.docx",
+              "heading": "Requisiti funzionali",
+              "text": "Il rapporto non include gli ordini annullati dal cliente."
+            }
+          ],
+          "hit1": {
+            "hit": false,
+            "rank": 2
+          },
+          "hit3": {
+            "hit": true,
+            "rank": 2
+          },
+          "hit5": {
+            "hit": true,
+            "rank": 2
+          }
+        }
+      }
+    }
+  ],
+  "nli": [],
+  "duration_s": 0.04,
+  "note": "Esplorativo: non valida i gate della slice 002."
+}
