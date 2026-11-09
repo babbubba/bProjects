@@ -32,6 +32,18 @@ public class DocumentWorkException(string code, string message) : Exception(mess
     /// </summary>
     public const string HierarchicalGapAssessmentUnsupported = "hierarchical_gap_assessment_unsupported";
 
+    /// <summary>
+    /// Motivi tipizzati (prefisso stabile di <c>ErrorMessage</c>, mai codici a sé) dello stadio Gap della definizione v6 (D1, AI §13.7): l'intero ledger non entra nel budget di input di una
+    /// chiamata (<see cref="GapLedgerExceedsInput"/>) oppure le valutazioni attese non entrano nel budget di output (<see cref="GapAssessmentExceedsOutput"/>). L'<c>ErrorCode</c> resta
+    /// <see cref="CallLimitExceeded"/> (stesso codice e azione utente di <see cref="HierarchicalGapAssessmentUnsupported"/>); nessun invio, troncamento o valutazione parziale.
+    /// </summary>
+    public const string GapLedgerExceedsInput = "gap_ledger_exceeds_input";
+
+    public const string GapAssessmentExceedsOutput = "gap_assessment_exceeds_output";
+
+    /// <summary>Prefisso dell'obbligazione <c>gap_reference_missing:&lt;gap&gt;</c> (stadio Gap): un Gap senza domanda canonica nell'analisi assemblata; il server non la crea. Codice del run: <see cref="CoverageIncomplete"/>.</summary>
+    public const string GapReferenceMissing = "gap_reference_missing";
+
     /// <summary>Fonte originale non verificabile alla costruzione del catalogo alias (range, citazione, campi di provenienza): permanente (AI §7.9).</summary>
     public const string SourceSnapshotInvalid = "source_snapshot_invalid";
 
