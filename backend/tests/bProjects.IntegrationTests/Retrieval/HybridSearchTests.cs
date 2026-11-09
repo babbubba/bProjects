@@ -73,6 +73,19 @@ public sealed class HybridSearchTests
     }
 
     [Fact]
+    public async Task A_sentence_query_matches_blocks_sharing_any_term_and_ranks_the_one_with_more_terms_first()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await using var db = f.Database.NewContext();
+
+        var ranking = await f.Rig.Search(db).LexicalAsync(f.Scope(f.Document), "Qual è il termine di pagamento in giorni dalla fattura?", pool: 50, Ct);
+
+        Assert.Equal(f.Document.BlockIds[0], ranking.Blocks[0].BlockId);   // termine + pagamento + giorni + fattura
+        Assert.Contains(f.Document.BlockIds[1], ranking.Blocks.Select(b => b.BlockId));   // solo alcuni termini: partecipa comunque
+        Assert.DoesNotContain(f.Document.BlockIds[3], ranking.Blocks.Select(b => b.BlockId));
+    }
+
+    [Fact]
     public async Task The_pool_limits_the_ranking_and_equal_scores_are_ordered_by_ascending_block_id()
     {
         await using var f = await Fixture.CreateAsync();

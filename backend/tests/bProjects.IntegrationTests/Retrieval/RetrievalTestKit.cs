@@ -198,7 +198,8 @@ internal sealed class RetrievalDb : IAsyncDisposable
     }
 
     /// <summary>Snapshot di fonti: i documenti inclusi (Ready, con la loro preparazione) e quelli esclusi dal PM.</summary>
-    public async Task<Guid> AddSnapshotAsync(Guid project, IReadOnlyList<SeededDocument> included, IReadOnlyList<SeededDocument>? excluded = null)
+    public async Task<Guid> AddSnapshotAsync(
+        Guid project, IReadOnlyList<SeededDocument> included, IReadOnlyList<SeededDocument>? excluded = null, IReadOnlyDictionary<Guid, Guid>? evidenceVersions = null)
     {
         var snapshot = Guid.NewGuid();
         await using var connection = new NpgsqlConnection(ConnectionString);
@@ -208,10 +209,22 @@ internal sealed class RetrievalDb : IAsyncDisposable
         db.SourceSnapshots.Add(new SourceSnapshot { Id = snapshot, ProjectId = project, SelectionRevision = 0, Hash = new string('f', 64), CreatedAt = DateTimeOffset.UtcNow });
         foreach (var d in included)
         {
+            // Ready richiede una versione Evidence: se il test non ne fornisce una, ne esiste una vuota e motivata (esito esplicito «zero evidenze»).
+            var evidenceVersion = evidenceVersions?.GetValueOrDefault(d.PreparationId) ?? Guid.NewGuid();
+            if (evidenceVersions?.ContainsKey(d.PreparationId) != true)
+            {
+                db.EvidenceExtractionVersions.Add(new EvidenceExtractionVersion
+                {
+                    Id = evidenceVersion, ProjectId = project, OriginKind = EvidenceOriginKind.Document, PreparationId = d.PreparationId, ManifestHash = new string('d', 64), Version = 1,
+                    JobId = Guid.NewGuid(), SchemaVersion = EvidenceExtractionVersion.DocumentSchemaVersion, PromptVersion = "p", ModelId = "m", Parameters = "{}",
+                    EvidenceCount = 0, NoEvidenceReason = "test", CreatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
             db.SourceSnapshotItems.Add(new SourceSnapshotItem
             {
                 Id = Guid.NewGuid(), SnapshotId = snapshot, ProjectId = project, DocumentId = d.DocumentId, Included = true, Availability = SourceAvailability.Ready,
-                DocumentVersionId = d.VersionId, PreparationId = d.PreparationId, EvidenceVersionId = null,
+                DocumentVersionId = d.VersionId, PreparationId = d.PreparationId, EvidenceVersionId = evidenceVersion,
             });
         }
 

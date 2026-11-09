@@ -30,7 +30,9 @@ public sealed record SearchRanking(IReadOnlyList<RankedBlock> Blocks, bool Empty
 public sealed record HybridSearchResult(SearchRanking Lexical, SearchRanking Dense, IReadOnlyList<FusedBlock> Fused);
 
 /// <summary>
-/// Ricerca ibrida sull'indice derivato (003 T012-T013, FR-005, FR-008, FR-020). Lessicale: <c>websearch_to_tsquery('italian')</c> + <c>ts_rank_cd</c>. Densa:
+/// Ricerca ibrida sull'indice derivato (003 T012-T013, FR-005, FR-008, FR-020). Lessicale: <c>websearch_to_tsquery('italian')</c> (normalizzazione, stemming, stopword) con i termini
+/// in OR (le interrogazioni dei Gap sono frasi: con l'AND di default quasi nessun blocco le soddisfa tutte) e ordinamento <c>ts_rank_cd</c>, che premia i blocchi con più termini; scelta da
+/// confermare con la misura di T019 (R-1). Densa:
 /// distanza coseno <c>&lt;=&gt;</c> con scansione esatta. In entrambe i filtri (progetto, configurazione, versioni e preparazioni incluse, voce coerente con il blocco)
 /// stanno nella <c>WHERE</c> PRIMA dell'ordinamento: i candidati esclusi non influenzano i ranghi dei restanti. Parità risolta per <c>BlockId</c> ascendente.
 /// L'embedding della query non disponibile lancia l'errore tipizzato (<c>embedding_unavailable</c> ecc.) e NON ripiega sul solo lessicale (D-3).
@@ -61,7 +63,7 @@ public sealed class HybridSearch(AppDbContext db, EmbeddingClient embedding, Ret
 
         var sql = $"""
             SELECT e."BlockId" {FromWhere}
-            CROSS JOIN LATERAL (SELECT websearch_to_tsquery('italian', @query) AS q) s
+            CROSS JOIN LATERAL (SELECT replace(websearch_to_tsquery('italian', @query)::text, ' & ', ' | ')::tsquery AS q) s
             {Filters} AND numnode(s.q) > 0 AND e."Tsv" @@ s.q
             ORDER BY ts_rank_cd(e."Tsv", s.q) DESC, e."BlockId" ASC
             LIMIT @pool
