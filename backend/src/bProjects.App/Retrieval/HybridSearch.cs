@@ -129,6 +129,24 @@ public sealed class HybridSearch(AppDbContext db, EmbeddingClient embedding, Ret
         return new(lexical, dense, Rrf.Fuse(lexical.Blocks, dense.Blocks, k));
     }
 
+    /// <summary>
+    /// L'indice è <c>Ready</c> per OGNI versione inclusa del perimetro alla configurazione richiesta (R-5: stato per versione e configurazione, mai <c>Ready</c> parziale).
+    /// Perimetro senza versioni incluse ⇒ vero (nulla da indicizzare). Non carica né modifica nulla.
+    /// </summary>
+    public async Task<bool> IndexReadyAsync(RetrievalScope scope, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        var versions = scope.DocumentVersionIds.Distinct().ToArray();
+        if (versions.Length == 0)
+        {
+            return true;
+        }
+
+        var ready = await db.RetrievalIndexStates.AsNoTracking()
+            .CountAsync(s => s.IndexConfigHash == scope.IndexConfigHash && s.Status == RetrievalIndexStatus.Ready && versions.Contains(s.DocumentVersionId), ct);
+        return ready == versions.Length;
+    }
+
     private static NpgsqlParameter[] Common(RetrievalScope scope) =>
     [
         new("project", NpgsqlDbType.Uuid) { Value = scope.ProjectId },
