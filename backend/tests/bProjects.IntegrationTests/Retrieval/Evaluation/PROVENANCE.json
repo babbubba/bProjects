@@ -1,0 +1,13 @@
+{
+  "contract": "retrieval-evaluation-fixtures-provenance-1",
+  "sourceBranch": "research/slice-003-lab",
+  "sourceCommit": "f005c8dab923f12e3130ef86517b1318d707ce10",
+  "frozenAt": "2026-11-09",
+  "queryAuthor": "singolo",
+  "dataOrigin": "sintetici (nessun dato cliente)",
+  "note": "Fixture di valutazione (T017/T018) accanto ai gold congelati di ../Gold (che restano invariati: il loro manifest contiene solo le 12 query N4). retrieval-cases.json e' copia byte-identica (git show <commit>:research/slice-003-lab/retrieval-cases.json; hash = input-hashes.json del laboratorio). lab-metrics-subset.json e' DERIVATO da results/{N4-fixtures--line_text,T082-single--docling_text,T083-multi--line_context}.json e results/summary.json (campi gold_ranks, first_correct_rank, hit, recall dei metodi bm25, dense, hybrid_rrf), solo per verificare l'equivalenza del calcolo delle metriche in C#.",
+  "files": [
+    { "path": "retrieval-cases.json", "source": "research/slice-003-lab/retrieval-cases.json", "sha256": "ded3345c91b978b7fea71d2f459a94d958841a88ecb392668ebe64078357e59b", "bytes": 26398 },
+    { "path": "lab-metrics-subset.json", "source": "derivato da research/slice-003-lab/results/* @ f005c8d", "sha256": "a59681ecb88c360c359f7f62586fca9dd1681691dd509d55fa528e81e99da56d", "bytes": 80529 }
+  ]
+}

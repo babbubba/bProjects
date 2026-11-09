@@ -101,14 +101,14 @@ internal sealed class RetrievalDb : IAsyncDisposable
 
     /// <summary>Documento con una versione Ready (preparazione corrente) e un blocco per testo, in ordine di lettura.</summary>
     public async Task<SeededDocument> AddDocumentAsync(
-        Guid project, string name, string[] texts, int version = 1, string parser = "parser-1", Guid? documentId = null, string[][]? headings = null)
+        Guid project, string name, string[] texts, int version = 1, string parser = "parser-1", Guid? documentId = null, string[][]? headings = null, Func<int, Guid>? blockId = null)
     {
         var document = documentId ?? Guid.NewGuid();
         var versionId = Guid.NewGuid();
         var preparation = Guid.NewGuid();
         var artifact = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        var blockIds = texts.Select(_ => Guid.NewGuid()).ToList();
+        var blockIds = texts.Select((_, i) => blockId?.Invoke(i) ?? Guid.NewGuid()).ToList();
 
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync(Ct);

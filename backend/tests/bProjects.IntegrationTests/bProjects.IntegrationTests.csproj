@@ -22,6 +22,9 @@
   <!-- Gold di recupero della 003 (T004): promossi dal laboratorio, byte identici; gli hash sono in PROVENANCE.json. -->
   <ItemGroup>
     <None Include="Retrieval/Gold/**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Fixture di valutazione e baseline offline (T017/T018). -->
+    <None Include="Retrieval/Evaluation/**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Retrieval/Baseline/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Corpus sintetico dei documenti (T002): copiato accanto ai test, così il percorso non dipende dalla cartella di lavoro. -->

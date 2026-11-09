@@ -2,3 +2,6 @@
 tests/fixtures/documents/** -text
 # Gold di recupero della 003 (promossi dal laboratorio, sola lettura): nessuna conversione dei fine riga, gli hash di PROVENANCE.json sono sui byte.
 backend/tests/bProjects.IntegrationTests/Retrieval/Gold/** -text
+# Fixture di valutazione della 003 (T017/T018): copia byte-identica del laboratorio e sottoinsieme derivato; hash in Retrieval/Evaluation/PROVENANCE.json.
+backend/tests/bProjects.IntegrationTests/Retrieval/Evaluation/** -text
+backend/tests/bProjects.IntegrationTests/Retrieval/Baseline/** -text
