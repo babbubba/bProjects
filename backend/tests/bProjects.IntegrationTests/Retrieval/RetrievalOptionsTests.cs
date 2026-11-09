@@ -42,7 +42,7 @@ public sealed class RetrievalOptionsTests
         var o = config.GetSection(RetrievalOptions.SectionName).Get<RetrievalOptions>()!;
 
         Assert.True(o.Enabled);
-        Assert.Equal("bge-m3", o.Embedding.ModelId);
+        Assert.Equal("bge-m3-Q5", o.Embedding.ModelId);
         Assert.Equal("bge-m3-Q5_K_M.gguf", o.Embedding.Artifact);
         Assert.Equal("bge-reranker-v2-m3", o.Reranker.ModelId);
         Assert.True(Validate(o).Succeeded);

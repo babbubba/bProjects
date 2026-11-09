@@ -35,7 +35,7 @@ public sealed class RetrievalOptions
 
     public RetrievalModelOptions Embedding { get; set; } = new()
     {
-        ModelId = "bge-m3",
+        ModelId = "bge-m3-Q5",
         Artifact = "bge-m3-Q5_K_M.gguf",
         Dimension = FixedDimension,
     };

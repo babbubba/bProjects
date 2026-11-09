@@ -12,7 +12,7 @@ public sealed class RetrievalModelReadinessTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static string Models(string id = "bge-m3", string status = "loaded", string? artifactArgs = "/models/bge-m3-Q5_K_M.gguf", string? sha = null) =>
+    private static string Models(string id = "bge-m3-Q5", string status = "loaded", string? artifactArgs = "/models/bge-m3-Q5_K_M.gguf", string? sha = null) =>
         "{\"object\":\"list\",\"data\":[{\"id\":\"" + id + "\",\"object\":\"model\",\"status\":{\"value\":\"" + status + "\",\"args\":[\"llama-server\""
         + (artifactArgs is null ? string.Empty : ",\"--model\",\"" + artifactArgs.Replace("\\", "\\\\") + "\"") + "]}"
         + (sha is null ? string.Empty : ",\"sha256\":\"" + sha + "\"") + "}]}";
@@ -69,7 +69,7 @@ public sealed class RetrievalModelReadinessTests
 
         Assert.Equal(RetrievalModelState.Ready, s.State);
         Assert.True(s.IsReady);
-        Assert.Equal("bge-m3", s.ModelId);
+        Assert.Equal("bge-m3-Q5", s.ModelId);
         Assert.Equal("bge-m3-Q5_K_M.gguf", s.Artifact);
         Assert.Equal(1024, s.Dimension);
         Assert.Equal(Sha256Status.NotVerified, s.Sha256Status);   // nessuno SHA-256 configurato
@@ -308,7 +308,7 @@ public sealed class RetrievalModelReadinessTests
     [InlineData(RetrievalModelState.Unverified, RetrievalException.EmbeddingUnavailable)]
     public void Every_not_ready_state_maps_to_its_typed_error(RetrievalModelState state, string code)
     {
-        var snapshot = new RetrievalModelSnapshot(state, null, "bge-m3", "bge-m3-Q5_K_M.gguf");
+        var snapshot = new RetrievalModelSnapshot(state, null, "bge-m3-Q5", "bge-m3-Q5_K_M.gguf");
 
         Assert.Equal(code, RetrievalModelReadiness.ToException(snapshot).Code);
     }

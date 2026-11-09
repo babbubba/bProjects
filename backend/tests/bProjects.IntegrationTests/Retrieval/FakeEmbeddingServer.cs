@@ -11,7 +11,7 @@ namespace bProjects.IntegrationTests;
 internal sealed class FakeEmbeddingServer : HttpMessageHandler
 {
     public const string ModelsLoaded =
-        """{"object":"list","data":[{"id":"bge-m3","object":"model","owned_by":"llamacpp","status":{"value":"loaded","args":["llama-server","--model","/models/bge-m3-Q5_K_M.gguf","--embeddings"]}}]}""";
+        """{"object":"list","data":[{"id":"bge-m3-Q5","object":"model","owned_by":"llamacpp","status":{"value":"loaded","args":["llama-server","--model","/models/bge-m3-Q5_K_M.gguf","--embeddings"]}}]}""";
 
     public int Dimension { get; set; } = 1024;
 
@@ -60,7 +60,7 @@ internal sealed class FakeEmbeddingServer : HttpMessageHandler
         JsonSerializer.Serialize(new
         {
             @object = "list",
-            model = "bge-m3",
+            model = "bge-m3-Q5",
             data = vectors.Select((v, i) => new { @object = "embedding", index = indexes?[i] ?? i, embedding = v }).ToArray(),
         });
 

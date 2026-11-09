@@ -90,7 +90,7 @@ public sealed class IndexTextTests
 
         Assert.NotEqual(baseline, IndexText.ConfigHash("index-text-2", "bge-m3", "a.gguf", 1024, "italian", Parser));
         Assert.NotEqual(baseline, IndexText.ConfigHash("index-text-1", "bge-m3", "a.gguf", 1024, "simple", Parser));
-        Assert.Equal(IndexText.ConfigHash(Options(), Parser), IndexText.ConfigHash("index-text-1", "bge-m3", "bge-m3-Q5_K_M.gguf", 1024, "italian", Parser));
+        Assert.Equal(IndexText.ConfigHash(Options(), Parser), IndexText.ConfigHash("index-text-1", "bge-m3-Q5", "bge-m3-Q5_K_M.gguf", 1024, "italian", Parser));
     }
 
     [Fact]
