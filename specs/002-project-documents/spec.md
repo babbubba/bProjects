@@ -1,6 +1,6 @@
 # Feature Specification: Documenti di progetto con provenienza verificabile
 
-**Feature Branch**: `feature/002-project-documents`
+**Feature Branch**: `feature/002-implementation`
 **Feature**: `002-project-documents`
 **Created**: 2026-11-01
 **Status**: Draft — specifica funzionale; nessuna implementazione o accettazione attestata

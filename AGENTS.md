@@ -58,7 +58,7 @@ integrazioni reali pertinenti, riportando PASS/FAIL/SKIP e verifiche mancanti.
 ## Stato preparatorio e Git
 
 Prossimo incremento previsto: `002-project-documents`, branch
-`feature/002-project-documents`: allegati PDF testuali, DOCX, Markdown e TXT,
+`feature/002-implementation`: allegati PDF testuali, DOCX, Markdown e TXT,
 parsing, provenienza e trattamento dei documenti oltre contesto. KB condivise e
 RAG esclusi. Questa registrazione non autorizza l'avvio di Spec Kit o l'implementazione.
 

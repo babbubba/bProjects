@@ -1,6 +1,6 @@
 # Implementation Plan: Documenti di progetto
 
-**Branch**: `feature/002-project-documents` | **Date**: 2026-11-01 | **Spec**: [spec.md](spec.md)
+**Branch**: `feature/002-implementation` | **Date**: 2026-11-01 | **Spec**: [spec.md](spec.md)
 **Input**: `specs/002-project-documents/spec.md`; chiarimenti funzionali riesaminati senza questioni bloccanti.
 **Stato**: correzione finale documentale B1 per verifica indipendente mirata; lifecycle B2 e riconciliazione B3 preservati. Nessuna implementazione, migrazione o prova runtime eseguita; nessuna checklist rivalidata. Le verifiche indicate sono gate futuri, non PASS.
 
