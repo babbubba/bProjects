@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using NpgsqlTypes;
 using bProjects.App.Persistence;
 
 #nullable disable
@@ -3829,6 +3830,111 @@ namespace bProjects.App.Persistence.Migrations
                     b.ToTable("Projects", t =>
                         {
                             t.HasCheckConstraint("CK_Projects_Name_NotBlank", "\"Name\" ~ '\\S'");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Retrieval.RetrievalIndexEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IndexConfigHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TextHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<NpgsqlTsVector>("Tsv")
+                        .IsRequired()
+                        .HasColumnType("tsvector");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Tsv");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Tsv"), "GIN");
+
+                    b.HasIndex("BlockId", "IndexConfigHash")
+                        .IsUnique();
+
+                    b.HasIndex("DocumentVersionId", "IndexConfigHash");
+
+                    b.HasIndex("ProjectId", "IndexConfigHash");
+
+                    b.ToTable("RetrievalIndexEntries", t =>
+                        {
+                            t.HasCheckConstraint("CK_RetrievalIndexEntries_ConfigHash", "\"IndexConfigHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RetrievalIndexEntries_TextHash", "length(\"TextHash\") > 0");
+                        });
+                });
+
+            modelBuilder.Entity("bProjects.App.Retrieval.RetrievalIndexState", b =>
+                {
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IndexConfigHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("BlockCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("BuiltAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EntryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DocumentVersionId", "IndexConfigHash");
+
+                    b.HasIndex("ProjectId", "IndexConfigHash");
+
+                    b.ToTable("RetrievalIndexStates", t =>
+                        {
+                            t.HasCheckConstraint("CK_RetrievalIndexStates_ConfigHash", "\"IndexConfigHash\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_RetrievalIndexStates_Counts", "\"BlockCount\" >= 0 AND \"EntryCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_RetrievalIndexStates_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_RetrievalIndexStates_Ready", "\"Status\" <> 'Ready' OR (\"EntryCount\" = \"BlockCount\" AND \"BuiltAt\" IS NOT NULL)");
                         });
                 });
 

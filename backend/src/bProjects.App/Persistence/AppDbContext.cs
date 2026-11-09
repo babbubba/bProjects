@@ -5,6 +5,7 @@ using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Identity;
 using bProjects.App.Projects;
+using bProjects.App.Retrieval;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -58,6 +59,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<RegimeTransition> RegimeTransitions => Set<RegimeTransition>();
     public DbSet<DerivedBatch> DerivedBatches => Set<DerivedBatch>();
     public DbSet<WorkOutput> WorkOutputs => Set<WorkOutput>();
+    public DbSet<RetrievalIndexEntry> RetrievalIndexEntries => Set<RetrievalIndexEntry>();
+    public DbSet<RetrievalIndexState> RetrievalIndexStates => Set<RetrievalIndexState>();
     public DbSet<RunCatalogNode> RunCatalogNodes => Set<RunCatalogNode>();
     public DbSet<RunCatalogPage> RunCatalogPages => Set<RunCatalogPage>();
     public DbSet<RunCatalogMember> RunCatalogMembers => Set<RunCatalogMember>();
@@ -1464,6 +1467,49 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 t.HasCheckConstraint("CK_ChatTurns_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
                 t.HasCheckConstraint("CK_ChatTurns_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultMessageId\" IS NOT NULL");
                 t.HasCheckConstraint("CK_ChatTurns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+            });
+        });
+
+        ConfigureRetrieval(builder);
+    }
+
+    /// <summary>
+    /// Indice derivato di recupero (003 T006, data-model.md): proiezione ricostruibile, nessuna tabella autorevole. La colonna <c>Embedding vector(1024)</c>
+    /// è aggiunta dalla migrazione con SQL e non è mappata (nessun pacchetto pgvector per EF); l'estensione si crea solo con <c>migrate</c> esplicito.
+    /// </summary>
+    private static void ConfigureRetrieval(ModelBuilder builder)
+    {
+        builder.Entity<RetrievalIndexEntry>(entry =>
+        {
+            entry.HasKey(e => e.Id);
+            entry.Property(e => e.IndexConfigHash).HasMaxLength(64);
+            entry.Property(e => e.TextHash).HasMaxLength(64);
+            entry.Property(e => e.Tsv).HasColumnType("tsvector");
+            entry.HasIndex(e => new { e.BlockId, e.IndexConfigHash }).IsUnique();
+            entry.HasIndex(e => new { e.ProjectId, e.IndexConfigHash });
+            entry.HasIndex(e => new { e.DocumentVersionId, e.IndexConfigHash });
+            entry.HasIndex(e => e.Tsv).HasMethod("GIN");
+            entry.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RetrievalIndexEntries_ConfigHash", "\"IndexConfigHash\" ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("CK_RetrievalIndexEntries_TextHash", "length(\"TextHash\") > 0");
+            });
+        });
+
+        builder.Entity<RetrievalIndexState>(state =>
+        {
+            state.HasKey(s => new { s.DocumentVersionId, s.IndexConfigHash });
+            state.Property(s => s.IndexConfigHash).HasMaxLength(64);
+            state.Property(s => s.Status).HasConversion<string>().HasMaxLength(16);
+            state.Property(s => s.ErrorCode).HasMaxLength(64);
+            state.HasIndex(s => new { s.ProjectId, s.IndexConfigHash });
+            state.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RetrievalIndexStates_ConfigHash", "\"IndexConfigHash\" ~ '^[0-9a-f]{64}$'");
+                t.HasCheckConstraint("CK_RetrievalIndexStates_Counts", "\"BlockCount\" >= 0 AND \"EntryCount\" >= 0");
+                // Ready solo con una voce per blocco; Failed sempre con causa tipizzata. Nessun CHECK che enumeri i valori di Status.
+                t.HasCheckConstraint("CK_RetrievalIndexStates_Ready", "\"Status\" <> 'Ready' OR (\"EntryCount\" = \"BlockCount\" AND \"BuiltAt\" IS NOT NULL)");
+                t.HasCheckConstraint("CK_RetrievalIndexStates_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
             });
         });
     }
