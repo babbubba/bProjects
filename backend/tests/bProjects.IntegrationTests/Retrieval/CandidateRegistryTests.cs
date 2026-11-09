@@ -123,7 +123,7 @@ public sealed class CandidateRegistryTests
     {
         var (gaps, evidences, blocks) = Scenario();
         IReadOnlyList<RegistryEvidence> withMessage = [Message(7), .. evidences];
-        var cost = new Dictionary<Guid, long> { [Id(107)] = 50 };
+        var cost = new Dictionary<Guid, long> { [Id(107)] = 50, [Id(101)] = 1, [Id(102)] = 1, [Id(103)] = 1, [Id(104)] = 1, [Id(105)] = 1 };   // costi misurati per ogni candidato (T025: nessun costo implicito)
 
         var registry = Build(gaps, withMessage, blocks, budget: new RegistryBudget(20, cost));
 

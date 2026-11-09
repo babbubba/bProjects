@@ -97,7 +97,7 @@ public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, Cand
         var registry = CandidateRegistry.Build(
             snapshotHash, scope.IndexConfigHash, policy.Version, policy.Hash(),
             [.. searched.Select((s, index) => new RegistryGapInput(s.Gap.GapEvidenceId, s.Gap.Query, s.Fused, finalOrders[index]))],
-            provenance, evidences, causes, budget, ReadinessOf(embeddingSnapshot, rerankerSnapshot));
+            provenance, evidences, causes, budget, ReadinessOf(embeddingSnapshot, rerankerSnapshot), rerankWindow: policy.Rerank);
         return new(registry);
     }
 

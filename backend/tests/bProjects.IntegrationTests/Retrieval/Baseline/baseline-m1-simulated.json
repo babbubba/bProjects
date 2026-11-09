@@ -3,7 +3,7 @@
   "mode": "Simulated",
   "note": "Baseline OFFLINE con embedding simulati (T018): serve alla regressione del plumbing, NON \u00E8 la baseline di qualit\u00E0 (baseline-m1.json, T019, richiede il DGX).",
   "goldSourceCommit": "f005c8dab923f12e3130ef86517b1318d707ce10",
-  "indexConfigHash": "acd754c22773a078b144c3c61c7dac9b176b2c60a85cfed9522421fb80ab731e",
+  "indexConfigHash": "1c74f8a47666cce29fd987509caaa42810b2dadbc888f892b4fefe04b2d01a54",
   "inputHashes": {
     "Evaluation/retrieval-cases.json": "ded3345c91b978b7fea71d2f459a94d958841a88ecb392668ebe64078357e59b",
     "Gold/N4-fixtures/md-basic.md": "63fc185f815fbb63f70ffc6ac65fa2d9f3b52d7d8381e2c6112f60aaea91f2a3",
@@ -22,7 +22,7 @@
     "Gold/T083-multi/verbale-collaudo-zefiro.docx": "53964807e7208bcb3ae425cc6429cd241842a871db9047f9f2d848670f3b477f",
     "Gold/cases.json": "8949ba63e0e9ed635f2c203ac367eb85eb3b3858a85882f78652575a70f5342e"
   },
-  "reportHash": "1bccb71eb19c8e0c59b2a764c8ff06c442848aa8541b44847aa0adb5a3085929",
+  "reportHash": "d4e52dec548c0582fc2398b7d4627713edd2c2780a88265a82e37c008c0950b0",
   "metrics": {
     "N4-fixtures.block.dense.hit@1": 0.083333,
     "N4-fixtures.block.dense.hit@10": 1,

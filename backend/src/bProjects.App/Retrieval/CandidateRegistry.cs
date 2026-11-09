@@ -12,8 +12,23 @@ namespace bProjects.App.Retrieval;
 /// </summary>
 public sealed record RegistryGapInput(Guid GapEvidenceId, string Query, IReadOnlyList<FusedBlock> Fused, IReadOnlyList<Guid>? FinalOrder = null);
 
-/// <summary>Budget del pacchetto: <see cref="Limit"/> in unità del costo per evidenza (token del <c>ContextBudget</c> dello stadio, calcolati dal chiamante); evidenza senza costo noto = 0.</summary>
-public sealed record RegistryBudget(long Limit, IReadOnlyDictionary<Guid, long> Cost);
+/// <summary>
+/// Budget del pacchetto: <see cref="Limit"/> in unità del costo per evidenza (token dello stadio) e <see cref="Cost"/> = conteggio MISURATO dal chiamante per ogni evidenza candidata.
+/// Un costo mancante è un errore (<see cref="CandidatePacker"/>): nessuna evidenza vale zero e nessun costo è stimato.
+/// </summary>
+public sealed record RegistryBudget(long Limit, IReadOnlyDictionary<Guid, long> Cost)
+{
+    /// <summary>
+    /// Budget del pacchetto dal <see cref="ContextBudget"/> dello stadio: budget di input meno i token del payload fisso (istruzioni, elenco dei Gap, schema della risposta) misurati dal
+    /// chiamante. Payload fisso oltre il budget ⇒ limite 0 (nessuna evidenza entra).
+    /// </summary>
+    public static RegistryBudget For(ContextBudget stage, long fixedPayloadTokens, IReadOnlyDictionary<Guid, long> cost)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(fixedPayloadTokens);
+        ArgumentNullException.ThrowIfNull(cost);
+        return new(Math.Max(0, stage.InputBudgetTokens - fixedPayloadTokens), cost);
+    }
+}
 
 /// <summary>Modello come dichiarato nel registro (nessun valore dedotto: ciò che la readiness ha osservato).</summary>
 public sealed record RegistryModelReadiness(string Model, string Artifact, int? Dimension, string Sha256Status);
@@ -79,7 +94,7 @@ public static class CandidateRegistry
     public static RetrievalRegistry Build(
         string snapshotHash, string indexConfigHash, string policyVersion, string policyHash,
         IReadOnlyList<RegistryGapInput> gaps, IReadOnlyDictionary<Guid, BlockProvenance> blocks, IReadOnlyList<RegistryEvidence> evidences,
-        IReadOnlyList<string>? causes = null, RegistryBudget? budget = null, RegistryReadiness? readiness = null)
+        IReadOnlyList<string>? causes = null, RegistryBudget? budget = null, RegistryReadiness? readiness = null, int? rerankWindow = null)
     {
         ArgumentNullException.ThrowIfNull(gaps);
         ArgumentNullException.ThrowIfNull(blocks);
@@ -123,45 +138,11 @@ public static class CandidateRegistry
         var outcome = causes.Count == 0 ? OutcomePackage : failed ? OutcomeFailed : OutcomeDiagnostic;
 
         // Pacchetto: nessuno con cause di servizio; altrimenti always_included e poi rango, a passaggi interi fino al budget.
-        var package = new List<Guid>();
-        var excluded = new List<RegistryExclusion>();
-        var alwaysExcluded = false;
-        var rankedExcluded = false;
-        if (outcome == OutcomePackage)
-        {
-            var limit = budget?.Limit ?? long.MaxValue;
-            long used = 0;
-            long Cost(Guid id) => budget?.Cost.GetValueOrDefault(id) ?? 0;
-            foreach (var id in always)
-            {
-                if (used + Cost(id) <= limit)
-                {
-                    used += Cost(id);
-                    package.Add(id);
-                }
-                else
-                {
-                    excluded.Add(new(id, ReasonBudget));
-                    alwaysExcluded = true;
-                }
-            }
-
-            var stopped = false;
-            foreach (var id in ranked)
-            {
-                if (!stopped && used + Cost(id) <= limit)
-                {
-                    used += Cost(id);
-                    package.Add(id);
-                }
-                else
-                {
-                    stopped = true;
-                    excluded.Add(new(id, ReasonBudget));
-                    rankedExcluded = true;
-                }
-            }
-        }
+        var packed = outcome == OutcomePackage
+            ? CandidatePacker.Pack(always, [.. ranked.Select(id => (id, bestAcross[id]))], budget, rerankWindow)
+            : new PackResult([], [], Complete: false);
+        var package = packed.Package;
+        var excluded = packed.Excluded;
 
         var inPackage = package.ToHashSet();
         var registryGaps = perGap.Select(g => new RegistryGap(g.Gap.GapEvidenceId, g.Gap.Query, [.. g.Rows.Select(row =>
@@ -179,7 +160,7 @@ public static class CandidateRegistry
 
         return new(
             Contract, snapshotHash, indexConfigHash, policyVersion, policyHash, SearchBasis, outcome,
-            RetrievalComplete: causes.Count == 0 && !alwaysExcluded && !rankedExcluded,
+            RetrievalComplete: causes.Count == 0 && packed.Complete,
             Degraded: degraded,
             Causes: causes,
             Readiness: readiness,
