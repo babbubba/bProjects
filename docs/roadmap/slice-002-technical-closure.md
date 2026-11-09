@@ -145,3 +145,22 @@ Problema (evidenza: `validation/T130-N4-revision.md`, gate anticipato T138): nel
 | Rischio rispetto alla 003 | Alto: il recupero è proprio il tema del retrieval della 003, rischio di duplicare e poi sostituire | Medio: meno codice nuovo, ma anche qui parte della logica diventa inutile con il retrieval |
 
 Raccomandazione: **A**, ridotta al minimo e progettata come adattatore sostituibile (input = un Gap + riscontri candidati, output = il record `gapAssessments` già contrattualizzato), così la 003 può sostituire solo il passo «recupero dei candidati» senza toccare il contratto. B è sconsigliata come soluzione definitiva perché lega la correttezza dei Gap a un partizionamento che la 003 dovrà comunque rivedere. Decisione del committente richiesta prima di qualunque implementazione; fino ad allora resta in vigore la soluzione temporanea C+D.
+
+## 15. Consolidamento di T082 e baseline tecnica (2026-11-09, base `8eb1c2c`)
+
+Il committente ha interrotto la campagna T082 dopo otto esecuzioni reali e non autorizza la nona. Nessuna prova DGX eseguita dopo `8eb1c2c`. Dettaglio e rischi in `specs/002-project-documents/validation/I5-single-real.md` (sezione «Consolidamento»). Task: 143 totali, 130 spuntati, 13 aperti; **nessun task chiuso in questa fase, nessun criterio, gold o stato di test modificato**.
+
+| Gate | Stato | Note |
+| --- | --- | --- |
+| T082 | FAILED / aperto | preparazione FUNCTIONALLY_VERIFIED (ottava); instradamento sull'output IMPLEMENTED + TECHNICALLY_VERIFIED offline; analisi completa NOT_VERIFIED con la nuova policy |
+| T083, T090, T104, T109, T110, T067, T114 | NOT_VERIFIED | a valle di T082 / T126 / T142, invariato rispetto a §13.3 |
+| T142 | BLOCKED (decisione) | terza prova N4: 60 PASS / 5 FAIL; nessun v7; decisioni su trasmissione di nome documento e percorso titoli e sul controllo duplicati |
+| T126 | NOT_VERIFIED | prova reale non eseguita |
+| T138 | BLOCKED (decisione) | raccomandazione A (§14); fail-fast C+D in vigore |
+| T107 (parte umana), T111 | NOT_VERIFIED | richiedono persone |
+
+### Rischio T138 allargato
+Con la policy `single-call-output-estimate-1` un documento con Gap la cui uscita attesa supera O fallisce in fail-fast invece di troncare: comportamento voluto (nessun troncamento non ritentabile), ma amplia il perimetro dei casi non soddisfatti finché T138 non è deciso.
+
+### Baseline
+Backend 3613 test, 0 falliti, 84 ignorati (DGX/parser reali e benchmark non eseguiti nella suite ordinaria). Per pianificare: decisioni T138 e T142, autorizzazione di una nona esecuzione T082, prova T126, poi la catena T067 → T104 e T083 → T090 → T109/T110 → T111 → T114.

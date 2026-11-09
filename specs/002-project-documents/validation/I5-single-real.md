@@ -1,4 +1,4 @@
-# I5 — T082 (documento singolo oltre contesto): FAILED all'estrazione (2 esecuzioni), analisi NON raggiunta
+# I5 — T082 (documento singolo oltre contesto): preparazione PASS (ottava esecuzione), analisi completa NON verificata; consolidato 2026-11-09
 
 **Autorizzazione**: autoload del router consentito dall'autore (2026-11-07); `BPROJECTS_TEST_DGX_ALLOW=1` solo nel processo del test; una inferenza alla volta; nessun altro modello caricato né slot attivo prima di ciascuna prova.
 **Runtime**: `Qwen3.6-35B-Smart` (router llama.cpp, ctx 131072, parallel 1), `BPROJECTS_TEST_CTX_WINDOW=131072`, PostgreSQL e parser Docling reali, endpoint `Analizza` di produzione.
@@ -78,3 +78,32 @@ Condizioni: `Qwen3.6-35B-Smart` (router llama.cpp b10703, modello `sleeping` pri
 - **Non verificati** (mai raggiunti): copertura dell'analisi, ≥12 fatti nell'analisi, negazioni/qualificatori, conflitti lontani, citazioni, tempi di analisi. Verdetto: T082 resta FAILED, ora per un difetto di instradamento dell'analisi e non più dell'estrazione né dei tempi.
 
 **Decisione richiesta** (nessuna modifica applicata): l'instradamento deve considerare anche l'output atteso. Opzioni: (a) stimare l'output dell'analisi dalle evidenze (numero e lunghezza) con un fattore calibrato e instradare alla gerarchia quando supera O — analogo all'`OutputExpansion` già usato dall'estrazione, ma è una nuova regola di routing e il fattore va calibrato sulle misure reali (qui: >16384 token per 297 evidenze, ≥55 token/evidenza); (b) soglia sul numero di evidenze (policy congelata nello snapshot, come `MaxCandidatesPerRun`); (c) rientro alla gerarchia dopo un troncamento, che è un nuovo retry e non è autorizzato. Raccomandazione: (a), con il fattore ricavato dalle misure e congelato nello snapshot dei limiti del run, perché non aggiunge fasi né retry e riusa la gerarchia v4/v5 già verificata (per le richieste senza Gap).
+
+## Consolidamento della campagna T082 (2026-11-09, decisione del committente: nessuna nona esecuzione)
+
+Il committente ha interrotto la campagna dopo otto esecuzioni reali e non ha autorizzato la nona. Questa sezione fissa lo stato; non cambia criteri di accettazione, gold né stato dei test. **T082 resta FAILED / aperto (checkbox non spuntata).**
+
+### Verificato
+| Cosa | Livello | Evidenza |
+| --- | --- | --- |
+| Preparazione del documento oltre contesto (295725 token = 2,60×B, 3116 blocchi) | FUNCTIONALLY_VERIFIED sul DGX (ottava esecuzione) | `Ready`, 458 porzioni `Completed`, 250 chiamate di estrazione tutte `finish=stop`, 297 evidenze, 37,8 min contro cap 3600 s (~22 min di margine) |
+| Provenienza: fatti gold S01–S16 presenti nel testo estratto; nessun blocco perso | FUNCTIONALLY_VERIFIED (ottava esecuzione) | 1323985 caratteri estratti contro 1323984 generati |
+| Latenza fra chiamate (1,2 s mediana, era 12,7 s) | TECHNICALLY_VERIFIED + osservata sul DGX | benchmark offline e ottava esecuzione; via rapida del pianificatore (`b73fcf4`) |
+| Versionamento `document-extraction-v3`: freeze, replay v2, errore su versione ignota/malformata | TECHNICALLY_VERIFIED | test `T082DocumentExtractionPromptTests`, `DocumentEvidenceAgentTests` |
+| Instradamento dell'analisi sul budget di output (`single-call-output-estimate-1`, congelata in `analysisOutputPolicy`, run storici invariati, fail-fast dei Gap invariato) | IMPLEMENTED + TECHNICALLY_VERIFIED, solo offline | commit `8eb1c2c`; 9 test dell'estimatore (inclusi 297 evidenze oltre il tetto con enunciati vuoti), 4 di instradamento su PostgreSQL con modello finto, 6 di compatibilità; suite backend 3613 test, 0 falliti, 84 ignorati |
+
+### NON verificato
+- **Analisi completa del documento grande sul DGX con la nuova policy**: mai eseguita. L'unica analisi reale (ottava esecuzione) è fallita per troncamento (`finish=length`, 1 chiamata, 330 s) prima della policy `8eb1c2c`.
+- Mai raggiunti: copertura dell'analisi, ≥12 fatti nell'analisi, negazioni e qualificatori, conflitti lontani, citazioni corrette, tempi di analisi, tutto entro il cap E.
+- Il percorso gerarchico oltre il tetto di output su un corpus reale con 297 evidenze: coperto solo dal test numerico dell'estimatore; il modello finto (finestra 4000) non riproduce quel caso.
+- Il gate dell'analisi completa **non è considerato superato**.
+
+### Rischi residui
+1. **Esito della prova reale ignoto.** Con 297 evidenze la stima supera 16384, quindi il documento andrebbe alla gerarchia: più lenta, e non provata sul DGX con questo corpus. Il cap di 3600 s vale per la preparazione, non è dimostrato per l'analisi.
+2. **Stima conservativa.** Coefficienti non calibrati su misure di output complete (solo un limite inferiore di ≥55 token/evidenza da una risposta troncata): possibile instradamento alla gerarchia di casi che la chiamata singola avrebbe retto (costo in latenza, non in correttezza). Cambiarli richiede una nuova versione della policy.
+3. **T138 (Gap oltre contesto).** Finché non è deciso, ogni documento oltre contesto che contenga Gap fa fail-fast (`document_limit_exceeded` / `hierarchical_gap_assessment_unsupported`), e ora ci cade anche un documento che entra nell'input ma ha un'uscita attesa oltre O. SC-004 resta non soddisfatto per questi casi. Raccomandazione A in `slice-002-technical-closure.md` §14, nessuna implementazione.
+4. **Espediente diagnostico**: `Auth__AccessTokenMinutes=480` usato solo nelle prove 5–8 in ambiente isolato; non è una configurazione di prodotto né sostituisce i test di refresh.
+5. **Ambiente DGX**: il modello era `sleeping` prima della settima esecuzione (autoload); il comportamento di readiness è oggetto di T126, non verificato qui.
+
+### Se la campagna riprende
+Una sola esecuzione reale, con le stesse condizioni, su autorizzazione esplicita; atteso: stima > O, instradamento alla gerarchia, nessun `finish=length`. Nessuna prova è stata eseguita dopo `8eb1c2c`.
