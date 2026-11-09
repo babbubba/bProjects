@@ -3,7 +3,8 @@ name: bprojects
 # Segreti e porte in infra/.env (non versionato): copiare infra/.env.example e valorizzare.
 services:
   db:
-    image: postgres:18
+    # pgvector per l'indice derivato della 003 (ADR-0002): pin per tag e digest.
+    image: pgvector/pgvector:pg18@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47
     restart: unless-stopped
     environment:
       POSTGRES_DB: bprojects
