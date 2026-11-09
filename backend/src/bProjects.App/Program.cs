@@ -6,6 +6,7 @@ using bProjects.App.Documents;
 using bProjects.App.Identity;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
+using bProjects.App.Retrieval;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
@@ -32,6 +33,9 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(builder
 builder.Services.AddSingleton<IValidateOptions<AiOptions>, AiOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<ExecutionOptions>, ExecutionOptionsValidator>();
 builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(AiOptions.SectionName)).ValidateOnStart();
+// Recupero (003): configurazione validata all'avvio ma INERTE per default (Retrieval:Enabled=false): nessun servizio contattato, nessuna sonda.
+builder.Services.AddSingleton<IValidateOptions<RetrievalOptions>, RetrievalOptionsValidator>();
+builder.Services.AddOptions<RetrievalOptions>().Bind(builder.Configuration.GetSection(RetrievalOptions.SectionName)).ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<DocumentOptions>, DocumentOptionsValidator>();
 builder.Services.AddOptions<DocumentOptions>().Bind(builder.Configuration.GetSection(DocumentOptions.SectionName)).ValidateOnStart();
 builder.Services.AddScoped<DocumentPolicyService>();
