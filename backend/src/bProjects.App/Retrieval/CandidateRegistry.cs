@@ -5,8 +5,12 @@ using bProjects.App.Evidence;
 
 namespace bProjects.App.Retrieval;
 
-/// <summary>Un Gap da interrogare: identificativo canonico dell'evidenza Gap nel run, testo canonico dell'interrogazione e fusione RRF dei suoi due segnali.</summary>
-public sealed record RegistryGapInput(Guid GapEvidenceId, string Query, IReadOnlyList<FusedBlock> Fused);
+/// <summary>
+/// Un Gap da interrogare: identificativo canonico dell'evidenza Gap nel run, testo canonico dell'interrogazione e fusione RRF dei suoi due segnali.
+/// <paramref name="FinalOrder"/> è l'ordine finale dei <c>BlockId</c> dopo il riordino (T023; permutazione esatta dei blocchi di <paramref name="Fused"/>); assente = ordine RRF
+/// (M1, oppure riordino non disponibile: ordine diagnostico).
+/// </summary>
+public sealed record RegistryGapInput(Guid GapEvidenceId, string Query, IReadOnlyList<FusedBlock> Fused, IReadOnlyList<Guid>? FinalOrder = null);
 
 /// <summary>Budget del pacchetto: <see cref="Limit"/> in unità del costo per evidenza (token del <c>ContextBudget</c> dello stadio, calcolati dal chiamante); evidenza senza costo noto = 0.</summary>
 public sealed record RegistryBudget(long Limit, IReadOnlyDictionary<Guid, long> Cost);
@@ -87,11 +91,12 @@ public static class CandidateRegistry
 
         // Rango migliore di ogni evidenza per Gap e fra Gap.
         var bestAcross = new Dictionary<Guid, int>();
-        var perGap = new List<(RegistryGapInput Gap, List<(FusedBlock Fused, BlockProvenance Prov, IReadOnlyList<Guid> Evidence)> Rows)>();
+        var perGap = new List<(RegistryGapInput Gap, List<(FusedBlock Fused, BlockProvenance Prov, IReadOnlyList<Guid> Evidence, int FinalRank)> Rows)>();
         foreach (var gap in gaps)
         {
-            var rows = new List<(FusedBlock, BlockProvenance, IReadOnlyList<Guid>)>();
-            foreach (var fused in gap.Fused.OrderBy(f => f.RrfRank))
+            var finalRanks = FinalRanks(gap);
+            var rows = new List<(FusedBlock, BlockProvenance, IReadOnlyList<Guid>, int)>();
+            foreach (var fused in gap.Fused.OrderBy(f => finalRanks[f.BlockId]))
             {
                 if (!blocks.TryGetValue(fused.BlockId, out var prov))
                 {
@@ -99,10 +104,11 @@ public static class CandidateRegistry
                 }
 
                 var ids = mapping.GetValueOrDefault(fused.BlockId) ?? [];
-                rows.Add((fused, prov, ids));
+                var finalRank = finalRanks[fused.BlockId];
+                rows.Add((fused, prov, ids, finalRank));
                 foreach (var id in ids)
                 {
-                    bestAcross[id] = bestAcross.TryGetValue(id, out var current) ? Math.Min(current, fused.RrfRank) : fused.RrfRank;
+                    bestAcross[id] = bestAcross.TryGetValue(id, out var current) ? Math.Min(current, finalRank) : finalRank;
                 }
             }
 
@@ -160,7 +166,7 @@ public static class CandidateRegistry
         var inPackage = package.ToHashSet();
         var registryGaps = perGap.Select(g => new RegistryGap(g.Gap.GapEvidenceId, g.Gap.Query, [.. g.Rows.Select(row =>
         {
-            var (fused, prov, ids) = row;
+            var (fused, prov, ids, finalRank) = row;
             var inside = outcome == OutcomePackage && ids.Any(inPackage.Contains);
             var reason = inside ? null
                 : ids.Count == 0 ? ReasonNoEvidence
@@ -168,7 +174,7 @@ public static class CandidateRegistry
                 : ReasonBudget;
             return new RegistryCandidate(
                 fused.BlockId, prov.DocumentId, prov.DocumentName, prov.DocumentVersion, prov.Section, [prov.RangeStart, prov.RangeEnd], prov.TextHash,
-                fused.LexicalRank, fused.DenseRank, fused.RrfRank, fused.RrfRank, ids, OriginRanked, inside, reason);
+                fused.LexicalRank, fused.DenseRank, fused.RrfRank, finalRank, ids, OriginRanked, inside, reason);
         })])).ToList();
 
         return new(
@@ -181,6 +187,23 @@ public static class CandidateRegistry
             AlwaysIncluded: [.. always.Select(id => new RegistryAlwaysIncluded(id, inPackage.Contains(id)))],
             PackageEvidence: package,
             Excluded: excluded);
+    }
+
+    /// <summary>Rango finale 1-based di ogni blocco del Gap: la posizione nell'ordine riordinato oppure, senza riordino, il rango RRF. L'ordine riordinato deve essere una permutazione esatta.</summary>
+    private static Dictionary<Guid, int> FinalRanks(RegistryGapInput gap)
+    {
+        if (gap.FinalOrder is null)
+        {
+            return gap.Fused.ToDictionary(f => f.BlockId, f => f.RrfRank);
+        }
+
+        var expected = gap.Fused.Select(f => f.BlockId).ToHashSet();
+        if (gap.FinalOrder.Count != expected.Count || !gap.FinalOrder.ToHashSet().SetEquals(expected))
+        {
+            throw new ArgumentException("L'ordine finale deve contenere esattamente una volta i blocchi della fusione del Gap.", nameof(gap));
+        }
+
+        return gap.FinalOrder.Select((id, index) => (id, rank: index + 1)).ToDictionary(t => t.id, t => t.rank);
     }
 
     private static bool IsRerankerCause(string cause) =>

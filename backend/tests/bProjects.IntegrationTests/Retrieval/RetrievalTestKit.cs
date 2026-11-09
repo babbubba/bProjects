@@ -22,15 +22,34 @@ internal interface IRetrievalRig
 
 internal sealed class RetrievalRig : IRetrievalRig, IDisposable
 {
-    public RetrievalRig(FakeEmbeddingServer? server = null)
+    public RetrievalRig(FakeEmbeddingServer? server = null, FakeRerankServer? rerankServer = null)
     {
         Server = server ?? new FakeEmbeddingServer();
+        RerankServer = rerankServer;
         Options = new RetrievalOptions { Enabled = true, RuntimeCheckSeconds = 60, Embedding = { Endpoint = "http://dgx.internal:8081/v1/", ApiKey = "k" } };
         Embedding = new EmbeddingClient(Options, Server);
-        Readiness = new RetrievalModelReadiness(Options, Embedding, Server);
+        if (rerankServer is null)
+        {
+            Readiness = new RetrievalModelReadiness(Options, Embedding, Server);
+        }
+        else
+        {
+            // Riordino su un'altra porta: un solo punto di rete instrada ai due server finti (la readiness usa un unico handler per i due modelli).
+            Options.Reranker.Endpoint = "http://dgx.internal:8082/v1/";
+            Options.Reranker.ApiKey = "r";
+            Reranker = new RerankClient(Options, rerankServer);
+            Readiness = new RetrievalModelReadiness(Options, Embedding, new RoutingHandler(Server, rerankServer), reranker: Reranker);
+        }
     }
 
     public FakeEmbeddingServer Server { get; }
+
+    /// <summary>Server finto del riordino (null = riordino non configurato).</summary>
+    public FakeRerankServer? RerankServer { get; }
+
+    public RerankClient? Reranker { get; }
+
+    public CandidateReranker Reranking(AppDbContext db) => new(db, Reranker ?? throw new InvalidOperationException("Riordino non configurato nel rig."), Readiness);
 
     public RetrievalOptions Options { get; }
 
@@ -49,7 +68,18 @@ internal sealed class RetrievalRig : IRetrievalRig, IDisposable
     {
         Readiness.Dispose();
         Embedding.Dispose();
+        Reranker?.Dispose();
     }
+}
+
+/// <summary>Instrada le richieste ai due server finti in base alla porta dell'endpoint (8082 = riordino, altrimenti embedding).</summary>
+internal sealed class RoutingHandler(HttpMessageHandler embedding, HttpMessageHandler rerank) : HttpMessageHandler
+{
+    private readonly HttpMessageInvoker _embedding = new(embedding, disposeHandler: false);
+    private readonly HttpMessageInvoker _rerank = new(rerank, disposeHandler: false);
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        (request.RequestUri!.Port == 8082 ? _rerank : _embedding).SendAsync(request, cancellationToken);
 }
 
 /// <summary>
