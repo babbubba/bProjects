@@ -257,3 +257,5 @@ Evidence ledger con provenienza (FR-007 della 002); snapshot congelato per run; 
 | 5 | Pinning modelli | Nome, artefatto e dimensione vettori fissati in readiness; SHA-256 al provisioning, «non verificato» fino ad allora. |
 
 Questioni tecniche che il piano risolve con misura (non decisioni normative): motore d'indice (`research.md` R-1), mapping blocco→evidenza (R-3), parametri di cutoff e budget dei padri (R-6).
+
+**Conferma del committente (2026-11-09):** lettura conservativa di D-3 confermata: con il riordino indisponibile lo stadio Gap LLM non viene invocato, il registro RRF diagnostico viene persistito e il run termina con causa tipizzata (nessun esito «provvisorio»). Restano da approvare: padri M4 (nuovo formato messaggio, prima di T041) e `absenceProven` sempre falso con sorgente `retrieval`.
