@@ -1124,6 +1124,131 @@ describe('EvidenceViewComponent', () => {
         expect(el.querySelector('#inj')).toBeNull();
         expect(text('gap-item')).toContain('<b id="inj">x</b>');
       });
+
+      describe('derived fields of the Gap stage (T149)', () => {
+        const derived = (over: Record<string, unknown> = {}) =>
+          gap({
+            reason: 'NoAnswer',
+            searchBasis: 'ledger_exhaustive',
+            retrievalComplete: true,
+            absenceProven: true,
+            ...over,
+          });
+        const derivedSummary = (over: Record<string, number> = {}) =>
+          gapSummary({
+            expectedGaps: 3,
+            assessedGaps: 3,
+            answeredGaps: 1,
+            openGaps: 2,
+            absenceProvenGaps: 1,
+            absenceUnprovenGaps: 1,
+            answeredWithOpenConflictGaps: 1,
+            ...over,
+          });
+        const stage = (over: Record<string, unknown> = {}) =>
+          v3({
+            summary: derivedSummary(),
+            gapAssessments: [
+              derived({ gapEvidenceId: 'g-1' }),
+              derived({ gapEvidenceId: 'g-2', absenceProven: false, retrievalComplete: false }),
+              gap({
+                gapEvidenceId: 'g-3',
+                outcome: 'AnsweredInSnapshot',
+                reason: 'Answered',
+                searchBasis: 'ledger_exhaustive',
+                retrievalComplete: true,
+                answeredWithOpenConflict: true,
+                supportingEvidenceIds: ['e-2'],
+              }),
+            ],
+            ...over,
+          });
+
+        it('says proven and unproven absence in words, with search basis and completeness', async () => {
+          await open(stage());
+          const items = qa('gap-item');
+          const abs = items.map((i) => i.querySelector('[data-testid=gap-absence]')?.textContent);
+          expect(abs[0]).toContain('Assenza provata');
+          expect(abs[1]).toContain('Assenza non provata');
+          expect(abs[2]).toBeUndefined();
+          expect(items[0].textContent).toContain('intero ledger delle evidenze');
+          expect(items[0].textContent).toContain('recupero completo');
+          expect(items[1].textContent).toContain('recupero non completo');
+          expect(items[1].textContent).toContain("l'assenza non è provata");
+          expect(items[0].querySelector('[data-testid=gap-absence-note]')).toBeNull();
+        });
+
+        it('flags the document answer with an open conflict as non blocking, without changing the outcome', async () => {
+          await open(stage());
+          const item = qa('gap-item')[2];
+          expect(item.textContent).toContain('Risolto nello snapshot');
+          expect(item.textContent).toContain('Risposta documentale con conflitto aperto');
+          expect(item.textContent).toContain('non bloccante');
+          expect(item.textContent).toContain('non risolve il conflitto');
+        });
+
+        it('shows the derived counters', async () => {
+          await open(stage());
+          expect(text('gap-derived-counters')).toContain('Assenza provata 1');
+          expect(text('gap-derived-counters')).toContain('Assenza non provata 1');
+          expect(text('gap-derived-counters')).toContain('conflitto aperto 1');
+          expect(text('gap-derived-counters')).not.toContain('parziale');
+        });
+
+        it('marks the derived counters partial and never complete when Gap are unassessed', async () => {
+          await open(stage({ summary: derivedSummary({ expectedGaps: 4, unassessedGaps: 1 }) }));
+          expect(text('gap-derived-counters')).toContain('parziale');
+          expect(text('gap-unassessed')).toContain('senza valutazione');
+          expect(text('gap-assessments').toLowerCase()).not.toMatch(/completa|completato/);
+        });
+
+        it('keeps the v5 coverage-3 report unchanged: no derived badges, notes or counters', async () => {
+          await open(v3());
+          expect(q('gap-absence')).toBeNull();
+          expect(q('gap-search-basis')).toBeNull();
+          expect(q('gap-open-conflict-guard')).toBeNull();
+          expect(q('gap-derived-counters')).toBeNull();
+          expect(text('gap-item')).not.toContain('Assenza');
+        });
+
+        it('never infers the derived claims from coverage-2 reports with hostile fields', async () => {
+          await open(
+            v3({
+              checkerVersion: 'coverage-2',
+              gapAssessments: [derived({ answeredWithOpenConflict: true })],
+              summary: derivedSummary(),
+            }),
+          );
+          expect(text('gap-assessments')).toContain('non disponibile');
+          expect(q('gap-absence')).toBeNull();
+          expect(q('gap-derived-counters')).toBeNull();
+          expect(q('gap-open-conflict-guard')).toBeNull();
+        });
+
+        it('treats wrongly typed derived fields as assessment unavailable', async () => {
+          await open(
+            stage({ gapAssessments: [derived({ absenceProven: 'true' })], summary: oneOpen() }),
+          );
+          expect(text('gap-assessments')).toContain('non disponibile');
+          expect(q('gap-absence')).toBeNull();
+        });
+
+        it('ignores incoherent derived counters instead of showing them', async () => {
+          await open(stage({ summary: derivedSummary({ absenceProvenGaps: -1 }) }));
+          expect(q('gap-derived-counters')).toBeNull();
+          expect(qa('gap-item')).toHaveLength(3);
+        });
+
+        it('does not claim absence for non NoAnswer reasons even with a hostile absenceProven', async () => {
+          await open(
+            stage({
+              gapAssessments: [derived({ reason: 'Partial', absenceProven: true })],
+              summary: oneOpen(),
+            }),
+          );
+          expect(q('gap-absence')).toBeNull();
+        });
+      });
     });
   });
 

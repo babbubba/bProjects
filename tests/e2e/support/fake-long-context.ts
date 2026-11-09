@@ -93,6 +93,10 @@ export interface ReportOptions {
   blocking?: number;
   findings?: Json[];
   reconciliation?: Json;
+  /** Solo coverage-3 (T149): versione del checker, contatori Gap aggiuntivi alla sintesi e campi di primo livello (aiRevisionId, gapAssessments, gapAssessmentsHash). */
+  checkerVersion?: string;
+  summaryExtra?: Json;
+  extra?: Json;
 }
 
 /** Report coverage-2 come lo serializza il server: sintesi per ID e per porzioni, mai un booleano di completezza. */
@@ -100,15 +104,16 @@ export function coverageReport(o: ReportOptions): Json {
   const findings = o.findings ?? [];
   const count = (c: string) => findings.filter((f) => f['category'] === c).length;
   return {
-    id: o.id, analysisId: o.analysisId, revisionId: o.revisionId, draftId: o.draftId ?? null, checkerVersion: 'coverage-2',
+    id: o.id, analysisId: o.analysisId, revisionId: o.revisionId, draftId: o.draftId ?? null, checkerVersion: o.checkerVersion ?? 'coverage-2',
     createdAt: '2030-01-01T10:09:00Z', inputHash: 'f'.repeat(64), createdBy: 'pm',
     counts: { deterministicErrors: count('DeterministicError'), semanticRisks: count('SemanticRisk'), pmAssessments: count('PmAssessment') },
     findings,
     limits: ['La copertura per ID non verifica il significato del testo.', 'Nessun controllo semantico automatico sulle fonti.'],
     summary: {
       expectedEvidence: o.expected, representedEvidence: o.represented, portionsExpected: o.portionsExpected, portionsProcessed: o.portionsProcessed,
-      portionsNoEvidence: 0, portionsMissing: o.portionsExpected - o.portionsProcessed, blockingFindings: o.blocking ?? 0,
+      portionsNoEvidence: 0, portionsMissing: o.portionsExpected - o.portionsProcessed, blockingFindings: o.blocking ?? 0, ...(o.summaryExtra ?? {}),
     },
+    ...(o.extra ?? {}),
     ...(o.reconciliation ? { reconciliation: o.reconciliation } : {}),
   };
 }

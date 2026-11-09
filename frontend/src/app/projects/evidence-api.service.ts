@@ -381,6 +381,10 @@ export interface CoverageDocumentSummary {
   answeredGaps?: number;
   openGaps?: number;
   unassessedGaps?: number;
+  /** Solo revisioni con stadio Gap (definizione v6), derivati dal server: assenti nei report v5 e mai dedotti dalla loro assenza. */
+  absenceProvenGaps?: number;
+  absenceUnprovenGaps?: number;
+  answeredWithOpenConflictGaps?: number;
 }
 
 export type GapOutcome = 'AnsweredInSnapshot' | 'Open';
@@ -398,6 +402,11 @@ export interface GapAssessmentView {
   openItemId: string | null;
   openConflictId: string | null;
   originBatchId: string;
+  /** Solo stadio Gap (v6), derivati dal server e opzionali: assenti nei report v5. `absenceProven` ha senso per i soli esiti NoAnswer. */
+  searchBasis?: string;
+  retrievalComplete?: boolean;
+  absenceProven?: boolean;
+  answeredWithOpenConflict?: boolean;
 }
 
 export interface ReconciliationLevel {

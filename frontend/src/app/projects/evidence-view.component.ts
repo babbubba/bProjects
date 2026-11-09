@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
 import {
+  CoverageDocumentSummary,
   CoverageFinding,
   CoverageReportSummary,
   CoverageReportView,
@@ -69,6 +70,12 @@ export type GapView =
       answered: number;
       open: number;
       unassessed: number;
+      /** Contatori derivati dello stadio Gap (v6): null se il server non li ha prodotti (v5) o se incoerenti. */
+      derived: {
+        absenceProven: number;
+        absenceUnproven: number;
+        answeredWithOpenConflict: number;
+      } | null;
       items: GapAssessmentView[];
       aiRevisionChanged: boolean;
     };
@@ -84,8 +91,19 @@ function validGapAssessment(g: GapAssessmentView): boolean {
     gapReasons.includes(g.reason) &&
     typeof g.rationale === 'string' &&
     Array.isArray(g.supportingEvidenceIds) &&
-    g.supportingEvidenceIds.every((id) => typeof id === 'string')
+    g.supportingEvidenceIds.every((id) => typeof id === 'string') &&
+    // Campi derivati opzionali (stadio Gap v6): se presenti devono avere il tipo atteso, altrimenti la valutazione è «non disponibile».
+    (g.searchBasis === undefined || typeof g.searchBasis === 'string') &&
+    (g.retrievalComplete === undefined || typeof g.retrievalComplete === 'boolean') &&
+    (g.absenceProven === undefined || typeof g.absenceProven === 'boolean') &&
+    (g.answeredWithOpenConflict === undefined || typeof g.answeredWithOpenConflict === 'boolean')
   );
+}
+
+function derivedCounters(s: CoverageDocumentSummary) {
+  const n = [s.absenceProvenGaps, s.absenceUnprovenGaps, s.answeredWithOpenConflictGaps];
+  if (!n.every((v) => Number.isInteger(v) && (v as number) >= 0)) return null;
+  return { absenceProven: n[0]!, absenceUnproven: n[1]!, answeredWithOpenConflict: n[2]! };
 }
 
 export const EVIDENCE_POLL_MS = new InjectionToken<number>('EVIDENCE_POLL_MS', {
@@ -290,6 +308,7 @@ export class EvidenceViewComponent {
       answered: s.answeredGaps!,
       open: s.openGaps!,
       unassessed: s.unassessedGaps!,
+      derived: derivedCounters(s),
       items: list,
       aiRevisionChanged: !!r.aiRevisionId && !!r.revisionId && r.aiRevisionId !== r.revisionId,
     };
@@ -693,6 +712,27 @@ export class EvidenceViewComponent {
 
   protected gapOutcomeLabel(g: GapAssessmentView): string {
     return g.outcome === 'AnsweredInSnapshot' ? 'Risolto nello snapshot' : 'Ancora aperto';
+  }
+
+  /** Solo per gli esiti NoAnswer con il campo derivato presente (stadio Gap v6): nei report v5 il campo manca e non si afferma nulla. */
+  protected absenceLabel(g: GapAssessmentView): string | null {
+    if (g.reason !== 'NoAnswer' || typeof g.absenceProven !== 'boolean') return null;
+    return g.absenceProven ? 'Assenza provata' : 'Assenza non provata';
+  }
+
+  protected searchBasisLabel(g: GapAssessmentView): string | null {
+    if (typeof g.searchBasis !== 'string' || !g.searchBasis) return null;
+    const basis =
+      g.searchBasis === 'ledger_exhaustive'
+        ? 'intero ledger delle evidenze'
+        : `base «${g.searchBasis}»`;
+    const retrieval =
+      g.retrievalComplete === true
+        ? 'recupero completo'
+        : g.retrievalComplete === false
+          ? 'recupero non completo'
+          : null;
+    return `Ricerca su ${basis}${retrieval ? ` · ${retrieval}` : ''}`;
   }
 
   protected gapReasonLabel(reason: GapAssessmentView['reason']): string {

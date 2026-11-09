@@ -763,6 +763,16 @@
                 Attesi {{ gv.expected }} · Valutati {{ gv.assessed }} · Risolti nello snapshot
                 {{ gv.answered }} · Aperti {{ gv.open }} · Non valutati {{ gv.unassessed }}
               </p>
+              @if (gv.derived; as d) {
+                <p class="small mb-1" data-testid="gap-derived-counters">
+                  Assenza provata {{ d.absenceProven }} · Assenza non provata
+                  {{ d.absenceUnproven }} · Risposte documentali con conflitto aperto
+                  {{ d.answeredWithOpenConflict }}
+                  @if (gv.unassessed > 0) {
+                    <span class="text-secondary"> (parziale: non include i Gap non valutati)</span>
+                  }
+                </p>
+              }
               @if (gv.unassessed > 0) {
                 <p class="alert alert-warning py-1 mb-1 small" data-testid="gap-unassessed">
                   {{ plural(gv.unassessed, 'Gap', 'Gap') }} senza valutazione: non è una risposta,
@@ -790,7 +800,34 @@
                           gapReasonLabel(g.reason)
                         }}</span>
                         <span class="badge text-bg-light border">Valutazione AI</span>
+                        @if (absenceLabel(g); as al) {
+                          <span class="badge text-bg-light border" data-testid="gap-absence"
+                            >{{ g.absenceProven ? '✓ ' : '⚠ ' }}{{ al }}</span
+                          >
+                        }
+                        @if (g.answeredWithOpenConflict) {
+                          <span
+                            class="badge text-bg-warning border"
+                            data-testid="gap-open-conflict-guard"
+                            >⚠ Risposta documentale con conflitto aperto</span
+                          >
+                        }
                       </div>
+                      @if (searchBasisLabel(g); as sb) {
+                        <p class="mb-1 text-secondary" data-testid="gap-search-basis">{{ sb }}</p>
+                      }
+                      @if (absenceLabel(g) === 'Assenza non provata') {
+                        <p class="mb-1 text-secondary" data-testid="gap-absence-note">
+                          Nessuna risposta trovata, ma l'assenza non è provata: non significa che la
+                          risposta non esista.
+                        </p>
+                      }
+                      @if (g.answeredWithOpenConflict) {
+                        <p class="mb-1 text-secondary" data-testid="gap-open-conflict-note">
+                          La risposta nel documento partecipa a un conflitto ancora aperto.
+                          Segnalazione non bloccante: non cambia l'esito e non risolve il conflitto.
+                        </p>
+                      }
                       <p class="mb-1" data-testid="gap-rationale">{{ g.rationale }}</p>
                       <p class="mb-1">
                         Gap:
