@@ -46,7 +46,7 @@ public static class RetrievalModelStateExtensions
 
 /// <summary>
 /// Snapshot della readiness: modello, artefatto (osservato dal runtime, null se non riportato), dimensione (osservata dalla risposta di prova, null se non
-/// provata), <see cref="Sha256Status"/> e istante della sonda. Nessun valore è dedotto dalla configurazione.
+/// provata o non applicabile al riordino), <see cref="Sha256Status"/> e istante della sonda. Nessun valore è dedotto dalla configurazione.
 /// </summary>
 public sealed record RetrievalModelSnapshot(
     RetrievalModelState State,
@@ -64,94 +64,70 @@ public sealed record RetrievalModelSnapshot(
 public sealed record RetrievalReadinessWait(RetrievalModelSnapshot Snapshot, bool DeadlineReached);
 
 /// <summary>
-/// Readiness del modello di embedding (003 T008, FR-034, D-5). Sonda a richiesta (<c>/v1/models</c>, <c>/props</c> e UNA richiesta di embedding di prova per
-/// la dimensione) con cache a TTL (<see cref="RetrievalOptions.RuntimeCheckSeconds"/>) e una sola sonda in volo; stesse attese e tetto di
-/// <see cref="ModelRuntimeMonitor.ReadinessBackoff"/>. Non carica né scarica modelli e non sostituisce mai il modello: nome, artefatto e dimensione sono configurazione
-/// fissata e una difformità è «non pronto». Difformità di nome/artefatto/dimensione ⇒ nessuna richiesta di embedding di contenuto (<see cref="EnsureEmbeddingReadyAsync"/>).
+/// Readiness dei modelli del recupero: embedding (003 T008) e riordino (T021) — FR-034, D-5. Sonda a richiesta (<c>/v1/models</c>, <c>/props</c> e UNA richiesta
+/// funzionale di prova: embedding per la dimensione, riordino minimo per il pooling <c>rank</c>) con cache a TTL (<see cref="RetrievalOptions.RuntimeCheckSeconds"/>)
+/// e una sola sonda in volo PER MODELLO; stesse attese e tetto di <see cref="ModelRuntimeMonitor.ReadinessBackoff"/>. Non carica né scarica modelli e non sostituisce
+/// mai il modello: nome, artefatto e dimensione sono configurazione fissata e una difformità è «non pronto». Difformità ⇒ nessuna richiesta di contenuto
+/// (<see cref="EnsureEmbeddingReadyAsync"/>, <see cref="EnsureRerankerReadyAsync"/>). I due modelli sono indipendenti: il riordino non pronto non rende non pronto l'embedding.
 /// </summary>
 public sealed class RetrievalModelReadiness : IDisposable
 {
     private readonly RetrievalOptions _options;
-    private readonly EmbeddingClient _embedding;
     private readonly HttpClient _http;
-    private readonly Uri _serverRoot;
     private readonly TimeProvider _time;
-    private readonly object _gate = new();
+    private readonly Slot _embeddingSlot;
+    private readonly Slot _rerankerSlot;
 
-    private RetrievalModelSnapshot _snapshot;
-    private DateTimeOffset _validUntil = DateTimeOffset.MinValue;
-    private Task<RetrievalModelSnapshot>? _probe;
-    private Task<RetrievalModelSnapshot>? _wait;
-
-    public RetrievalModelReadiness(RetrievalOptions options, EmbeddingClient embedding, HttpMessageHandler? handler = null, TimeProvider? time = null)
+    public RetrievalModelReadiness(RetrievalOptions options, EmbeddingClient embedding, HttpMessageHandler? handler = null, TimeProvider? time = null, RerankClient? reranker = null)
     {
         _options = options;
-        _embedding = embedding;
         _time = time ?? TimeProvider.System;
-        var endpoint = new Uri(options.Embedding.Endpoint.TrimEnd('/') + "/", UriKind.Absolute);
-        _serverRoot = new Uri(endpoint, "/");
         _http = handler is null
             ? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false })
             : new HttpClient(handler, disposeHandler: false);
         _http.Timeout = Timeout.InfiniteTimeSpan;
-        if (!string.IsNullOrEmpty(options.Embedding.ApiKey))
-        {
-            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.Embedding.ApiKey);
-        }
 
-        _snapshot = Empty(RetrievalModelState.Unverified, null);
-    }
-
-    /// <summary>Ultimo stato noto, senza I/O (Unverified se mai sondato).</summary>
-    public RetrievalModelSnapshot Current
-    {
-        get
-        {
-            lock (_gate)
+        // La prova funzionale dell'embedding restituisce la dimensione osservata; quella del riordino non ha dimensione (null).
+        _embeddingSlot = new Slot(
+            options.Embedding,
+            async ct => await embedding.ProbeDimensionAsync(ct),
+            expectsDimension: true);
+        _rerankerSlot = new Slot(
+            options.Reranker,
+            async ct =>
             {
-                return _snapshot;
-            }
-        }
+                await reranker!.ProbeAsync(ct);
+                return null;
+            },
+            expectsDimension: false,
+            configured: reranker is not null && !string.IsNullOrWhiteSpace(options.Reranker.Endpoint));
+
+        _embeddingSlot.Snapshot = Empty(_embeddingSlot, RetrievalModelState.Unverified, null);
+        _rerankerSlot.Snapshot = Empty(_rerankerSlot, RetrievalModelState.Unverified, null);
     }
+
+    /// <summary>Ultimo stato noto dell'embedding, senza I/O (Unverified se mai sondato).</summary>
+    public RetrievalModelSnapshot Current => Read(_embeddingSlot);
+
+    /// <summary>Ultimo stato noto del riordino, senza I/O (Unverified se mai sondato).</summary>
+    public RetrievalModelSnapshot CurrentReranker => Read(_rerankerSlot);
 
     /// <summary>Stato verificato dell'embedding: dalla cache finché valido, altrimenti con una sonda condivisa fra i chiamanti. Non lancia per errori del server.</summary>
-    public async Task<RetrievalModelSnapshot> GetEmbeddingSnapshotAsync(CancellationToken cancellationToken = default)
-    {
-        Task<RetrievalModelSnapshot> probe;
-        lock (_gate)
-        {
-            if (_time.GetUtcNow() < _validUntil)
-            {
-                return _snapshot;
-            }
+    public Task<RetrievalModelSnapshot> GetEmbeddingSnapshotAsync(CancellationToken cancellationToken = default) => GetSnapshotAsync(_embeddingSlot, cancellationToken);
 
-            probe = _probe ??= Task.Run(ProbeAndStoreAsync, CancellationToken.None);
-        }
-
-        return await probe.WaitAsync(cancellationToken);
-    }
+    /// <summary>Stato verificato del riordino (stesse regole dell'embedding). Riordino non configurato ⇒ <see cref="RetrievalModelState.Unverified"/> senza alcuna richiesta.</summary>
+    public Task<RetrievalModelSnapshot> GetRerankerSnapshotAsync(CancellationToken cancellationToken = default) => GetSnapshotAsync(_rerankerSlot, cancellationToken);
 
     /// <summary>
     /// Attende la readiness di un modello transitoriamente non pronto (scaricato, in caricamento, irraggiungibile) con poche sonde e tetto fisso; un solo giro condiviso
     /// fra i chiamanti. Non invia richieste di caricamento. <paramref name="remaining"/> è il residuo della deadline del chiamante.
     /// </summary>
-    public async Task<RetrievalReadinessWait> WaitUntilEmbeddingReadyAsync(TimeSpan remaining, CancellationToken cancellationToken = default)
-    {
-        Task<RetrievalModelSnapshot> loop;
-        lock (_gate)
-        {
-            loop = _wait ??= Task.Run(WaitLoopAsync, CancellationToken.None);
-        }
+    public Task<RetrievalReadinessWait> WaitUntilEmbeddingReadyAsync(TimeSpan remaining, CancellationToken cancellationToken = default) =>
+        WaitUntilReadyAsync(_embeddingSlot, remaining, cancellationToken);
 
-        try
-        {
-            return new(await loop.WaitAsync(remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining, _time, cancellationToken), false);
-        }
-        catch (TimeoutException)
-        {
-            return new(Current, true);
-        }
-    }
+    /// <summary>Come <see cref="WaitUntilEmbeddingReadyAsync"/>, per il riordino.</summary>
+    public Task<RetrievalReadinessWait> WaitUntilRerankerReadyAsync(TimeSpan remaining, CancellationToken cancellationToken = default) =>
+        WaitUntilReadyAsync(_rerankerSlot, remaining, cancellationToken);
 
     /// <summary>Lancia l'errore tipizzato del recupero se l'embedding non è pronto; in caso contrario restituisce lo snapshot (da registrare nel registro e nei rapporti).</summary>
     public async Task<RetrievalModelSnapshot> EnsureEmbeddingReadyAsync(CancellationToken cancellationToken = default)
@@ -160,7 +136,14 @@ public sealed class RetrievalModelReadiness : IDisposable
         return snapshot.IsReady ? snapshot : throw ToException(snapshot);
     }
 
-    /// <summary>Mappatura verso gli errori tipizzati (contracts/model-readiness.md §2).</summary>
+    /// <summary>Come <see cref="EnsureEmbeddingReadyAsync"/>, per il riordino: non pronto ⇒ <c>reranker_unavailable</c> (modalità degradata, mai un cambio di modello).</summary>
+    public async Task<RetrievalModelSnapshot> EnsureRerankerReadyAsync(CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetRerankerSnapshotAsync(cancellationToken);
+        return snapshot.IsReady ? snapshot : throw ToRerankerException(snapshot);
+    }
+
+    /// <summary>Mappatura verso gli errori tipizzati dell'embedding (contracts/model-readiness.md §2).</summary>
     public static RetrievalException ToException(RetrievalModelSnapshot snapshot) => snapshot.State switch
     {
         RetrievalModelState.ModelMissing or RetrievalModelState.ArtifactMismatch => new(
@@ -174,20 +157,72 @@ public sealed class RetrievalModelReadiness : IDisposable
             $"Il servizio di embedding non è pronto ({snapshot.State}): riprovare più tardi; nessun servizio alternativo è usato."),
     };
 
-    /// <summary>Scarta la validità della cache: la lettura successiva sonda di nuovo.</summary>
-    public void Invalidate()
+    /// <summary>Riordino non pronto, per qualsiasi stato (assente, artefatto diverso, non dimostrabile, irraggiungibile) ⇒ <c>reranker_unavailable</c> con la causa nello stato.</summary>
+    public static RetrievalException ToRerankerException(RetrievalModelSnapshot snapshot) => new(
+        RetrievalException.RerankerUnavailable,
+        $"Il servizio di riordino {snapshot.ModelId} non è pronto ({snapshot.State}; artefatto atteso {snapshot.ExpectedArtifact}): ordine diagnostico, nessun servizio alternativo è usato.");
+
+    /// <summary>Scarta la validità della cache dell'embedding: la lettura successiva sonda di nuovo.</summary>
+    public void Invalidate() => Invalidate(_embeddingSlot);
+
+    /// <summary>Scarta la validità della cache del riordino.</summary>
+    public void InvalidateReranker() => Invalidate(_rerankerSlot);
+
+    private static RetrievalModelSnapshot Read(Slot slot)
     {
-        lock (_gate)
+        lock (slot.Gate)
         {
-            _validUntil = DateTimeOffset.MinValue;
+            return slot.Snapshot;
         }
     }
 
-    private async Task<RetrievalModelSnapshot> WaitLoopAsync()
+    private static void Invalidate(Slot slot)
+    {
+        lock (slot.Gate)
+        {
+            slot.ValidUntil = DateTimeOffset.MinValue;
+        }
+    }
+
+    private async Task<RetrievalModelSnapshot> GetSnapshotAsync(Slot slot, CancellationToken cancellationToken)
+    {
+        Task<RetrievalModelSnapshot> probe;
+        lock (slot.Gate)
+        {
+            if (_time.GetUtcNow() < slot.ValidUntil)
+            {
+                return slot.Snapshot;
+            }
+
+            probe = slot.Probe ??= Task.Run(() => ProbeAndStoreAsync(slot), CancellationToken.None);
+        }
+
+        return await probe.WaitAsync(cancellationToken);
+    }
+
+    private async Task<RetrievalReadinessWait> WaitUntilReadyAsync(Slot slot, TimeSpan remaining, CancellationToken cancellationToken)
+    {
+        Task<RetrievalModelSnapshot> loop;
+        lock (slot.Gate)
+        {
+            loop = slot.Wait ??= Task.Run(() => WaitLoopAsync(slot), CancellationToken.None);
+        }
+
+        try
+        {
+            return new(await loop.WaitAsync(remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining, _time, cancellationToken), false);
+        }
+        catch (TimeoutException)
+        {
+            return new(Read(slot), true);
+        }
+    }
+
+    private async Task<RetrievalModelSnapshot> WaitLoopAsync(Slot slot)
     {
         try
         {
-            var snapshot = await GetEmbeddingSnapshotAsync(CancellationToken.None);
+            var snapshot = await GetSnapshotAsync(slot, CancellationToken.None);
             foreach (var pause in ModelRuntimeMonitor.ReadinessBackoff)
             {
                 if (!snapshot.State.IsTransient())
@@ -196,46 +231,47 @@ public sealed class RetrievalModelReadiness : IDisposable
                 }
 
                 await Task.Delay(pause, _time);
-                Invalidate();
-                snapshot = await GetEmbeddingSnapshotAsync(CancellationToken.None);
+                Invalidate(slot);
+                snapshot = await GetSnapshotAsync(slot, CancellationToken.None);
             }
 
             return snapshot;
         }
         finally
         {
-            lock (_gate)
+            lock (slot.Gate)
             {
-                _wait = null;
+                slot.Wait = null;
             }
         }
     }
 
-    private async Task<RetrievalModelSnapshot> ProbeAndStoreAsync()
+    private async Task<RetrievalModelSnapshot> ProbeAndStoreAsync(Slot slot)
     {
         RetrievalModelSnapshot fresh;
         try
         {
-            fresh = await ProbeAsync();
+            // Servizio non configurato: nessuna richiesta, mai «pronto».
+            fresh = slot.Configured ? await ProbeAsync(slot) : Empty(slot, RetrievalModelState.Unverified, _time.GetUtcNow());
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
-            fresh = Empty(RetrievalModelState.Unverified, _time.GetUtcNow());   // risposta incomprensibile: non dimostrabile, mai «pronto»
+            fresh = Empty(slot, RetrievalModelState.Unverified, _time.GetUtcNow());   // risposta incomprensibile: non dimostrabile, mai «pronto»
         }
 
-        lock (_gate)
+        lock (slot.Gate)
         {
-            _snapshot = fresh;
-            _validUntil = _time.GetUtcNow().AddSeconds(Math.Max(1, _options.RuntimeCheckSeconds));
-            _probe = null;
+            slot.Snapshot = fresh;
+            slot.ValidUntil = _time.GetUtcNow().AddSeconds(Math.Max(1, _options.RuntimeCheckSeconds));
+            slot.Probe = null;
         }
 
         return fresh;
     }
 
-    private async Task<RetrievalModelSnapshot> ProbeAsync()
+    private async Task<RetrievalModelSnapshot> ProbeAsync(Slot slot)
     {
-        var model = _options.Embedding;
+        var model = slot.Model;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Min(ModelRuntimeMonitor.MaxProbeSeconds, Math.Max(1, _options.TimeoutSeconds))));
         var ct = timeout.Token;
         var now = _time.GetUtcNow();
@@ -244,27 +280,27 @@ public sealed class RetrievalModelReadiness : IDisposable
         ListedModel[]? listed;
         try
         {
-            listed = await ListModelsAsync(ct);
+            listed = await ListModelsAsync(model, ct);
         }
         catch (Exception e) when (IsUnreachable(e))
         {
-            return Empty(RetrievalModelState.Unreachable, now);
+            return Empty(slot, RetrievalModelState.Unreachable, now);
         }
 
         if (listed is null)
         {
-            return Empty(RetrievalModelState.Unverified, now);   // il server risponde ma l'elenco non è utilizzabile
+            return Empty(slot, RetrievalModelState.Unverified, now);   // il server risponde ma l'elenco non è utilizzabile
         }
 
         var entry = listed.FirstOrDefault(m => string.Equals(m.Id, model.ModelId, StringComparison.Ordinal));
         if (entry is null)
         {
-            return Empty(RetrievalModelState.ModelMissing, now);
+            return Empty(slot, RetrievalModelState.ModelMissing, now);
         }
 
         if (entry.Status is { } status && !string.Equals(status, "loaded", StringComparison.OrdinalIgnoreCase))
         {
-            return Empty(string.Equals(status, "loading", StringComparison.OrdinalIgnoreCase) ? RetrievalModelState.ModelLoading : RetrievalModelState.ModelUnloaded, now);
+            return Empty(slot, string.Equals(status, "loading", StringComparison.OrdinalIgnoreCase) ? RetrievalModelState.ModelLoading : RetrievalModelState.ModelUnloaded, now);
         }
 
         // 2. Artefatto: dai parametri del modello elencato (router mode) o, in alternativa, da /props. Non riportato ⇒ non dimostrabile.
@@ -273,11 +309,11 @@ public sealed class RetrievalModelReadiness : IDisposable
         {
             try
             {
-                artifact = await GetPropsArtifactAsync(model.ModelId, ct);
+                artifact = await GetPropsArtifactAsync(model, ct);
             }
             catch (Exception e) when (IsUnreachable(e))
             {
-                return Empty(RetrievalModelState.Unreachable, now);
+                return Empty(slot, RetrievalModelState.Unreachable, now);
             }
             catch (Exception e) when (e is HttpRequestException or JsonException)
             {
@@ -288,36 +324,36 @@ public sealed class RetrievalModelReadiness : IDisposable
         var sha = model.ResolveSha256Status(entry.Sha256);
         if (artifact is null)
         {
-            return Empty(RetrievalModelState.Unverified, now) with { Sha256Status = sha };
+            return Empty(slot, RetrievalModelState.Unverified, now) with { Sha256Status = sha };
         }
 
         if (!string.Equals(artifact, model.Artifact, StringComparison.Ordinal))
         {
-            return Empty(RetrievalModelState.ArtifactMismatch, now) with { Artifact = artifact, Sha256Status = sha };
+            return Empty(slot, RetrievalModelState.ArtifactMismatch, now) with { Artifact = artifact, Sha256Status = sha };
         }
 
-        // 3. Dimensione: UNA risposta di prova; nessuna richiesta di contenuto è mai inviata prima di questo punto.
-        int dimension;
+        // 3. Prova funzionale: UNA richiesta minima (embedding: dimensione; riordino: due candidati con risposta validata); nessuna richiesta di contenuto prima di questo punto.
+        int? dimension;
         try
         {
-            dimension = await _embedding.ProbeDimensionAsync(ct);
+            dimension = await slot.FunctionalProbe(ct);
         }
-        catch (Exception e) when (e is OperationCanceledException || e is RetrievalException { Code: RetrievalException.EmbeddingUnavailable })
+        catch (Exception e) when (e is OperationCanceledException || e is RetrievalException { Code: RetrievalException.EmbeddingUnavailable or RetrievalException.RerankerUnavailable })
         {
-            return Empty(RetrievalModelState.Unreachable, now) with { Artifact = artifact, Sha256Status = sha };
+            return Empty(slot, RetrievalModelState.Unreachable, now) with { Artifact = artifact, Sha256Status = sha };
         }
         catch (RetrievalException)
         {
-            return Empty(RetrievalModelState.Unverified, now) with { Artifact = artifact, Sha256Status = sha };
+            return Empty(slot, RetrievalModelState.Unverified, now) with { Artifact = artifact, Sha256Status = sha };
         }
 
-        return dimension == model.Dimension
+        return !slot.ExpectsDimension || dimension == model.Dimension
             ? new RetrievalModelSnapshot(RetrievalModelState.Ready, now, model.ModelId, model.Artifact, artifact, dimension, sha)
-            : Empty(RetrievalModelState.DimensionMismatch, now) with { Artifact = artifact, Dimension = dimension, Sha256Status = sha };
+            : Empty(slot, RetrievalModelState.DimensionMismatch, now) with { Artifact = artifact, Dimension = dimension, Sha256Status = sha };
     }
 
-    private RetrievalModelSnapshot Empty(RetrievalModelState state, DateTimeOffset? checkedAt) =>
-        new(state, checkedAt, _options.Embedding.ModelId, _options.Embedding.Artifact);
+    private static RetrievalModelSnapshot Empty(Slot slot, RetrievalModelState state, DateTimeOffset? checkedAt) =>
+        new(state, checkedAt, slot.Model.ModelId, slot.Model.Artifact);
 
     private static bool IsUnreachable(Exception e) =>
         e is HttpRequestException { StatusCode: null } or OperationCanceledException or TimeoutException or IOException
@@ -325,9 +361,25 @@ public sealed class RetrievalModelReadiness : IDisposable
 
     private sealed record ListedModel(string Id, string? Status, string? Artifact, string? Sha256);
 
-    private async Task<ListedModel[]?> ListModelsAsync(CancellationToken ct)
+    /// <summary>Radice del server del modello (host:porta): l'embedding e il riordino possono stare su server diversi.</summary>
+    private static Uri ServerRoot(RetrievalModelOptions model) =>
+        new(new Uri(model.Endpoint.TrimEnd('/') + "/", UriKind.Absolute), "/");
+
+    /// <summary>GET autenticato con la chiave del PROPRIO modello: la chiave dell'embedding non viaggia verso il riordino e viceversa.</summary>
+    private async Task<HttpResponseMessage> GetAsync(RetrievalModelOptions model, string relative, CancellationToken ct)
     {
-        using var response = await _http.GetAsync(new Uri(_serverRoot, "v1/models"), ct);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(ServerRoot(model), relative));
+        if (!string.IsNullOrEmpty(model.ApiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", model.ApiKey);
+        }
+
+        return await _http.SendAsync(request, ct);
+    }
+
+    private async Task<ListedModel[]?> ListModelsAsync(RetrievalModelOptions model, CancellationToken ct)
+    {
+        using var response = await GetAsync(model, "v1/models", ct);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
         if (json.RootElement.ValueKind != JsonValueKind.Object || !json.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
@@ -364,9 +416,9 @@ public sealed class RetrievalModelReadiness : IDisposable
     }
 
     /// <summary><c>GET /props?model=</c>: <c>model_path</c> del server (basename). Assente ⇒ null.</summary>
-    private async Task<string?> GetPropsArtifactAsync(string modelId, CancellationToken ct)
+    private async Task<string?> GetPropsArtifactAsync(RetrievalModelOptions model, CancellationToken ct)
     {
-        using var response = await _http.GetAsync(new Uri(_serverRoot, $"props?model={Uri.EscapeDataString(modelId)}"), ct);
+        using var response = await GetAsync(model, $"props?model={Uri.EscapeDataString(model.ModelId)}", ct);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
         return json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("model_path", out var path) && path.ValueKind == JsonValueKind.String
@@ -382,4 +434,26 @@ public sealed class RetrievalModelReadiness : IDisposable
     }
 
     public void Dispose() => _http.Dispose();
+
+    /// <summary>Stato condiviso di un modello: cache, sonda in volo e attesa in corso (una sola per modello).</summary>
+    private sealed class Slot(RetrievalModelOptions model, Func<CancellationToken, Task<int?>> functionalProbe, bool expectsDimension, bool configured = true)
+    {
+        public RetrievalModelOptions Model { get; } = model;
+
+        public Func<CancellationToken, Task<int?>> FunctionalProbe { get; } = functionalProbe;
+
+        public bool ExpectsDimension { get; } = expectsDimension;
+
+        public bool Configured { get; } = configured;
+
+        public object Gate { get; } = new();
+
+        public RetrievalModelSnapshot Snapshot { get; set; } = null!;
+
+        public DateTimeOffset ValidUntil { get; set; } = DateTimeOffset.MinValue;
+
+        public Task<RetrievalModelSnapshot>? Probe { get; set; }
+
+        public Task<RetrievalModelSnapshot>? Wait { get; set; }
+    }
 }
