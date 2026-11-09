@@ -1,0 +1,1 @@
+capitolato-aurora.txt sha256=a926fb1da97b8b01edfa61e67e87967a8249f6bd37e22d239fd642eb491530f6

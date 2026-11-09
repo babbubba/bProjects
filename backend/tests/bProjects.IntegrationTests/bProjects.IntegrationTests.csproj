@@ -19,6 +19,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Gold di recupero della 003 (T004): promossi dal laboratorio, byte identici; gli hash sono in PROVENANCE.json. -->
+  <ItemGroup>
+    <None Include="Retrieval/Gold/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Corpus sintetico dei documenti (T002): copiato accanto ai test, così il percorso non dipende dalla cartella di lavoro. -->
   <ItemGroup>
     <None Include="..\..\..\tests\fixtures\documents\**" Link="fixtures\documents\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

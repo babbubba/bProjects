@@ -1,0 +1,102 @@
+{
+  "version": "research-003-fixtures-v1",
+  "note": "Gold di retrieval, non gold di analisi; usano solo fixture sintetiche della slice 002.",
+  "cases": [
+    {
+      "id": "N4-doc-title",
+      "query": "Cosa dice la Scheda A sul termine di pagamento?",
+      "gold": {
+        "file": "txt-conflict-a.txt",
+        "contains": "termine di pagamento e' 30 giorni"
+      }
+    },
+    {
+      "id": "N4-doc-30",
+      "query": "In quale scheda il termine di pagamento è 30 giorni?",
+      "gold": {
+        "file": "txt-conflict-a.txt",
+        "contains": "termine di pagamento e' 30 giorni"
+      }
+    },
+    {
+      "id": "N4-doc-B",
+      "query": "Cosa riporta la Scheda B sul termine di pagamento?",
+      "gold": {
+        "file": "txt-conflict-b.txt",
+        "contains": "termine di pagamento e' 60 giorni"
+      }
+    },
+    {
+      "id": "N4-doc-B-60",
+      "query": "Quale documento stabilisce pagamento a 60 giorni?",
+      "gold": {
+        "file": "txt-conflict-b.txt",
+        "contains": "termine di pagamento e' 60 giorni"
+      }
+    },
+    {
+      "id": "neg-consent",
+      "query": "È consentito inviare email senza consenso?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "non deve inviare mai email senza consenso"
+      }
+    },
+    {
+      "id": "neg-returns",
+      "query": "Il progetto richiede la gestione dei resi?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "Non e' richiesta la gestione dei resi"
+      }
+    },
+    {
+      "id": "neg-card",
+      "query": "Possiamo memorizzare il numero della carta?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "vietato memorizzare il numero di carta"
+      }
+    },
+    {
+      "id": "neg-export",
+      "query": "Quali esportazioni di dati sono vietate?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "esportazioni sono consentite tranne"
+      }
+    },
+    {
+      "id": "neg-45",
+      "query": "Il termine dei pagamenti è 45 oppure 30 giorni?",
+      "gold": {
+        "file": "txt-negations.txt",
+        "contains": "termine e' di 45 giorni"
+      }
+    },
+    {
+      "id": "md-release",
+      "query": "Che cosa include il rilascio 1?",
+      "gold": {
+        "file": "md-basic.md",
+        "contains": "rilascio 1 include la consultazione degli ordini"
+      }
+    },
+    {
+      "id": "md-excluded",
+      "query": "Sono comprese le modifiche agli ordini?",
+      "gold": {
+        "file": "md-basic.md",
+        "contains": "Le modifiche agli ordini sono escluse"
+      }
+    },
+    {
+      "id": "md-collaudo",
+      "query": "Qual è la scadenza del collaudo?",
+      "gold": {
+        "file": "md-basic.md",
+        "contains": "Collaudo | 2027-03-01"
+      }
+    }
+  ]
+}

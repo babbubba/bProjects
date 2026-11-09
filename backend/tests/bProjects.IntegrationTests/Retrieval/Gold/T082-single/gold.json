@@ -1,0 +1,285 @@
+{
+  "Name": "T082-single",
+  "Seed": 20261106,
+  "FillerChars": null,
+  "BulkRulesPerDocument": 260,
+  "Gold": [
+    {
+      "Id": "S01",
+      "DocKey": "cap",
+      "Zone": 0,
+      "Sentence": "Il portale Aurora conserva i documenti di trasporto per 84 mesi dalla data di emissione.",
+      "Text": [
+        "84",
+        "mesi"
+      ],
+      "Quote": [
+        "84 mesi"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S02",
+      "DocKey": "cap",
+      "Zone": 0,
+      "Sentence": "L'accesso al portale Aurora non è consentito agli utenti privi di credenziale nominativa.",
+      "Text": [
+        "credenzial"
+      ],
+      "Quote": [
+        "credenziale nominativa"
+      ],
+      "Negative": true,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S03",
+      "DocKey": "cap",
+      "Zone": 0,
+      "Sentence": "La fattura elettronica è emessa entro il settimo giorno lavorativo del mese successivo.",
+      "Text": [
+        "settimo",
+        "lavorativ"
+      ],
+      "Quote": [
+        "settimo giorno lavorativo"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S04",
+      "DocKey": "cap",
+      "Zone": 0,
+      "Sentence": "Fanno eccezione i mesi di agosto e dicembre, nei quali il termine per l'emissione della fattura elettronica è il decimo giorno lavorativo.",
+      "Text": [
+        "decimo",
+        "agosto"
+      ],
+      "Quote": [
+        "decimo giorno lavorativo"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S05",
+      "DocKey": "cap",
+      "Zone": 1,
+      "Sentence": "Le segnalazioni di guasto con priorità alta sono prese in carico entro 40 minuti, esclusi i giorni festivi.",
+      "Text": [
+        "40",
+        "minut"
+      ],
+      "Quote": [
+        "40 minuti"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S06",
+      "DocKey": "cap",
+      "Zone": 1,
+      "Sentence": "Per gli ordini urgenti il limite di spesa è di 1850 euro; gli importi superiori richiedono l'autorizzazione scritta del responsabile di magazzino.",
+      "Text": [
+        "1850|1.850",
+        "autorizzazione"
+      ],
+      "Quote": [
+        "1850 euro"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S07",
+      "DocKey": "cap",
+      "Zone": 1,
+      "Sentence": "Il magazzino di Verona non accetta resi di merce deperibile.",
+      "Text": [
+        "verona",
+        "resi"
+      ],
+      "Quote": [
+        "non accetta resi"
+      ],
+      "Negative": true,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S08",
+      "DocKey": "cap",
+      "Zone": 1,
+      "Sentence": "Le copie di sicurezza sono eseguite ogni notte alle 02:30 e conservate per 31 giorni.",
+      "Text": [
+        "31",
+        "giorni"
+      ],
+      "Quote": [
+        "31 giorni"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S09",
+      "DocKey": "cap",
+      "Zone": 2,
+      "Sentence": "La penale per il ritardo nella consegna è pari allo 0,4 per cento del valore dell'ordine per ogni giorno lavorativo di ritardo, fino a un massimo del 12 per cento.",
+      "Text": [
+        "0,4|0.4",
+        "12"
+      ],
+      "Quote": [
+        "0,4 per cento"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S10",
+      "DocKey": "cap",
+      "Zone": 2,
+      "Sentence": "Il fornitore non risponde dei ritardi causati da scioperi dei vettori comunicati almeno 48 ore prima della consegna.",
+      "Text": [
+        "scioper",
+        "48"
+      ],
+      "Quote": [
+        "48 ore"
+      ],
+      "Negative": true,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S11",
+      "DocKey": "cap",
+      "Zone": 2,
+      "Sentence": "La reperibilità notturna è garantita soltanto per il sito di Padova.",
+      "Text": [
+        "padova",
+        "reperibil"
+      ],
+      "Quote": [
+        "padova"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S12",
+      "DocKey": "cap",
+      "Zone": 2,
+      "Sentence": "Tutte le comunicazioni contrattuali sono inviate esclusivamente tramite posta elettronica certificata.",
+      "Text": [
+        "certificata|pec"
+      ],
+      "Quote": [
+        "posta elettronica certificata"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S13",
+      "DocKey": "cap",
+      "Zone": 0,
+      "Sentence": "Il termine di pagamento delle fatture è di 30 giorni dalla data di ricevimento.",
+      "Text": [
+        "30",
+        "giorni"
+      ],
+      "Quote": [
+        "30 giorni"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S14",
+      "DocKey": "cap",
+      "Zone": 2,
+      "Sentence": "Ai fini del presente capitolato il termine di pagamento delle fatture è di 60 giorni data fattura.",
+      "Text": [
+        "60",
+        "giorni"
+      ],
+      "Quote": [
+        "60 giorni"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S15",
+      "DocKey": "cap",
+      "Zone": 1,
+      "Sentence": "La finestra di manutenzione programmata cade il primo sabato di ogni mese, dalle 22:00 alle 02:00.",
+      "Text": [
+        "primo sabato"
+      ],
+      "Quote": [
+        "primo sabato"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    },
+    {
+      "Id": "S16",
+      "DocKey": "cap",
+      "Zone": 2,
+      "Sentence": "La finestra di manutenzione programmata cade la terza domenica di ogni mese.",
+      "Text": [
+        "terza domenica"
+      ],
+      "Quote": [
+        "terza domenica"
+      ],
+      "Negative": false,
+      "Class": "Documented"
+    }
+  ],
+  "Conflicts": [
+    {
+      "Id": "pagamento",
+      "Sides": [
+        [
+          "30 giorni"
+        ],
+        [
+          "60 giorni"
+        ]
+      ],
+      "Topic": [
+        "pagament"
+      ]
+    },
+    {
+      "Id": "manutenzione",
+      "Sides": [
+        [
+          "primo sabato"
+        ],
+        [
+          "terza domenica"
+        ]
+      ],
+      "Topic": [
+        "manutenzion"
+      ]
+    }
+  ],
+  "Equivalents": [],
+  "PmStatement": null,
+  "Documents": [
+    {
+      "Key": "cap",
+      "FileName": "capitolato-aurora.txt",
+      "Sha256": "a926fb1da97b8b01edfa61e67e87967a8249f6bd37e22d239fd642eb491530f6",
+      "PlainTextSha256": "a926fb1da97b8b01edfa61e67e87967a8249f6bd37e22d239fd642eb491530f6"
+    }
+  ],
+  "Source": "Exact synthetic original from T082 run4; original SHA verified; gold unchanged from LargeDocumentCorpus.cs"
+}

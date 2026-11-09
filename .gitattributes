@@ -1,2 +1,4 @@
 # Le fixture dei documenti hanno hash nel manifest: nessuna conversione dei fine riga.
 tests/fixtures/documents/** -text
+# Gold di recupero della 003 (promossi dal laboratorio, sola lettura): nessuna conversione dei fine riga, gli hash di PROVENANCE.json sono sui byte.
+backend/tests/bProjects.IntegrationTests/Retrieval/Gold/** -text
