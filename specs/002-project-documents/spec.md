@@ -175,3 +175,7 @@ Integrazione di **SC-003/009** per la revisione T130/N4: nelle prove nominali e 
 - Consultazione comprende elenco, metadati, testo estratto strutturato, passaggio citato e download originale; non richiede editor o viewer con fedeltà tipografica completa.
 - La sola compattazione 001 non è assunta sufficiente per i documenti oltre contesto. Plan dovrà dimostrare la fattibilità, anche della generazione da analisi confermata ampia, senza decidere qui strategie tecniche.
 - Nessuna nuova funzione di cancellazione/retention: conservare originali/versioni necessari alla storia. La 002 non implica nuova accettazione generale della 001.
+
+## Delta derivato 2026-11-09 (D2/D3) — proiezione, nessun requisito nuovo
+
+**FR-007/008/015** (proiezione derivata, testo dei requisiti invariato): per le nuove richieste v6 il contesto inviato al modello nel single-call porta, per ogni evidenza documentale, nome del documento, versione e (se nota) sezione come dati oggettivi e la certezza (`message-format-2`, AI §13.8); coverage ≥v6 segnala come avviso non bloccante un item che ripete un’alternativa di conflitto. Né l’uno né l’altro modifica evidenze, valutazioni o esiti, né certifica fedeltà semantica. Task T151–T153.
