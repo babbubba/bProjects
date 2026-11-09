@@ -44,8 +44,10 @@ public sealed class DocumentAnalysisContractV6Tests
     {
         Assert.Equal(6, DocumentAnalysisWorkflow.ContractOf(Run(V6())));
         var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(SourceSnapshotStore.AnalysisPromptVersionsV6())!;
-        Assert.Equal(V6().OrderBy(k => k.Key, StringComparer.Ordinal), frozen.OrderBy(k => k.Key, StringComparer.Ordinal));   // né più né meno
-        Assert.Equal(18, frozen.Count);
+        var withFormat = V6();
+        withFormat["analysisMessageFormat"] = "message-format-2";   // D2 (T151): le nuove richieste v6 congelano anche il formato del messaggio
+        Assert.Equal(withFormat.OrderBy(k => k.Key, StringComparer.Ordinal), frozen.OrderBy(k => k.Key, StringComparer.Ordinal));   // né più né meno
+        Assert.Equal(19, frozen.Count);
         Assert.DoesNotContain("reconcileGapPolicy", frozen.Keys);
         Assert.Equal("project-analysis-documents-v6", SourceSnapshotStore.AnalysisDefinitionV6);
         Assert.Equal(6, DocumentAnalysisWorkflow.ContractOf(Run(frozen)));
@@ -199,7 +201,10 @@ public sealed class DocumentGapStageRoutingTests : ReconcileRig
 
         Assert.Equal("project-analysis-documents-v6", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
-        Assert.Equal(AnalysisV6Fixture.Keys().OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
+        // D2 (T151): le NUOVE richieste v6 congelano in più `analysisMessageFormat`; `Keys()` resta il v6 storico senza la chiave (formato 1, ancora valido).
+        var expected = AnalysisV6Fixture.Keys();
+        expected["analysisMessageFormat"] = "message-format-2";
+        Assert.Equal(expected.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
         Assert.DoesNotContain("reconcileGapPolicy", frozen.Keys);
         Assert.Equal("document-analysis-v6", frozen["analysis"]);
         Assert.Equal("document-analysis-alias-2", frozen["analysisAiSchema"]);
@@ -359,6 +364,62 @@ public sealed class DocumentGapStageRoutingTests : ReconcileRig
     }
 
     // ================================================================ v5, definizioni miste e storico invariati
+
+    /// <summary>
+    /// 002 T151 (D2) — il single-call di una NUOVA richiesta v6 manda il formato 2 (documento/versione/certezza letti dal DB nella mappa laterale); una v6 congelata prima di D2 (chiave assente) e una v5
+    /// storica mandano il formato 1 con lo STESSO inputHash del batch (run in volo e storici non rotti); catalogo e manifesto non dipendono dal formato.
+    /// </summary>
+    [Fact]
+    public async Task The_single_call_of_a_new_v6_run_sends_message_format_2_while_a_pre_D2_v6_and_a_v5_run_keep_the_byte_identical_format_1()
+    {
+        using var client = await App.LoginAsync();
+        var (v6Run, v6Claim, project) = await ArrangeAsync(documents: 3, gaps: 1, words: 12, existing: client);
+        var model6 = new DocumentChatWorkflowTests.FakeChatModel { ContextWindow = 40_000, Responder = r => AliasModelRepliesV5.Reply(r.AllText) };
+        Assert.Equal(ProcessingRunStatus.Completed, (await RunWideAsync(v6Claim, model6, window: 40_000, output: 8_000)).Status);
+        var text6 = Assert.Single(model6.Requests).AllText;
+        Assert.Contains("documento=\"doc1", text6);
+        Assert.Contains(" versione=1", text6);
+        Assert.Contains(" certezza=", text6);
+        Assert.DoesNotContain(" sezione=", text6);                                                                   // fixture senza intestazioni: mai inventata
+
+        var (legacyRun, legacyClaim, _) = await ArrangeAsync(documents: 3, gaps: 1, words: 12, existing: client, existingProject: project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"PromptVersions\" = \"PromptVersions\" - 'analysisMessageFormat' WHERE \"Id\" = @r", ("r", legacyRun));
+        var modelLegacy = new DocumentChatWorkflowTests.FakeChatModel { ContextWindow = 40_000, Responder = r => AliasModelRepliesV5.Reply(r.AllText) };
+        Assert.Equal(ProcessingRunStatus.Completed, (await RunWideAsync(legacyClaim, modelLegacy, window: 40_000, output: 8_000)).Status);
+        var textLegacy = Assert.Single(modelLegacy.Requests).AllText;
+        Assert.DoesNotContain("documento=", textLegacy);
+        Assert.DoesNotContain(" certezza=", textLegacy);
+
+        var (v5Run, v5Claim, _) = await ArrangeAsync(documents: 3, gaps: 1, words: 12, existing: client, existingProject: project);
+        await Execute(HistoricalAnalysisV5.Sql, ("v", HistoricalAnalysisV5.Versions), ("r", v5Run));
+        var model5 = new DocumentChatWorkflowTests.FakeChatModel { ContextWindow = 40_000, Responder = r => AliasModelRepliesV5.Reply(r.AllText) };
+        Assert.Equal(ProcessingRunStatus.Completed, (await RunWideAsync(v5Claim, model5, window: 40_000, output: 8_000)).Status);
+        Assert.Equal(textLegacy, Assert.Single(model5.Requests).AllText);
+
+        var hashes = new List<string>();
+        foreach (var run in new[] { v6Run, legacyRun, v5Run })
+        {
+            hashes.Add(await Scalar<string>("SELECT string_agg(\"InputHash\", ',' ORDER BY \"Ordinal\") FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r", ("r", run)));
+        }
+
+        Assert.NotEqual(hashes[0], hashes[1]);                                                                       // il formato 2 è una nuova identità solo per le nuove richieste
+        Assert.Equal(hashes[1], hashes[2]);                                                                          // v6 pre-D2 e v5 storica: stesso inputHash del formato 1
+    }
+
+    [Fact]
+    public async Task A_v6_run_with_an_unknown_message_format_is_workflow_incompatible_with_zero_calls()
+    {
+        using var client = await App.LoginAsync();
+        var (run, claim, _) = await ArrangeAsync(documents: 3, gaps: 1, words: 12, existing: client);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"PromptVersions\" = jsonb_set(\"PromptVersions\", '{analysisMessageFormat}', '\"message-format-9\"') WHERE \"Id\" = @r", ("r", run));
+        var model = Tripwire();
+
+        var result = await RunWideAsync(claim, model, window: 40_000, output: 8_000);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal("workflow_incompatible", (await RunRow(run)).Code);
+        Assert.Empty(model.Requests);
+    }
 
     [Fact]
     public async Task A_v5_run_above_context_with_a_gap_still_fails_fast_with_the_v5_reason_and_never_reaches_the_stage()

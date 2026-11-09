@@ -23,10 +23,13 @@ public sealed record DocumentAnalysisEvidence(
 /// <summary>
 /// Input immutabile del run documentale: identità e cutoff, snapshot di riconciliazione (evidenze e relazioni note), evidenze con i testi per il prompt e dialogo.
 /// <see cref="BatchKey"/> e <see cref="InputHash"/> sono identità del server dell'unico batch, note prima della chiamata e dunque comunicabili al modello.
+/// <see cref="DocumentMeta"/> (D2, <c>message-format-2</c>) è una mappa LATERALE di documento/versione/sezione per le evidenze documentali: non entra in <see cref="Snapshot"/>, nel catalogo né in
+/// alcun hash (<c>CatalogHash</c>, <c>RunIndependentHash</c>, <c>SourceHash</c>); è letta solo dal formato 2 del messaggio single-call.
 /// </summary>
 public sealed record DocumentAnalysisInput(
     Guid ProjectId, Guid AnalysisId, long Cutoff, int PmMessageCount, int ReadyDocumentSourceCount, int Unavailable, string SnapshotHash,
-    ReconciliationSnapshot Snapshot, IReadOnlyList<DocumentAnalysisEvidence> Evidence, IReadOnlyList<AnalysisDialogMessage> Dialog)
+    ReconciliationSnapshot Snapshot, IReadOnlyList<DocumentAnalysisEvidence> Evidence, IReadOnlyList<AnalysisDialogMessage> Dialog,
+    IReadOnlyDictionary<Guid, GapStageEvidenceMeta>? DocumentMeta = null)
 {
     public string BatchKey => DocumentAnalysisWorkflow.Sha($"single-call-batch|{AnalysisId:N}|{Snapshot.SourceHash}");
 
@@ -102,12 +105,15 @@ public static class DocumentAnalysisSources
             ["evidence"] = new JsonArray([.. evidence.Select(e => (JsonNode)new JsonObject { ["id"] = e.EvidenceId.ToString("D"), ["version"] = e.VersionId.ToString("D"), ["hash"] = e.ContentHash })]),
         }.ToJsonString());
 
-        return new DocumentAnalysisInput(
+        var input = new DocumentAnalysisInput(
             run.ProjectId, run.Id, run.SourceCutoffSequence!.Value, messages.Count(m => m.Role == MessageRole.User),
             snapshotItems.Count(s => s.Included && s.Availability == SourceAvailability.Ready && s.EvidenceVersionId != null),
             snapshotItems.Count(s => s.Availability == SourceAvailability.Unavailable), snapshotHash,
             new ReconciliationSnapshot(run.ProjectId, sourceHash, [.. evidence.Select(e => new SnapshotEvidence(e.EvidenceId, e.VersionId, e.ContentHash, e.Sources))], snapshotRelations),
             evidence, dialog);
+
+        // D2: metadati documentali (documento, versione, sezione) in una mappa laterale, mai nel catalogo né negli hash; solo lettura.
+        return input with { DocumentMeta = await GapStageMetadata.LoadAsync(db, input, ct) };
     }
 
     /// <summary>Fatti strutturali delle evidenze della selezione congelata del run, per le sole chiavi di routing della directory (T072): mai l'enunciato.</summary>
@@ -417,6 +423,40 @@ public sealed class DocumentAnalysisWorkflow(
     /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata), v4 (alias con gerarchia) o v5 (single-call con Gap + gerarchia v4 + policy Gap, T141) o v6 (come v5 ma con stadio Gap dedicato su ledger completo al posto della policy Gap, D1/T148); null = definizione, prompt o versioni non supportati o miste (workflow_incompatible).</summary>
     public static int? ContractOf(ProcessingRun run)
     {
+        var contract = ContractOfCore(run);
+
+        // D2 (AI §13.8): la chiave `analysisMessageFormat` esiste solo nella definizione v6 e solo con un valore supportato; in v2-v5 (o con valore ignoto) la combinazione è mista ⇒ workflow_incompatible,
+        // mai reinterpretata. L'ASSENZA della chiave in una v6 è il formato 1 storico (richieste v6 congelate prima di D2): resta valida e invariata.
+        return HasKey(run, AnalysisMessageFormatKey) && (contract != 6 || MessageFormatOf(run) == MessageFormatState.Unsupported) ? null : contract;
+    }
+
+    /// <summary>Formato del messaggio single-call congelato nel run (D2): assente = 1 (storico), <c>message-format-2</c> = 2, altro valore = non supportato.</summary>
+    public enum MessageFormatState
+    {
+        V1,
+        V2,
+        Unsupported,
+    }
+
+    public const string AnalysisMessageFormatKey = "analysisMessageFormat";
+
+    /// <summary>Formato 2 del messaggio single-call (D2, AI §13.8): intestazione VOCE con documento, versione, sezione e certezza come testo-dato.</summary>
+    public const string MessageFormatV2 = "message-format-2";
+
+    public static MessageFormatState MessageFormatOf(ProcessingRun run)
+    {
+        if (!HasKey(run, AnalysisMessageFormatKey))
+        {
+            return MessageFormatState.V1;
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(run.PromptVersions!);
+        var value = document.RootElement.GetProperty(AnalysisMessageFormatKey);
+        return value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == MessageFormatV2 ? MessageFormatState.V2 : MessageFormatState.Unsupported;
+    }
+
+    private static int? ContractOfCore(ProcessingRun run)
+    {
         if (run.MafVersion != Conversation.CurrentMafVersion)
         {
             return null;
@@ -538,7 +578,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, ct) : RunGraphAsync(db, claim, limits, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, contract == 6 && MessageFormatOf(run) == MessageFormatState.V2 ? 2 : 1, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -650,7 +690,7 @@ public sealed class DocumentAnalysisWorkflow(
     /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata; v5 (T143, §13.6): con almeno un Gap fail-fast senza chiamate (<c>document_limit_exceeded</c>,
     /// motivo <c>hierarchical_gap_assessment_unsupported</c>), senza Gap gerarchia come v4 con la definizione v5.
     /// </summary>
-    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, string promptVersion, bool outputPolicy, CancellationToken ct)
+    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, string promptVersion, bool outputPolicy, int messageFormat, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         // v5 (T136): catalogo con il contratto alias-2 nell'identità, prompt document-analysis-v4 e schema alias-2; v3/v4 invariati.
@@ -659,7 +699,7 @@ public sealed class DocumentAnalysisWorkflow(
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
         var instructions = !gaps ? InstructionsV3 : promptVersion == PromptVersionV6 ? InstructionsV6 : promptVersion == PromptVersionV5 ? InstructionsV5 : InstructionsV4;
         var schema = gaps ? AnalysisAliasContracts.JsonSchemaV2() : AnalysisAliasContracts.JsonSchema();
-        var messages = DocumentAnalysisAliasPlan.BuildMessages(input, catalog);
+        var messages = DocumentAnalysisAliasPlan.BuildMessages(input, catalog, messageFormat);
         var measure = await factory.Preflight.MeasureAsync(
             new DocumentPayload(AiPhase.Analysis, instructions, messages, structured ? schema.GetRawText() : null), ct);
         if (measure.Quality == TokenCountQuality.Unavailable)

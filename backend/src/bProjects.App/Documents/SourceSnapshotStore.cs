@@ -206,7 +206,7 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             ["algorithm"] = DocumentAnalysisWorkflow.AlgorithmVersionV5, ["validation"] = DocumentAnalysisWorkflow.ValidationVersionV5,
             ["reconcile"] = ReconcileAliasContracts.PromptVersion, ["reconcileAiSchema"] = ReconcileAliasContracts.SchemaVersion,
             ["reconcileAlgorithm"] = DocumentReconcilePlan.AlgorithmVersion, ["reconcileCatalog"] = ReconcileAliasContracts.CatalogVersion,
-            ["analysisOutputPolicy"] = AnalysisOutputEstimate.PolicyVersion,
+            ["analysisOutputPolicy"] = AnalysisOutputEstimate.PolicyVersion, [DocumentAnalysisWorkflow.AnalysisMessageFormatKey] = DocumentAnalysisWorkflow.MessageFormatV2,
             ["gapStage"] = GapStage.FreezeKeys["gapStage"], ["gapPrompt"] = GapStage.FreezeKeys["gapPrompt"], ["gapAiSchema"] = GapStage.FreezeKeys["gapAiSchema"],
             ["gapMessageFormat"] = GapStage.FreezeKeys["gapMessageFormat"], ["gapPolicy"] = GapStage.FreezeKeys["gapPolicy"], ["gapEstimate"] = GapStage.FreezeKeys["gapEstimate"],
         });

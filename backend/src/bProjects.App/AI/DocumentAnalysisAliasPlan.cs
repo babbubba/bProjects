@@ -98,9 +98,10 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IInformedR
     /// <summary>
     /// Messaggio unico del batch con soli alias (§7.3): dialogo come contesto, evidenze <c>[E&lt;n&gt;]</c> con enunciato e fonti <c>[S&lt;n&gt;]</c> con la
     /// citazione letterale, relazioni note <c>[R&lt;n&gt;]</c>. Mai UUID, hash, entryId, batchId, inputHash, id di progetto/analisi, offset, blocchi, cutoff
-    /// o conteggi. A capo sempre «\n».
+    /// o conteggi. A capo sempre «\n». <paramref name="messageFormat"/>: 1 = <c>message-format-1</c> (storico, byte-identico); 2 = <c>message-format-2</c> (D2, AI §13.8): l'intestazione VOCE aggiunge
+    /// <c>documento</c>, <c>versione</c>, <c>sezione</c> (se nota) e <c>certezza</c> come testo-dato con escape, mai UUID, blocchi o offset.
     /// </summary>
-    internal static IReadOnlyList<ChatMessage> BuildMessages(DocumentAnalysisInput input, AnalysisAliasCatalog catalog)
+    internal static IReadOnlyList<ChatMessage> BuildMessages(DocumentAnalysisInput input, AnalysisAliasCatalog catalog, int messageFormat = 1)
     {
         var text = new StringBuilder();
         if (input.Unavailable > 0)
@@ -130,8 +131,30 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IInformedR
         foreach (var entry in catalog.Data.Evidence)
         {
             var entryStart = text.Length;
-            text.Append($"<<<VOCE [{entry.Alias}] origine={entry.Origin} tipo={entry.Kind} polarita={entry.Polarity}>>>\n")
-                .Append(byId[entry.EvidenceId].Statement).Append('\n');
+            text.Append($"<<<VOCE [{entry.Alias}] origine={entry.Origin} tipo={entry.Kind} polarita={entry.Polarity}");
+            if (messageFormat >= 2)
+            {
+                // message-format-2 (D2, AI §13.8): metadati oggettivi come testo-dato con escape. documento/versione/sezione solo se noti (mai inventati, mai il primo rigo come titolo).
+                var meta = input.DocumentMeta?.GetValueOrDefault(entry.EvidenceId);
+                if (meta?.Document is { } document)
+                {
+                    text.Append(" documento=\"").Append(GapStageBuilder.Attribute(document)).Append('"');
+                }
+
+                if (meta?.Version is { } version)
+                {
+                    text.Append(" versione=").Append(version);
+                }
+
+                if (!string.IsNullOrEmpty(meta?.Section))
+                {
+                    text.Append(" sezione=\"").Append(GapStageBuilder.Attribute(meta.Section)).Append('"');
+                }
+
+                text.Append(" certezza=").Append(entry.Certainty);
+            }
+
+            text.Append(">>>\n").Append(byId[entry.EvidenceId].Statement).Append('\n');
             foreach (var link in entry.Sources)
             {
                 text.Append($"<<<FONTE [{link.SourceAlias}] ruolo={link.Role}>>>\n").Append(catalog.Source(link.SourceAlias)!.Quote).Append("\n<<<FINE FONTE>>>\n");
@@ -570,4 +593,11 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IInformedR
         Committed = true;
         return 1;
     }
+}
+
+/// <summary>Ingresso pubblico (verificabile dai test golden) alla composizione del messaggio single-call con alias: stessa funzione usata per la misura, il controllo e l'invio.</summary>
+public static class DocumentAnalysisMessageBuilder
+{
+    public static IReadOnlyList<ChatMessage> Build(DocumentAnalysisInput input, AnalysisAliasCatalog catalog, int messageFormat = 1) =>
+        DocumentAnalysisAliasPlan.BuildMessages(input, catalog, messageFormat);
 }

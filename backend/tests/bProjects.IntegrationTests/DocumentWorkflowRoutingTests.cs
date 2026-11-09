@@ -580,7 +580,9 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         // Freeze al POST: definizione v5 e TUTTE le chiavi (single-call v5 + gerarchia v4 + policy Gap), nessuna decisione single-call/gerarchico alla richiesta.
         Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV6, (await RunRow(run)).Definition);
         var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
-        Assert.Equal(AnalysisV6Fixture.Keys().OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
+        var expectedKeys = AnalysisV6Fixture.Keys();
+        expectedKeys["analysisMessageFormat"] = "message-format-2";   // D2 (T151): le nuove richieste v6 congelano anche il formato del messaggio
+        Assert.Equal(expectedKeys.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
         Assert.Equal(0, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         Assert.Empty(_model.Graphs);
 
