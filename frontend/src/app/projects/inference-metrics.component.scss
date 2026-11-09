@@ -14,3 +14,24 @@
 .metric[title] {
   cursor: help;
 }
+
+.execution-timing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  margin: 0.25rem 0 0;
+  font-variant-numeric: tabular-nums;
+
+  .timing {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  dt {
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 0;
+  }
+}

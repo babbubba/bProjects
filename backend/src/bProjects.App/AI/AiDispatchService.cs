@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
 using bProjects.App.Evidence;
@@ -22,7 +23,9 @@ public interface IChatTurnExecutor
 /// ProcessingRun di Analysis e di Document (stessa coda, stesso limite globale, FIFO per richiesta); claim, lease e fencing sono nel
 /// database (<see cref="ExecutionLeaseStore"/>). Un turno è eseguito dall'<see cref="IChatTurnExecutor"/>; un run di
 /// Analysis dal workflow nativo <see cref="AnalysisWorkflow"/> e uno di Document da <see cref="DocumentWorkflow"/>, che scelgono da soli avvio o ripresa dal checkpoint: il
-/// dispatcher non decide mai il passo successivo. Senza esecutore o workflow registrati il rispettivo tipo di lavoro
+/// dispatcher non decide mai il passo successivo. Le unità di estrazione documentale (DocumentJob ExtractUnit, T050) sono lavoro di sfondo
+/// bounded dello stesso slot: una per claim, con precedenza di chat, run ed estrazioni di messaggio alla successiva e nessuna preemption; il
+/// routing dei workflow formali e della chat documentale è T123. Senza esecutore o workflow registrati il rispettivo tipo di lavoro
 /// non viene letto né modificato: resta Queued finché esiste chi può eseguirlo davvero.
 /// </summary>
 public sealed class AiDispatchService(
@@ -36,16 +39,19 @@ public sealed class AiDispatchService(
     DocumentWorkflow? documentWorkflow = null,
     IEvidenceExtractionExecutor? extractor = null,
     EvidenceEvents? evidenceEvents = null,
-    DispatchWakeup? wakeup = null) : BackgroundService
+    DispatchWakeup? wakeup = null,
+    IDocumentUnitExecutor? unitExecutor = null,
+    DocumentRootClassifier? classifier = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
     private readonly ExecutionOptions _policy = options.Value;
+    private readonly IDocumentUnitExecutor? _unitExecutor = unitExecutor;
     private readonly string _owner = $"{Environment.MachineName}:{Guid.NewGuid():N}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (executor is null && workflow is null && documentWorkflow is null && extractor is null)
+        if (executor is null && workflow is null && documentWorkflow is null && extractor is null && _unitExecutor is null)
         {
             logger.LogInformation("Nessun esecutore dei turni né workflow formale registrati: il dispatcher non prende in carico lavori.");
             return;
@@ -53,6 +59,9 @@ public sealed class AiDispatchService(
 
         try
         {
+            // Il monitor delle scadenze è un ciclo distinto dal ciclo di lavoro: continua a girare mentre l'unico slot AI è occupato da
+            // un'esecuzione (che il ciclo di lavoro attende). Non è uno scheduler: non prende in carico lavoro e non promuove.
+            var monitor = MonitorDeadlinesAsync(stoppingToken);
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -69,6 +78,8 @@ public sealed class AiDispatchService(
                     await Task.Delay(PollInterval, stoppingToken);
                 }
             }
+
+            await monitor;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -77,25 +88,132 @@ public sealed class AiDispatchService(
     }
 
     /// <summary>
+    /// Monitor/sweep delle scadenze (T119): la prima passata è la riconciliazione al restart (al riavvio le scadenze si leggono dal database, il
+    /// budget non riparte), poi una passata per ogni <see cref="ExecutionOptions.DeadlineSweepInterval"/>. Ogni passata rilegge il database:
+    /// nessun timer in memoria sopravvive a una promozione o a un reclaim.
+    /// </summary>
+    private async Task MonitorDeadlinesAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(_policy.DeadlineSweepInterval);
+        try
+        {
+            do
+            {
+                try
+                {
+                    await SweepDeadlinesOnceAsync(ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning("Sweep delle scadenze non riuscito: {ExceptionType}", ex.GetType().Name);
+                }
+            }
+            while (await timer.WaitForNextTickAsync(ct));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Arresto dell'applicazione.
+        }
+    }
+
+    // Esecuzioni in corso in questa istanza, per id del lavoro: lo sweep che chiude un root scaduto ne annulla il token (cooperativo; il fence
+    // già impedisce ogni pubblicazione, l'annullamento evita solo calcolo inutile).
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _active = new();
+
+    /// <summary>
+    /// Una passata dello sweep delle scadenze: chiude i root documentali e i figli scaduti (<see cref="ExecutionLeaseStore.SweepExpiredDocumentWorkAsync"/>),
+    /// annulla l'esecuzione in corso del lavoro chiuso e notifica gli stati terminali. Nessuna promozione, nessun claim.
+    /// </summary>
+    public async Task<ExpiredWork> SweepDeadlinesOnceAsync(CancellationToken ct)
+    {
+        ExpiredWork closed;
+        using (var scope = scopes.CreateScope())
+        {
+            closed = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
+                .SweepExpiredDocumentWorkAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct);
+        }
+
+        foreach (var id in closed.Turns.Concat(closed.Runs).Concat(closed.Extractions).Concat(closed.Jobs))
+        {
+            if (_active.TryGetValue(id, out var running))
+            {
+                try
+                {
+                    await running.CancelAsync();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // L'esecuzione si è appena conclusa.
+                }
+            }
+        }
+
+        foreach (var id in closed.Turns)
+        {
+            await PublishState(id);
+        }
+
+        foreach (var id in closed.Runs)
+        {
+            await PublishRunState(id);
+        }
+
+        if (evidenceEvents is not null)
+        {
+            foreach (var id in closed.Extractions)
+            {
+                await evidenceEvents.PublishStateAsync(id);
+            }
+        }
+
+        return closed;
+    }
+
+    /// <summary>
     /// Attesa a riposo: al massimo un intervallo di polling, interrotta subito da un endpoint che ha appena accodato un turno o un run.
     /// Il lavoro resta comunque letto dal database, quindi un segnale perso costa al più <see cref="PollInterval"/>.
     /// </summary>
-    private Task IdleAsync(CancellationToken ct) => wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct);
+    private async Task IdleAsync(CancellationToken ct)
+    {
+        using var span = DocumentTiming.Span("dispatch.idle");
+        await (wakeup is null ? Task.Delay(PollInterval, ct) : wakeup.WaitAsync(PollInterval, ct));
+    }
 
     /// <summary>Prende in carico ed esegue al più un lavoro. False se non c'era nulla di ammissibile.</summary>
     public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
-        if (executor is null && workflow is null && documentWorkflow is null && extractor is null)
+        if (executor is null && workflow is null && documentWorkflow is null && extractor is null && _unitExecutor is null)
         {
             return false;
         }
 
+        // Classificazione iniziale dei root documentali (T124): preflight tecnico senza LLM, PRIMA di ogni claim. Finche un root e Pending
+        // nessuna query di claim lo vede, quindi nessuna inferenza. Non e inferenza e non tiene lo slot AI; un root classificato non si riclassifica mai.
+        if (classifier is not null
+            && await DocumentTiming.TimeAsync("dispatch.classify", () => classifier.ClassifyNextAsync(turns: executor is not null, analysisRuns: workflow is not null, documentRuns: documentWorkflow is not null, ct)) is { } classified)
+        {
+            await PublishClassifiedAsync(classified);
+            return true;
+        }
+
+        // Aggregazione documentale (T051): lavoro deterministico che pubblica la versione Evidence quando tutte le unità sono Completed. Ha claim e lock
+        // propri e non entra nel limite AI globale (non è inferenza), quindi non tiene mai lo slot e non attende le unità; un passo per giro del ciclo.
+        using (var aggregationScope = scopes.CreateScope())
+        {
+            if (aggregationScope.ServiceProvider.GetService<Documents.DocumentAggregationRunner>() is { } aggregation
+                && await DocumentTiming.TimeAsync("dispatch.aggregate", () => aggregation.RunNextAsync(_owner, ct)) is not null)
+            {
+                return true;
+            }
+        }
+
         WorkClaim? work;
+        using (DocumentTiming.Span("dispatch.claim"))
         using (var scope = scopes.CreateScope())
         {
             work = await scope.ServiceProvider.GetRequiredService<ExecutionLeaseStore>()
                 .ClaimNextWorkAsync(_owner, turns: executor is not null, runs: workflow is not null, documents: documentWorkflow is not null,
-                    extractions: extractor is not null, ct);
+                    extractions: extractor is not null, units: _unitExecutor is not null, ct);
         }
 
         if (work is null)
@@ -103,6 +221,10 @@ public sealed class AiDispatchService(
             return false;
         }
 
+        using (DocumentTiming.Span("dispatch.recordQueue"))
+        {
+            await RecordQueueAsync(work, ct);
+        }
         if (work.Turn is { } turn)
         {
             await RunTurnAsync(turn, ct);
@@ -115,6 +237,13 @@ public sealed class AiDispatchService(
         {
             await RunDocumentAsync(document, ct);
         }
+        else if (work.Unit is { } unit)
+        {
+            using (DocumentTiming.Span("dispatch.runUnit"))
+            {
+                await RunUnitAsync(unit, ct);
+            }
+        }
         else
         {
             await RunExtractionAsync(work.Extraction!, ct);
@@ -122,6 +251,10 @@ public sealed class AiDispatchService(
 
         return true;
     }
+
+    /// <summary>Notifica lo stato (best-effort, dopo il commit) del root appena classificato: un terminale (Failed) e visibile subito, senza attendere un claim.</summary>
+    private Task PublishClassifiedAsync(ClassificationResult result) =>
+        result.Kind == ClassificationOwnerKind.ChatTurn ? PublishState(result.RootId) : PublishRunState(result.RootId);
 
     private async Task RunTurnAsync(ChatTurnClaim claim, CancellationToken ct)
     {
@@ -131,6 +264,7 @@ public sealed class AiDispatchService(
         var inference = InferenceScope.Current!;
         var owner = new InferenceOwner(claim.TurnId, null, claim.AttemptCount, claim.FencingToken);
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _active[claim.TurnId] = leaseLost;
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync((store, c) => store.RenewAsync(claim, c), claim.TurnId, leaseLost, stopHeartbeat.Token);
         var executed = false;
@@ -170,6 +304,7 @@ public sealed class AiDispatchService(
         }
         finally
         {
+            _active.TryRemove(claim.TurnId, out _);
             await stopHeartbeat.CancelAsync();
             await heartbeat;
         }
@@ -234,6 +369,22 @@ public sealed class AiDispatchService(
         ct,
         publish: id => evidenceEvents is null ? Task.CompletedTask : evidenceEvents.PublishStateAsync(id));
 
+    /// <summary>
+    /// Esegue un'unità di estrazione documentale con lo stesso ciclo, lo stesso lease/heartbeat/fence e le stesse regole di retry dei run formali
+    /// (T050): l'esecutore committa da sé dati di lavoro e chiusura dell'unità; un errore del modello o dell'infrastruttura è classificato qui
+    /// (transitorio: Queued con backoff entro tentativi e tempo; permanente: Failed con la preparazione). Lo slot si libera a fine unità, quindi
+    /// il claim successivo ricontrolla chat e run prima di una nuova unità. Nessun evento SSE per le unità (T064).
+    /// </summary>
+    private Task RunUnitAsync(DocumentUnitClaim claim, CancellationToken ct) => RunFormalAsync(
+        "estrazione di un'unità documentale",
+        claim.JobId,
+        new InferenceOwner(null, null, claim.AttemptCount, claim.FencingToken, null, claim.JobId),
+        (store, c) => store.RenewAsync(claim, c),
+        c => _unitExecutor!.ExecuteAsync(claim, c),
+        (store, failure, c) => store.ReleaseAfterFailureAsync(claim, failure, failure.Code, failure.Detail ?? "Il modello interno ha rifiutato la richiesta.", c),
+        ct,
+        publish: _ => Task.CompletedTask);
+
     private async Task RunFormalAsync(
         string label,
         Guid runId,
@@ -245,17 +396,23 @@ public sealed class AiDispatchService(
         Func<Guid, Task>? publish = null)
     {
         publish ??= PublishRunState;
+        using var formalSpan = DocumentTiming.Span("formal.total");
         await publish(runId); // Running
         // Lo scope è ereditato dagli executor del workflow MAF: commit e Failed del validatore vi trovano le chiamate del tentativo.
         using var inferenceScope = InferenceScope.Begin();
         var inference = InferenceScope.Current!;
         using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _active[runId] = leaseLost;
         using var stopHeartbeat = new CancellationTokenSource();
         var heartbeat = HeartbeatAsync(renew, runId, leaseLost, stopHeartbeat.Token);
         var completed = false;
         try
         {
-            await execute(leaseLost.Token);
+            using (DocumentTiming.Span("formal.execute"))
+            {
+                await execute(leaseLost.Token);
+            }
+
             completed = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -288,6 +445,7 @@ public sealed class AiDispatchService(
         }
         finally
         {
+            _active.TryRemove(runId, out _);
             await stopHeartbeat.CancelAsync();
             await heartbeat;
         }
@@ -304,6 +462,54 @@ public sealed class AiDispatchService(
     /// di telemetria del tentativo (failed/interrupted, mai token inventati): se owner/fencing non sono più validi la transazione si
     /// annulla e non si scrive nulla. Null se la transizione è stata rifiutata.
     /// </summary>
+    /// <summary>Telemetria (T064): la coda del primo claim di un root documentale. Un guasto di scrittura non blocca mai il lavoro.</summary>
+    private async Task RecordQueueAsync(WorkClaim work, CancellationToken ct)
+    {
+        (ClassificationOwnerKind Kind, Guid Id) target = work.Turn is { } t ? (ClassificationOwnerKind.ChatTurn, t.TurnId)
+            : work.Run is { } r ? (ClassificationOwnerKind.ProcessingRun, r.RunId)
+            : work.Document is { } d ? (ClassificationOwnerKind.ProcessingRun, d.RunId)
+            : default;
+        if (target.Id == Guid.Empty)
+        {
+            return; // unità/estrazioni: non sono root del regime
+        }
+
+        await RecordRecoveryAsync(work, target, ct);
+
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await ExecutionIntervalStore.RecordQueueAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), target.Kind, target.Id, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Intervallo di coda non registrato: {ExceptionType}", ex.GetType().Name);
+        }
+    }
+
+    /// <summary>Telemetria (T102): il recupero di un lease scaduto, dal suo termine al claim che riprende il root. Un guasto di scrittura non blocca mai il lavoro.</summary>
+    private async Task RecordRecoveryAsync(WorkClaim work, (ClassificationOwnerKind Kind, Guid Id) target, CancellationToken ct)
+    {
+        var (recovery, attempt) = work.Turn is { } t ? (t.Recovery, t.AttemptCount)
+            : work.Run is { } r ? (r.Recovery, r.AttemptCount)
+            : work.Document is { } d ? (d.Recovery, d.AttemptCount)
+            : default;
+        if (recovery is not { } interval)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await ExecutionIntervalStore.RecordRecoveryAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), target.Kind, target.Id, attempt - 1, interval, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Intervallo di recupero non registrato: {ExceptionType}", ex.GetType().Name);
+        }
+    }
+
     private async Task<TurnRelease?> ReleaseAsync(
         Func<ExecutionLeaseStore, CancellationToken, Task<TurnRelease>> release, InferenceScope inference, InferenceOwner owner, CancellationToken ct)
     {
@@ -319,7 +525,35 @@ public sealed class AiDispatchService(
         await InferenceCallLog.AppendAttemptAsync(db, inference, owner, ct);
         await transaction.CommitAsync(ct);
         inference.MarkWritten();
+        await RecordBackoffAsync(released, owner, ct);
         return released;
+    }
+
+    /// <summary>Telemetria (T064): il backoff di un retry di un turno o run documentale, dopo il commit del rilascio. Un guasto di scrittura non blocca mai il lavoro.</summary>
+    private async Task RecordBackoffAsync(TurnRelease released, InferenceOwner owner, CancellationToken ct)
+    {
+        if (released is not { Outcome: TurnTransition.Requeued, NextAttemptAt: { } next, Delay: { } delay })
+        {
+            return;
+        }
+
+        (ClassificationOwnerKind Kind, Guid Id) target = owner.ChatTurnId is { } turn ? (ClassificationOwnerKind.ChatTurn, turn)
+            : owner.ProcessingRunId is { } run ? (ClassificationOwnerKind.ProcessingRun, run)
+            : default;
+        if (target.Id == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await ExecutionIntervalStore.RecordBackoffAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), target.Kind, target.Id, owner.Attempt, next, delay, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Intervallo di backoff non registrato: {ExceptionType}", ex.GetType().Name);
+        }
     }
 
     private static bool IsLeaseLost(Exception exception)

@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import {
   CoverageReportView,
   EvidenceDetailView,
+  EvidenceEnvelope,
   EvidenceStatusView,
   EvidenceView,
   ExtractionJobView,
@@ -17,6 +18,13 @@ import { ProjectEventsService, ProjectStreamHandlers } from './project-events.se
 
 const P = 'p-1';
 const BASE = `/api/projects/${P}`;
+const listUrl = (r: { url: string }) => r.url === `${BASE}/evidence`;
+const detailUrl = (r: { url: string }) => r.url === `${BASE}/evidence/e-1`;
+const detailUrl_doc = (r: { url: string }) => r.url === `${BASE}/evidence/e-doc`;
+const envelope = (e: EvidenceView): EvidenceEnvelope => ({
+  evidenceViewVersion: '1.0.0',
+  evidence: e,
+});
 
 const job = (over: Partial<ExtractionJobView> = {}): ExtractionJobView => ({
   id: 'j-1',
@@ -162,6 +170,8 @@ describe('EvidenceViewComponent', () => {
     opts: {
       messages?: MessageEvidenceStatus[];
       items?: EvidenceView[];
+      /** Elenco già in formato envelope (liste miste, versioni ignote). */
+      envelopes?: unknown[];
       analysisId?: string | null;
       pollMs?: number;
     } = {},
@@ -190,7 +200,9 @@ describe('EvidenceViewComponent', () => {
     fixture.detectChanges();
     await Promise.resolve();
     http.expectOne(`${BASE}/evidence/status`).flush(status(opts.messages ?? [message()]));
-    http.expectOne(`${BASE}/evidence`).flush({ items: opts.items ?? [evidence()] });
+    http
+      .expectOne(listUrl)
+      .flush({ items: opts.envelopes ?? (opts.items ?? [evidence()]).map(envelope) });
     if (opts.analysisId) {
       http.expectOne(`${BASE}/analyses/${opts.analysisId}/coverage-reports`).flush({ items: [] });
     }
@@ -419,7 +431,9 @@ describe('EvidenceViewComponent', () => {
     await click('ev-detail');
     const detail: EvidenceDetailView = {
       evidence: evidence(),
-      messages: [{ id: 'm-1', sequence: 1, role: 'user', text: TEXT }],
+      evidenceViewVersion: '1.1.0',
+      sourceDocuments: [],
+      sourceMessages: [{ id: 'm-1', sequence: 1, role: 'user', text: TEXT }],
       relations: [
         {
           id: 'r-1',
@@ -433,7 +447,7 @@ describe('EvidenceViewComponent', () => {
         },
       ],
     };
-    http.expectOne(`${BASE}/evidence/e-1`).flush(detail);
+    http.expectOne(detailUrl).flush(detail);
     await settle();
     const marks = el.querySelectorAll('[data-testid=original] mark');
     expect(marks).toHaveLength(1);
@@ -447,13 +461,15 @@ describe('EvidenceViewComponent', () => {
     const text = '<b id="injected">x</b> vincolo';
     await setup();
     await click('ev-detail');
-    http.expectOne(`${BASE}/evidence/e-1`).flush({
+    http.expectOne(detailUrl).flush({
       evidence: evidence({
         sources: [
           { messageId: 'm-1', sequence: 1, role: 'Primary', start: 0, end: 6, quote: '<b id="' },
         ],
       }),
-      messages: [{ id: 'm-1', sequence: 1, role: 'user', text }],
+      evidenceViewVersion: '1.1.0',
+      sourceDocuments: [],
+      sourceMessages: [{ id: 'm-1', sequence: 1, role: 'user', text }],
       relations: [],
     });
     await settle();
@@ -556,7 +572,7 @@ describe('EvidenceViewComponent', () => {
       .expectOne(`${BASE}/messages/m-1/evidence/versions`)
       .flush(versions({ stateRevision: 6, currentVersionId: 'v-2' }));
     http.expectOne(`${BASE}/evidence/status`).flush(status([message()]));
-    http.expectOne(`${BASE}/evidence`).flush({ items: [evidence()] });
+    http.expectOne(listUrl).flush({ items: [envelope(evidence())] });
     await settle();
     expect(q('evidence-live')!.textContent).toContain('Versione 2 promossa');
     expect(q('evidence-live')!.textContent).toContain('2 rimappate');
@@ -580,7 +596,7 @@ describe('EvidenceViewComponent', () => {
     );
     http.expectOne(`${BASE}/messages/m-1/evidence/versions`).flush(versions({ stateRevision: 7 }));
     http.expectOne(`${BASE}/evidence/status`).flush(status([message()]));
-    http.expectOne(`${BASE}/evidence`).flush({ items: [evidence()] });
+    http.expectOne(listUrl).flush({ items: [envelope(evidence())] });
     await settle();
     // Dopo il ricaricamento la richiesta di conferma è chiusa: nessuna promozione parte da sola.
     expect(q('promote-confirm')).toBeNull();
@@ -707,6 +723,534 @@ describe('EvidenceViewComponent', () => {
     expect(semantic).toContain('Non è una conferma');
     expect(q('empty-DeterministicError')!.textContent).toContain('Nessuna segnalazione');
   });
+  describe('coverage-2 and hierarchical reconciliation', () => {
+    const finding = (over: Partial<CoverageReportView['findings'][number]>) => ({
+      category: 'DeterministicError' as const,
+      code: 'x',
+      message: 'm',
+      evidenceId: null,
+      alias: null,
+      itemId: null,
+      section: null,
+      confidence: null,
+      details: null,
+      ...over,
+    });
+
+    const open = async (
+      report: Partial<CoverageReportView>,
+      setupOpts: { items?: EvidenceView[] } = {},
+    ) => {
+      await setup({ analysisId: 'a-1', ...setupOpts });
+      await click('verify-coverage');
+      http
+        .expectOne(`${BASE}/draft`)
+        .flush({ code: 'draft_not_available' }, { status: 404, statusText: 'Not Found' });
+      await settle();
+      http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush(
+        {
+          id: 'c-9',
+          analysisId: 'a-1',
+          revisionId: 'rev-1',
+          draftId: null,
+          checkerVersion: 'coverage-2',
+          createdAt: '2030-01-03T10:00:00Z',
+          counts: { deterministicErrors: 0, semanticRisks: 0, pmAssessments: 0 },
+          inputHash: 'h',
+          createdBy: 'pm',
+          findings: [],
+          limits: [],
+          ...report,
+        },
+        { status: 201, statusText: 'Created' },
+      );
+      await settle();
+      http.expectOne(`${BASE}/analyses/a-1/coverage-reports`).flush({ items: [] });
+      await settle();
+    };
+
+    const summary = (over: Record<string, number> = {}) => ({
+      expectedEvidence: 2,
+      representedEvidence: 2,
+      portionsExpected: 1,
+      portionsProcessed: 1,
+      portionsNoEvidence: 0,
+      portionsMissing: 0,
+      blockingFindings: 0,
+      ...over,
+    });
+
+    const none = {
+      projected: false,
+      levels: [],
+      candidates: [],
+      patches: [],
+      frontier: [],
+      openPoints: [],
+    };
+
+    const text = (id: string) => q(id)!.textContent!.replace(/\s+/g, ' ');
+
+    it('shows 100% ID coverage next to a separate semantic warning without certifying fidelity', async () => {
+      await open({
+        counts: { deterministicErrors: 0, semanticRisks: 1, pmAssessments: 1 },
+        summary: summary(),
+        reconciliation: none,
+        findings: [
+          finding({
+            category: 'SemanticRisk',
+            code: 'qualifier_changed',
+            message: 'Il qualificatore non si ritrova',
+            confidence: 'medium',
+          }),
+          finding({
+            category: 'PmAssessment',
+            code: 'item_rewritten_by_pm',
+            message: 'Elemento riscritto dal PM',
+          }),
+        ],
+      });
+
+      expect(text('id-coverage')).toContain('Copertura per ID: 2 di 2 evidenze attese');
+      expect(text('id-coverage-note')).toContain('non dimostra che il testo sia fedele');
+      expect(q('blocking-warning')).toBeNull();
+      expect(text('group-SemanticRisk')).toContain('Rischio stimato (1)');
+      expect(text('group-SemanticRisk')).toContain('Confidenza media');
+      expect(text('group-PmAssessment')).toContain('Valutazione PM (1)');
+      expect(q('group-SemanticRisk')!.textContent).not.toContain('Elemento riscritto dal PM');
+      expect(q('group-PmAssessment')!.textContent).not.toContain('qualificatore');
+      const all = q('report')!.textContent!.toLowerCase();
+      expect(all).not.toMatch(/fedele al 100|\bverificato\b|\bcompleto\b|\bcompleta\b/);
+      expect(text('reconciliation-none')).toContain('non è una conferma di completezza');
+    });
+
+    it('lists unresolved candidates, frontier and blocking patches with id and reason, plus open alternatives in full', async () => {
+      await open({
+        counts: { deterministicErrors: 2, semanticRisks: 0, pmAssessments: 0 },
+        summary: summary({ blockingFindings: 2, portionsMissing: 1, portionsProcessed: 0 }),
+        findings: [
+          finding({ code: 'candidate_not_terminal', message: 'Il candidato c1 non è terminale' }),
+        ],
+        reconciliation: {
+          projected: true,
+          levels: [{ view: 'A', level: 0, nodes: 2, pages: 3 }],
+          candidates: [
+            {
+              candidateId: 'cand-1',
+              kind: 'Relation',
+              proposedType: 'SameRule',
+              state: 'NotProcessed',
+              reason: 'limite di chiamate',
+              childCandidateIds: [],
+              terminal: false,
+            },
+            {
+              candidateId: 'cand-2',
+              kind: 'Relation',
+              proposedType: 'Contradicts',
+              state: 'Open',
+              reason: 'orario discordante',
+              childCandidateIds: [],
+              terminal: true,
+            },
+          ],
+          frontier: [{ candidateId: 'cand-1', reason: 'limite di chiamate' }],
+          patches: [
+            {
+              patchId: 'patch-1',
+              targetKind: 'Item',
+              targetId: 'i-1',
+              state: 'Stale',
+              reason: 'base cambiata',
+              blocking: true,
+            },
+          ],
+          openPoints: [
+            {
+              kind: 'conflict',
+              id: 'k-1',
+              description: 'Orario di chiusura discordante',
+              alternatives: [
+                {
+                  itemId: 'i-1',
+                  text: 'Chiude alle 18.',
+                  classification: 'Documented',
+                  evidenceRefs: [],
+                },
+                {
+                  itemId: 'i-2',
+                  text: 'Chiude alle 20.',
+                  classification: 'Documented',
+                  evidenceRefs: [],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      expect(text('blocking-warning')).toContain('2 segnalazioni bloccanti');
+      expect(text('blocking-warning')).toContain('la verifica non è chiusa');
+      expect(text('id-coverage')).toContain('(1 mancante)');
+      expect(text('reconciliation-levels')).toContain('Vista A, livello 0: 2 nodi, 3 pagine');
+      expect(text('reconciliation-unresolved')).toContain(
+        'cand-1 · NotProcessed · limite di chiamate',
+      );
+      expect(text('reconciliation-open-candidates')).toContain(
+        'cand-2 · dubbio preservato · orario discordante',
+      );
+      expect(text('reconciliation-frontier')).toContain('cand-1 · limite di chiamate');
+      expect(text('reconciliation-patches')).toContain('patch-1 · Stale bloccante · base cambiata');
+      expect(text('reconciliation-open-points')).toContain(
+        'Conflitto: Orario di chiusura discordante',
+      );
+      const alternatives = fixture.nativeElement.querySelectorAll(
+        '[data-testid="open-alternative"]',
+      );
+      expect([...alternatives].map((a) => (a as HTMLElement).textContent)).toEqual([
+        'Chiude alle 18.',
+        'Chiude alle 20.',
+      ]);
+      expect(text('group-DeterministicError')).toContain('Errore deterministico (1)');
+    });
+
+    it('keeps rendering a historic coverage-v1 report without summary or reconciliation', async () => {
+      await open({ checkerVersion: 'coverage-v1' });
+
+      expect(q('id-coverage')).toBeNull();
+      expect(q('reconciliation')).toBeNull();
+      expect(q('report')).not.toBeNull();
+      expect(text('gap-unavailable')).toContain('non disponibile');
+    });
+
+    describe('coverage-3 Gap assessments (T140)', () => {
+      const gap = (over: Record<string, unknown> = {}) => ({
+        gapEvidenceId: 'e-1',
+        gapEvidenceVersionId: 'v-1',
+        sourceSnapshotHash: 'sh',
+        outcome: 'Open',
+        reason: 'Partial',
+        rationale: 'La fonte copre solo il caso feriale.',
+        supportingEvidenceIds: [],
+        openItemId: null,
+        openConflictId: null,
+        originBatchId: 'b-1',
+        ...over,
+      });
+      const gapSummary = (over: Record<string, number> = {}) =>
+        summary({
+          expectedGaps: 2,
+          assessedGaps: 2,
+          answeredGaps: 1,
+          openGaps: 1,
+          unassessedGaps: 0,
+          ...over,
+        });
+      const v3 = (over: Record<string, unknown> = {}) =>
+        ({
+          checkerVersion: 'coverage-3',
+          aiRevisionId: 'rev-1',
+          gapAssessmentsHash: 'gh',
+          summary: gapSummary(),
+          gapAssessments: [
+            gap({
+              gapEvidenceId: 'e-1',
+              outcome: 'AnsweredInSnapshot',
+              reason: 'Answered',
+              rationale: 'Risolto dalla fonte.',
+              supportingEvidenceIds: ['e-2'],
+            }),
+            gap({ gapEvidenceId: 'e-9', reason: 'NoAnswer', openItemId: 'q-1' }),
+          ],
+          ...over,
+        }) as unknown as Partial<CoverageReportView>;
+      const oneOpen = () =>
+        gapSummary({ expectedGaps: 1, assessedGaps: 1, answeredGaps: 0, openGaps: 1 });
+      const noGap = () => q('gap-assessments')?.querySelectorAll('[data-testid=gap-item]') ?? [];
+
+      it.each([
+        ['without gap fields', {}],
+        [
+          'with hostile empty gap fields',
+          {
+            gapAssessments: [],
+            gapAssessmentsHash: 'x',
+            summary: summary({
+              expectedGaps: 0,
+              assessedGaps: 0,
+              answeredGaps: 0,
+              openGaps: 0,
+              unassessedGaps: 0,
+            }),
+          },
+        ],
+        [
+          'with hostile populated gap fields',
+          { gapAssessments: [gap()], aiRevisionId: 'rev-1', summary: gapSummary() },
+        ],
+      ])(
+        'treats coverage-2 %s as Gap assessment unavailable, never as zero Gap',
+        async (_n, over) => {
+          await open({ summary: summary(), ...(over as Partial<CoverageReportView>) });
+          const t = text('gap-assessments');
+          expect(t).toContain('non disponibile');
+          expect(t).toContain('non significa che non ci siano Gap');
+          expect(noGap()).toHaveLength(0);
+          expect(q('gap-counters')).toBeNull();
+          expect(t.toLowerCase()).not.toContain('nessun gap');
+        },
+      );
+
+      it('treats a coverage-3 report whose gap fields are missing or malformed as unavailable', async () => {
+        await open({
+          checkerVersion: 'coverage-3',
+          summary: summary(),
+          gapAssessments: undefined,
+        } as Partial<CoverageReportView>);
+        expect(text('gap-assessments')).toContain('non disponibile');
+        expect(noGap()).toHaveLength(0);
+        expect(q('gap-counters')).toBeNull();
+      });
+
+      it('shows answered and open Gap with textual outcome, reason, rationale and counters', async () => {
+        await open(v3());
+        const t = text('gap-assessments');
+        expect(t).toContain('valutazione AI nello snapshot');
+        expect(t).toContain('non è un supporto di requisito né una conferma del PM');
+        expect(text('gap-counters')).toContain('Attesi 2');
+        expect(text('gap-counters')).toContain('Valutati 2');
+        expect(text('gap-counters')).toContain('Risolti nello snapshot 1');
+        expect(text('gap-counters')).toContain('Aperti 1');
+        expect(text('gap-counters')).toContain('Non valutati 0');
+        const items = qa('gap-item');
+        expect(items).toHaveLength(2);
+        expect(items[0].textContent).toContain('Risolto nello snapshot');
+        expect(items[0].textContent).toContain('Risposta presente');
+        expect(items[0].textContent).toContain('Risolto dalla fonte.');
+        expect(items[1].textContent).toContain('Ancora aperto');
+        expect(items[1].textContent).toContain('Nessuna risposta');
+        expect(items[1].textContent).toContain('Domanda aperta');
+      });
+
+      it.each([
+        ['Partial', 'Risposta parziale'],
+        ['Ambiguous', 'Risposta ambigua'],
+        ['NoAnswer', 'Nessuna risposta'],
+      ])('labels the open reason %s in words', async (reason, label) => {
+        await open(v3({ gapAssessments: [gap({ reason })], summary: oneOpen() }));
+        expect(text('gap-item')).toContain('Ancora aperto');
+        expect(text('gap-item')).toContain(label);
+      });
+
+      it('shows a valid empty coverage-3 list as no Gap in the snapshot, not as a failed check', async () => {
+        await open(
+          v3({
+            gapAssessments: [],
+            summary: gapSummary({
+              expectedGaps: 0,
+              assessedGaps: 0,
+              answeredGaps: 0,
+              openGaps: 0,
+            }),
+          }),
+        );
+        expect(text('gap-assessments')).toContain('Nessun Gap');
+        expect(noGap()).toHaveLength(0);
+      });
+
+      it('reports unassessed Gap explicitly', async () => {
+        await open(
+          v3({
+            summary: gapSummary({ expectedGaps: 3, unassessedGaps: 1 }),
+          }),
+        );
+        expect(text('gap-counters')).toContain('Non valutati 1');
+        expect(text('gap-unassessed')).toContain('senza valutazione');
+      });
+
+      it('opens a referenced evidence through the existing detail command, with keyboard-reachable buttons', async () => {
+        await open(v3(), {
+          items: [evidence(), evidence({ id: 'e-2', statement: 'Supporto' })],
+        });
+        const refs = qa('gap-ref');
+        expect(refs.length).toBeGreaterThanOrEqual(2);
+        expect(refs.every((b) => b.tagName === 'BUTTON')).toBe(true);
+        refs[0].click();
+        await settle();
+        http.expectOne(detailUrl).flush({
+          evidence: evidence(),
+          evidenceViewVersion: '1.1.0',
+          sourceDocuments: [],
+          sourceMessages: [{ id: 'm-1', sequence: 1, role: 'user', text: TEXT }],
+          relations: [],
+        });
+        await settle();
+        expect(q('detail')).not.toBeNull();
+      });
+
+      it('does not offer a button for a referenced evidence outside the current list', async () => {
+        await open(v3({ gapAssessments: [gap({ gapEvidenceId: 'e-404' })], summary: oneOpen() }));
+        const item = q('gap-item')!;
+        expect(item.querySelector('[data-testid=gap-ref]')).toBeNull();
+        expect(item.textContent).toContain('non nell’elenco corrente');
+      });
+
+      it('separates the original AI revision from the current one and labels the PM removal', async () => {
+        await open(
+          v3({
+            aiRevisionId: 'rev-ai',
+            findings: [
+              finding({
+                category: 'PmAssessment',
+                code: 'gap_open_reference_removed_by_pm',
+                message: 'Il PM ha rimosso il riferimento aperto',
+              }),
+            ],
+          }),
+        );
+        expect(text('gap-assessments')).toContain('revisione AI originaria');
+        expect(text('gap-assessments')).toContain('non cambia la valutazione AI');
+        expect(text('gap-assessments')).toContain('né chiude un Gap o un conflitto');
+        expect(text('group-PmAssessment')).toContain('Modifica del PM');
+      });
+
+      it('never renders rationale as HTML', async () => {
+        await open(
+          v3({
+            gapAssessments: [gap({ rationale: '<b id="inj">x</b>' })],
+            summary: oneOpen(),
+          }),
+        );
+        expect(el.querySelector('#inj')).toBeNull();
+        expect(text('gap-item')).toContain('<b id="inj">x</b>');
+      });
+
+      describe('derived fields of the Gap stage (T149)', () => {
+        const derived = (over: Record<string, unknown> = {}) =>
+          gap({
+            reason: 'NoAnswer',
+            searchBasis: 'ledger_exhaustive',
+            retrievalComplete: true,
+            absenceProven: true,
+            ...over,
+          });
+        const derivedSummary = (over: Record<string, number> = {}) =>
+          gapSummary({
+            expectedGaps: 3,
+            assessedGaps: 3,
+            answeredGaps: 1,
+            openGaps: 2,
+            absenceProvenGaps: 1,
+            absenceUnprovenGaps: 1,
+            answeredWithOpenConflictGaps: 1,
+            ...over,
+          });
+        const stage = (over: Record<string, unknown> = {}) =>
+          v3({
+            summary: derivedSummary(),
+            gapAssessments: [
+              derived({ gapEvidenceId: 'g-1' }),
+              derived({ gapEvidenceId: 'g-2', absenceProven: false, retrievalComplete: false }),
+              gap({
+                gapEvidenceId: 'g-3',
+                outcome: 'AnsweredInSnapshot',
+                reason: 'Answered',
+                searchBasis: 'ledger_exhaustive',
+                retrievalComplete: true,
+                answeredWithOpenConflict: true,
+                supportingEvidenceIds: ['e-2'],
+              }),
+            ],
+            ...over,
+          });
+
+        it('says proven and unproven absence in words, with search basis and completeness', async () => {
+          await open(stage());
+          const items = qa('gap-item');
+          const abs = items.map((i) => i.querySelector('[data-testid=gap-absence]')?.textContent);
+          expect(abs[0]).toContain('Assenza provata');
+          expect(abs[1]).toContain('Assenza non provata');
+          expect(abs[2]).toBeUndefined();
+          expect(items[0].textContent).toContain('intero ledger delle evidenze');
+          expect(items[0].textContent).toContain('recupero completo');
+          expect(items[1].textContent).toContain('recupero non completo');
+          expect(items[1].textContent).toContain("l'assenza non è provata");
+          expect(items[0].querySelector('[data-testid=gap-absence-note]')).toBeNull();
+        });
+
+        it('flags the document answer with an open conflict as non blocking, without changing the outcome', async () => {
+          await open(stage());
+          const item = qa('gap-item')[2];
+          expect(item.textContent).toContain('Risolto nello snapshot');
+          expect(item.textContent).toContain('Risposta documentale con conflitto aperto');
+          expect(item.textContent).toContain('non bloccante');
+          expect(item.textContent).toContain('non risolve il conflitto');
+        });
+
+        it('shows the derived counters', async () => {
+          await open(stage());
+          expect(text('gap-derived-counters')).toContain('Assenza provata 1');
+          expect(text('gap-derived-counters')).toContain('Assenza non provata 1');
+          expect(text('gap-derived-counters')).toContain('conflitto aperto 1');
+          expect(text('gap-derived-counters')).not.toContain('parziale');
+        });
+
+        it('marks the derived counters partial and never complete when Gap are unassessed', async () => {
+          await open(stage({ summary: derivedSummary({ expectedGaps: 4, unassessedGaps: 1 }) }));
+          expect(text('gap-derived-counters')).toContain('parziale');
+          expect(text('gap-unassessed')).toContain('senza valutazione');
+          expect(text('gap-assessments').toLowerCase()).not.toMatch(/completa|completato/);
+        });
+
+        it('keeps the v5 coverage-3 report unchanged: no derived badges, notes or counters', async () => {
+          await open(v3());
+          expect(q('gap-absence')).toBeNull();
+          expect(q('gap-search-basis')).toBeNull();
+          expect(q('gap-open-conflict-guard')).toBeNull();
+          expect(q('gap-derived-counters')).toBeNull();
+          expect(text('gap-item')).not.toContain('Assenza');
+        });
+
+        it('never infers the derived claims from coverage-2 reports with hostile fields', async () => {
+          await open(
+            v3({
+              checkerVersion: 'coverage-2',
+              gapAssessments: [derived({ answeredWithOpenConflict: true })],
+              summary: derivedSummary(),
+            }),
+          );
+          expect(text('gap-assessments')).toContain('non disponibile');
+          expect(q('gap-absence')).toBeNull();
+          expect(q('gap-derived-counters')).toBeNull();
+          expect(q('gap-open-conflict-guard')).toBeNull();
+        });
+
+        it('treats wrongly typed derived fields as assessment unavailable', async () => {
+          await open(
+            stage({ gapAssessments: [derived({ absenceProven: 'true' })], summary: oneOpen() }),
+          );
+          expect(text('gap-assessments')).toContain('non disponibile');
+          expect(q('gap-absence')).toBeNull();
+        });
+
+        it('ignores incoherent derived counters instead of showing them', async () => {
+          await open(stage({ summary: derivedSummary({ absenceProvenGaps: -1 }) }));
+          expect(q('gap-derived-counters')).toBeNull();
+          expect(qa('gap-item')).toHaveLength(3);
+        });
+
+        it('does not claim absence for non NoAnswer reasons even with a hostile absenceProven', async () => {
+          await open(
+            stage({
+              gapAssessments: [derived({ reason: 'Partial', absenceProven: true })],
+              summary: oneOpen(),
+            }),
+          );
+          expect(q('gap-absence')).toBeNull();
+        });
+      });
+    });
+  });
 
   it('includes the draft only when it belongs to the current revision', async () => {
     await setup({ analysisId: 'a-1' });
@@ -720,5 +1264,186 @@ describe('EvidenceViewComponent', () => {
     create.flush({ code: 'selection_not_available' }, { status: 409, statusText: 'Conflict' });
     await settle();
     expect(q('coverage-error')!.textContent).toContain('selezione di evidenze');
+  });
+
+  describe('evidence from documents (envelope 1.1.0)', () => {
+    const src = (over: Record<string, unknown> = {}) => ({
+      sourceId: 's-1',
+      kind: 'Document',
+      role: 'Primary',
+      citationGroupId: 'g-1',
+      part: 0,
+      documentId: 'd-1',
+      documentVersionId: 'dv-1',
+      preparationId: 'prep-1',
+      artifactId: 'a-1',
+      blockId: 'b-1',
+      start: 4,
+      end: 12,
+      quote: 'Requisito',
+      ...over,
+    });
+    const docEvidence = (sources = [src()]) => ({
+      id: 'e-doc',
+      versionId: 'ev-1',
+      version: 1,
+      isCurrent: true,
+      projectId: P,
+      ordinal: 0,
+      key: 'k-doc',
+      kind: 'Requirement',
+      polarity: 'Affirmed',
+      certainty: 'Inferred',
+      statement: 'Il sistema esporta in CSV',
+      origin: {
+        kind: 'Document',
+        documentId: 'd-1',
+        documentVersionId: 'dv-1',
+        preparationId: 'prep-1',
+      },
+      content: {
+        schemaVersion: '1.1.0',
+        kindRationale: 'Obbligo esplicito',
+        structure: {
+          subject: 'sistema',
+          action: 'esporta',
+          object: null,
+          scope: null,
+          purpose: null,
+          instrument: null,
+          channel: null,
+          recipient: null,
+        },
+        qualifiers: [],
+        sources,
+      },
+    });
+    const resolved = (sourceId: string, blockId: string, page: number | null) => ({
+      sourceId,
+      documentId: 'd-1',
+      documentVersionId: 'dv-1',
+      documentVersion: 2,
+      originalName: 'spec.pdf',
+      preparationId: 'prep-1',
+      generation: 1,
+      artifactId: 'a-1',
+      blockId,
+      blockRef: 'p1',
+      locator: { page, headingPath: ['Export'], bbox: null, sourceLines: null, doclingRef: null },
+      passageUrl: '',
+      downloadUrl: '',
+    });
+    const mixed = () => [
+      { evidenceViewVersion: '1.0.0', evidence: evidence() },
+      { evidenceViewVersion: '1.1.0', evidence: docEvidence() },
+    ];
+
+    it('lists messages and documents together, each with its own origin and no invented message', async () => {
+      await setup({ envelopes: mixed() });
+      expect(qa('ev-origin').map((b) => b.textContent!.trim())).toEqual(['Messaggio', 'Documento']);
+      const docRow = q('evidence-e-doc')!;
+      expect(docRow.textContent).toContain('Il sistema esporta in CSV');
+      expect(docRow.textContent).toContain('Soggetto');
+      expect(docRow.textContent).not.toContain('Messaggio #');
+      expect(q('evidence-e-1')!.textContent).toContain('Messaggio #1');
+    });
+
+    it('filters by origin through originKind', async () => {
+      await setup({ envelopes: mixed() });
+      const select = el.querySelector<HTMLSelectElement>('#ev-f-origin')!;
+      select.value = 'Document';
+      select.dispatchEvent(new Event('change'));
+      await settle();
+      http
+        .expectOne((r) => listUrl(r) && true)
+        .flush({ items: [{ evidenceViewVersion: '1.1.0', evidence: docEvidence() }] });
+      await settle();
+      expect(qa('ev-origin')).toHaveLength(1);
+    });
+
+    it('declares unknown envelope versions instead of rendering them deformed', async () => {
+      await setup({
+        envelopes: [...mixed(), { evidenceViewVersion: '2.0.0', evidence: { id: 'x' } }],
+      });
+      expect(qa('ev-origin')).toHaveLength(2);
+      expect(q('items-unsupported')!.textContent).toContain('1 elemento');
+    });
+
+    it('keeps the parts of a multi-block quote separate and opens every exact range', async () => {
+      await setup({
+        envelopes: [{ evidenceViewVersion: '1.1.0', evidence: docEvidence() }],
+      });
+      await click('ev-detail');
+      const parts = [
+        src({ sourceId: 's-2', part: 1, blockId: 'b-2', start: 0, end: 5, quote: 'secondo' }),
+        src({ sourceId: 's-1', part: 0, blockId: 'b-1', start: 4, end: 12, quote: 'primo' }),
+      ];
+      http.expectOne(detailUrl_doc).flush({
+        evidenceViewVersion: '1.1.0',
+        evidence: docEvidence(parts),
+        relations: [],
+        sourceDocuments: [resolved('s-1', 'b-1', 3), resolved('s-2', 'b-2', 4)],
+        sourceMessages: [],
+      });
+      await settle();
+      expect(qa('source-group')).toHaveLength(1);
+      const shown = qa('source-part').map((p) => p.textContent!.replace(/\s+/g, ' ').trim());
+      expect(shown[0]).toContain('«primo»');
+      expect(shown[0]).toContain('pagina 3');
+      expect(shown[1]).toContain('«secondo»');
+      expect(shown[1]).toContain('pagina 4');
+      expect(el.textContent).toContain('Obbligo esplicito');
+
+      await click('open-group');
+      const prep = http.match((r) => r.url.endsWith('/preparations/prep-1'));
+      expect(prep).toHaveLength(2);
+      prep.forEach((r) =>
+        r.flush({
+          id: 'prep-1',
+          processingStatus: 'Ready',
+          isReady: true,
+          issues: [],
+          blockCount: 2,
+        }),
+      );
+      await settle();
+      const passages = http.match((r) => r.url.includes('/preparations/prep-1/passages/'));
+      expect(
+        passages.map(
+          (r) =>
+            `${r.request.url.split('/').pop()}:${r.request.params.get('start')}-${r.request.params.get('end')}`,
+        ),
+      ).toEqual(['b-1:4-12', 'b-2:0-5']);
+      expect(http.match((r) => r.url.endsWith('/blocks'))).toHaveLength(0);
+      passages.forEach((r) => r.flush({ code: 'x' }, { status: 404, statusText: 'Not Found' }));
+      await settle();
+    });
+
+    it('does not offer to open a part whose block cannot be resolved by the server', async () => {
+      await setup({ envelopes: [{ evidenceViewVersion: '1.1.0', evidence: docEvidence() }] });
+      await click('ev-detail');
+      http.expectOne(detailUrl_doc).flush({
+        evidenceViewVersion: '1.1.0',
+        evidence: docEvidence(),
+        relations: [
+          {
+            id: 'r',
+            type: 'Confirms',
+            basis: 'Inferred',
+            rationale: null,
+            direction: 'outgoing',
+            otherEvidenceId: 'e-9',
+            otherStatement: 'Altro',
+          },
+        ],
+        sourceDocuments: [],
+        sourceMessages: [],
+      });
+      await settle();
+      expect(q('source-locator')!.textContent).toContain('Posizione non risolvibile');
+      expect(q('open-part')!.hasAttribute('disabled')).toBe(true);
+      expect(q('relations')!.textContent).toContain('Altro');
+      expect(q('relations')!.textContent).not.toContain('messaggio #');
+    });
   });
 });

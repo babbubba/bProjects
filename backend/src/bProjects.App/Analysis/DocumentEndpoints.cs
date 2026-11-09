@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,10 @@ public sealed record DraftView(
     bool HasNewNotes,
     bool HasNewRevision,
     string Label,
-    InferenceMetricsView? Metrics = null);
+    InferenceMetricsView? Metrics = null,
+    IReadOnlyList<DraftSourceMapEntry>? SourceMap = null,
+    Guid? SourceSnapshotId = null,
+    bool? HasSourceChanges = null);
 
 /// <summary>
 /// Generazione esplicita del documento e lettura dell'ultima bozza (contracts/http-api.md, «Generazione esplicita del documento»).
@@ -54,6 +58,8 @@ public static class DocumentEndpoints
         IOptions<ExecutionOptions> execution,
         IOptions<AiOptions> ai,
         ProcessingRunEvents events,
+        SourceSnapshotStore snapshots,
+        DocumentPolicyService documentPolicy,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -150,12 +156,16 @@ public static class DocumentEndpoints
                 return Problem(StatusCodes.Status409Conflict, "Un'elaborazione formale è già attiva", "processing_active", active);
             }
 
+            // Snapshot ereditato dalla revisione (root dell'analisi), mai la selezione corrente; null per le analisi legacy.
+            var inheritedSnapshot = await snapshots.InheritedFromAnalysisAsync(projectId, analysisId, ct);
+            var documentary = inheritedSnapshot is { } inheritedId && await snapshots.HasReadyAsync(inheritedId, ct);
             var now = (await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").ToListAsync(ct)).Single();
             var run = new ProcessingRun
             {
                 Id = Guid.NewGuid(),
                 ProjectId = projectId,
                 Kind = ProcessingRunKind.Document,
+                SourceSnapshotId = inheritedSnapshot,
                 AnalysisId = analysisId,
                 InputRevisionId = revisionId,
                 RequestKey = requestKey,
@@ -163,13 +173,19 @@ public static class DocumentEndpoints
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.RunDeadline,
-                WorkflowDefinitionVersion = ProcessingRun.DocumentWorkflowVersion,
+                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.DocumentDefinition : ProcessingRun.DocumentWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = AnalysisEndpoints.FrozenConfig(ai.Value, policy, AiPhase.Document),
-                PromptVersions = JsonSerializer.Serialize(new { document = DocumentAgent.PromptVersion }),
+                PromptVersions = documentary ? SourceSnapshotStore.DocumentPromptVersions() : JsonSerializer.Serialize(new { document = DocumentAgent.PromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };
+            if (documentary)
+            {
+                // Snapshot ereditato con almeno una fonte Ready: Pending (Extended provvisorio, cap dal t0), nessuna misura né invio nel POST (T124).
+                DocumentRootRegime.Pending(run, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
+            }
+
             db.ProcessingRuns.Add(run);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -207,6 +223,7 @@ public static class DocumentEndpoints
         var draft = await db.Drafts.AsNoTracking().SingleAsync(d => d.Id == draftId && d.ProjectId == projectId, ct);
         var source = await db.AnalysisRevisions.AsNoTracking().SingleAsync(r => r.Id == draft.AnalysisRevisionId, ct);
         var analysis = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == source.AnalysisId, ct);
+        var draftRun = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == draft.ProcessingRunId, ct);
 
         // Solo i messaggi PM contano: una risposta dell'assistente oltre il cutoff non rende la bozza «vecchia».
         var hasNewNotes = await db.ConversationMessages.AsNoTracking()
@@ -218,6 +235,17 @@ public static class DocumentEndpoints
                 .Select(r => (Guid?)r.Id)
                 .FirstOrDefaultAsync(ct)
             : null;
+
+        // Mappa storica delle fonti (T087): solo quella persistita dal run che ha prodotto la bozza; assente per le bozze storiche, mai ricostruita.
+        IReadOnlyList<DraftSourceMapEntry>? sourceMap;
+        try
+        {
+            sourceMap = await DraftSourceMapReader.ReadAsync(db, draft, source, ct);
+        }
+        catch (DraftSourceMapInconsistentException)
+        {
+            return Problem(StatusCodes.Status500InternalServerError, "Mappa delle fonti della bozza incoerente", "draft_source_map_inconsistent");
+        }
 
         return Results.Ok(new DraftView(
             draft.Id,
@@ -234,7 +262,10 @@ public static class DocumentEndpoints
             HasNewRevision: latestRevisionId != source.Id,
             DraftLabel,
             // Metriche del run Document che ha generato la bozza, rilette dopo il reload insieme al Markdown.
-            await InferenceMetrics.ForRunAsync(db, projectId, draft.ProcessingRunId, ct)));
+            await InferenceMetrics.ForRunAsync(db, projectId, draft.ProcessingRunId, ct),
+            sourceMap,
+            draftRun.SourceSnapshotId,
+            await AnalysisEndpoints.SourceChangesAsync(db, projectId, draftRun.SourceSnapshotId, ct)));
     }
 
     private static async Task<Guid?> ActiveRunAsync(AppDbContext db, Guid projectId, CancellationToken ct) =>

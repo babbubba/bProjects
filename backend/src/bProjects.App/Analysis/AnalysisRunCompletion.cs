@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace bProjects.App.Analysis;
 
 /// <summary>Esecuzione di Analysis presa in carico: owner e fencing token del lease del ProcessingRun.</summary>
-public sealed record AnalysisRunClaim(Guid RunId, string LeaseOwner, long FencingToken, int AttemptCount = 0);
+public sealed record AnalysisRunClaim(Guid RunId, string LeaseOwner, long FencingToken, int AttemptCount = 0, LeaseRecovery? Recovery = null);
 
 public enum AnalysisCommitOutcome
 {
@@ -118,16 +118,10 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
             return new(AnalysisCommitOutcome.Rejected, Reason: "run_missing");
         }
 
-        var state = (await db.Database.SqlQuery<string>($"""
-            SELECT CASE
-                WHEN "Status" = 'Completed' THEN 'completed'
-                WHEN "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner} AND "FencingToken" = {claim.FencingToken}
-                     AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp() THEN 'valid'
-                ELSE 'stale' END AS "Value"
-            FROM "ProcessingRuns" WHERE "Id" = {claim.RunId}
-            """).ToListAsync(ct)).Single();
+        // Stato di commit dalla guard dell'autorità temporale (T118): lease, fence e scadenza corrente (DeadlineAt ed EffectiveDeadlineAt) sotto lock di riga.
+        var state = await DocumentDeadlineGuard.CommitStateAsync(db, turn: false, claim.RunId, claim.LeaseOwner, claim.FencingToken, ct);
 
-        if (state == "completed")
+        if (state == RootCommitState.Completed)
         {
             await transaction.RollbackAsync(CancellationToken.None);
             return run.ResultRevisionId is { } existing
@@ -135,7 +129,7 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
                 : new(AnalysisCommitOutcome.Rejected, Reason: "completed_without_result");
         }
 
-        if (state != "valid")
+        if (state != RootCommitState.Valid)
         {
             return new(AnalysisCommitOutcome.Rejected, Reason: "lease_lost");
         }
@@ -185,6 +179,114 @@ public sealed class AnalysisRunCompletion(AppDbContext db) : IAnalysisRunStore
         }
 
         // Telemetria del tentativo vincente nella stessa transazione del risultato (stesso controllo di lease/fencing).
+        var inference = InferenceScope.Current;
+        InferenceCallLog.Stage(db, inference, run.ProjectId, new(null, run.Id, claim.AttemptCount, claim.FencingToken), result: true);
+        await db.SaveChangesAsync(ct);
+
+        await db.Projects.Where(p => p.Id == run.ProjectId).ExecuteUpdateAsync(s => s.SetProperty(p => p.CurrentAnalysisId, run.Id), ct);
+
+        await transaction.CommitAsync(ct);
+        inference?.MarkWritten();
+        db.ChangeTracker.Clear();
+        return new(AnalysisCommitOutcome.Committed, revision.Id);
+    }
+
+    /// <summary>
+    /// Commit atomico del ramo documentale (002 T059, AnalysisContent 1.1.0): stesso lock di riga, guard dell'autorità temporale e telemetria del
+    /// ramo 001, ma revisione AI con schema 1.1.0, mappa item→evidenze dall'evidenceMap validata (solo item della revisione ed evidenze della
+    /// selezione congelata) e relazioni interpretative del run append-only, tutto nella stessa transazione di Completed e CurrentAnalysisId.
+    /// </summary>
+    public async Task<AnalysisCommitResult> CommitDocumentAsync(
+        AnalysisRunClaim claim, DocumentAnalysisContent content, IReadOnlyList<EvidenceMapEntry> evidenceMap, IReadOnlyList<RunRelation> relations, CancellationToken ct,
+        IReadOnlyList<object>? projections = null)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(evidenceMap);
+        ArgumentNullException.ThrowIfNull(relations);
+
+        db.ChangeTracker.Clear();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        var run = (await db.ProcessingRuns
+            .FromSql($"SELECT * FROM \"ProcessingRuns\" WHERE \"Id\" = {claim.RunId} FOR UPDATE")
+            .AsTracking()
+            .ToListAsync(ct)).SingleOrDefault();
+        if (run is null || run.Kind != ProcessingRunKind.Analysis)
+        {
+            return new(AnalysisCommitOutcome.Rejected, Reason: "run_missing");
+        }
+
+        var state = await DocumentDeadlineGuard.CommitStateAsync(db, turn: false, claim.RunId, claim.LeaseOwner, claim.FencingToken, ct);
+        if (state == RootCommitState.Completed)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            return run.ResultRevisionId is { } existing
+                ? new(AnalysisCommitOutcome.AlreadyCompleted, existing)
+                : new(AnalysisCommitOutcome.Rejected, Reason: "completed_without_result");
+        }
+
+        if (state != RootCommitState.Valid)
+        {
+            return new(AnalysisCommitOutcome.Rejected, Reason: "lease_lost");
+        }
+
+        if (content.AnalysisId != run.Id || content.ProjectId != run.ProjectId || content.SourceCutoffSequence != run.SourceCutoffSequence)
+        {
+            return new(AnalysisCommitOutcome.Rejected, Reason: "content_not_bound_to_run");
+        }
+
+        var selected = await db.AnalysisEvidenceSelectionItems.AsNoTracking().Where(i => i.RunId == run.Id).Select(i => i.VersionId).ToListAsync(ct);
+        var inSelection = (await db.Evidences.AsNoTracking().Where(e => selected.Contains(e.VersionId)).Select(e => e.Id).ToListAsync(ct)).ToHashSet();
+        var items = ReconciliationContractRules.ItemIds(content).ToHashSet();
+        if (evidenceMap.Any(m => !items.Contains(m.ItemId) || m.EvidenceIds.Any(e => !inSelection.Contains(e)))
+            || relations.Any(r => !inSelection.Contains(r.From) || !inSelection.Contains(r.To)))
+        {
+            return new(AnalysisCommitOutcome.Rejected, Reason: "evidence_outside_frozen_selection");
+        }
+
+        var now = (await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").ToListAsync(ct)).Single();
+        var revision = new AnalysisRevision
+        {
+            Id = Guid.NewGuid(),
+            AnalysisId = run.Id,
+            Version = 1,
+            ParentRevisionId = null,
+            Origin = AnalysisRevisionOrigin.Ai,
+            CreatedBy = run.RequestedBy,
+            CreatedAt = now,
+            SchemaVersion = DocumentAnalysisContent.SchemaVersionValue,
+            ContentJson = DocumentAnalysisContentJson.Serialize(content),
+            ValidationState = AnalysisValidationState.Unvalidated,
+        };
+        db.AnalysisRevisions.Add(revision);
+        await db.SaveChangesAsync(ct);
+
+        run.Status = ProcessingRunStatus.Completed;
+        run.ResultRevisionId = revision.Id;
+        run.CompletedAt = now;
+        run.UpdatedAt = now;
+        run.LastObservedStage = DocumentBatchWorkflow.CommitId;
+        run.LeaseOwner = null;
+        run.LeaseUntil = null;
+        run.ErrorCode = null;
+        run.ErrorMessage = null;
+        db.AnalysisEvidenceLinks.AddRange(evidenceMap
+            .SelectMany(m => m.EvidenceIds.Select(e => (Item: m.ItemId, Evidence: e)))
+            .Distinct()
+            .Select(x => new AnalysisEvidenceLink { RunId = run.Id, ItemId = x.Item, EvidenceId = x.Evidence, ProjectId = run.ProjectId }));
+        new EvidenceLedgerStore(db).AppendRunRelations(run.Id, run.ProjectId, relations);
+
+        // Proiezioni della riconciliazione gerarchica (T122) nella stessa transazione: le pagine una per volta, perché la catena (n richiede n-1) è imposta dal database.
+        foreach (var row in projections ?? [])
+        {
+            db.Add(row);
+            if (row is AI.RunCatalogPage)
+            {
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
         var inference = InferenceScope.Current;
         InferenceCallLog.Stage(db, inference, run.ProjectId, new(null, run.Id, claim.AttemptCount, claim.FencingToken), result: true);
         await db.SaveChangesAsync(ct);

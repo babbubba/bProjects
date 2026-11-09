@@ -163,10 +163,25 @@
     <div class="ev-block-head">
       <h3 id="ev-items-title" class="h6 mb-0">Evidenze correnti</h3>
       <span class="small text-secondary" role="status" data-testid="items-count">
-        {{ itemsLoading() ? 'Caricamento…' : plural(items().length, 'evidenza', 'evidenze') }}
+        {{ itemsLoading() ? 'Caricamento…' : plural(list().rows.length, 'evidenza', 'evidenze') }}
       </span>
     </div>
     <form class="ev-filters" aria-label="Filtri delle evidenze" (submit)="$event.preventDefault()">
+      <div>
+        <label for="ev-f-origin" class="form-label small mb-0">Origine</label>
+        <select
+          id="ev-f-origin"
+          class="form-select form-select-sm"
+          data-testid="ev-f-origin"
+          (change)="setFilter('originKind', $event)"
+        >
+          <option value="" [selected]="!filters().originKind">Tutte</option>
+          <option value="Message" [selected]="filters().originKind === 'Message'">Messaggi</option>
+          <option value="Document" [selected]="filters().originKind === 'Document'">
+            Documenti
+          </option>
+        </select>
+      </div>
       <div>
         <label for="ev-f-message" class="form-label small mb-0">Messaggio</label>
         <select
@@ -241,7 +256,7 @@
         </button>
       </div>
     }
-    @if (!itemsLoading() && !itemsError() && items().length === 0) {
+    @if (!itemsLoading() && !itemsError() && list().rows.length === 0) {
       <p class="ev-empty" data-testid="no-items">
         @if (hasFilters()) {
           Nessuna evidenza corrisponde ai filtri.
@@ -250,8 +265,14 @@
         }
       </p>
     }
+    @if (list().unsupported > 0) {
+      <div class="alert alert-warning py-2 mb-0" role="status" data-testid="items-unsupported">
+        {{ plural(list().unsupported, 'elemento', 'elementi') }} in un formato non supportato: non
+        mostrati, per non presentarli in modo deformato.
+      </div>
+    }
     <ul class="list-unstyled mb-0 ev-list" aria-label="Evidenze correnti">
-      @for (e of items(); track e.id) {
+      @for (e of list().rows; track e.id) {
         <li class="ev-row" [attr.data-testid]="'evidence-' + e.id">
           <div class="ev-row-head">
             <span class="badge text-bg-primary" data-testid="ev-kind">{{ kindLabel(e.kind) }}</span>
@@ -261,12 +282,17 @@
             <span class="badge text-bg-light border" data-testid="ev-certainty"
               >Certezza: {{ certaintyLabel(e.certainty) }}</span
             >
-            <span class="small text-secondary">Messaggio #{{ e.messageSequence }}</span>
+            @if (e.origin === 'Document') {
+              <span class="badge text-bg-info" data-testid="ev-origin">Documento</span>
+            } @else {
+              <span class="badge text-bg-light border" data-testid="ev-origin">Messaggio</span>
+              <span class="small text-secondary">Messaggio #{{ e.messageSequence }}</span>
+            }
           </div>
           <p class="ev-statement" data-testid="ev-statement">{{ e.statement }}</p>
-          @if (structureFields(e).length > 0) {
+          @if (e.fields.length > 0) {
             <dl class="ev-fields">
-              @for (f of structureFields(e); track f.label) {
+              @for (f of e.fields; track f.label) {
                 <div>
                   <dt>{{ f.label }}</dt>
                   <dd>{{ f.value }}</dd>
@@ -292,7 +318,13 @@
               [attr.aria-controls]="'ev-detail-' + e.id"
               (click)="toggleDetail(e.id)"
             >
-              {{ selectedId() === e.id ? 'Nascondi originale' : 'Mostra originale' }}
+              {{
+                selectedId() === e.id
+                  ? 'Nascondi originale'
+                  : e.origin === 'Document'
+                    ? 'Mostra fonti'
+                    : 'Mostra originale'
+              }}
             </button>
           </div>
 
@@ -328,7 +360,64 @@
                   Evidenziato: passo citato (sfondo giallo), contesto precedente (sottolineato
                   tratteggiato).
                 </p>
-                @if (d.evidence.sources.length > 0) {
+                @if (detailGroups().length > 0) {
+                  <h4 class="h6 mb-1">Fonti nel documento</h4>
+                  @for (g of detailGroups(); track g.citationGroupId) {
+                    <div class="ev-source-group" data-testid="source-group">
+                      @if (g.parts.length > 1) {
+                        <p class="small mb-1">
+                          Citazione in {{ g.parts.length }} parti (blocchi distinti, non fuse).
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-primary ms-1"
+                            data-testid="open-group"
+                            (click)="openGroup(g)"
+                          >
+                            Apri tutte le parti
+                          </button>
+                        </p>
+                      }
+                      <ol class="small ps-3 mb-2">
+                        @for (p of g.parts; track p.source.sourceId) {
+                          <li data-testid="source-part">
+                            <span class="text-secondary" data-testid="source-locator">{{
+                              locatorText(p.resolved)
+                            }}</span>
+                            <span class="d-block">«{{ p.source.quote }}»</span>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-link p-0"
+                              data-testid="open-part"
+                              [disabled]="!p.resolved"
+                              [attr.aria-expanded]="openParts().has(p.source.sourceId)"
+                              (click)="togglePart(p.source.sourceId)"
+                            >
+                              {{
+                                openParts().has(p.source.sourceId)
+                                  ? 'Chiudi passaggio'
+                                  : 'Apri passaggio'
+                              }}
+                            </button>
+                            @if (p.resolved && openParts().has(p.source.sourceId)) {
+                              <app-document-passage
+                                [projectId]="projectId()"
+                                [documentId]="p.resolved.documentId"
+                                [version]="p.resolved.documentVersion"
+                                [preparation]="p.resolved.preparationId"
+                                [highlight]="{
+                                  blockId: p.source.blockId,
+                                  start: p.source.start,
+                                  end: p.source.end,
+                                }"
+                                [showBlocks]="false"
+                              />
+                            }
+                          </li>
+                        }
+                      </ol>
+                    </div>
+                  }
+                } @else if (!isDocument(d.evidence) && d.evidence.sources.length > 0) {
                   <h4 class="h6 mb-1">Fonti</h4>
                   <ul class="small ps-3">
                     @for (s of d.evidence.sources; track $index) {
@@ -338,9 +427,9 @@
                     }
                   </ul>
                 }
-                @if (d.evidence.kindRationale) {
+                @if (kindRationale(d.evidence)) {
                   <p class="small mb-2">
-                    <strong>Perché questa tipologia:</strong> {{ d.evidence.kindRationale }}
+                    <strong>Perché questa tipologia:</strong> {{ kindRationale(d.evidence) }}
                   </p>
                 }
                 <h4 class="h6 mb-1">Relazioni</h4>
@@ -358,7 +447,7 @@
                             ? relationLabel(r.type)
                             : 'è ' + relationLabel(r.type) + ' da'
                         }}
-                        «{{ r.otherStatement }}» (messaggio #{{ r.otherMessageSequence }}) ·
+                        «{{ r.otherStatement }}»{{ relationSequence(r) }} ·
                         {{ r.basis === 'Declared' ? 'dichiarata nel testo' : 'inferita' }}
                         @if (r.rationale) {
                           <span class="text-secondary"> · {{ r.rationale }}</span>
@@ -627,6 +716,272 @@
           Report del {{ formatTime(r.createdAt) }} · verificatore {{ r.checkerVersion }} ·
           {{ r.draftId ? 'bozza inclusa' : 'senza bozza' }}
         </p>
+        @if (r.summary; as s) {
+          <div class="small mb-2" data-testid="id-coverage">
+            <p class="mb-1">
+              Copertura per ID: {{ s.representedEvidence }} di
+              {{ plural(s.expectedEvidence, 'evidenza attesa', 'evidenze attese') }} collegate a un
+              elemento · porzioni elaborate {{ s.portionsProcessed }} di {{ s.portionsExpected }}
+              @if (s.portionsMissing > 0) {
+                ({{ plural(s.portionsMissing, 'mancante', 'mancanti') }})
+              }
+            </p>
+            <p class="mb-1 text-secondary" data-testid="id-coverage-note">
+              Il collegamento per ID non dimostra che il testo sia fedele alle fonti: nessuna
+              copertura, anche al 100%, certifica il significato.
+            </p>
+            @if (s.blockingFindings > 0) {
+              <p class="alert alert-danger py-1 mb-0" role="alert" data-testid="blocking-warning">
+                {{
+                  plural(s.blockingFindings, 'segnalazione bloccante', 'segnalazioni bloccanti')
+                }}: la verifica non è chiusa.
+              </p>
+            }
+          </div>
+        }
+        <section class="mb-2" aria-labelledby="ev-gap-title" data-testid="gap-assessments">
+          <h4 id="ev-gap-title" class="h6 mb-1">Valutazione dei Gap</h4>
+          @if (gapView(); as gv) {
+            @if (!gv.available) {
+              <p class="small mb-1" data-testid="gap-unavailable">
+                Valutazione dei Gap non disponibile per questo report ({{ r.checkerVersion }}): non
+                significa che non ci siano Gap.
+              </p>
+            } @else {
+              <p class="small text-secondary mb-1" data-testid="gap-note">
+                Ogni esito è una valutazione AI nello snapshot congelato: non è un supporto di
+                requisito né una conferma del PM. Modificare o confermare l'analisi non cambia la
+                valutazione AI né chiude un Gap o un conflitto.
+              </p>
+              @if (gv.aiRevisionChanged) {
+                <p class="small mb-1" data-testid="gap-revision-note">
+                  Le valutazioni appartengono alla revisione AI originaria; la revisione corrente è
+                  diversa perché modificata dal PM.
+                </p>
+              }
+              <p class="small mb-1" data-testid="gap-counters">
+                Attesi {{ gv.expected }} · Valutati {{ gv.assessed }} · Risolti nello snapshot
+                {{ gv.answered }} · Aperti {{ gv.open }} · Non valutati {{ gv.unassessed }}
+              </p>
+              @if (gv.derived; as d) {
+                <p class="small mb-1" data-testid="gap-derived-counters">
+                  Assenza provata {{ d.absenceProven }} · Assenza non provata
+                  {{ d.absenceUnproven }} · Risposte documentali con conflitto aperto
+                  {{ d.answeredWithOpenConflict }}
+                  @if (gv.unassessed > 0) {
+                    <span class="text-secondary"> (parziale: non include i Gap non valutati)</span>
+                  }
+                </p>
+              }
+              @if (gv.unassessed > 0) {
+                <p class="alert alert-warning py-1 mb-1 small" data-testid="gap-unassessed">
+                  {{ plural(gv.unassessed, 'Gap', 'Gap') }} senza valutazione: non è una risposta,
+                  resta da verificare.
+                </p>
+              }
+              @if (gv.expected === 0 && gv.items.length === 0) {
+                <p class="small mb-1" data-testid="gap-none">
+                  Nessun Gap nello snapshot di questa analisi.
+                </p>
+              }
+              @if (gv.items.length > 0) {
+                <ul class="list-unstyled small mb-1 gap-list">
+                  @for (g of gv.items; track g.gapEvidenceId) {
+                    <li class="gap-item" data-testid="gap-item">
+                      <div class="gap-head">
+                        <span
+                          class="badge border"
+                          [class.text-bg-success]="g.outcome === 'AnsweredInSnapshot'"
+                          [class.text-bg-warning]="g.outcome === 'Open'"
+                          data-testid="gap-outcome"
+                          >{{ g.outcome === 'Open' ? '⚠ ' : '✓ ' }}{{ gapOutcomeLabel(g) }}</span
+                        >
+                        <span class="badge text-bg-light border" data-testid="gap-reason">{{
+                          gapReasonLabel(g.reason)
+                        }}</span>
+                        <span class="badge text-bg-light border">Valutazione AI</span>
+                        @if (absenceLabel(g); as al) {
+                          <span class="badge text-bg-light border" data-testid="gap-absence"
+                            >{{ g.absenceProven ? '✓ ' : '⚠ ' }}{{ al }}</span
+                          >
+                        }
+                        @if (g.answeredWithOpenConflict) {
+                          <span
+                            class="badge text-bg-warning border"
+                            data-testid="gap-open-conflict-guard"
+                            >⚠ Risposta documentale con conflitto aperto</span
+                          >
+                        }
+                      </div>
+                      @if (searchBasisLabel(g); as sb) {
+                        <p class="mb-1 text-secondary" data-testid="gap-search-basis">{{ sb }}</p>
+                      }
+                      @if (absenceLabel(g) === 'Assenza non provata') {
+                        <p class="mb-1 text-secondary" data-testid="gap-absence-note">
+                          Nessuna risposta trovata, ma l'assenza non è provata: non significa che la
+                          risposta non esista.
+                        </p>
+                      }
+                      @if (g.answeredWithOpenConflict) {
+                        <p class="mb-1 text-secondary" data-testid="gap-open-conflict-note">
+                          La risposta nel documento partecipa a un conflitto ancora aperto.
+                          Segnalazione non bloccante: non cambia l'esito e non risolve il conflitto.
+                        </p>
+                      }
+                      <p class="mb-1" data-testid="gap-rationale">{{ g.rationale }}</p>
+                      <p class="mb-1">
+                        Gap:
+                        @if (isListed(g.gapEvidenceId)) {
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-link p-0 align-baseline"
+                            data-testid="gap-ref"
+                            (click)="openEvidenceRef(g.gapEvidenceId)"
+                          >
+                            Apri l'evidenza del Gap <code>{{ g.gapEvidenceId }}</code>
+                          </button>
+                        } @else {
+                          <code>{{ g.gapEvidenceId }}</code>
+                          <span class="text-secondary"> · non nell’elenco corrente</span>
+                        }
+                      </p>
+                      @if (g.supportingEvidenceIds.length > 0) {
+                        <p class="mb-1">
+                          Evidenze della risposta:
+                          @for (id of g.supportingEvidenceIds; track id) {
+                            @if (isListed(id)) {
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-link p-0 align-baseline me-2"
+                                data-testid="gap-ref"
+                                (click)="openEvidenceRef(id)"
+                              >
+                                Apri <code>{{ id }}</code>
+                              </button>
+                            } @else {
+                              <span class="me-2"
+                                ><code>{{ id }}</code>
+                                <span class="text-secondary">
+                                  · non nell’elenco corrente</span
+                                ></span
+                              >
+                            }
+                          }
+                        </p>
+                      }
+                      @if (g.openItemId) {
+                        <p class="mb-1 text-secondary">
+                          Domanda aperta collegata: <code>{{ g.openItemId }}</code>
+                        </p>
+                      }
+                      @if (g.openConflictId) {
+                        <p class="mb-1 text-secondary">
+                          Conflitto aperto collegato: <code>{{ g.openConflictId }}</code>
+                        </p>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            }
+          }
+        </section>
+        @if (reconciliation(); as rec) {
+          <section
+            class="mb-2"
+            aria-labelledby="ev-reconciliation-title"
+            data-testid="reconciliation"
+          >
+            <h4 id="ev-reconciliation-title" class="h6 mb-1">Riconciliazione gerarchica</h4>
+            @if (!rec.projected) {
+              <p class="small text-secondary mb-1" data-testid="reconciliation-none">
+                Nessuna proiezione gerarchica per questa analisi: non c'è nulla da elencare, e non è
+                una conferma di completezza.
+              </p>
+            } @else {
+              <ul class="small ps-3 mb-1" data-testid="reconciliation-levels">
+                @for (l of rec.levels; track l.view + l.level) {
+                  <li>
+                    Vista {{ l.view }}, livello {{ l.level }}:
+                    {{ plural(l.nodes, 'nodo', 'nodi') }}, {{ plural(l.pages, 'pagina', 'pagine') }}
+                  </li>
+                }
+              </ul>
+              <p class="small mb-1">
+                Candidati: {{ rec.candidates.length }} · non terminali: {{ nonTerminal().length }} ·
+                aperti: {{ openCandidates().length }}
+              </p>
+              @if (nonTerminal().length > 0) {
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-unresolved">
+                  @for (c of nonTerminal(); track c.candidateId) {
+                    <li>
+                      <code>{{ c.candidateId }}</code> · {{ c.state }}
+                      @if (c.reason) {
+                        <span class="text-secondary"> · {{ c.reason }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+              @if (openCandidates().length > 0) {
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-open-candidates">
+                  @for (c of openCandidates(); track c.candidateId) {
+                    <li>
+                      <code>{{ c.candidateId }}</code> · dubbio preservato
+                      @if (c.reason) {
+                        <span class="text-secondary"> · {{ c.reason }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+              @if (rec.frontier.length > 0) {
+                <p class="small mb-0">Frontiera non risolta</p>
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-frontier">
+                  @for (f of rec.frontier; track f.candidateId) {
+                    <li>
+                      <code>{{ f.candidateId }}</code> · {{ f.reason }}
+                    </li>
+                  }
+                </ul>
+              }
+              @if (rec.patches.length > 0) {
+                <p class="small mb-0">Patch non applicate</p>
+                <ul class="small ps-3 mb-1" data-testid="reconciliation-patches">
+                  @for (p of rec.patches; track p.patchId) {
+                    <li>
+                      <code>{{ p.patchId }}</code> · {{ p.state }}
+                      @if (p.blocking) {
+                        <span class="badge text-bg-light border ms-1">bloccante</span>
+                      }
+                      @if (p.reason) {
+                        <span class="text-secondary"> · {{ p.reason }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            }
+            @if (rec.openPoints.length > 0) {
+              <p class="small mb-0">Punti aperti della revisione</p>
+              <ul class="small ps-3 mb-1" data-testid="reconciliation-open-points">
+                @for (o of rec.openPoints; track o.id) {
+                  <li>
+                    {{ o.kind === 'conflict' ? 'Conflitto' : 'Domanda aperta' }}:
+                    {{ o.description }}
+                    @if (o.alternatives.length > 0) {
+                      <ol class="mb-0">
+                        @for (a of o.alternatives; track a.itemId) {
+                          <li data-testid="open-alternative">{{ a.text }}</li>
+                        }
+                      </ol>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+        }
         @for (g of groups(); track g.category) {
           <section
             [attr.aria-label]="categoryLabel(g.category)"
@@ -647,6 +1002,11 @@
               <ul class="small ps-3 mb-2">
                 @for (f of g.findings; track $index) {
                   <li data-testid="finding">
+                    @if (f.code === 'gap_open_reference_removed_by_pm') {
+                      <span class="badge text-bg-light border me-1" data-testid="pm-gap-removal"
+                        >Modifica del PM</span
+                      >
+                    }
                     {{ f.message }}
                     @if (f.alias) {
                       <span class="text-secondary"> · {{ f.alias }}</span>

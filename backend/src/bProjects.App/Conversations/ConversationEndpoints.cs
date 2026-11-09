@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using bProjects.App.AI;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -50,7 +51,10 @@ public static class ConversationEndpoints
         int MaxAttempts,
         DateTimeOffset? NextAttemptAt,
         Guid? ResultMessageId,
-        TurnError? Error);
+        TurnError? Error,
+        ExecutionView? Execution = null,
+        Guid? SourceSnapshotId = null,
+        bool? HasSourceChanges = null);
 
     public static IEndpointRouteBuilder MapConversationEndpoints(this IEndpointRouteBuilder app)
     {
@@ -70,6 +74,9 @@ public static class ConversationEndpoints
         IOptions<AiOptions> ai,
         ChatTurnEvents events,
         EvidenceEvents evidenceEvents,
+        SourceSelectionService selection,
+        SourceSnapshotStore snapshots,
+        DocumentPolicyService documentPolicy,
         CancellationToken ct,
         bProjects.App.AI.DispatchWakeup? wakeup = null)
     {
@@ -104,6 +111,13 @@ public static class ConversationEndpoints
         var policy = execution.Value;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        // Lock di progetto delle fonti prima di quello della conversazione (ordine progetto → conversazione); i progetti senza documenti restano sul ramo 001.
+        var hasDocuments = await db.ProjectDocuments.AsNoTracking().AnyAsync(d => d.ProjectId == projectId, ct);
+        if (hasDocuments)
+        {
+            await ProjectLock.AcquireAsync(db, projectId, ct);
+        }
 
         // Lock della conversazione: serializza assegnazione di Sequence, replay e fissaggio del cutoff.
         var conversationId = await LockConversation(db, projectId, ct);
@@ -159,6 +173,21 @@ public static class ConversationEndpoints
             DeadlineAt = now + policy.RunDeadline,
             MaxAttempts = policy.MaxAttempts,
         };
+
+        // Fonti fissate alla richiesta anche quando non pronte: il turno conserva il messaggio e dichiara l'indisponibilità senza attenderla.
+        if (hasDocuments)
+        {
+            var evaluation = await selection.EvaluateAsync(projectId, ct);
+            turn.SourceSnapshotId = snapshots.Add(projectId, evaluation, now).Id;
+
+            // Ramo documentale (stessa regola del routing della chat: almeno una fonte inclusa e Ready nello snapshot): il turno nasce Pending, Extended
+            // provvisorio con cap dal t0, senza misure né invii nel POST (T124). Il preflight tecnico lo classifica nel dispatcher prima del primo claim.
+            if (evaluation.Entries.Any(e => e.Included && e.Availability == SourceAvailability.Ready))
+            {
+                DocumentRootRegime.Pending(turn, now, (await documentPolicy.GetAsync(ct)).Snapshot.Limits);
+                SourceSnapshotStore.FreezeChat(turn);   // T128: le NUOVE richieste documentali congelano la v3 con alias; i turni storici restano v2
+            }
+        }
 
         // Lavoro durevole di estrazione delle evidenze (contracts/ai-workflow.md §10.1): nella stessa transazione, mai dipendente dal modello.
         var extraction = EvidenceLedgerStore.NewJob(projectId, conversation.Id, message.Id, message.Sequence, ExtractionJobReason.Initial, now,
@@ -236,7 +265,17 @@ public static class ConversationEndpoints
             join c in db.Conversations on t.ConversationId equals c.Id
             where t.Id == turnId && c.ProjectId == projectId
             select t).AsNoTracking().SingleOrDefaultAsync(ct);
-        return turn is null ? Results.NotFound() : Results.Ok(ToView(turn));
+        if (turn is null)
+        {
+            return Results.NotFound();
+        }
+
+        // Solo i root documentali (regime valorizzato) espongono «execution»: la vista del ramo 001 resta invariata.
+        var execution = turn.InitialRegime is null
+            ? null
+            : (await ExecutionTelemetry.ForRootAsync(db, projectId, ClassificationOwnerKind.ChatTurn, turn.Id, ct))?.Execution;
+        var changed = turn.SourceSnapshotId is { } snapshotId && (await new SourceSnapshotStore(db).ChangedAsync(projectId, [snapshotId], ct)).Contains(snapshotId);
+        return Results.Ok(ToView(turn) with { Execution = execution, HasSourceChanges = turn.SourceSnapshotId is null ? null : changed });
     }
 
     private static async Task<Guid?> LockConversation(AppDbContext db, Guid projectId, CancellationToken ct)
@@ -288,5 +327,6 @@ public static class ConversationEndpoints
         t.MaxAttempts,
         t.NextAttemptAt,
         t.ResultMessageId,
-        t.ErrorCode is null ? null : new TurnError(t.ErrorCode, t.ErrorMessage));
+        t.ErrorCode is null ? null : new TurnError(t.ErrorCode, t.ErrorMessage),
+        SourceSnapshotId: t.SourceSnapshotId);
 }

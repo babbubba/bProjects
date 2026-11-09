@@ -44,7 +44,47 @@
             <span class="badge text-bg-warning ai-badge">AI — non validata</span>
             <time class="text-secondary small">{{ formatTime(message.createdAt) }}</time>
           </header>
-          <p class="msg-text">{{ message.text }}</p>
+          <p class="msg-text">
+            @for (seg of segments(message); track $index) {
+              @if (seg.t === 'text') {
+                <ng-container>{{ seg.v }}</ng-container>
+              } @else {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary py-0 px-1 source-chip"
+                  data-testid="chat-source"
+                  [attr.aria-label]="'Apri la fonte ' + sourceLabel(message, seg.id)"
+                  (click)="openSource(message, seg.id)"
+                >
+                  {{ sourceLabel(message, seg.id) }}
+                </button>
+              }
+            }
+          </p>
+          @if (openedSource(); as opened) {
+            @if (opened.messageId === message.id) {
+              <section class="chat-source" data-testid="chat-source-open" aria-label="Fonte citata">
+                @if (opened.notice) {
+                  <p
+                    class="small text-secondary mb-1"
+                    role="status"
+                    data-testid="chat-source-notice"
+                  >
+                    {{ opened.notice }}
+                  </p>
+                } @else {
+                  <app-source-parts
+                    [projectId]="projectId()"
+                    [parts]="opened.parts"
+                    [expanded]="true"
+                  />
+                }
+                <button type="button" class="btn btn-sm btn-link p-0" (click)="closeSource()">
+                  Chiudi fonte
+                </button>
+              </section>
+            }
+          }
           <app-inference-metrics [metrics]="message.metrics" />
         </article>
       }

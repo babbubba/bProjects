@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { ContextUsageStore } from './context-usage.store';
 import { InferenceMetricsComponent } from './inference-metrics.component';
-import { ContextUsageKind } from './project-api.service';
+import { regimeReasonText } from './failure-text';
+import { ContextUsageKind, ExecutionView, InferencePhase } from './project-api.service';
 import { formatCount, formatPercent, formatToken, hasValue, sourceLabel } from './token-format';
 
 /** Soglie di occupazione del contesto: da qui in poi il pannello avvisa (non blocca nulla). */
@@ -21,6 +22,35 @@ const runtimeLabels = {
   offline: 'non raggiungibile',
   unverified: 'non verificato',
 };
+
+const regimeLabels = { Ordinary: 'Ordinario', Extended: 'Esteso' };
+
+const phaseLabels: Record<InferencePhase, string> = {
+  chat: 'Chat',
+  analysis: 'Analisi',
+  document: 'Documento',
+  compaction: 'Compattazione',
+  extraction: 'Estrazione dai documenti',
+};
+
+const phaseOrder: InferencePhase[] = ['chat', 'analysis', 'document', 'compaction', 'extraction'];
+
+/** Ricevuta tecnica: prefisso dell'hash per la lettura, hash completo nel title. */
+const shortHash = (hash: string | null) => (hash ? hash.slice(0, 12) : null);
+
+/** Unità realmente pianificate finora (il piano cresce solo con output intermedi effettivi); null resta indisponibile. */
+function unitsText(e: ExecutionView): string {
+  const done = e.completedUnits;
+  const planned = e.plannedUnits;
+  if (done === null && planned === null) return 'Unità: indisponibili';
+  if (planned === null) {
+    return `Unità: ${formatCount(done!)} completate (pianificazione non disponibile)`;
+  }
+  if (done === null) {
+    return `Unità: completate indisponibili su ${formatCount(planned)} pianificate finora`;
+  }
+  return `Unità: ${formatCount(done)} di ${formatCount(planned)} pianificate finora`;
+}
 
 interface Segment {
   id: 'prompt' | 'reserved' | 'margin' | 'remaining';
@@ -106,7 +136,49 @@ export class ContextUsagePanelComponent {
       at: timeFormat.format(new Date(last.at)),
       metrics: last.metrics,
       stale: last.staleReason === 'newer_messages',
+      execution: last.execution ?? null,
+      attempts: last.attempts ?? null,
+      modelFingerprint: last.modelFingerprint ?? null,
     };
+  });
+
+  /** Regime e ricevuta del root dell'ultima richiesta (002): solo ciò che il server ha misurato o deciso. */
+  protected readonly execution = computed(() => {
+    const e = this.summary()?.execution;
+    if (!e) return null;
+    const pending = e.classificationStatus === 'Pending';
+    const changed = !!e.initialRegime && !!e.regime && e.initialRegime !== e.regime;
+    return {
+      regime: e.regime ? regimeLabels[e.regime] : 'non assegnato',
+      provisional: pending,
+      reason: regimeReasonText(e.reason),
+      receipt: shortHash(e.classificationRecordHash),
+      receiptFull: e.classificationRecordHash,
+      change: changed
+        ? {
+            text: `Da ${regimeLabels[e.initialRegime!]} a ${regimeLabels[e.regime!]}`,
+            at: e.promotedAt ? timeFormat.format(new Date(e.promotedAt)) : null,
+            reason: regimeReasonText(e.promotionReason ?? e.reason),
+            receipt: shortHash(e.promotionReceiptHash),
+            receiptFull: e.promotionReceiptHash,
+          }
+        : null,
+      deadline: e.effectiveDeadlineAt ? timeFormat.format(new Date(e.effectiveDeadlineAt)) : null,
+      units: unitsText(e),
+      background: e.regime === 'Extended' && !pending,
+    };
+  });
+
+  /** Budget di input e output massimo configurati per ciascuna fase (limiti, non consumi). */
+  protected readonly phaseBudgets = computed(() => {
+    const phases = this.usage()?.limits.phases;
+    if (!phases) return [];
+    return phaseOrder.map((id) => ({
+      id,
+      label: phaseLabels[id],
+      input: formatCount(phases[id].inputBudgetTokens),
+      output: formatCount(phases[id].maxOutputTokens),
+    }));
   });
 
   /** Se non null, i valori mostrati sono le ultime metriche persistite e non lo stato corrente del server. */

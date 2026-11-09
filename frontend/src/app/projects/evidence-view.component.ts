@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
   DestroyRef,
+  ElementRef,
   InjectionToken,
   computed,
   effect,
@@ -12,6 +13,7 @@ import {
 } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
 import {
+  CoverageDocumentSummary,
   CoverageFinding,
   CoverageReportSummary,
   CoverageReportView,
@@ -19,8 +21,9 @@ import {
   EvidenceDetailView,
   EvidenceStatusView,
   EvidenceApiService,
-  EvidenceView,
+  EvidenceEnvelope,
   FindingCategory,
+  GapAssessmentView,
   MessageVersionsView,
   VersionDiffView,
 } from './evidence-api.service';
@@ -32,27 +35,77 @@ import {
   confidenceLabel,
   diffFieldLabel,
   diffStatusLabel,
+  evidenceRows,
   excerpt,
   highlightSegments,
+  isDocumentEvidence,
   isPromotionConflict,
   isUncertainOutcome,
   jobErrorText,
   kindLabel,
   kindLabels,
+  locatorText,
   plural,
   polarityLabel,
   polarityLabels,
   problemOf,
   qualifierLabel,
   relationLabel,
+  sourceGroups,
   sourceRoleLabel,
   stateBadge,
   structureFields,
 } from './evidence-format';
+import { DocumentPassageComponent } from './document-passage.component';
 import { ProjectApiService } from './project-api.service';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
 
 /** Intervallo (ms) di riconciliazione mentre ci sono lavori aperti; 0 disattiva il polling. */
+export type GapView =
+  | { available: false }
+  | {
+      available: true;
+      expected: number;
+      assessed: number;
+      answered: number;
+      open: number;
+      unassessed: number;
+      /** Contatori derivati dello stadio Gap (v6): null se il server non li ha prodotti (v5) o se incoerenti. */
+      derived: {
+        absenceProven: number;
+        absenceUnproven: number;
+        answeredWithOpenConflict: number;
+      } | null;
+      items: GapAssessmentView[];
+      aiRevisionChanged: boolean;
+    };
+
+const gapOutcomes = ['AnsweredInSnapshot', 'Open'];
+const gapReasons = ['Answered', 'NoAnswer', 'Partial', 'Ambiguous'];
+
+function validGapAssessment(g: GapAssessmentView): boolean {
+  return (
+    !!g &&
+    typeof g.gapEvidenceId === 'string' &&
+    gapOutcomes.includes(g.outcome) &&
+    gapReasons.includes(g.reason) &&
+    typeof g.rationale === 'string' &&
+    Array.isArray(g.supportingEvidenceIds) &&
+    g.supportingEvidenceIds.every((id) => typeof id === 'string') &&
+    // Campi derivati opzionali (stadio Gap v6): se presenti devono avere il tipo atteso, altrimenti la valutazione è «non disponibile».
+    (g.searchBasis === undefined || typeof g.searchBasis === 'string') &&
+    (g.retrievalComplete === undefined || typeof g.retrievalComplete === 'boolean') &&
+    (g.absenceProven === undefined || typeof g.absenceProven === 'boolean') &&
+    (g.answeredWithOpenConflict === undefined || typeof g.answeredWithOpenConflict === 'boolean')
+  );
+}
+
+function derivedCounters(s: CoverageDocumentSummary) {
+  const n = [s.absenceProvenGaps, s.absenceUnprovenGaps, s.answeredWithOpenConflictGaps];
+  if (!n.every((v) => Number.isInteger(v) && (v as number) >= 0)) return null;
+  return { absenceProven: n[0]!, absenceUnproven: n[1]!, answeredWithOpenConflict: n[2]! };
+}
+
 export const EVIDENCE_POLL_MS = new InjectionToken<number>('EVIDENCE_POLL_MS', {
   providedIn: 'root',
   factory: () => 2000,
@@ -66,8 +119,9 @@ interface Filters {
   kind: string;
   polarity: string;
   certainty: string;
+  originKind: string;
 }
-const noFilters: Filters = { messageId: '', kind: '', polarity: '', certainty: '' };
+const noFilters: Filters = { messageId: '', kind: '', polarity: '', certainty: '', originKind: '' };
 
 /**
  * Vista leggera del registro delle evidenze: stato reale delle estrazioni, evidenze correnti con il testo originale
@@ -76,6 +130,7 @@ const noFilters: Filters = { messageId: '', kind: '', polarity: '', certainty: '
  */
 @Component({
   selector: 'app-evidence-view',
+  imports: [DocumentPassageComponent],
   templateUrl: './evidence-view.component.html',
   styleUrl: './evidence-view.component.scss',
 })
@@ -85,6 +140,7 @@ export class EvidenceViewComponent {
   private readonly events = inject(ProjectEventsService);
   private readonly auth = inject(AuthService);
   private readonly pollMs = inject(EVIDENCE_POLL_MS);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly projectId = input.required<string>();
   /** Analisi e revisione correnti (null = nessuna analisi: la copertura non è disponibile). */
@@ -104,6 +160,17 @@ export class EvidenceViewComponent {
   protected readonly categoryHint = categoryHint;
   protected readonly confidenceLabel = confidenceLabel;
   protected readonly structureFields = structureFields;
+  protected readonly locatorText = locatorText;
+  protected readonly isDocument = isDocumentEvidence;
+
+  protected kindRationale(e: EvidenceDetailView['evidence']): string | null {
+    return isDocumentEvidence(e) ? e.content.kindRationale : e.kindRationale;
+  }
+
+  /** « (messaggio #N)» solo per relazioni con evidenze di messaggio: per i documenti il numero non esiste. */
+  protected relationSequence(r: EvidenceDetailView['relations'][number]): string {
+    return 'otherMessageSequence' in r ? ` (messaggio #${r.otherMessageSequence})` : '';
+  }
   protected readonly plural = plural;
   protected readonly kindOptions = Object.entries(kindLabels);
   protected readonly polarityOptions = Object.entries(polarityLabels);
@@ -150,7 +217,9 @@ export class EvidenceViewComponent {
 
   // Evidenze correnti.
   protected readonly filters = signal<Filters>(noFilters);
-  protected readonly items = signal<EvidenceView[]>([]);
+  protected readonly items = signal<EvidenceEnvelope[]>([]);
+  /** Righe di lista (messaggi e documenti) e numero di elementi di versione ignota, non mostrati ma dichiarati. */
+  protected readonly list = computed(() => evidenceRows(this.items()));
   protected readonly itemsLoading = signal(false);
   protected readonly itemsError = signal('');
   protected readonly selectedId = signal<string | null>(null);
@@ -164,18 +233,27 @@ export class EvidenceViewComponent {
   /** Testi originali del dettaglio, con i passi citati evidenziati (segmenti, mai HTML). */
   protected readonly detailMessages = computed(() => {
     const d = this.detail();
-    if (!d) return [];
-    return d.messages.map((m) => ({
+    if (!d || isDocumentEvidence(d.evidence)) return [];
+    const sources = d.evidence.sources;
+    return d.sourceMessages.map((m) => ({
       id: m.id,
       sequence: m.sequence,
       assistant: m.role === 'assistant',
       segments: highlightSegments(
         m.text,
-        d.evidence.sources.filter((s) => s.messageId === m.id),
+        sources.filter((s) => s.messageId === m.id),
       ),
     }));
   });
-
+  /** Evidenza documentale aperta: parti citate raggruppate per citazione, con il locator risolto dal server. */
+  protected readonly detailGroups = computed(() => {
+    const d = this.detail();
+    return d && isDocumentEvidence(d.evidence)
+      ? sourceGroups(d.evidence.content.sources, d.sourceDocuments)
+      : [];
+  });
+  /** Parti (sourceId) di cui è aperto il passaggio: una per volta oppure tutte le parti di un gruppo. */
+  protected readonly openParts = signal<ReadonlySet<string>>(new Set());
   // Versioni di un messaggio.
   protected readonly versionsFor = signal<string | null>(null);
   protected readonly versions = signal<MessageVersionsView | null>(null);
@@ -199,6 +277,43 @@ export class EvidenceViewComponent {
   protected readonly coverageBusy = signal(false);
   protected readonly coverageError = signal('');
   protected readonly selectionInfo = signal('');
+  protected readonly reconciliation = computed(() => this.report()?.reconciliation ?? null);
+  protected readonly nonTerminal = computed(() =>
+    (this.reconciliation()?.candidates ?? []).filter((c) => !c.terminal),
+  );
+  protected readonly openCandidates = computed(() =>
+    (this.reconciliation()?.candidates ?? []).filter((c) => c.terminal && c.state === 'Open'),
+  );
+  /**
+   * Valutazioni dei Gap: lette SOLO se il report è «coverage-3» (versione, mai presenza di campi). Per ogni altra versione, o se i campi di un
+   * coverage-3 mancano o sono incoerenti, la valutazione è «non disponibile»: non è mai «zero Gap».
+   */
+  protected readonly gapView = computed<GapView>(() => {
+    const r = this.report();
+    if (!r || r.checkerVersion !== 'coverage-3') return { available: false };
+    const s = r.summary;
+    const list = r.gapAssessments;
+    if (!s || !Array.isArray(list)) return { available: false };
+    const counters = [s.expectedGaps, s.assessedGaps, s.answeredGaps, s.openGaps, s.unassessedGaps];
+    if (!counters.every((n) => Number.isInteger(n) && (n as number) >= 0)) {
+      return { available: false };
+    }
+    if (!list.every(validGapAssessment) || s.assessedGaps !== list.length) {
+      return { available: false };
+    }
+    return {
+      available: true,
+      expected: s.expectedGaps!,
+      assessed: s.assessedGaps!,
+      answered: s.answeredGaps!,
+      open: s.openGaps!,
+      unassessed: s.unassessedGaps!,
+      derived: derivedCounters(s),
+      items: list,
+      aiRevisionChanged: !!r.aiRevisionId && !!r.revisionId && r.aiRevisionId !== r.revisionId,
+    };
+  });
+  private readonly listedIds = computed(() => new Set(this.list().rows.map((row) => row.id)));
   protected readonly groups = computed(() => {
     const findings = this.report()?.findings ?? [];
     return categories.map((category) => ({
@@ -545,7 +660,7 @@ export class EvidenceViewComponent {
       this.items.set(items);
       this.itemsError.set('');
       const selected = this.selectedId();
-      if (selected && !items.some((i) => i.id === selected)) {
+      if (selected && !items.some((i) => i.evidence.id === selected)) {
         this.selectedId.set(null);
         this.detail.set(null);
       }
@@ -562,7 +677,79 @@ export class EvidenceViewComponent {
     }
   }
 
+  protected togglePart(sourceId: string): void {
+    this.openParts.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(sourceId)) next.add(sourceId);
+      return next;
+    });
+  }
+
+  /** «Apri tutte le parti»: ogni parte di una citazione multi-blocco apre il proprio blocco, nessuna fusa con un'altra. */
+  protected openGroup(group: ReturnType<typeof sourceGroups>[number]): void {
+    this.openParts.update((set) => {
+      const next = new Set(set);
+      for (const p of group.parts) if (p.resolved) next.add(p.source.sourceId);
+      return next;
+    });
+  }
+
+  protected isListed(evidenceId: string): boolean {
+    return this.listedIds().has(evidenceId);
+  }
+
+  /** Apre il dettaglio dell'evidenza nell'elenco esistente (nessun nuovo comando) e porta il focus sulla sua riga. */
+  protected async openEvidenceRef(evidenceId: string): Promise<void> {
+    if (this.selectedId() !== evidenceId) await this.toggleDetail(evidenceId);
+    const row = this.host.nativeElement.querySelector<HTMLElement>(
+      `[data-testid="evidence-${CSS.escape(evidenceId)}"]`,
+    );
+    if (!row) return;
+    row.setAttribute('tabindex', '-1');
+    row.scrollIntoView?.({ block: 'nearest' });
+    row.focus();
+  }
+
+  protected gapOutcomeLabel(g: GapAssessmentView): string {
+    return g.outcome === 'AnsweredInSnapshot' ? 'Risolto nello snapshot' : 'Ancora aperto';
+  }
+
+  /** Solo per gli esiti NoAnswer con il campo derivato presente (stadio Gap v6): nei report v5 il campo manca e non si afferma nulla. */
+  protected absenceLabel(g: GapAssessmentView): string | null {
+    if (g.reason !== 'NoAnswer' || typeof g.absenceProven !== 'boolean') return null;
+    return g.absenceProven ? 'Assenza provata' : 'Assenza non provata';
+  }
+
+  protected searchBasisLabel(g: GapAssessmentView): string | null {
+    if (typeof g.searchBasis !== 'string' || !g.searchBasis) return null;
+    const basis =
+      g.searchBasis === 'ledger_exhaustive'
+        ? 'intero ledger delle evidenze'
+        : `base «${g.searchBasis}»`;
+    const retrieval =
+      g.retrievalComplete === true
+        ? 'recupero completo'
+        : g.retrievalComplete === false
+          ? 'recupero non completo'
+          : null;
+    return `Ricerca su ${basis}${retrieval ? ` · ${retrieval}` : ''}`;
+  }
+
+  protected gapReasonLabel(reason: GapAssessmentView['reason']): string {
+    switch (reason) {
+      case 'Answered':
+        return 'Risposta presente';
+      case 'NoAnswer':
+        return 'Nessuna risposta';
+      case 'Partial':
+        return 'Risposta parziale';
+      default:
+        return 'Risposta ambigua';
+    }
+  }
+
   protected async toggleDetail(evidenceId: string): Promise<void> {
+    this.openParts.set(new Set());
     if (this.selectedId() === evidenceId) {
       this.selectedId.set(null);
       this.detail.set(null);

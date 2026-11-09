@@ -1,0 +1,6 @@
+# Dipendenze dirette del parser (document-parse-1). Il lock con hash e' requirements.lock.
+--extra-index-url https://download.pytorch.org/whl/cpu
+docling==2.129.0
+fastapi==0.136.1
+uvicorn==0.46.0
+python-multipart==0.0.28

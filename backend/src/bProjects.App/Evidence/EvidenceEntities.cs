@@ -88,6 +88,16 @@ public enum EvidenceSourceRole
     Referent,
 }
 
+/// <summary>Discriminante del ledger (data-model.md §Estensione del ledger): le righe storiche sono tutte Message.</summary>
+public enum EvidenceOriginKind
+{
+    /// <summary>Messaggio PM di una conversazione (ramo 001, evidence-1.0.0).</summary>
+    Message,
+
+    /// <summary>Preparazione di una versione file documentale (ramo 002, evidence-1.1.0). Nessun messaggio fittizio.</summary>
+    Document,
+}
+
 public enum EvidenceBatchKind
 {
     Reanalysis,
@@ -99,9 +109,15 @@ public sealed class EvidenceExtractionJob
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
-    public Guid ConversationId { get; set; }
-    public Guid MessageId { get; set; }
-    public long MessageSequence { get; set; }
+
+    /// <summary>XOR: Message → ConversationId/MessageId/MessageSequence valorizzati e PreparationId null; Document → il contrario.</summary>
+    public EvidenceOriginKind OriginKind { get; set; }
+    public Guid? ConversationId { get; set; }
+    public Guid? MessageId { get; set; }
+    public long? MessageSequence { get; set; }
+
+    /// <summary>Preparazione documentale di cui questo lavoro (unico aggregatore) pubblica la versione Evidence.</summary>
+    public Guid? PreparationId { get; set; }
     public ExtractionJobReason Reason { get; set; }
     public Guid? BatchId { get; set; }
     public Guid? RetryOfJobId { get; set; }
@@ -135,11 +151,20 @@ public sealed class EvidenceExtractionVersion
 {
     public const string CurrentSchemaVersion = "evidence-1.0.0";
 
+    public const string DocumentSchemaVersion = "evidence-1.1.0";
+
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
-    public Guid ConversationId { get; set; }
-    public Guid MessageId { get; set; }
-    public long MessageSequence { get; set; }
+
+    /// <summary>XOR come <see cref="EvidenceExtractionJob"/>: la numerazione <see cref="Version"/> è per messaggio oppure per preparazione.</summary>
+    public EvidenceOriginKind OriginKind { get; set; }
+    public Guid? ConversationId { get; set; }
+    public Guid? MessageId { get; set; }
+    public long? MessageSequence { get; set; }
+    public Guid? PreparationId { get; set; }
+
+    /// <summary>Hash del manifest delle fonti dell'estrazione documentale (obbligatorio solo per Document).</summary>
+    public string? ManifestHash { get; set; }
     public int Version { get; set; }
     public Guid JobId { get; set; }
     public required string SchemaVersion { get; set; }
@@ -160,7 +185,9 @@ public sealed class EvidenceItem
     public Guid Id { get; set; }
     public Guid VersionId { get; set; }
     public Guid ProjectId { get; set; }
-    public Guid MessageId { get; set; }
+    public EvidenceOriginKind OriginKind { get; set; }
+    public Guid? MessageId { get; set; }
+    public Guid? PreparationId { get; set; }
     public int Ordinal { get; set; }
     public required string Key { get; set; }
     public EvidenceKind Kind { get; set; }
@@ -191,6 +218,35 @@ public sealed class EvidenceMessageState
     public Guid CurrentVersionId { get; set; }
     public int Revision { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Versione Evidence corrente di una versione file documentale (stessa semantica di <see cref="EvidenceMessageState"/>, altro discriminante).
+/// Revision parte da 0; entrambi i puntatori null oppure entrambi valorizzati, sulla stessa versione file e sullo stesso progetto.
+/// </summary>
+public sealed class EvidenceDocumentState
+{
+    public Guid DocumentVersionId { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid? CurrentPreparationId { get; set; }
+    public Guid? CurrentEvidenceVersionId { get; set; }
+    public int Revision { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Traccia append-only di un cambio di bundle corrente di una versione file; PromotedBy null = prima estrazione valida.</summary>
+public sealed class DocumentPromotion
+{
+    public Guid Id { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid DocumentVersionId { get; set; }
+    public Guid? FromPreparationId { get; set; }
+    public Guid? FromEvidenceVersionId { get; set; }
+    public Guid ToPreparationId { get; set; }
+    public Guid ToEvidenceVersionId { get; set; }
+    public Guid? PromotedBy { get; set; }
+    public DateTimeOffset PromotedAt { get; set; }
+    public string? Reason { get; set; }
 }
 
 /// <summary>Traccia append-only di un cambio di versione corrente; PromotedBy null = regola automatica della prima versione valida.</summary>
@@ -237,11 +293,14 @@ public sealed class AnalysisEvidenceSelection
     public required string View { get; set; }
 }
 
+/// <summary>Una versione Evidence selezionata dal run (chiave: RunId+VersionId). Message → MessageId/MessageSequence; Document → PreparationId.</summary>
 public sealed class AnalysisEvidenceSelectionItem
 {
     public Guid RunId { get; set; }
-    public Guid MessageId { get; set; }
-    public long MessageSequence { get; set; }
+    public EvidenceOriginKind OriginKind { get; set; }
+    public Guid? MessageId { get; set; }
+    public long? MessageSequence { get; set; }
+    public Guid? PreparationId { get; set; }
     public Guid VersionId { get; set; }
 }
 
@@ -251,6 +310,21 @@ public sealed class AnalysisEvidenceLink
     public Guid RunId { get; set; }
     public Guid ItemId { get; set; }
     public Guid EvidenceId { get; set; }
+    public Guid ProjectId { get; set; }
+}
+
+/// <summary>
+/// Relazione interpretativa nata durante Analizza documentale (data-model: AnalysisEvidenceRelations): append-only, per run; non modifica le
+/// estrazioni pregresse. Scritta nella stessa transazione della revisione AI, dalle sole patch AddRelation non invalide (Applied o preservate in un conflitto).
+/// </summary>
+public sealed class AnalysisEvidenceRelation
+{
+    public Guid RunId { get; set; }
+    public Guid FromEvidenceId { get; set; }
+    public Guid ToEvidenceId { get; set; }
+    public EvidenceRelationType Type { get; set; }
+    public EvidenceRelationBasis Basis { get; set; }
+    public string? Rationale { get; set; }
     public Guid ProjectId { get; set; }
 }
 

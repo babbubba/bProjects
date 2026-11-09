@@ -26,11 +26,41 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
     : IEvidenceExtractionExecutor
 {
     public const string AgentName = "EvidenceExtractor";
-    public const string PromptVersion = "extraction-v2";
+    /// <summary>Versione corrente per le nuove richieste: v3 riconosce come Gap le domande esplicite del PM (prompt extraction-v3.md).</summary>
+    public const string PromptVersion = "extraction-v3";
 
-    private static readonly Lazy<string> Prompt = new(() => LoadPrompt("extraction.md"));
+    /// <summary>Versione storica, invariata (extraction.md): i lavori già congelati con questa versione la usano ancora.</summary>
+    public const string PromptVersionV2 = "extraction-v2";
+
+    private static readonly Lazy<string> Prompt = new(() => LoadPrompt("extraction-v3.md"));
+    private static readonly Lazy<string> PromptV2 = new(() => LoadPrompt("extraction.md"));
 
     public static string Instructions => Prompt.Value;
+
+    /// <summary>Istruzioni della versione congelata nel lavoro; una versione assente o sconosciuta usa la corrente.</summary>
+    public static string InstructionsFor(string? promptVersion) => promptVersion == PromptVersionV2 ? PromptV2.Value : Prompt.Value;
+
+    /// <summary>Versione effettiva di un lavoro dalla sua configurazione congelata (<c>promptVersion</c>); assente o sconosciuta → corrente.</summary>
+    public static string EffectivePromptVersion(string? frozenConfig)
+    {
+        if (string.IsNullOrWhiteSpace(frozenConfig))
+        {
+            return PromptVersion;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(frozenConfig);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("promptVersion", out var v) && v.ValueKind == JsonValueKind.String && v.GetString() == PromptVersionV2
+                ? PromptVersionV2
+                : PromptVersion;
+        }
+        catch (JsonException)
+        {
+            return PromptVersion;
+        }
+    }
 
     public async Task ExecuteAsync(ExtractionJobClaim claim, CancellationToken ct)
     {
@@ -38,6 +68,9 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var store = new EvidenceLedgerStore(db);
         var context = await store.LoadContextAsync(claim.JobId, ct);
+        var frozenConfig = await db.EvidenceExtractionJobs.AsNoTracking().Where(j => j.Id == claim.JobId).Select(j => j.ExtractorConfig).SingleAsync(ct);
+        var promptVersion = EffectivePromptVersion(frozenConfig);
+        var instructions = InstructionsFor(promptVersion);
 
         // Contesto mirato entro il budget della fase: si tolgono prima gli originali PM precedenti più vecchi (già estratti, le loro
         // evidenze restano nel contesto), poi le evidenze precedenti più vecchie, infine il referente. Il messaggio da estrarre non si
@@ -45,7 +78,7 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
         var omittedMessages = new List<long>();
         var omittedEvidence = 0;
         var messages = BuildMessages(context);
-        while (!await factory.FitsExtractionBudgetAsync(messages, Instructions, ct))
+        while (!await factory.FitsExtractionBudgetAsync(messages, instructions, ct))
         {
             if (context.PriorUserMessages.Count > 0)
             {
@@ -63,7 +96,7 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
             }
             else
             {
-                await factory.EnsureExtractionWithinBudgetAsync(messages, Instructions, ct); // lancia ContextOverflowException con i token reali
+                await factory.EnsureExtractionWithinBudgetAsync(messages, instructions, ct); // lancia ContextOverflowException con i token reali
             }
 
             messages = BuildMessages(context);
@@ -80,7 +113,7 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
                 Temperature = options.Temperature,
                 RawRepresentationFactory = options.RawRepresentationFactory,
                 ResponseFormat = options.ResponseFormat,
-                Instructions = Instructions,
+                Instructions = instructions,
             },
         });
         var response = await agent.RunAsync(messages, cancellationToken: ct);
@@ -100,8 +133,7 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
             return;
         }
 
-        var config = await db.EvidenceExtractionJobs.AsNoTracking().Where(j => j.Id == claim.JobId).Select(j => j.ExtractorConfig).SingleAsync(ct);
-        using var configDocument = JsonDocument.Parse(config);
+        using var configDocument = JsonDocument.Parse(frozenConfig);
         var parameters = JsonSerializer.Serialize(new
         {
             config = configDocument.RootElement,
@@ -115,7 +147,7 @@ public sealed class EvidenceExtractor(IServiceScopeFactory scopes, AgentFactory 
                 omittedPriorEvidence = omittedEvidence,
             },
         });
-        var commit = await store.CommitAsync(claim, context, validation, options.ModelId ?? "", parameters, ct);
+        var commit = await store.CommitAsync(claim, context, validation, options.ModelId ?? "", parameters, ct, promptVersion);
         if (commit.Outcome == ExtractionCommitOutcome.Rejected)
         {
             throw new LeaseLostException($"Commit dell'estrazione rifiutato ({commit.Reason}): il lease non è più valido.");

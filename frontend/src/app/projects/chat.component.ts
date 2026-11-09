@@ -3,6 +3,7 @@ import {
   Component,
   DestroyRef,
   InjectionToken,
+  Injector,
   computed,
   effect,
   inject,
@@ -13,6 +14,8 @@ import {
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../auth/auth.service';
 import { ContextUsageStore } from './context-usage.store';
+import { SourcePart, SourcePartsComponent } from './source-parts.component';
+import { TextSegment, splitSourceMarkers } from './markdown';
 import { InferenceMetricsComponent } from './inference-metrics.component';
 import { ChatTurnView, MessageView, ProjectApiService } from './project-api.service';
 import { describeFailure } from './failure-text';
@@ -51,13 +54,15 @@ const errorLabels: Record<string, string> = {
   deadline_exceeded: 'Il tempo massimo per la risposta è scaduto.',
   attempts_exhausted: 'I tentativi disponibili per rispondere sono esauriti.',
   checkpoint_incompatible: 'Lo stato della conversazione non è compatibile.',
+  document_limit_exceeded:
+    'I documenti selezionati superano la capacità gestibile dal modello in questa risposta: escludine alcuni dalle fonti e riprova.',
   processing_failed: 'Elaborazione non riuscita.',
 };
 
 /** Chat centrale del progetto: la conferma di salvataggio PM è distinta dallo stato del turno AI. */
 @Component({
   selector: 'app-chat',
-  imports: [FormsModule, InferenceMetricsComponent],
+  imports: [FormsModule, InferenceMetricsComponent, SourcePartsComponent],
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss',
 })
@@ -67,6 +72,7 @@ export class ChatComponent {
   private readonly events = inject(ProjectEventsService);
   private readonly auth = inject(AuthService);
   private readonly usage = inject(ContextUsageStore);
+  private readonly injector = inject(Injector);
 
   readonly projectId = input.required<string>();
 
@@ -126,6 +132,82 @@ export class ChatComponent {
         });
       });
     });
+  }
+
+  /** Fonte documentale aperta da una citazione di una risposta: parti del gruppo o avviso se non consultabile. */
+  protected readonly openedSource = signal<{
+    messageId: string;
+    parts: SourcePart[];
+    notice: string;
+  } | null>(null);
+
+  /** Testo della risposta diviso in testo e marcatori `[fonte:id]`; mai HTML. */
+  protected segments(message: MessageView): TextSegment[] {
+    return splitSourceMarkers(message.text);
+  }
+
+  /** F1, F2… per le fonti distinte del messaggio, nell'ordine della prima citazione. */
+  protected sourceLabel(message: MessageView, id: string): string {
+    const ids = [
+      ...new Set(splitSourceMarkers(message.text).flatMap((s) => (s.t === 'source' ? [s.id] : []))),
+    ];
+    return `F${ids.indexOf(id) + 1}`;
+  }
+
+  /**
+   * Apre il passaggio di una citazione: risolve il sourceId nelle evidenze documentali del progetto (nessun URL del modello) e
+   * apre tutte le parti dello stesso gruppo di citazione, distinte. Una fonte non risolvibile è dichiarata, mai inventata.
+   */
+  protected async openSource(message: MessageView, id: string): Promise<void> {
+    const gen = this.generation;
+    const projectId = this.projectId();
+    const label = this.sourceLabel(message, id);
+    try {
+      // Caricato solo al primo clic su una citazione: il registro evidenze non pesa sul bundle iniziale.
+      const { EvidenceApiService } = await import('./evidence-api.service');
+      const items = await this.injector
+        .get(EvidenceApiService)
+        .listEvidence(projectId, { originKind: 'Document' });
+      if (gen !== this.generation) return;
+      for (const env of items) {
+        if (env.evidenceViewVersion !== '1.1.0' || !('origin' in env.evidence)) continue;
+        const sources = env.evidence.content.sources;
+        const hit = sources.find((s) => s.sourceId === id);
+        if (!hit) continue;
+        const parts = sources
+          .filter((s) => s.citationGroupId === hit.citationGroupId)
+          .sort((a, b) => a.part - b.part)
+          .map<SourcePart>((s) => ({
+            sourceId: s.sourceId,
+            label: s.sourceId === id ? label : `${label} · parte ${s.part + 1}`,
+            documentId: s.documentId,
+            documentVersionId: s.documentVersionId,
+            preparationId: s.preparationId,
+            blockId: s.blockId,
+            start: s.start,
+            end: s.end,
+            quote: s.quote,
+          }));
+        this.openedSource.set({ messageId: message.id, parts, notice: '' });
+        return;
+      }
+      this.openedSource.set({
+        messageId: message.id,
+        parts: [],
+        notice: `La fonte ${label} non è più consultabile: il documento o l'evidenza citata non è disponibile.`,
+      });
+    } catch {
+      if (gen !== this.generation) return;
+      this.openedSource.set({
+        messageId: message.id,
+        parts: [],
+        notice: `Impossibile leggere la fonte ${label}. Riprova più tardi.`,
+      });
+    }
+  }
+
+  protected closeSource(): void {
+    this.openedSource.set(null);
   }
 
   protected formatTime(iso: string): string {
@@ -243,6 +325,7 @@ export class ChatComponent {
     this.stopPolling();
     this.messages.set([]);
     this.turns.set({});
+    this.openedSource.set(null);
     this.draft.set('');
     this.pending = null;
     this.sendState.set('idle');

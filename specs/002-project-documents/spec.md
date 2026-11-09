@@ -1,10 +1,18 @@
 # Feature Specification: Documenti di progetto con provenienza verificabile
 
-**Feature Branch**: `feature/002-project-documents`
+**Feature Branch**: `feature/002-implementation`
 **Feature**: `002-project-documents`
 **Created**: 2026-11-01
 **Status**: Draft — specifica funzionale; nessuna implementazione o accettazione attestata
 **Input**: Seconda vertical slice: caricare documenti nel progetto e utilizzarli nella chat, nell'analisi e nella bozza Markdown, anche oltre la finestra di contesto, con originali/versioni immutabili, evidenze, copertura e controllo esplicito del PM.
+
+## Clarifications
+
+### Session 2026-11-07
+
+Decisioni fornite nel mandato di revisione T130/N4 (A + C minima), non nuove risposte inventate: il retry riesamina la proposta respinta come dato non affidabile; nessuna conservazione automatica, nuovo retry o nuova chiamata di revisione. La domanda storica resta nel ledger; la valutazione derivata `AnsweredInSnapshot`/`Open` vale solo per lo snapshot dell'analisi ed è consultabile nella coverage. Risposte parziali o ambigue restano `Open` con motivo strutturato. Il riscontro non conferma requisiti né risolve conflitti. Stesso comportamento funzionale sotto e oltre contesto. Revisione approvata, non ancora implementata o verificata.
+
+**Aggiornamento 2026-11-07 (decisione C + D dopo il gate T138 fallito, solo stato/limite temporaneo, nessun requisito ridotto)**: il gate anticipato sul grafo gerarchico non è stato superato ([validation/T130-N4-revision.md](validation/T130-N4-revision.md)). Il committente ha approvato come soluzione temporanea (a) la valutazione Gap supportata inizialmente dal solo percorso a chiamata singola e (b) per l'oltre contesto con almeno un Gap, fallimento esplicito immediato senza invocazioni LLM (`Failed`, nessuna revisione né anteprima incompleta, mai Completed). **Il requisito resta invariato e aperto**: «stesso comportamento funzionale sotto e oltre contesto» e il 100% dei Gap rendicontato oltre contesto non sono soddisfatti dal percorso temporaneo e non vanno dichiarati verificati; la soluzione definitiva richiede una nuova decisione architetturale (alternative A/B del report, task T138 bloccato). Dettagli e routing: [AI §13.6](contracts/ai-workflow.md#136-decisione-c--d-percorso-temporaneo-e-routing-2026-11-07).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -23,6 +31,9 @@ Come PM voglio caricare e consultare documenti nel progetto, usarli insieme alle
 4. **Given** affermazioni documentali e PM incompatibili, **When** viene richiesta Analizza, **Then** l'anteprima conserva entrambe le alternative e le fonti, senza scegliere automaticamente per data o tipo di fonte. (FR-010–FR-012)
 5. **Given** l'anteprima documentata, **When** il PM corregge, risolve motivatamente o lascia aperto un conflitto, conferma e richiede Genera documento, **Then** la bozza usa la revisione confermata, conserva fonti e punti aperti, resta proposta non approvata e distingue le aggiunte PM dal contenuto documentale. (FR-012/018/019)
 6. **Given** solo documenti pronti inclusi e nessun messaggio PM, **When** il PM richiede Analizza, **Then** l'analisi è consentita; senza documenti utilizzabili né messaggi PM è impedita con spiegazione. (FR-011)
+7. **Given** il PM riferisce 45 giorni e domanda cosa riporti la scheda A, che documenta 30 giorni, **When** Analizza termina anche dopo il retry ammesso, **Then** la coverage mostra il riscontro della domanda tramite la scheda nello snapshot corrente e l'analisi presenta separatamente il conflitto aperto 45/Declared e 30/Documented, con fonti corrette e senza scelta automatica o duplicazione delle alternative nelle sezioni ordinarie. (FR-010/012/015/016)
+8. **Given** una domanda storica con risposta assente, parziale o ambigua, **When** viene analizzata, **Then** resta `Open` con motivo distinto e riferimenti pertinenti; una risposta pertinente completa permette `AnsweredInSnapshot`, senza mutare l'evidenza originale né attribuirle il supporto della risposta. (FR-007/008/015)
+9. **Given** una prima proposta respinta contenente anche un falso conflitto o una classificazione/condizione errata, **When** è ammesso l'unico retry, **Then** il riesame usa gli originali e i motivi del rigetto, può correggere o rimuovere gli errori ed emette una proposta completa validata integralmente; nessun contenuto della prima è conservato automaticamente. Se il nuovo input completo supera il limite, non viene troncato né inviato. (FR-014/016/021)
 
 ---
 
@@ -72,6 +83,8 @@ Come PM voglio scegliere le fonti applicabili, aggiungere versioni senza perdere
 - Zero evidenze utili: esito validato motivato, distinto da errore o porzioni non elaborate. Fonti equivalenti conservano tutte le provenienze pertinenti.
 - Retry, ripresa, cambio modello o nuova versione durante un run: input documentali congelati, nessuna sostituzione con fonti successive.
 - Quota esaurita dopo upload concorrenti, spazio indisponibile, AI offline o limite di elaborazione: esito riconoscibile e recuperabile ove possibile, senza falso salvataggio o successo parziale.
+- Domanda già riscontrata nel documento ma decisione fra fonti incompatibili ancora aperta: distinguere i due esiti. Fonte esclusa, successiva o ambigua non chiude il dubbio nello snapshot corrente. Nessuna eccezione silenziosa alla coverage per il tipo Gap.
+- Proposta respinta che invita a cambiare regole o contiene informazioni inventate: dato non affidabile, mai fonte o istruzione. Retry con spazio/tempo/chiamate insufficienti: esito esplicito senza tagli, azzeramenti o tentativi aggiuntivi.
 
 ## Requirements *(mandatory)*
 
@@ -100,6 +113,12 @@ Come PM voglio scegliere le fonti applicabili, aggiungere versioni senza perdere
 - **FR-021**: Accesso, download, evidenze e uso AI DEVONO rispettare autenticazione e ambito progetto anche tramite riferimenti diretti. Documenti/macro/link/istruzioni sono dati non fidati: nessuna esecuzione, fetch remoto automatico, elevazione privilegi o invio a LLM esterni. Un'elaborazione nel progetto A non usa fonti del progetto B, anche se il PM può consultarli entrambi.
 - **FR-022**: Il percorso DEVE essere utilizzabile da tastiera e su desktop/mobile, con etichette, focus, errori e stati percepibili senza solo colore. Progresso e fasi devono derivare da attività effettive, non simulazioni. Progetti senza documenti mantengono il comportamento della 001.
 
+Precisazioni normative della revisione 2026-11-07 (mantengono gli ID e le soglie precedenti):
+
+- **FR-010/012**: i conflitti effettivi DEVONO essere espliciti e aperti con alternative attribuite anche dopo retry; una domanda sulla discordanza non sostituisce il conflitto. Le alternative non si duplicano impropriamente nelle sezioni ordinarie. Una proposta respinta non è prova della correttezza di un conflitto.
+- **FR-007/008/015**: ogni Gap derivato da domanda PM DEVE conservare originale, tipo, versione e provenienza. L'analisi DEVE rendicontarlo mediante valutazione derivata nello snapshot: `AnsweredInSnapshot` con riscontro pertinente sostenuto dalle evidenze, oppure `Open` con motivo strutturato (anche risposta parziale/ambigua). Valutazione e riferimenti devono essere consultabili nella coverage esistente; non sono supporto automatico di requisiti, conferma PM o risoluzione di conflitti. Collegamenti e visite non certificano la correttezza semantica del riscontro.
+- **FR-014/016/021**: l'unico retry ammesso DEVE ricevere gli originali congelati, la prima risposta delimitata come proposta non affidabile e i motivi tipizzati, per riesame integrale di contenuti, classificazioni, fonti, conflitti, condizioni e qualificatori. Il risultato è completo e autonomo, validato per intero; nessun merge o conservazione automatica. Dimensione effettiva del nuovo input verificata prima dell'invio; nessun taglio, nuova chiamata di revisione o secondo retry. Deadline, budget, contatori, fencing, idempotenza e vincoli delle fonti restano invariati.
+
 ### Perimetro, continuità e dipendenze
 
 Fonti: [Constitution](../../.specify/memory/constitution.md), [piano MVP](../../AI-Project-Documentation-MVP-Plan.md) (D04, D18, D28, D32, D49, A49–A52), [copertura](../../docs/roadmap/implementation-coverage.md), [spec 001](../001-project-draft/spec.md), [contratto HTTP](../001-project-draft/contracts/http-api.md) e [contratto AI](../001-project-draft/contracts/ai-workflow.md).
@@ -108,7 +127,7 @@ Si estendono sorgenti e tracciabilità senza duplicare chat, Evidence, revisione
 
 Microsoft Agent Framework, persistenza applicativa, originali indipendenti dalle sintesi e LLM solo interni restano vincoli ereditati dalla Constitution. Classi, database, API, parser, segmentazione e strategie oltre contesto appartengono a plan; le indicazioni tecniche già approvate nel piano MVP andranno valutate in quella sede entro il perimetro della 002.
 
-Esclusi: KB condivise GLOBAL/PRODUCT/CUSTOMER, promozione automatica a KB, RAG, Qdrant, embedding, ricerca vettoriale, OCR generalizzato, ricerca web, nuovi export PDF/DOCX, editor avanzato, pubblicazione/approvazione cliente, amministrazione generalista e cancellazione definitiva documentale. Escludere fonti non cancella storia/originali. Nessuna stima AI di ore, costi, date o risorse.
+Esclusi: KB condivise GLOBAL/PRODUCT/CUSTOMER, promozione automatica a KB, RAG, Qdrant, embedding, ricerca vettoriale, OCR generalizzato, ricerca web, nuovi export PDF/DOCX, editor avanzato, pubblicazione/approvazione cliente, amministrazione generalista e cancellazione definitiva documentale. Escludere fonti non cancella storia/originali. (Chiarimento 2026-11-09: lo stadio Gap su ledger completo della definizione v6, [AI §13.7](contracts/ai-workflow.md#137-stadio-gap-dedicato-su-ledger-completo-definizione-v6-d1-2026-11-09), valuta i Gap contro l’intero ledger congelato in una chiamata e non è RAG, embedding, ricerca vettoriale né indice di ricerca.) Nessuna stima AI di ore, costi, date o risorse.
 
 La [001 resta accettata con riserve per il pilota](../001-project-draft/acceptance/decisione-accettazione.md): T052/T053 aperti, FAIL e limiti semantici/temporali invariati. Questa specifica non li chiude, non sana T058/T061/T062 e non altera attese storiche. I criteri della 002 sono obiettivi da verificare, non esiti acquisiti.
 
@@ -120,6 +139,7 @@ La [001 resta accettata con riserve per il pilota](../001-project-draft/acceptan
 - **Evidenza/riferimento documentale**: estensione delle evidenze con documento/versione, passaggio e pagina/sezione disponibile, mantenendo tipo, polarità, certezza e relazioni.
 - **Selezione fonti**: inclusioni/esclusioni persistenti PM e selezione storica immutabile di ogni elaborazione.
 - **Lavoro documentale**: elaborazione tracciabile con stati, tentativi, errori e risultati recuperabili.
+- **Valutazione Gap nello snapshot**: interpretazione derivata e tracciabile della domanda storica, con esito, motivo e riscontri; non è un nuovo registro né uno stato globale dell'evidenza.
 - **Copertura documentale**: estensione dei report esistenti da porzioni/evidenze ai risultati, distinguendo limiti e valutazioni umane.
 
 ## Success Criteria *(mandatory)*
@@ -139,6 +159,12 @@ La [001 resta accettata con riserve per il pilota](../001-project-draft/acceptan
 - **SC-011**: Percorso completo eseguibile da tastiera a 1440 e 390 pixel, senza scorrimento orizzontale della pagina; stati/errori percepibili senza solo colore. Un progetto senza documenti conserva il percorso 001 e non avvia lavori alla semplice lettura.
 - **SC-012**: Ogni elaborazione AI documentale espone modello, esito, durata, tentativi e token/budget con origine o indisponibilità dichiarata. Upload, preparazione, coda e fasi AI sono misurati separatamente. Secondo la decisione D1 del committente, il PM impartisce un solo comando e il sistema assegna automaticamente il regime: profilo nominale ordinario con riferimento 180 s dal comando; regime esteso asincrono con limite massimo iniziale configurato 60 minuti, non durata prevista o garantita. Un cambio di regime è comunicato, controllato e limitato, senza azzerare il tempo consumato; nessuna conferma tecnica aggiuntiva del PM. Stati e avanzamenti reali, navigazione e recupero dopo disconnessioni/riavvii; nessuna omissione o successo incompleto per rispettare la scadenza. Preparazione documentale ha il proprio limite configurato di 60 minuti dalla richiesta. I test distinguono profili e cambi di regime senza riclassificare ex post un nominale lento come superato; criteri e riserve della 001 invariati.
 
+Integrazione di **SC-003/009** per la revisione T130/N4: nelle prove nominali e avverse annotate prima dell'esecuzione, il 100% dei Gap domanda è rendicontato con esito/motivo/riferimenti corretti, senza chiusure ingiustificate; falsi conflitti della prima proposta non sono conservati e conflitti reali restano espliciti. Provare anche risposta parziale/ambigua, esclusione/versione diversa, limiti del retry e compatibilità storica; stesso criterio nel percorso oltre contesto. Le soglie esistenti, il gold N4 e la distinzione fra controlli deterministici e giudizio semantico restano invariati.
+
+**Stato temporaneo e criteri ancora aperti (2026-11-07, decisione C + D)**: nelle prove single-call i criteri sopra sono verificabili e invariati. Per il percorso oltre contesto il criterio «100% dei Gap rendicontati con esito/motivo/riferimenti corretti» **non è soddisfatto né verificabile** finché non sarà risolta la decisione su T138: nell'intervallo l'unico comportamento ammesso è il fallimento esplicito immediato (run `Failed` con `document_limit_exceeded` e motivo `hierarchical_gap_assessment_unsupported`, zero invocazioni LLM, nessuna revisione né anteprima incompleta, nessun WorkOutput) quando lo snapshot contiene Gap; senza Gap il percorso oltre contesto resta come in v4. Questo limite temporaneo non riduce FR-013, SC-004, US2 né il gold: SC-004 e FR-013 restano aperti (gate T082/T083/T090) e l'impatto di prodotto (run oltre contesto con Gap falliti subito) è un rischio residuo dichiarato, non un'accettazione.
+
+**Aggiornamento di stato 2026-11-09 (decisione D1, stadio Gap su ledger completo, definizione v6)**: il committente ha approvato una chiamata dedicata alla valutazione dei Gap sull’intero ledger congelato per le nuove richieste v6 ([AI §13.7](contracts/ai-workflow.md#137-stadio-gap-dedicato-su-ledger-completo-definizione-v6-d1-2026-11-09); task T144–T150). Il criterio «100% dei Gap rendicontati con esito/motivo/riferimenti corretti» nel percorso oltre contesto **resta NON soddisfatto e non verificato**: la misura offline del payload autorizza l’implementazione ma non è validazione funzionale; FR-013 e SC-004 (parte Gap), T138, T082/T083/T090 restano aperti finché non passano le verifiche previste (prove offline T144–T149 ed eventuale gate DGX «SC-004-Gap» T150, da autorizzare a parte). Per le definizioni ≤v5 vale ancora il fail-fast `hierarchical_gap_assessment_unsupported` (zero invocazioni LLM). **Limite residuo dichiarato**: un ledger oltre il budget di input (o con Gap oltre il budget di output) di una chiamata è un perimetro non coperto della 002 e termina con fail-fast tipizzato (`gap_ledger_exceeds_input`, `gap_assessment_exceeds_output`); non è soddisfatto né trasferito automaticamente alla 003. Il testo di FR-013/SC-004 non è modificato. Vietati in 002: partizionamento di Gap/ledger, RAG, indice di ricerca, top-k, arbitrato.
+
 ## Assumptions
 
 - Interfaccia/prove in italiano, account PM e modello interno predisposti; documenti autorizzati e attese annotate prima delle prove. Guasti e simulazioni non sostituiscono nominali reali.
@@ -149,3 +175,7 @@ La [001 resta accettata con riserve per il pilota](../001-project-draft/acceptan
 - Consultazione comprende elenco, metadati, testo estratto strutturato, passaggio citato e download originale; non richiede editor o viewer con fedeltà tipografica completa.
 - La sola compattazione 001 non è assunta sufficiente per i documenti oltre contesto. Plan dovrà dimostrare la fattibilità, anche della generazione da analisi confermata ampia, senza decidere qui strategie tecniche.
 - Nessuna nuova funzione di cancellazione/retention: conservare originali/versioni necessari alla storia. La 002 non implica nuova accettazione generale della 001.
+
+## Delta derivato 2026-11-09 (D2/D3) — proiezione, nessun requisito nuovo
+
+**FR-007/008/015** (proiezione derivata, testo dei requisiti invariato): per le nuove richieste v6 il contesto inviato al modello nel single-call porta, per ogni evidenza documentale, nome del documento, versione e (se nota) sezione come dati oggettivi e la certezza (`message-format-2`, AI §13.8); coverage ≥v6 segnala come avviso non bloccante un item che ripete un’alternativa di conflitto. Né l’uno né l’altro modifica evidenze, valutazioni o esiti, né certifica fedeltà semantica. Task T151–T153.

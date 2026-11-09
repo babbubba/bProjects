@@ -25,7 +25,7 @@ public sealed record ServerSlot(int? ContextTokens);
 /// <see cref="IChatClient"/> MAF sull'endpoint Chat Completions configurato: nessun altro provider,
 /// nessun fallback, nessun retry nel client HTTP/SDK (i tentativi sono del dispatcher, contracts §2).
 /// </summary>
-public sealed class InternalModelClient : IDisposable
+public sealed class InternalModelClient : IDisposable, IPayloadMeter
 {
     private readonly AiOptions _options;
     private readonly HttpClient _http;
@@ -168,9 +168,13 @@ public sealed class InternalModelClient : IDisposable
     /// GET /props?model=: finestra per slot e n_predict di default come riportati dal server. Ogni campo assente o non numerico è
     /// null: nulla è dedotto. Un errore HTTP lancia <see cref="HttpRequestException"/> (con lo StatusCode).
     /// </summary>
-    public async Task<ServerProps> GetServerPropsAsync(CancellationToken cancellationToken = default)
+    public Task<ServerProps> GetServerPropsAsync(CancellationToken cancellationToken = default) =>
+        GetServerPropsAsync(_options.ModelId, cancellationToken);
+
+    /// <summary>Come <see cref="GetServerPropsAsync(CancellationToken)"/> per un modello specifico (override di fase).</summary>
+    public async Task<ServerProps> GetServerPropsAsync(string modelId, CancellationToken cancellationToken)
     {
-        var uri = new Uri(_serverRoot, $"props?model={Uri.EscapeDataString(_options.ModelId)}");
+        var uri = new Uri(_serverRoot, $"props?model={Uri.EscapeDataString(modelId)}");
         using var response = await _http.GetAsync(uri, cancellationToken);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
@@ -187,9 +191,13 @@ public sealed class InternalModelClient : IDisposable
     }
 
     /// <summary>GET /slots?model=: <c>n_ctx</c> di ogni slot. Disabilitato/non supportato (404/501...) lancia <see cref="HttpRequestException"/>: il chiamante lo tollera.</summary>
-    public async Task<IReadOnlyList<ServerSlot>> GetSlotsAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ServerSlot>> GetSlotsAsync(CancellationToken cancellationToken = default) =>
+        GetSlotsAsync(_options.ModelId, cancellationToken);
+
+    /// <summary>Come <see cref="GetSlotsAsync(CancellationToken)"/> per un modello specifico.</summary>
+    public async Task<IReadOnlyList<ServerSlot>> GetSlotsAsync(string modelId, CancellationToken cancellationToken)
     {
-        var uri = new Uri(_serverRoot, $"slots?model={Uri.EscapeDataString(_options.ModelId)}");
+        var uri = new Uri(_serverRoot, $"slots?model={Uri.EscapeDataString(modelId)}");
         using var response = await _http.GetAsync(uri, cancellationToken);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
@@ -213,14 +221,40 @@ public sealed class InternalModelClient : IDisposable
     }
 
     /// <summary>Conteggio esatto con il tokenizer del modello (POST /tokenize di llama.cpp).</summary>
-    public async Task<int> CountTokensAsync(string text, CancellationToken cancellationToken = default)
+    public Task<int> CountTokensAsync(string text, CancellationToken cancellationToken = default) =>
+        CountTokensAsync(_options.ModelId, text, cancellationToken);
+
+    /// <summary>Conteggio con il tokenizer del modello indicato (POST /tokenize con <c>model</c>): ogni modello ha il proprio.</summary>
+    public async Task<int> CountTokensAsync(string modelId, string text, CancellationToken cancellationToken)
     {
-        var body = JsonSerializer.Serialize(new { model = _options.ModelId, content = text });
+        var body = JsonSerializer.Serialize(new { model = modelId, content = text });
         using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
         using var response = await _http.PostAsync(new Uri(_serverRoot, "tokenize"), content, cancellationToken);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
         return json.RootElement.GetProperty("tokens").GetArrayLength();
+    }
+
+    /// <summary>
+    /// Prompt realmente reso dal template del modello (POST /apply-template di llama.cpp): contiene il framing dei ruoli e le
+    /// istruzioni. Endpoint assente/disabilitato lancia <see cref="HttpRequestException"/>: il runtime non espone il template.
+    /// </summary>
+    public async Task<string> RenderChatTemplateAsync(
+        string modelId, IReadOnlyList<(string Role, string Text)> messages, bool enableThinking, CancellationToken cancellationToken)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            model = modelId,
+            messages = messages.Select(m => new { role = m.Role, content = m.Text }),
+            chat_template_kwargs = new { enable_thinking = enableThinking },
+        });
+        using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+        using var response = await _http.PostAsync(new Uri(_serverRoot, "apply-template"), content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        return json.RootElement.TryGetProperty("prompt", out var prompt) && prompt.ValueKind == JsonValueKind.String
+            ? prompt.GetString()!
+            : throw new HttpRequestException("apply-template senza prompt", null, System.Net.HttpStatusCode.NotImplemented);
     }
 
     public void Dispose() => _http.Dispose();

@@ -34,6 +34,13 @@ export interface ProjectStreamHandlers {
   onEvent(event: ProjectStreamEvent): void;
   /** Stream chiuso o caduto (prima di un'eventuale riconnessione). */
   onDisconnected(): void;
+  /** Primo tentativo di una serie fallito senza mai connettersi: nessun evento arriva, il chiamante riconcilia con i GET. */
+  onUnavailable?(): void;
+  /**
+   * Uscita definitiva senza riconnessione (sessione assente o scaduta, progetto non trovato): il chiamante
+   * riconcilia con i GET e, tornata la sessione, riapre lo stream con `open`.
+   */
+  onTerminated?(): void;
 }
 
 /** Parser incrementale del formato text/event-stream: commenti ignorati, data multi-riga unito con \n. */
@@ -165,11 +172,13 @@ export class ProjectEventsService {
         shared.connected = false;
         if (signal.aborted) return;
         if (connected) each((h) => h.onDisconnected());
+        else if (failures === 0) each((h) => h.onUnavailable?.());
         await this.sleep(this.delay(failures++), signal);
       }
     } finally {
       // Uscita definitiva (no token, 404, refresh fallito): un nuovo open() potrà riaprire.
       if (this.streams.get(projectId) === shared) this.streams.delete(projectId);
+      each((h) => h.onTerminated?.()); // no-op se annullato dai subscriber (abort)
     }
   }
 

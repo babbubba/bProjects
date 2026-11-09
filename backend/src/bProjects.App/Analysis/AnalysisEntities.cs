@@ -92,6 +92,41 @@ public sealed class ProcessingRun
     }
     public string? WorkflowSessionId { get; set; }
 
+    /// <summary>Selezione documentale fissata alla richiesta (slice 002); null per i run legacy e per i progetti senza documenti.</summary>
+    public Guid? SourceSnapshotId { get; set; }
+
+    // ---- Root del regime (document-regime-v2, Plan §Classificazione). Nullable: i record 001 non li valorizzano e mantengono DeadlineAt/regole 001.
+    public bProjects.App.AI.ExecutionRegime? InitialRegime { get; set; }
+    public bProjects.App.AI.ExecutionRegime? Regime { get; set; }
+    public bProjects.App.AI.ClassificationStatus? ClassificationStatus { get; set; }
+    public string? ClassificationVersion { get; set; }
+    public string? ClassificationReason { get; set; }
+
+    /// <summary>t0+180 s nel regime Ordinary; null per Extended e per i root legacy. PromotionDueAt non esiste (sempre null per Plan).</summary>
+    public DateTimeOffset? OrdinaryDeadlineAt { get; set; }
+
+    /// <summary>0 o 1: l'unica promozione Ordinary→Extended (additional_work, T047).</summary>
+    public int? PromotionCount { get; set; }
+    public DateTimeOffset? PromotedAt { get; set; }
+    public string? PromotedReason { get; set; }
+
+    /// <summary>Hash della policy congelata alla richiesta; null per i root legacy.</summary>
+    public string? PolicyHash { get; set; }
+
+    /// <summary>
+    /// Limiti documentali congelati alla richiesta (JSONB, <see cref="bProjects.App.Documents.RunLimitsSnapshot"/>): obbligatori e immutabili (CHECK e trigger) per i run
+    /// documentali di Analizza; null per i run 001 e per gli altri workflow.
+    /// </summary>
+    public string? DocumentLimitsSnapshot { get; set; }
+
+    /// <summary>Cap finito dal t0 (documentale); null per i root legacy.</summary>
+    public DateTimeOffset? HardDeadlineAt { get; set; }
+
+    /// <summary>Autorità temporale corrente; per i root documentali DeadlineAt = EffectiveDeadlineAt (CHECK).</summary>
+    public DateTimeOffset? EffectiveDeadlineAt { get; set; }
+    public int? CallCount { get; set; }
+    public Guid? RetryOfId { get; set; }
+
     public int AttemptCount { get; set; }
     public int MaxAttempts { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }
@@ -114,6 +149,9 @@ public sealed class ProcessingRun
 public sealed class AnalysisRevision
 {
     public const string CurrentSchemaVersion = "1.0.0";
+
+    /// <summary>Schema delle revisioni documentali (slice 002, decoder dedicato): una revisione conserva il proprio schema in modifica e conferma, mai convertito.</summary>
+    public const string DocumentSchemaVersion = DocumentAnalysisContent.SchemaVersionValue;
 
     public Guid Id { get; set; }
     public Guid AnalysisId { get; set; }

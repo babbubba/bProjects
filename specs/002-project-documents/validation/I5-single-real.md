@@ -1,0 +1,109 @@
+# I5 — T082 (documento singolo oltre contesto): preparazione PASS (ottava esecuzione), analisi completa NON verificata; consolidato 2026-11-09
+
+**Autorizzazione**: autoload del router consentito dall'autore (2026-11-07); `BPROJECTS_TEST_DGX_ALLOW=1` solo nel processo del test; una inferenza alla volta; nessun altro modello caricato né slot attivo prima di ciascuna prova.
+**Runtime**: `Qwen3.6-35B-Smart` (router llama.cpp, ctx 131072, parallel 1), `BPROJECTS_TEST_CTX_WINDOW=131072`, PostgreSQL e parser Docling reali, endpoint `Analizza` di produzione.
+**Dataset**: `capitolato-aurora.txt`, generatore deterministico seed 20261106, 3116 blocchi; **295725 token** (tokenizer reale) contro 2×B = 227328 ⇒ requisito >2×budget SODDISFATTO (B = 113664).
+**Esito**: FAILED, `[COMPLETAMENTO]` preparazione non Ready. Esecuzioni: 9m38s e 2m41s, stesso esito.
+- Strutturale: PASS (dimensione >2×B, hash originale, upload 201).
+- Causa osservata (job `ExtractUnit`): `work_output_invalid` — «L'output del modello non è un'estrazione valida (24 violazioni)… evidenza eN: kind Other richiede kindRationale». La chiamata del modello è terminata normalmente (`finish=stop`, prompt 3581, completion 7422 token, 124 s). Le altre unità sono andate `parent_failed`.
+- Copertura / semantica / provenienza / analisi v4 / riconciliazione gerarchica: **NOT VERIFIED** (mai raggiunte).
+**Classificazione**: non infrastrutturale; è il validatore di produzione dell'estrazione che rifiuta l'intera unità (e la preparazione) quando il modello etichetta evidenze come `Other` senza `kindRationale`. Il riempitivo non applicabile del corpus induce evidenze `Other`; l'estrazione non ha retry guidato. Non risolvibile senza una decisione (contratto estrazione / corpus). Nessuna correzione tentata, nessun gold o dimensione modificati. Aggiunta al test solo diagnostica (errori job e chiamate) per leggere la causa prima che il DB di test venga eliminato.
+**Chiamate**: T082 non ha raggiunto l'analisi; chiamate di estrazione osservate prima dell'errore non contate integralmente (DB temporaneo eliminato; solo l'ultima chiamata riportata).
+
+## Terza esecuzione (2026-11-07 07:23–07:31, dopo T134) — FAILED per un motivo DIVERSO: troncamento dell'output di estrazione
+Condizioni: stesso modello/finestra (W=131072, O=16384, M=1024, B=113664), modello `sleeping`→risvegliato, nessun altro modello caricato, slot inattivo; stesso corpus (sha256 a926fb1d…30f6, 295725 token = 2,60×B).
+Esito: strutturale PASS; `[COMPLETAMENTO]` preparazione Failed, durata 7m59s.
+- Il difetto `Other` senza `kindRationale` NON si è ripresentato in questa esecuzione (non provato che il retry T134 sia intervenuto: non c'è evidenza di marker nei log).
+- Nuova causa: job `ExtractUnit` `work_output_invalid` «Output del modello troncato dal limite di lunghezza» — chiamata `finish=length`, prompt 3645, completion 16384 = tetto di output, 275 s. Le altre chiamate osservate: finish=stop (prompt 3512/completion 1723/29 s; prompt 2783/completion 6805/112 s). Le altre unità `parent_failed`.
+- Per contratto il troncamento non è ritentato (§2.3, e T134 lo esclude espressamente). Analisi, gerarchia, copertura, semantica e citazioni NOT VERIFIED.
+- Ipotesi (non verificata): su un'unità con molto testo narrativo o ripetitivo il modello genera un'estrazione molto lunga fino al tetto di 16384 token. Non si può distinguere fra contenuto pertinente numeroso, ripetizioni o degenerazione senza il contenuto della chiamata (DB di test eliminato).
+Per mandato dell'autore («se fallisce nuovamente per un motivo diverso, fermarsi e riportare le evidenze») nessun ulteriore tentativo. T083 non eseguito.
+
+## Quarta esecuzione (2026-11-07 08:01–08:08, 6m07s) — con cattura diagnostica: troncamento RIPRODOTTO e spiegato
+Condizioni: `Qwen3.6-35B-Smart` (sleeping→risvegliato), W=131072, O=16384, M=1024, B=113664; corpus invariato (295725 token = 2,60×B). Diagnostica locale (fuori dal repository, non versionata): `%TEMP%\bprojects-i5-real\diag\<runId>\` (calls.jsonl, summary.json, testo troncato, SHA-256 `5dec055c…face`). Nessun contenuto grezzo nei log o nel repository.
+**Chiamate**: 2 (preparazione abortita al fallimento). #1 `finish=stop`, prompt 3586, 2071 token generati, 7 evidenze, 35 s. #2 `finish=length`, prompt 3505, **16384 generati** (tetto), 278 s, 55743 caratteri, JSON non parsabile (troncato in e59). 250 job: 1 Completed, 1 Failed `work_output_invalid`, 248 `parent_failed`.
+**Batch troncato** (correlazione per sequenza di range): job `04718ae5…`, unità `27068b16…`, batch `e8c353f2…` ordinale 0, porzioni [5,6], 13 range tutti Primary.
+**Misure** (OwnedTokens non è persistito: ricostruito dal testo Primary con il tokenizer del runtime): OwnedTokens **1296** (5879 caratteri); payload misurato 4210; output previsto dal planner = ceil(1296×8.0) = **10368**; generati ≥ **16384** (≥1,58× il previsto, ≥12,6 token generati per token posseduto; il fattore 8.0 è il default di produzione, il valore effettivo è congelato solo come hash nel manifesto).
+**Contenuto (analisi locale, euristica)**: 59 evidenze `e1…e59` (ultima troncata), 58 di `kind: Other` con `kindRationale: null` (tutte; la 59ª è troncata prima del campo; `DocumentPassage` è il tipo di fonte, non dell’evidenza); 58 enunciati di cui 40 distinti (max 5 ripetizioni dello stesso enunciato/citazione); **0 enunciati con numeri o verbi di obbligo/divieto**; esempi: frasi narrative sul paesaggio/edificio. 12 range su 13 coperti. Nessun ciclo degenerativo: ogni evidenza cita una frase reale del testo (il generatore del corpus riusa un insieme finito di frasi di riempitivo, per questo le ripetizioni); il modello enumera TUTTE le frasi del riempitivo come evidenze `Other`.
+**Risposte**: (1) batch `e8c353f2…` (ord. 0, porzioni 5–6); (2) 1296; (3) 10368; (4) 16384 (cap); (5) 59; (6) praticamente nessuna pertinente al progetto (riempitivo narrativo per costruzione; euristica, non verifica semantica completa); (7) ripetizioni sì (enunciati identici dalla fonte), non degenerazione; (8) con il fattore 8.0 il batch non sarebbe stato diviso, ma il comportamento reale (~13–18 token di output per token posseduto con un'evidenza JSON di ~280 token per frase di ~13 token) supera il previsto: il planner sottostima il caso peggiore di questo modello; (9) vedi sotto.
+**Causa più probabile** (evidenza ALTA, osservata direttamente): il modello estrae ogni frase narrativa come `Other` senza motivazione perché il prompt `document-extraction-v2` non vieta esplicitamente di estrarre il non pertinente nelle unità miste e dice «in caso di dubbio registra»; l'output risultante supera sia il previsto del planner (OutputExpansion 8.0) sia il tetto di 16384. È lo stesso comportamento dei due fallimenti precedenti (24 violazioni `Other` e troncamento): T134 non può intervenire sul troncamento.
+**Interventi minimi possibili (NON implementati, richiedono decisione)**: (a) nuova versione del prompt di estrazione con divieto esplicito del non pertinente (invalida le evidenze I3 verificate con v2 e i checkpoint); (b) calibrare `OutputExpansion` sul rapporto osservato (~14–20) per suddividere preventivamente (più batch/chiamate, costo e durata) — non ferma l'estrazione inutile; (c) retry guidato anche per `finish=length` (contratto §2.3, nuovo perimetro). Nessuna correzione speculativa applicata. Un singolo run non prova un comportamento probabilistico; i tre fallimenti sono però coerenti.
+**Stato**: T082 FAILED (preparazione), analisi/gerarchia/copertura/semantica/citazioni NOT VERIFIED; T083 NOT VERIFIED (non eseguito).
+
+## Quinta e sesta esecuzione (2026-11-08, `document-extraction-v3`, commit `aa76916`)
+
+Condizioni: `Qwen3.6-35B-Smart` (router llama.cpp b10703), finestra 131072, parser `bprojects-rc-parser`, PostgreSQL 18 reale, corpus invariato (`capitolato-aurora.txt`, 3116 blocchi, 295725 token = 2,60×B), una inferenza alla volta, `BPROJECTS_TEST_DGX_ALLOW=1` solo nel processo del test. Nessun gold, criterio o limite modificato.
+
+**Quinta (10 min 48 s): FAIL per difetto del harness, non del prodotto.** L'harness esegue un solo login (`LargeDocumentRealFlow.cs:237`) e `AuthOptions.AccessTokenMinutes` vale 10 per default: dopo ~10 minuti il GET di polling ha risposto senza `versions` (`KeyNotFoundException` a `LargeDocumentRealFlow.cs:263`). Fino a quel punto 32 chiamate di estrazione, tutte `finish=stop`, max 2045 token generati (prima 16384), 0 troncamenti. Correzione di harness senza codice: `Auth__AccessTokenMinutes=480` nell'ambiente del test (documentata in `operations.md`).
+
+**Sesta (1 h 00 min 45 s): FAIL, preparazione `Failed deadline_exceeded` al cap di 3600 s.**
+- 250 unità: **165 completate**, 85 `Failed/parent_deadline_exceeded`. 165 chiamate di estrazione, tutte `finish=stop`, 0 errori, 0 troncamenti, max 5370 token generati, 239 evidenze, 606953 token di prompt e 81127 generati in totale. Il difetto delle esecuzioni 1–4 (`Other` senza `kindRationale`, troncamento a 16384) **non si ripresenta**: la correzione di estrazione è efficace.
+- **Collo di bottiglia: tempo, non qualità.** Durata media di una chiamata 9,0 s; ma fra la fine di una chiamata e l'inizio della successiva passano in mediana 12,7 s (min 6,0, p90 16,8, max 21,2): 2085 s su ~3550 s sono tempo non dedicato all'inferenza. Ritmo effettivo ≈ 21,6 s per unità ⇒ 250 unità ≈ 90 minuti contro un cap E di 60.
+- Non attribuibile ai probe del router: misurati in sola lettura `/v1/models` 0,18 s, `/props` 0,16 s, `/slots` 0,08 s, `/tokenize` 0,08–0,13 s. La causa dei ~12 s per unità (caricamento delle porzioni dell'unità, claim/lease, misura del partizionamento, commit, attesa del dispatcher) **non è ancora isolata**: serve strumentazione dei tempi per fase (non c'è nel codice) o un benchmark con modello finto su ~250 unità.
+- Analisi, gerarchia, copertura, semantica e citazioni: **NOT VERIFIED** (non raggiunte). T082 resta **FAILED/BLOCKED** per il cap temporale della preparazione; nessun aumento del cap o riduzione del corpus.
+
+**Versionamento (verifica richiesta).** Il passaggio globale a `document-extraction-v3` (`9b16759`) cambiava, per i job già creati, `configHash`, identità del manifesto e `batchId` (tutti includono `PromptVersion`/SHA delle istruzioni), perché la configurazione congelata dei job ExtractUnit non portava la versione. Correzione compatibile: la versione è congelata in `DocumentJobs.ConfigJson` (e in `ExtractorConfig` del job di aggregazione) alla creazione; una configurazione senza chiave, non valida o ignota riprende con **v2** (storico), quella con `promptVersion=document-extraction-v3` usa v3; il `PromptVersion` della versione Evidence segue la configurazione del job. Test: `T082DocumentExtractionPromptTests` (13/13) e `A_job_without_the_prompt_version_replays_as_historic_v2_and_a_new_job_freezes_v3_...` (PostgreSQL reale: versione dei batch, `configHash` e `batchId` diversi).
+
+## Scomposizione misurata della latenza fra due chiamate (2026-11-08, nessuna inferenza reale)
+
+**Sintomo** (sesta esecuzione): 165 unità in ~59 min, inferenza media 9,0 s, ma 12,7 s mediani di intervallo fra una chiamata e la successiva (2085 s su ~3550 s non sono inferenza).
+
+**Strumentazione** (`AI/DocumentTiming.cs`, `ActivitySource` senza listener = costo nullo; intervalli su dispatcher, claim, caricamento input, profilo, partizionamento/misura, workflow MAF, checkpoint, riserva chiamata, persistenza, completamento unità, invio al modello). **Benchmark** `DocumentLatencyBenchmarkTests` (PostgreSQL reale, dispatcher e agente reali, modello finto; si esegue solo con `BPROJECTS_BENCH=1`, parametri `BPROJECTS_BENCH_UNITS`, `BPROJECTS_BENCH_HTTP_MS` per simulare la latenza di ogni richiesta HTTP): 30 unità da 12 porzioni, 1 chiamata di inferenza per unità, latenza di inferenza 0.
+
+| Misura per unità | Prima della correzione | Dopo la correzione |
+| --- | --- | --- |
+| Latenza HTTP simulata 0 ms: tempo totale per unità | 212 ms | non rimisurato (cambiano solo le richieste) |
+| Latenza HTTP simulata 100 ms: tempo totale per unità | **13 721 ms** | **1 561 ms** |
+| di cui `agent.measure` (proprio) | **12 685 ms (92 %)** | 549 ms |
+| Richieste HTTP per unità: `/tokenize` + `/apply-template` | 73 + 47 = **120** | 7 + 3 = **10** |
+| Misure del payload per unità | 23 (= 2n−1, con n = 12 porzioni) | 1 |
+| Altro lavoro per unità (claim, input, checkpoint ×8, persistenza, completamento, workflow) | ~200 ms in totale | ~200 ms (invariato) |
+
+**Causa.** `DocumentPortionPlanner.PartitionAsync` misura ogni pezzo da solo (n misure) e poi ogni candidato incrementale (n−1): per 12 porzioni 23 misure. Ogni misura (`DocumentEvidenceAgent.MeasureAsync`) misura il payload completo (apply-template + tokenize) e quello proprietario (tokenize), ~5 richieste seriali. Con il tokenizer del DGX a 0,08–0,13 s per richiesta (misurato in sola lettura) sono ~10–12 s per unità: coincide con l'intervallo mediano osservato (12,7 s). Non sono attese di polling o backoff: il dispatcher non entra mai in idle (`dispatch.idle` assente), il lavoro di database è ~200 ms per unità, `ReadinessBackoff` non interviene a runtime sano.
+
+**Correzione** (`DocumentPortionPlanner.PartitionAsync`, via rapida): si misura prima il payload dell'intero insieme dei range proprietari; se entra nel budget con qualità utilizzabile, la partizione è un unico batch (stesso risultato del packing incrementale, perché con l'insieme completo dentro il budget nessuna aggiunta può essere rifiutata e nessun pezzo si divide), con UNA misura. Altrimenti, o se la misura non è utilizzabile (errore `RuntimeUnverified` invariato), si prosegue con l'algoritmo originale, costo +1 misura. Nessuna soglia, deadline, corpus o criterio modificato. Test: 13 test originali del pianificatore invariati e 3 nuovi (una sola misura, stesso batch/ordine/misura; fallback invariato; misura non utilizzabile non prende la via rapida).
+
+**Proiezione, non misura.** Con 250 unità, ~9 s di inferenza e ~1,5 s di overhead per unità: ≈ 44 minuti contro il cap di 60 (margine ~25 %). La conferma richiede una nuova prova reale, da eseguire solo dopo la tua autorizzazione.
+
+## Settima e ottava esecuzione (2026-11-08/09, commit `acf35a6` e `LargeDocumentRealFlow` corretto): preparazione PASS, analisi FAIL per troncamento
+
+Condizioni: `Qwen3.6-35B-Smart` (router llama.cpp b10703, modello `sleeping` prima della settima: risvegliato dall'autoload), W=131072, O=16384, M=1024, B=113664, parser `bprojects-rc-parser`, PostgreSQL 18 reale, corpus invariato (`capitolato-aurora.txt`, sha256 `a926fb1d…30f6`, 295725 token = 2,60×B), `Auth__AccessTokenMinutes=480` solo come espediente diagnostico dell'ambiente isolato, `BPROJECTS_TEST_DGX_ALLOW=1` solo nel processo del test.
+
+**Settima (42 min 38 s): FAIL del harness**, non del prodotto: la query dei blocchi in `LargeDocumentRealFlow.ExtractedAsync` non passava il parametro `@p` (`42703: column "p" does not exist`); il gemello offline lo passava. Preparazione già completa: 250/250 unità `Completed`, 250 chiamate tutte `finish=stop`, intervallo mediano fra le chiamate 1,2 s. Corretto il harness (nessun criterio toccato).
+
+**Ottava (44 min 48 s): 24 PASS / 2 FAIL.**
+- **Preparazione (PASS)**: `Ready`, 458 porzioni tutte `Completed`, 250 chiamate di estrazione, 0 troncate, 297 evidenze, max 6702 token generati; durata 37,8 min di cui 32,6 di inferenza; intervallo mediano 1,2 s (p90 1,6 s, max 2,2 s) contro 12,7 s della sesta esecuzione. Il cap di 3600 s è rispettato con ~22 min di margine. Testo estratto 1323985 caratteri contro 1323984 generati (nessun blocco perso); i 16 fatti gold S01–S16 sono presenti nel testo estratto (provenienza PASS); 295725 token = 2,60×B (nessuna riduzione, finestra non aumentata).
+- **Analisi (FAIL)**: POST Analizza 202; il run termina `Failed work_output_invalid` «Output del modello troncato dal limite di lunghezza»: **1 sola chiamata di analisi**, 330 s, `finish=length` (≈ 16384 token generati = tetto O). Non è passata dalla riconciliazione gerarchica.
+- **Causa** (`DocumentAnalysisWorkflow.RunAliasGraphAsync`, riga ~590): la scelta fra chiamata singola e gerarchia usa solo `measure.Fits` = token del payload ≤ budget di INPUT (`ContextBudget.cs:348`). Le 297 evidenze estratte entrano nell'input (il testo grezzo è 2,6×B, ma le evidenze sono poche e brevi), quindi si sceglie la chiamata singola; l'output richiesto (una voce con fonti per evidenza) supera però O=16384 e viene troncato. Il troncamento non è ritentabile per contratto (§5.3).
+- **Non verificati** (mai raggiunti): copertura dell'analisi, ≥12 fatti nell'analisi, negazioni/qualificatori, conflitti lontani, citazioni, tempi di analisi. Verdetto: T082 resta FAILED, ora per un difetto di instradamento dell'analisi e non più dell'estrazione né dei tempi.
+
+**Decisione richiesta** (nessuna modifica applicata): l'instradamento deve considerare anche l'output atteso. Opzioni: (a) stimare l'output dell'analisi dalle evidenze (numero e lunghezza) con un fattore calibrato e instradare alla gerarchia quando supera O — analogo all'`OutputExpansion` già usato dall'estrazione, ma è una nuova regola di routing e il fattore va calibrato sulle misure reali (qui: >16384 token per 297 evidenze, ≥55 token/evidenza); (b) soglia sul numero di evidenze (policy congelata nello snapshot, come `MaxCandidatesPerRun`); (c) rientro alla gerarchia dopo un troncamento, che è un nuovo retry e non è autorizzato. Raccomandazione: (a), con il fattore ricavato dalle misure e congelato nello snapshot dei limiti del run, perché non aggiunge fasi né retry e riusa la gerarchia v4/v5 già verificata (per le richieste senza Gap).
+
+## Consolidamento della campagna T082 (2026-11-09, decisione del committente: nessuna nona esecuzione)
+
+Il committente ha interrotto la campagna dopo otto esecuzioni reali e non ha autorizzato la nona. Questa sezione fissa lo stato; non cambia criteri di accettazione, gold né stato dei test. **T082 resta FAILED / aperto (checkbox non spuntata).**
+
+### Verificato
+| Cosa | Livello | Evidenza |
+| --- | --- | --- |
+| Preparazione del documento oltre contesto (295725 token = 2,60×B, 3116 blocchi) | FUNCTIONALLY_VERIFIED sul DGX (ottava esecuzione) | `Ready`, 458 porzioni `Completed`, 250 chiamate di estrazione tutte `finish=stop`, 297 evidenze, 37,8 min contro cap 3600 s (~22 min di margine) |
+| Provenienza: fatti gold S01–S16 presenti nel testo estratto; nessun blocco perso | FUNCTIONALLY_VERIFIED (ottava esecuzione) | 1323985 caratteri estratti contro 1323984 generati |
+| Latenza fra chiamate (1,2 s mediana, era 12,7 s) | TECHNICALLY_VERIFIED + osservata sul DGX | benchmark offline e ottava esecuzione; via rapida del pianificatore (`b73fcf4`) |
+| Versionamento `document-extraction-v3`: freeze, replay v2, errore su versione ignota/malformata | TECHNICALLY_VERIFIED | test `T082DocumentExtractionPromptTests`, `DocumentEvidenceAgentTests` |
+| Instradamento dell'analisi sul budget di output (`single-call-output-estimate-1`, congelata in `analysisOutputPolicy`, run storici invariati, fail-fast dei Gap invariato) | IMPLEMENTED + TECHNICALLY_VERIFIED, solo offline | commit `8eb1c2c`; 9 test dell'estimatore (inclusi 297 evidenze oltre il tetto con enunciati vuoti), 4 di instradamento su PostgreSQL con modello finto, 6 di compatibilità; suite backend 3613 test, 0 falliti, 84 ignorati |
+
+### NON verificato
+- **Analisi completa del documento grande sul DGX con la nuova policy**: mai eseguita. L'unica analisi reale (ottava esecuzione) è fallita per troncamento (`finish=length`, 1 chiamata, 330 s) prima della policy `8eb1c2c`.
+- Mai raggiunti: copertura dell'analisi, ≥12 fatti nell'analisi, negazioni e qualificatori, conflitti lontani, citazioni corrette, tempi di analisi, tutto entro il cap E.
+- Il percorso gerarchico oltre il tetto di output su un corpus reale con 297 evidenze: coperto solo dal test numerico dell'estimatore; il modello finto (finestra 4000) non riproduce quel caso.
+- Il gate dell'analisi completa **non è considerato superato**.
+
+### Rischi residui
+1. **Esito della prova reale ignoto.** Con 297 evidenze la stima supera 16384, quindi il documento andrebbe alla gerarchia: più lenta, e non provata sul DGX con questo corpus. Il cap di 3600 s vale per la preparazione, non è dimostrato per l'analisi.
+2. **Stima conservativa.** Coefficienti non calibrati su misure di output complete (solo un limite inferiore di ≥55 token/evidenza da una risposta troncata): possibile instradamento alla gerarchia di casi che la chiamata singola avrebbe retto (costo in latenza, non in correttezza). Cambiarli richiede una nuova versione della policy.
+3. **T138 (Gap oltre contesto).** Finché non è deciso, ogni documento oltre contesto che contenga Gap fa fail-fast (`document_limit_exceeded` / `hierarchical_gap_assessment_unsupported`), e ora ci cade anche un documento che entra nell'input ma ha un'uscita attesa oltre O. SC-004 resta non soddisfatto per questi casi. Raccomandazione A in `slice-002-technical-closure.md` §14, nessuna implementazione.
+4. **Espediente diagnostico**: `Auth__AccessTokenMinutes=480` usato solo nelle prove 5–8 in ambiente isolato; non è una configurazione di prodotto né sostituisce i test di refresh.
+5. **Ambiente DGX**: il modello era `sleeping` prima della settima esecuzione (autoload); il comportamento di readiness è oggetto di T126, non verificato qui.
+
+### Se la campagna riprende
+Una sola esecuzione reale, con le stesse condizioni, su autorizzazione esplicita; atteso: stima > O, instradamento alla gerarchia, nessun `finish=length`. Nessuna prova è stata eseguita dopo `8eb1c2c`.

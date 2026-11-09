@@ -1,0 +1,76 @@
+:host {
+  display: block;
+  margin-top: 1.5rem;
+  min-width: 0;
+}
+
+.docs,
+.docs-list,
+.docs-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.docs-upload,
+.docs-list {
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+}
+
+.docs-list-head,
+.docs-item-head,
+.docs-actions,
+.docs-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.docs-list-head {
+  justify-content: space-between;
+}
+
+.docs-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.docs-item {
+  padding: 0.75rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  min-width: 0;
+}
+
+.docs-name {
+  overflow-wrap: anywhere;
+}
+
+.docs-versions {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.docs-version {
+  padding: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+
+.docs-progress {
+  width: 12rem;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+[tabindex='-1']:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}

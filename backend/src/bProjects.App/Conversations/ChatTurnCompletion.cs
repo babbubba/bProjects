@@ -47,29 +47,34 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
             .ToListAsync(ct)).SingleOrDefault();
 
         // La riga del turno è bloccata fino al commit: nessun reclaim può interporsi tra verifica e Completed.
-        var state = (await db.Database.SqlQuery<string>($"""
-            SELECT CASE
-                WHEN "Status" = 'Completed' THEN 'completed'
-                WHEN "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner} AND "FencingToken" = {claim.FencingToken}
-                     AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp() THEN 'valid'
-                ELSE 'stale' END AS "Value"
-            FROM "ChatTurns" WHERE "Id" = {claim.TurnId} FOR UPDATE
-            """).ToListAsync(ct)).SingleOrDefault();
+        // Stato di commit dalla guard dell'autorità temporale (T118): lease, fence e scadenza corrente (DeadlineAt ed EffectiveDeadlineAt) sotto lock di riga.
+        var state = await DocumentDeadlineGuard.CommitStateAsync(db, turn: true, claim.TurnId, claim.LeaseOwner, claim.FencingToken, ct);
 
-        if (conversation is null || state is null)
+        if (conversation is null || state == RootCommitState.Missing)
         {
             return new(ChatTurnCommitOutcome.Rejected, Reason: "turn_missing");
         }
 
-        if (state == "completed")
+        if (state == RootCommitState.Completed)
         {
             await transaction.RollbackAsync(CancellationToken.None);
             return await ReconcileAsync(claim.TurnId, ct) ?? new(ChatTurnCommitOutcome.Rejected, Reason: "completed_without_result");
         }
 
-        if (state != "valid")
+        if (state != RootCommitState.Valid)
         {
             return new(ChatTurnCommitOutcome.Rejected, Reason: "lease_lost");
+        }
+
+        // Chat documentale: le fonti citate sono ricontrollate contro lo snapshot del turno sotto lo stesso lock, prima di scrivere qualunque cosa
+        // (la validazione del workflow non basta da sola: lo snapshot e le evidenze sono quelli congelati, mai la selezione corrente).
+        if (reply.Document is { SourceIds.Count: > 0 } cited)
+        {
+            var allowed = await DocumentChatSources.LoadAsync(db, claim.TurnId, ct);
+            if (cited.SourceIds.Any(id => !allowed.SourceIds.Contains(id)))
+            {
+                throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "La risposta cita una fonte che non appartiene allo snapshot del turno: nessun commit.");
+            }
         }
 
         var startRevision = (await db.Database.SqlQuery<long>(
@@ -96,7 +101,7 @@ public sealed class ChatTurnCompletion(AppDbContext db, ExecutionLeaseStore leas
         db.ConversationMessages.Add(message);
 
         conversation.MafChatSessionState = await PostgresChatHistoryProvider.CreateSnapshotAsync(
-            reply.Agent, reply.Session, db, conversation, reply.Turn, new(message.Id, message.Sequence), reply.ChatConfigVersion, ct);
+            reply.Agent, reply.Session, db, conversation, reply.Turn, new(message.Id, message.Sequence), reply.ChatConfigVersion, ct, reply.DocumentSnapshotHash);
         conversation.MafVersion = Conversation.CurrentMafVersion;
         conversation.ChatConfigVersion = reply.ChatConfigVersion;
         conversation.ContextThroughSequence = message.Sequence; // include la risposta appena committata

@@ -2,6 +2,7 @@ using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,9 @@ public enum SelectionOutcome
 }
 
 public sealed record SelectionResult(SelectionOutcome Outcome, EvidenceSelectionView? View = null, IReadOnlyList<long>? MissingSequences = null);
+
+/// <summary>Relazione interpretativa del run da persistere (append-only) insieme alla revisione.</summary>
+public sealed record RunRelation(Guid From, Guid To, EvidenceRelationType Type, EvidenceRelationBasis Basis, string? Rationale);
 
 /// <summary>
 /// Scritture e letture del registro delle evidenze (data-model.md §Registro, contracts/ai-workflow.md §10.5–10.6). Ogni scrittura di un
@@ -118,8 +122,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             .ToListAsync(ct);
         var ids = messages.Select(m => m.Id).ToList();
         var open = (await db.EvidenceExtractionJobs.AsNoTracking()
-            .Where(j => ids.Contains(j.MessageId) && (j.Status == ExtractionJobStatus.Queued || j.Status == ExtractionJobStatus.Running))
-            .Select(j => j.MessageId).ToListAsync(ct)).ToHashSet();
+            .Where(j => ids.Contains(j.MessageId!.Value) && (j.Status == ExtractionJobStatus.Queued || j.Status == ExtractionJobStatus.Running))
+            .Select(j => j.MessageId!.Value).ToListAsync(ct)).ToHashSet();
         var current = onlyMissing
             ? (await db.EvidenceMessageStates.AsNoTracking().Where(s => ids.Contains(s.MessageId)).Select(s => s.MessageId).ToListAsync(ct)).ToHashSet()
             : [];
@@ -163,8 +167,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             .ToListAsync(ct);
         var sequenceOf = priorUsers.ToDictionary(m => m.Id, m => m.Sequence);
         var priorEvidence = (await db.Evidences.AsNoTracking().Where(e => currentVersions.Contains(e.VersionId)).ToListAsync(ct))
-            .OrderBy(e => sequenceOf[e.MessageId]).ThenBy(e => e.Ordinal)
-            .Select((e, i) => new PriorEvidence($"P{i + 1}", e.Id, e.MessageId, sequenceOf[e.MessageId], e.Kind, e.Polarity, e.Statement))
+            .OrderBy(e => sequenceOf[e.MessageId!.Value]).ThenBy(e => e.Ordinal)
+            .Select((e, i) => new PriorEvidence($"P{i + 1}", e.Id, e.MessageId!.Value, sequenceOf[e.MessageId!.Value], e.Kind, e.Polarity, e.Statement))
             .ToList();
 
         return new ExtractionContext(
@@ -184,7 +188,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
     /// stato e promozione automatica tracciata. Un worker con lease/fencing/deadline non più validi non scrive nulla.
     /// </summary>
     public async Task<ExtractionCommitResult> CommitAsync(
-        ExtractionJobClaim claim, ExtractionContext context, ExtractionValidationResult validation, string modelId, string parameters, CancellationToken ct)
+        ExtractionJobClaim claim, ExtractionContext context, ExtractionValidationResult validation, string modelId, string parameters, CancellationToken ct,
+        string? promptVersion = null)
     {
         ArgumentNullException.ThrowIfNull(validation);
         if (!validation.Accepted)
@@ -198,7 +203,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             .FromSql($"SELECT * FROM \"EvidenceExtractionJobs\" WHERE \"Id\" = {claim.JobId} FOR UPDATE")
             .AsTracking()
             .ToListAsync(ct)).SingleOrDefault();
-        if (job is null || job.MessageId != context.Target.Id)
+        if (job is null || job.OriginKind != EvidenceOriginKind.Message || job.MessageId != context.Target.Id)
         {
             return new(ExtractionCommitOutcome.Rejected, Reason: "job_missing");
         }
@@ -222,7 +227,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             return new(ExtractionCommitOutcome.Rejected, Reason: "lease_lost");
         }
 
-        await LockMessageAsync(job.MessageId, ct);
+        await LockMessageAsync(job.MessageId!.Value, ct);
         var now = await NowAsync(ct);
         var number = (await db.EvidenceExtractionVersions.Where(v => v.MessageId == job.MessageId).MaxAsync(v => (int?)v.Version, ct) ?? 0) + 1;
         var version = new EvidenceExtractionVersion
@@ -235,7 +240,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             Version = number,
             JobId = job.Id,
             SchemaVersion = EvidenceExtractionVersion.CurrentSchemaVersion,
-            PromptVersion = EvidenceExtractor.PromptVersion,
+            PromptVersion = promptVersion ?? EvidenceExtractor.PromptVersion,
             ModelId = modelId.Length <= 256 ? modelId : modelId[..256],
             Parameters = parameters,
             EvidenceCount = validation.Evidences.Count,
@@ -294,7 +299,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         {
             db.EvidenceMessageStates.Add(new EvidenceMessageState
             {
-                MessageId = job.MessageId,
+                MessageId = job.MessageId!.Value,
                 ProjectId = job.ProjectId,
                 CurrentVersionId = version.Id,
                 Revision = 1,
@@ -304,7 +309,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
             {
                 Id = Guid.NewGuid(),
                 ProjectId = job.ProjectId,
-                MessageId = job.MessageId,
+                MessageId = job.MessageId!.Value,
                 FromVersionId = null,
                 ToVersionId = version.Id,
                 PromotedBy = null,
@@ -321,6 +326,85 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         inference?.MarkWritten();
         db.ChangeTracker.Clear();
         return new(ExtractionCommitOutcome.Committed, version.Id);
+    }
+
+    // ------------------------------------------------------------------ aggregazione documentale (002 T051)
+
+    /// <summary>
+    /// Ricava, in sola lettura, la versione Evidence 1.1.0 di una Preparation dagli output immutabili delle sue unità: copertura dei range,
+    /// integrità di hash/manifesto/ordinali, fonti risolte sul testo canonico. <see cref="DocumentAggregationException"/> se non è aggregabile.
+    /// Il commit (autorità, numerazione, Completed, Ready, bundle corrente) è di <c>DocumentBundleStore</c>, che lo chiama sotto i propri lock.
+    /// </summary>
+    public Task<DocumentAggregate> LoadDocumentAggregateAsync(Guid preparationId, string? configuredModelId, CancellationToken ct) =>
+        DocumentEvidenceAggregator.LoadAsync(db, preparationId, configuredModelId, ct);
+
+    /// <summary>
+    /// Accoda (senza SaveChanges) versione, evidenze e relazioni dell'aggregazione documentale. La numerazione è per Preparation ed è calcolata qui:
+    /// il chiamante tiene il lock della Preparation, quindi due pubblicazioni non assegnano lo stesso numero (e Unique(JobId) rifiuta comunque la seconda).
+    /// Gli ID delle evidenze sono derivati dalla chiave globale, quindi stabili nel replay; le righe sono append-only e nessuna versione precedente è toccata.
+    /// </summary>
+    public async Task<EvidenceExtractionVersion> StageDocumentVersionAsync(
+        EvidenceExtractionJob job, DocumentAggregate aggregate, DateTimeOffset now, CancellationToken ct)
+    {
+        if (job.OriginKind != EvidenceOriginKind.Document || job.PreparationId != aggregate.PreparationId)
+        {
+            throw new ArgumentException("L'aggregatore non appartiene alla preparazione aggregata.", nameof(job));
+        }
+
+        var number = (await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.PreparationId == job.PreparationId).MaxAsync(v => (int?)v.Version, ct) ?? 0) + 1;
+        var version = new EvidenceExtractionVersion
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = job.ProjectId,
+            OriginKind = EvidenceOriginKind.Document,
+            PreparationId = job.PreparationId,
+            ManifestHash = aggregate.ManifestHash,
+            Version = number,
+            JobId = job.Id,
+            SchemaVersion = EvidenceExtractionVersion.DocumentSchemaVersion,
+            PromptVersion = DocumentEvidenceAgent.EffectivePromptVersion(job.ExtractorConfig),
+            ModelId = aggregate.ModelId,
+            Parameters = aggregate.ParametersJson,
+            EvidenceCount = aggregate.Evidences.Count,
+            NoEvidenceReason = aggregate.Evidences.Count == 0 ? aggregate.NoEvidenceReason : null,
+            CreatedAt = now,
+        };
+        db.EvidenceExtractionVersions.Add(version);
+        foreach (var e in aggregate.Evidences)
+        {
+            db.Evidences.Add(new EvidenceItem
+            {
+                Id = e.Id,
+                VersionId = version.Id,
+                ProjectId = job.ProjectId,
+                OriginKind = EvidenceOriginKind.Document,
+                PreparationId = job.PreparationId,
+                Ordinal = e.Ordinal,
+                Key = e.Key,
+                Kind = e.Kind,
+                Polarity = e.Polarity,
+                Certainty = e.Certainty,
+                Statement = e.Statement,
+                Content = DocumentEvidenceCodec.EncodeContent(e.Content),
+            });
+        }
+
+        foreach (var r in aggregate.Relations)
+        {
+            db.EvidenceRelations.Add(new EvidenceRelation
+            {
+                Id = r.Id,
+                ProjectId = job.ProjectId,
+                VersionId = version.Id,
+                FromEvidenceId = r.FromEvidenceId,
+                ToEvidenceId = r.ToEvidenceId,
+                Type = r.Type,
+                Basis = r.Basis,
+                Rationale = r.Rationale,
+            });
+        }
+
+        return version;
     }
 
     public static InferenceOwner Owner(ExtractionJobClaim claim) => new(null, null, claim.AttemptCount, claim.FencingToken, claim.JobId);
@@ -489,8 +573,8 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         }
 
         var versionIds = states.Values.Select(s => s.CurrentVersionId).ToList();
-        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.MessageId, ct);
-        var items = users.Select(u => versions[u.Id]).Select(v => new SelectionItem(v.MessageId, v.MessageSequence, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.MessageId!.Value, ct);
+        var items = users.Select(u => versions[u.Id]).Select(v => new SelectionItem(v.MessageId!.Value, v.MessageSequence!.Value, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
         var view = await BuildViewAsync(items, ct);
 
         var now = await NowAsync(ct);
@@ -515,6 +599,103 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
         db.ChangeTracker.Clear();
         return new(SelectionOutcome.Frozen, view);
     }
+
+    /// <summary>
+    /// Congela la selezione del run documentale (002 T059): come <see cref="FreezeSelectionAsync"/> per le versioni correnti dei messaggi PM entro il
+    /// cutoff (vista 001 immutata), e in più le versioni Evidence dei documenti Ready inclusi nello snapshot di fonti del run, scritte come
+    /// righe di selezione Document (preparazione e versione) nella stessa transazione e una sola volta, sotto lease/fencing del run. Con cutoff 0 non ci
+    /// sono messaggi PM e la selezione contiene i soli documenti. I tentativi successivi e il resume la rileggono identica.
+    /// </summary>
+    public async Task<SelectionResult> FreezeDocumentSelectionAsync(AnalysisRunClaim claim, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        if (await LoadSelectionAsync(claim.RunId, ct) is { } existing)
+        {
+            return new(SelectionOutcome.Existing, existing);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var valid = (await db.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM "ProcessingRuns"
+            WHERE "Id" = {claim.RunId} AND "Kind" = 'Analysis' AND "Status" = 'Running' AND "LeaseOwner" = {claim.LeaseOwner}
+              AND "FencingToken" = {claim.FencingToken} AND "LeaseUntil" > clock_timestamp() AND "DeadlineAt" > clock_timestamp()
+            FOR UPDATE
+            """).ToListAsync(ct)).Count == 1;
+        if (!valid)
+        {
+            return new(SelectionOutcome.Rejected);
+        }
+
+        if (await LoadSelectionAsync(claim.RunId, ct) is { } raced)
+        {
+            return new(SelectionOutcome.Existing, raced);
+        }
+
+        var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId, ct);
+        var users = await db.ConversationMessages.AsNoTracking()
+            .Where(m => m.ConversationId == run.ConversationId && m.Role == MessageRole.User && m.Sequence <= run.SourceCutoffSequence)
+            .OrderBy(m => m.Sequence)
+            .Select(m => new { m.Id, m.Sequence })
+            .ToListAsync(ct);
+        var ids = users.Select(u => u.Id).ToList();
+        var states = await db.EvidenceMessageStates.AsNoTracking().Where(s => ids.Contains(s.MessageId)).ToDictionaryAsync(s => s.MessageId, ct);
+        var missing = users.Where(u => !states.ContainsKey(u.Id)).Select(u => u.Sequence).ToList();
+        if (missing.Count > 0)
+        {
+            return new(SelectionOutcome.Missing, MissingSequences: missing);
+        }
+
+        var versionIds = states.Values.Select(s => s.CurrentVersionId).ToList();
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToDictionaryAsync(v => v.MessageId!.Value, ct);
+        var items = users.Select(u => versions[u.Id]).Select(v => new SelectionItem(v.MessageId!.Value, v.MessageSequence!.Value, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
+        var view = await BuildViewAsync(items, ct);
+
+        var documents = run.SourceSnapshotId is { } snapshotId
+            ? await db.SourceSnapshotItems.AsNoTracking()
+                .Where(i => i.SnapshotId == snapshotId && i.Included && i.Availability == SourceAvailability.Ready && i.EvidenceVersionId != null && i.PreparationId != null)
+                .OrderBy(i => i.DocumentId).ToListAsync(ct)
+            : [];
+
+        var now = await NowAsync(ct);
+        db.AnalysisEvidenceSelections.Add(new AnalysisEvidenceSelection
+        {
+            RunId = run.Id,
+            ProjectId = run.ProjectId,
+            CreatedAt = now,
+            ViewHash = view.Hash(),
+            View = view.Serialize(),
+        });
+        await db.SaveChangesAsync(ct);
+        db.AnalysisEvidenceSelectionItems.AddRange(items.Select(i => new AnalysisEvidenceSelectionItem
+        {
+            RunId = run.Id,
+            OriginKind = EvidenceOriginKind.Message,
+            MessageId = i.MessageId,
+            MessageSequence = i.Sequence,
+            VersionId = i.VersionId,
+        }));
+        db.AnalysisEvidenceSelectionItems.AddRange(documents.Select(d => new AnalysisEvidenceSelectionItem
+        {
+            RunId = run.Id,
+            OriginKind = EvidenceOriginKind.Document,
+            PreparationId = d.PreparationId,
+            VersionId = d.EvidenceVersionId!.Value,
+        }));
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+        return new(SelectionOutcome.Frozen, view);
+    }
+
+    /// <summary>Accoda (nel contesto corrente, senza salvare) le relazioni interpretative del run: append-only, deduplicate per (da, a, tipo).</summary>
+    public void AppendRunRelations(Guid runId, Guid projectId, IEnumerable<RunRelation> relations) =>
+        db.AnalysisEvidenceRelations.AddRange(relations
+            .GroupBy(r => (r.From, r.To, r.Type))
+            .Select(g => g.First())
+            .Select(r => new AnalysisEvidenceRelation
+            {
+                RunId = runId, FromEvidenceId = r.From, ToEvidenceId = r.To, Type = r.Type, Basis = r.Basis, Rationale = r.Rationale, ProjectId = projectId,
+            }));
 
     /// <summary>Vista deterministica per le versioni date: evidenze, relazioni asserite e versioni dei bersagli non selezionati.</summary>
     public async Task<EvidenceSelectionView> BuildViewAsync(IReadOnlyList<SelectionItem> items, CancellationToken ct)
@@ -545,7 +726,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
                           join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
                           where versionIds.Contains(e.VersionId)
                           select new { e, v.MessageSequence }).ToListAsync(ct);
-        return [.. rows.Select(r => EvidenceSnapshot.From(r.e, r.MessageSequence)).OrderBy(e => e.MessageSequence).ThenBy(e => e.Ordinal)];
+        return [.. rows.Select(r => EvidenceSnapshot.From(r.e, r.MessageSequence!.Value)).OrderBy(e => e.MessageSequence).ThenBy(e => e.Ordinal)];
     }
 
     /// <summary>Relazioni asserite dalle versioni date, con versione e messaggio del bersaglio.</summary>
@@ -560,7 +741,7 @@ public sealed class EvidenceLedgerStore(AppDbContext db)
                       join t in db.Evidences.AsNoTracking() on r.ToEvidenceId equals t.Id
                       where versionIds.Contains(r.VersionId)
                       orderby r.Id
-                      select new RelationRecord(r.Id, r.VersionId, r.FromEvidenceId, r.ToEvidenceId, t.VersionId, t.MessageId, r.Type, r.Basis, r.Rationale))
+                      select new RelationRecord(r.Id, r.VersionId, r.FromEvidenceId, r.ToEvidenceId, t.VersionId, t.MessageId!.Value, r.Type, r.Basis, r.Rationale))
             .ToListAsync(ct);
     }
 

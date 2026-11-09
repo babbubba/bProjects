@@ -228,6 +228,60 @@ describe('AnalysisPreviewComponent', () => {
     expect(el.querySelector('.analysis')!.innerHTML).not.toContain('<pre');
   });
 
+  it("completamento visto ma GET dell'anteprima fallito (rete caduta): alla riconnessione dello stream la sola lettura viene ripetuta, senza comandi", async () => {
+    await setup();
+    await click();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ status: 'Completed', analysisId: 'r-1', resultRevisionId: 'rev-1' }),
+    });
+    await settle();
+    http
+      .expectOne(`${BASE}/analyses/r-1`)
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await settle();
+    expect(el.querySelector('[data-testid=preview]')).toBeNull();
+
+    handlers.onConnected();                                    // lo stream si riconnette: riconciliazione
+    await settle();
+    http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
+    await settle();
+    expect(el.querySelector('[data-testid=preview]')).not.toBeNull();
+    handlers.onConnected();                                    // gia caricata: nessuna richiesta ulteriore
+    await settle();
+    http.expectNone(`${BASE}/analyses/r-1`);
+    expect(http.match((r) => r.method !== 'GET')).toHaveLength(0);
+  });
+
+  it("completamento visto ma GET dell'anteprima fallito: la sola lettura si ripete a intervalli anche senza riconnessione dello stream, poi si ferma", async () => {
+    await setup({ pollMs: 5 });
+    await click();
+    http
+      .expectOne((r) => r.method === 'POST')
+      .flush(run(), { status: 202, statusText: 'Accepted' });
+    await settle();
+    handlers.onEvent({
+      name: 'processing.state',
+      data: run({ status: 'Completed', analysisId: 'r-1', resultRevisionId: 'rev-1' }),
+    });
+    await settle();
+    http
+      .expectOne(`${BASE}/analyses/r-1`)
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await settle();
+    await new Promise((r) => setTimeout(r, 20));
+    http.expectOne(`${BASE}/analyses/r-1`).flush(analysis());
+    await settle();
+    expect(el.querySelector('[data-testid=preview]')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    http.expectNone(`${BASE}/analyses/r-1`);
+    expect(http.match((r) => r.method !== 'GET')).toHaveLength(0);
+  });
+
   it('un evento di un altro run non cambia lo stato', async () => {
     await setup();
     await click();
@@ -965,6 +1019,152 @@ describe('AnalysisPreviewComponent', () => {
 
       expect(el.querySelector('[data-testid=run-error]')).not.toBeNull();
       expect(el.querySelector('[data-testid=run-metrics]')).toBeNull();
+    });
+  });
+
+  describe('percorso documentale (002 T063): AnalysisContent 1.1', () => {
+    const openProject = project({
+      latestAnalysisRunId: 'r-1',
+      currentAnalysisId: 'r-1',
+      currentRevisionId: 'rev-1',
+    });
+    const docSource = (n: number) => ({
+      id: `ds-${n}`,
+      kind: 'DocumentPassage' as const,
+      messageId: null,
+      messageRole: null,
+      revisionId: null,
+      documentId: 'doc-1',
+      documentVersionId: 'ver-1',
+      preparationId: 'prep-1',
+      artifactId: 'art-1',
+      blockId: `b-${n}`,
+      start: 0,
+      end: 4,
+      quote: n === 1 ? '<script>alert(1)</script> Il sistema' : 'deve esportare',
+    });
+    const v11 = (over: Partial<AnalysisView> = {}): AnalysisView => {
+      const base = analysis();
+      return analysis({
+        schemaVersion: '1.1.0',
+        content: {
+          ...base.content,
+          schemaVersion: '1.1.0',
+          sourceCutoffSequence: 0,
+          sources: [docSource(1), docSource(2)],
+          requirements: [
+            {
+              id: 'q-1',
+              text: 'Esporta i dati',
+              classification: 'Documented',
+              evidenceRefs: ['ds-1', 'ds-2'],
+            },
+          ],
+        },
+        ...over,
+      });
+    };
+    const tid = (id: string) => el.querySelector<HTMLButtonElement>(`[data-testid=${id}]`)!;
+    const prepUrl = `${BASE}/documents/doc-1/versions/ver-1/preparations/prep-1`;
+
+    it('mostra classificazione Documentato e fonti documentali con citazione escapata', async () => {
+      await setup({ project: openProject, analysis: v11() });
+      expect(text()).toContain('Documentato');
+      expect(text()).toContain('F1 · passaggio di un documento');
+      expect(text()).toContain('<script>alert(1)</script> Il sistema');
+      expect(el.querySelector('.analysis script')).toBeNull();
+    });
+
+    it('«Vedi nei documenti» apre tutte le parti dell\'elemento, ciascuna nel proprio blocco', async () => {
+      await setup({ project: openProject, analysis: v11() });
+      http.expectNone(prepUrl);
+      tid('item-sources').click();
+      await settle();
+      expect(el.querySelectorAll('app-document-passage').length).toBe(2);
+      const calls = http.match((r) => r.url === prepUrl);
+      expect(calls.length).toBe(2);
+      for (const c of calls) c.flush({ id: 'prep-1', version: 1, isReady: true, processingStatus: 'Ready', contentState: 'Ready', blockCount: 2, issues: [], allowedActions: [] });
+      await settle();
+      http.match((r) => r.url.includes('/passages/')).forEach((r) => r.flush({}, { status: 404, statusText: 'x' }));
+      await settle();
+    });
+
+    it('un\'analisi 1.0 non offre le fonti nei documenti', async () => {
+      await setup({ project: openProject, analysis: analysis() });
+      expect(el.querySelector('[data-testid=item-sources]')).toBeNull();
+    });
+
+    it('la modifica di una 1.1 resta 1.1 e conserva le fonti documentali', async () => {
+      await setup({ project: openProject, analysis: v11() });
+      const ta = el.querySelector<HTMLTextAreaElement>('[data-section=requirements] [data-testid=item-text]')!;
+      ta.value = 'Esporta i dati in CSV';
+      ta.dispatchEvent(new Event('input'));
+      await settle();
+      tid('save').click();
+      await Promise.resolve();
+      await settle();
+      const put = http.expectOne((r) => r.method === 'PUT' && r.url === `${BASE}/analyses/r-1/preview`);
+      expect(put.request.body.schemaVersion).toBe('1.1.0');
+      expect(put.request.body.sources.map((s: { id: string }) => s.id)).toEqual(['ds-1', 'ds-2']);
+      expect(put.request.body.requirements[0].classification).toBe('Documented');
+      put.flush(v11({ currentRevisionId: 'rev-2', version: 2 }));
+      await settle();
+    });
+
+    it('hasSourceChanges avvisa senza revocare la conferma né disabilitare Genera', async () => {
+      await setup({
+        project: openProject,
+        analysis: v11({
+          validationState: 'PmConfirmed',
+          canGenerate: true,
+          canConfirm: false,
+          hasSourceChanges: true,
+        }),
+      });
+      expect(el.querySelector('[data-testid=source-changes]')!.textContent).toContain(
+        'La conferma resta valida',
+      );
+      expect(el.querySelector<HTMLElement>('[data-testid=confirmed-badge]')!.hidden).toBe(false);
+      expect(tid('generate').disabled).toBe(false);
+    });
+
+    it('senza hasSourceChanges nessun avviso', async () => {
+      await setup({ project: openProject, analysis: v11() });
+      expect(el.querySelector('[data-testid=source-changes]')).toBeNull();
+    });
+
+    it('sources_not_ready: nomina i documenti non pronti, nessun run', async () => {
+      await setup();
+      button().click();
+      await Promise.resolve();
+      await settle();
+      http.expectOne((r) => r.method === 'POST').flush(
+        {
+          code: 'sources_not_ready',
+          blockingSources: [
+            { documentId: 'd', displayName: 'Capitolato.pdf', versionId: 'v', version: 2, status: 'Parsing', allowedActions: [] },
+          ],
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await settle();
+      const msg = el.querySelector('[data-testid=command-error]')!.textContent!;
+      expect(msg).toContain('Capitolato.pdf v2 (Parsing)');
+      expect(msg).toContain('non è ancora pronto');
+      expect(el.querySelector('[data-testid=run-state]')).toBeNull();
+    });
+
+    it('no_source_input: chiede un messaggio o un documento pronto', async () => {
+      await setup();
+      button().click();
+      await Promise.resolve();
+      await settle();
+      http.expectOne((r) => r.method === 'POST').flush(
+        { code: 'no_source_input' },
+        { status: 422, statusText: 'Unprocessable' },
+      );
+      await settle();
+      expect(el.querySelector('[data-testid=command-error]')!.textContent).toContain('documento pronto');
     });
   });
 });

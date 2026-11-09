@@ -18,14 +18,17 @@ public sealed class AgentFactory
     private readonly ModelRuntimeMonitor? _runtime;
     private readonly TokenCounter _count;
     private readonly ChatOptions? _summarizerOptions;
+    private readonly DocumentPreflight _preflight;
 
     /// <summary>
     /// Con <paramref name="runtime"/> ogni chiamata al modello (anche la sintesi) passa dal controllo di coerenza della finestra.
     /// Sotto il controllo, ogni richiesta realmente inviata è registrata con la propria fase (<see cref="InferenceCaptureChatClient"/>).
     /// </summary>
     public AgentFactory(
-        AiOptions options, IChatClient model, TokenCounter count, ChatOptions? summarizerOptions = null, ModelRuntimeMonitor? runtime = null)
+        AiOptions options, IChatClient model, TokenCounter count, ChatOptions? summarizerOptions = null, ModelRuntimeMonitor? runtime = null,
+        IPayloadMeter? meter = null, PayloadCalibration? calibration = null)
     {
+        _preflight = new DocumentPreflight(options, runtime, meter, calibration);
         _options = options;
         _model = model;
         _runtime = runtime;
@@ -44,9 +47,13 @@ public sealed class AgentFactory
         return _runtime is null ? capture : new ModelRuntimeGuardChatClient(capture, _runtime, phase);
     }
 
-    public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null) =>
+    /// <summary>
+    /// Factory di produzione. <paramref name="calibration"/> (da <c>Documents:Calibration</c>) è la sola origine ammessa di un limite superiore del
+    /// payload documentale quando il runtime non espone template o tokenizer; senza, quel ramo resta <c>runtime_unverified</c>.
+    /// </summary>
+    public static AgentFactory Create(AiOptions options, InternalModelClient client, ModelRuntimeMonitor? runtime = null, PayloadCalibration? calibration = null) =>
         new(options, client.ChatClient, async (text, ct) => await client.CountTokensAsync(text, ct),
-            client.CreateChatOptions(temperature: 0, phase: AiPhase.Compaction), runtime);
+            client.CreateChatOptions(temperature: 0, phase: AiPhase.Compaction), runtime, meter: client, calibration: calibration);
 
     /// <summary>Client per la chat (budget della fase Chat).</summary>
     public Task<IChatClient> CreateCompactingClientAsync(string instructions, CancellationToken cancellationToken = default) =>
@@ -149,6 +156,40 @@ public sealed class AgentFactory
         + "La sintesi deve essere molto più breve dell'originale (al massimo un quarto della sua lunghezza): raggruppa gli elementi simili o ripetitivi "
         + "in poche frasi, senza elencarli uno per uno, ma non omettere mai negazioni, esclusioni, decisioni, nomi e identificativi. "
         + "Non aggiungere informazioni, interpretazioni o stime. Rispondi solo con la sintesi.";
+
+    /// <summary>Preflight documentale per modello/fase (finestra misurata, tokenizer e template del runtime, payload completo).</summary>
+    public DocumentPreflight Preflight => _preflight;
+
+    /// <summary>
+    /// Client di un agente batch documentale (T039): nessuna history, compattazione né sintesi; ogni chiamata passa dal preflight del
+    /// payload effettivo sul profilo verificato del modello/fase (<paramref name="expectedFingerprint"/> = impronta congelata dal
+    /// manifest). Runtime, finestra o tokenizer non verificati: <see cref="RuntimeUnverifiedException"/> prima di ogni richiesta.
+    /// </summary>
+    public IChatClient CreateBatchClient(AiPhase phase, string? expectedFingerprint = null)
+    {
+        var timed = new PhaseTimeoutChatClient(_model, phase, TimeSpan.FromSeconds(_options.ForPhase(phase).RequestTimeoutSeconds));
+        // Composizione per categoria (anche document_sources) sul payload realmente inviato, con il tokenizer del runtime.
+        var capture = new InferenceCaptureChatClient(timed, phase, _options, _runtime, _count);
+        return new DocumentPayloadChatClient(capture, _preflight, phase, expectedFingerprint);
+    }
+
+    /// <summary>
+    /// Agente batch: istruzioni della fase, nessun provider di history/compattazione e nessuno strumento. Ogni batch gira in una
+    /// sessione nuova (<see cref="RunBatchAsync"/>): tre batch entro budget ma oltre la finestra cumulativa non si accumulano.
+    /// </summary>
+    public ChatClientAgent CreateBatchAgent(string name, string id, string instructions, ChatOptions chatOptions, AiPhase phase, string? expectedFingerprint = null)
+    {
+        var options = chatOptions.Clone();
+        options.Instructions = instructions;
+        return new ChatClientAgent(CreateBatchClient(phase, expectedFingerprint), new ChatClientAgentOptions { Id = id, Name = name, ChatOptions = options });
+    }
+
+    /// <summary>Esegue un batch in una sessione nativa nuova e vuota: nessun turno precedente è implicito.</summary>
+    public static async Task<AgentResponse> RunBatchAsync(ChatClientAgent agent, IEnumerable<ChatMessage> input, CancellationToken cancellationToken = default)
+    {
+        var session = await agent.CreateSessionAsync(cancellationToken);
+        return await agent.RunAsync(input, session, cancellationToken: cancellationToken);
+    }
 
     /// <summary>Client del DocumentAgent: nessuna compattazione, fallisce con context_overflow prima della chiamata.</summary>
     public IChatClient CreateDocumentClient()

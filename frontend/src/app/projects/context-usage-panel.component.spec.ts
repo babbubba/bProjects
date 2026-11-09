@@ -8,12 +8,13 @@ import {
   calculated,
   contextUsage,
   estimated,
+  execution,
   measured,
   metrics,
   unavailable,
 } from './context-usage.fixtures';
 import { CONTEXT_USAGE_DEBOUNCE_MS } from './context-usage.store';
-import { ContextUsage } from './project-api.service';
+import { ContextUsage, ExecutionView } from './project-api.service';
 import { ProjectEventsService, ProjectStreamHandlers } from './project-events.service';
 
 const url = (id: string) => `/api/projects/${id}/context-usage`;
@@ -507,6 +508,169 @@ describe('ContextUsagePanelComponent', () => {
       await settle();
       expect(q('usage-error')).toBeNull();
       expect(text('usage-headline')).toContain('21.256');
+    });
+  });
+
+  describe('esecuzione, regime e budget per fase (T065)', () => {
+    const run = (over: Partial<ExecutionView> | null) =>
+      withLast({ execution: over === null ? null : execution(over) });
+    const section = () => q('usage-execution');
+
+    it('mostra regime, motivo e ricevuta tecnica abbreviata (hash completo in title)', async () => {
+      await load(run({}));
+
+      expect(text('execution-regime')).toContain('Ordinario');
+      expect(text('execution-reason')).toContain('una sola chiamata');
+      const receipt = q('execution-receipt')!;
+      expect(receipt.textContent?.trim()).toBe('a1b2c3d4e5f6');
+      expect(receipt.getAttribute('title')).toContain('a1b2c3d4e5f60718293a4b5c6d7e8f90');
+    });
+
+    it('cambio di regime: da Ordinario a Esteso per lavoro aggiuntivo, con la ricevuta di promozione', async () => {
+      await load(
+        run({
+          regime: 'Extended',
+          reason: 'additional_work',
+          promotedAt: '2030-01-01T10:02:00Z',
+          promotionReason: 'additional_work',
+          promotionReceiptHash: 'ffeeddccbbaa99887766',
+          effectiveDeadlineAt: '2030-01-01T11:00:00Z',
+        }),
+      );
+
+      expect(text('execution-regime')).toContain('Esteso');
+      expect(text('execution-regime-change')).toContain('Da Ordinario a Esteso');
+      expect(text('execution-regime-change')).toContain('aggiuntivo');
+      expect(q('execution-promotion-receipt')!.textContent?.trim()).toBe('ffeeddccbbaa');
+    });
+
+    it('un root esteso avvisa, nella regione live, che prosegue in background', async () => {
+      await load(
+        run({ initialRegime: 'Extended', regime: 'Extended', reason: 'multipass_or_capacity' }),
+      );
+
+      const notes = q('usage-notes')!;
+      expect(notes.getAttribute('role')).toBe('status');
+      expect(text('execution-extended-note')).toContain('prosegue in background');
+      expect(text('execution-extended-note')).toContain('continuare a usare');
+      expect(notes.contains(q('execution-extended-note'))).toBe(true);
+    });
+
+    it('Pending: regime provvisorio dichiarato, nessuna ricevuta inventata', async () => {
+      await load(
+        run({
+          initialRegime: null,
+          regime: 'Extended',
+          classificationStatus: 'Pending',
+          reason: 'preflight_pending',
+          classificationRecordHash: null,
+        }),
+      );
+
+      expect(text('execution-regime')).toContain('provvisorio');
+      expect(q('execution-receipt')).toBeNull();
+    });
+
+    it('il limite massimo non è presentato come durata prevista', async () => {
+      await load(run({ effectiveDeadlineAt: '2030-01-01T10:03:00Z' }));
+
+      const deadline = text('execution-deadline')!;
+      expect(deadline).toContain('Limite massimo');
+      expect(deadline).toMatch(/non è una durata prevista/);
+      expect(deadline).not.toMatch(/previsti|ETA/i);
+    });
+
+    it('scadenza assente: nessun limite inventato', async () => {
+      await load(
+        run({ effectiveDeadlineAt: null, hardDeadlineAt: null, ordinaryDeadlineAt: null }),
+      );
+
+      expect(text('execution-deadline')).toContain('non disponibile');
+    });
+
+    it('unità: solo quelle realmente pianificate finora, mai una percentuale simulata', async () => {
+      await load(run({ completedUnits: 2, plannedUnits: 5 }));
+
+      expect(text('execution-units')).toBe('Unità: 2 di 5 pianificate finora');
+      expect(section()!.textContent).not.toContain('%');
+      expect(section()!.querySelector('[role=progressbar], progress, .progress')).toBeNull();
+    });
+
+    it('unità non disponibili restano indisponibili, non zero', async () => {
+      await load(run({ completedUnits: null, plannedUnits: null }));
+      expect(text('execution-units')).toBe('Unità: indisponibili');
+    });
+
+    it('unità completate note ma piano non disponibile: lo dichiara', async () => {
+      await load(run({ completedUnits: 0, plannedUnits: null }));
+      expect(text('execution-units')).toContain('0 completate');
+      expect(text('execution-units')).toContain('pianificazione non disponibile');
+    });
+
+    it('nessun selettore di strategia, consenso tecnico o campo di input', async () => {
+      await load(run({ regime: 'Extended', reason: 'workload_unknown' }));
+
+      expect(
+        section()!.querySelector('input, select, textarea, [role=radio], [role=checkbox]'),
+      ).toBeNull();
+      expect(section()!.textContent).not.toMatch(/strategia|profondità|consenso|conferma tecnica/i);
+    });
+
+    it('record 001 senza execution: sezione dichiarata non disponibile, nessun tempo', async () => {
+      await load(run(null));
+
+      expect(text('execution-none')).toContain('non disponibili');
+      expect(q('execution-regime')).toBeNull();
+      expect(q('execution-timing')).toBeNull();
+    });
+
+    it('i tempi per fase passano dal componente delle metriche; null resta indisponibile', async () => {
+      await load(run({ queueMs: null, recoveryMs: null }));
+
+      expect(text('timing-queue')).toBe('Coda indisponibile');
+      expect(text('timing-recovery')).toBe('Recupero indisponibile');
+      expect(text('timing-processing')).toBe('Calcolo 6,5 s');
+    });
+
+    it('budget di input e output massimo per ciascuna fase, dichiarati come limiti e non consumi', async () => {
+      await load(run({}));
+
+      const rows = [...el.querySelectorAll('[data-testid=phase-budgets] tbody tr')];
+      expect(rows.map((r) => r.getAttribute('data-phase'))).toEqual([
+        'chat',
+        'analysis',
+        'document',
+        'compaction',
+        'extraction',
+      ]);
+      expect(rows[0].textContent).toContain('24.064');
+      expect(rows[3].textContent).toContain('30.208');
+      expect(rows[4].textContent).toContain('4.096');
+      expect(text('phase-budgets-caption')).toMatch(/limiti configurati, non consumi/i);
+    });
+
+    it('la composizione distingue le fonti salvate dal testo effettivamente inviato come contesto', async () => {
+      await load(run({}));
+
+      const caption = text('composition-caption')!;
+      expect(caption).toMatch(/Fonti documentali/);
+      expect(caption).toMatch(/inviato al modello in questa richiesta/);
+      expect(caption).toMatch(/non le fonti salvate/);
+    });
+
+    it('a11y: sezioni con nome accessibile, tabella con intestazioni e comandi da tastiera', async () => {
+      await load(run({}));
+
+      expect(section()!.getAttribute('aria-label')).toBe('Esecuzione della richiesta');
+      expect(section()!.querySelector('h3')).not.toBeNull();
+      const budgets = q('phase-budgets')!;
+      expect(budgets.querySelector('caption')).not.toBeNull();
+      expect(budgets.querySelectorAll('th[scope=col]').length).toBeGreaterThanOrEqual(3);
+      expect(budgets.querySelectorAll('tbody th[scope=row]').length).toBe(5);
+      const buttons = [...el.querySelectorAll<HTMLElement>('button')];
+      expect(buttons.length).toBeGreaterThan(0);
+      for (const b of buttons) expect(b.tabIndex).toBeGreaterThanOrEqual(0);
+      expect(el.querySelector('[tabindex]:not([tabindex="0"]):not([tabindex="-1"])')).toBeNull();
     });
   });
 });

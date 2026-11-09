@@ -1,4 +1,4 @@
-import { ContextUsage, InferenceMetrics, TokenValue } from './project-api.service';
+import { ContextUsage, ExecutionView, InferenceMetrics, TokenValue } from './project-api.service';
 
 /** Fixture conformi al contratto HTTP «Metriche di inferenza e monitor del contesto» (solo per i test). */
 export const measured = (value: number): TokenValue => ({ value, source: 'measured' });
@@ -24,6 +24,34 @@ export function metrics(over: Partial<InferenceMetrics> = {}): InferenceMetrics 
     finishReason: 'stop',
     calls: 1,
     compaction: null,
+    ...over,
+  };
+}
+
+export function execution(over: Partial<ExecutionView> = {}): ExecutionView {
+  return {
+    initialRegime: 'Ordinary',
+    regime: 'Ordinary',
+    classificationStatus: 'Classified',
+    classificationVersion: 'document-regime-v2',
+    classificationRecordHash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+    reason: 'single_call_fit',
+    requestedAt: '2030-01-01T10:00:00Z',
+    ordinaryDeadlineAt: '2030-01-01T10:03:00Z',
+    hardDeadlineAt: '2030-01-01T11:00:00Z',
+    effectiveDeadlineAt: '2030-01-01T10:03:00Z',
+    promotedAt: null,
+    promotionReason: null,
+    promotionReceiptHash: null,
+    elapsedMs: 9000,
+    queueMs: 1200,
+    processingMs: 6500,
+    preflightMs: 300,
+    backoffMs: 0,
+    recoveryMs: null,
+    stage: 'completed',
+    completedUnits: 1,
+    plannedUnits: 1,
     ...over,
   };
 }

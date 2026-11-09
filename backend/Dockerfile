@@ -9,6 +9,8 @@ RUN dotnet publish backend/src/bProjects.App/bProjects.App.csproj -c Release --n
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /out .
+# Radice privata degli originali (Documents__StorageRoot): il volume nominato eredita proprietario e permessi di questa cartella.
+RUN mkdir -p /var/lib/bprojects/documents && chown $APP_UID:$APP_UID /var/lib/bprojects/documents && chmod 700 /var/lib/bprojects/documents
 EXPOSE 8080
 USER $APP_UID
 ENTRYPOINT ["dotnet", "bProjects.App.dll"]

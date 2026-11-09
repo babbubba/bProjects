@@ -4,6 +4,8 @@
  * immagini remote (le immagini diventano testo), script o link con schemi diversi da http/https/mailto.
  * I marcatori `[fonte:<id>]` diventano nodi «source» risolti dalla UI.
  */
+import type { DraftSourceMapEntry } from './project-api.service';
+
 export interface InlineNode {
   t: 'text' | 'strong' | 'em' | 'code' | 'link' | 'source';
   /** Testo (text, code). */
@@ -186,4 +188,59 @@ export function parseMarkdown(markdown: string): MdBlock[] {
     blocks.push({ t: 'paragraph', c: parseInline(paragraph.join(' ')) });
   }
   return blocks;
+}
+
+/** Gruppo di citazione ricostruito dalla mappa persistita: le fonti sono nell'ordine delle parti (002 T087). */
+export interface CitationGroup {
+  evidenceId: string;
+  citationGroupId: string;
+  sourceIds: string[];
+}
+
+/**
+ * Gruppi di citazione che contengono la fonte, letti SOLO dalla mappa persistita (evidenza, gruppo, parte): mai dedotti dalla sequenza dei sourceIds.
+ * Due gruppi con lo stesso header restano distinti; le voci senza evidenza o gruppo (PmRevision, registro assente) non formano gruppi.
+ * Senza mappa (bozza storica) il risultato è vuoto.
+ */
+export function citationGroupsOf(
+  sourceMap: readonly DraftSourceMapEntry[] | null | undefined,
+  sourceId: string,
+): CitationGroup[] {
+  const groups = new Map<string, Map<string, number>>();
+  for (const e of sourceMap ?? []) {
+    if (!e.evidenceId || !e.citationGroupId || e.part == null) continue;
+    const key = JSON.stringify([e.evidenceId, e.citationGroupId]);
+    const parts = groups.get(key) ?? new Map<string, number>();
+    if (!parts.has(e.sourceId)) parts.set(e.sourceId, e.part);
+    groups.set(key, parts);
+  }
+  return [...groups.entries()]
+    .filter(([, parts]) => parts.has(sourceId))
+    .map(([key, parts]) => {
+      const [evidenceId, citationGroupId] = JSON.parse(key) as [string, string];
+      return {
+        evidenceId,
+        citationGroupId,
+        sourceIds: [...parts.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id),
+      };
+    });
+}
+
+export type TextSegment = { t: 'text'; v: string } | { t: 'source'; id: string };
+
+/**
+ * Divide un testo semplice (messaggio della chat) in testo e marcatori `[fonte:<id>]`, senza interpretare altro Markdown né HTML.
+ * Il testo resta sempre dato da interpolare: l'escaping è del template.
+ */
+export function splitSourceMarkers(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const pattern = /\[fonte:([A-Za-z0-9-]{1,64})\]/g;
+  let last = 0;
+  for (let m = pattern.exec(text); m; m = pattern.exec(text)) {
+    if (m.index > last) segments.push({ t: 'text', v: text.slice(last, m.index) });
+    segments.push({ t: 'source', id: m[1] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ t: 'text', v: text.slice(last) });
+  return segments;
 }

@@ -96,7 +96,7 @@ public sealed class MafApiCompatibilityTests
     }
 
     /// <summary>Store JSON in memoria per provare CheckpointManager.CreateJson (lo store PostgreSQL è un task successivo).</summary>
-    private sealed class InMemoryJsonCheckpointStore : ICheckpointStore<JsonElement>
+    internal sealed class InMemoryJsonCheckpointStore : ICheckpointStore<JsonElement>
     {
         private readonly ConcurrentDictionary<string, List<(CheckpointInfo Info, JsonElement Value)>> _runs = new();
 

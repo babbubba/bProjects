@@ -36,6 +36,8 @@ public sealed record AnalysisValidationResult(bool Accepted, string? Code, IRead
     public static AnalysisValidationResult Ok(AnalysisContent content) => new(true, null, [], content);
 }
 
+public sealed record DocumentAnalysisValidationResult(bool Accepted, string? Code, IReadOnlyList<string> Violations, DocumentAnalysisContent? Content);
+
 public static class AnalysisContentValidator
 {
     public const string InvalidAgentOutput = "invalid_agent_output";
@@ -89,6 +91,153 @@ public static class AnalysisContentValidator
         return violations.Count == 0
             ? AnalysisValidationResult.Ok(content)
             : new(false, CodeFor(actor), violations, null);
+    }
+
+    /// <summary>
+    /// Validatore di revisione 1.1.0 (T060): regole strutturali di <see cref="DocumentAnalysisContentRules"/> più identità del server, stato per attore,
+    /// fonti Message/PmRevision risolte e privilegi (l'AI non risolve conflitti né crea PmRevision; il PM non crea né altera fonti documentali, che
+    /// devono coincidere con quelle della revisione corrente; risoluzioni motivate con fonte PmRevision). La verifica di blocco/quote contro l'originale
+    /// delle fonti documentali dell'AI resta a monte (snapshot congelato, T059): qui le fonti documentali sono immutabili.
+    /// </summary>
+    public static DocumentAnalysisValidationResult Validate(
+        DocumentAnalysisContent content, AnalysisValidationContext context, AnalysisActorKind actor, DocumentAnalysisContent? current, int readyDocumentSourceCount)
+    {
+        var violations = new List<string>();
+        var pmMessages = context.Messages.Count(m => m.Role == AnalysisMessageRole.User && m.Sequence <= context.SourceCutoffSequence);
+        violations.AddRange(DocumentAnalysisContentRules.Check(
+            content, new DocumentAnalysisFacts(context.ProjectId, context.AnalysisId, context.SourceCutoffSequence, pmMessages, readyDocumentSourceCount)));
+
+        var expected = actor == AnalysisActorKind.PmConfirm ? AnalysisContentState.PmConfirmed : AnalysisContentState.Unvalidated;
+        if (content.ValidationState != expected)
+        {
+            violations.Add($"validationState: atteso {expected} per questo attore.");
+        }
+
+        var historical = (current?.Sources ?? []).ToDictionary(x => x.Id);
+        for (var i = 0; i < content.Sources.Count; i++)
+        {
+            var source = content.Sources[i];
+            var path = $"sources[{i}]";
+            switch (source.Kind)
+            {
+                case DocumentAnalysisSourceKind.Message when source.MessageId is not null && source.MessageRole is not null:
+                    var message = context.Messages.FirstOrDefault(m => m.Id == source.MessageId);
+                    if (message is null || message.ProjectId != context.ProjectId)
+                    {
+                        violations.Add($"{path}.messageId: messaggio inesistente nel progetto.");
+                    }
+                    else if (message.Sequence > context.SourceCutoffSequence)
+                    {
+                        violations.Add($"{path}.messageId: messaggio oltre il cutoff.");
+                    }
+                    else if (message.Role != source.MessageRole)
+                    {
+                        violations.Add($"{path}.messageRole: incoerente con il messaggio.");
+                    }
+
+                    break;
+                case DocumentAnalysisSourceKind.PmRevision when source.RevisionId is not null:
+                    if (actor == AnalysisActorKind.Ai)
+                    {
+                        violations.Add($"{path}: l'AI non può creare fonti PmRevision.");
+                    }
+                    else if (!context.PmRevisionIds.Contains(source.RevisionId.Value))
+                    {
+                        violations.Add($"{path}.revisionId: non è una revisione PM di questa analisi.");
+                    }
+
+                    break;
+                case DocumentAnalysisSourceKind.DocumentPassage when actor != AnalysisActorKind.Ai:
+                    if (!historical.TryGetValue(source.Id, out var known) || known != source)
+                    {
+                        violations.Add($"{path}: il PM non può aggiungere o modificare fonti documentali.");
+                    }
+
+                    break;
+            }
+        }
+
+        for (var i = 0; i < content.Conflicts.Count; i++)
+        {
+            CheckResolution(content.Conflicts[i], $"conflicts[{i}]", actor, content.Sources, violations);
+        }
+
+        if (actor == AnalysisActorKind.PmConfirm)
+        {
+            if (current is null)
+            {
+                violations.Add("conferma: revisione corrente mancante.");
+            }
+            else
+            {
+                if (current.ValidationState != AnalysisContentState.Unvalidated)
+                {
+                    violations.Add("conferma: la revisione corrente è già confermata.");
+                }
+
+                var before = JsonSerializer.SerializeToNode(current with { ValidationState = AnalysisContentState.PmConfirmed }, DocumentAnalysisContentJson.Options);
+                var after = JsonSerializer.SerializeToNode(content, DocumentAnalysisContentJson.Options);
+                if (!System.Text.Json.Nodes.JsonNode.DeepEquals(before, after))
+                {
+                    violations.Add("conferma: può cambiare soltanto validationState rispetto alla revisione corrente.");
+                }
+            }
+        }
+        else if (actor == AnalysisActorKind.PmEdit && current is not null)
+        {
+            var kept = content.Sources.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First());
+            violations.AddRange(current.Sources
+                .Where(h => !kept.TryGetValue(h.Id, out var k) || k != h)
+                .Select(h => $"sources: la fonte storica {h.Id} non può essere rimossa o mutata."));
+        }
+
+        var distinct = violations.Distinct().ToList();
+        return distinct.Count == 0
+            ? new(true, null, [], content)
+            : new(false, CodeFor(actor), distinct, null);
+    }
+
+    private static void CheckResolution(
+        DocumentAnalysisConflict conflict, string path, AnalysisActorKind actor, IReadOnlyList<DocumentAnalysisSource> sources, List<string> violations)
+    {
+        if (conflict.Status != AnalysisConflictStatus.Resolved)
+        {
+            return;
+        }
+
+        if (actor == AnalysisActorKind.Ai)
+        {
+            violations.Add($"{path}.status: l'AI non può risolvere conflitti.");
+            return;
+        }
+
+        var resolution = conflict.Resolution;
+        if (resolution is null)
+        {
+            return; // già segnalato dalle regole strutturali
+        }
+
+        if (resolution.SelectedAlternativeIds.Count < 1 || resolution.SelectedAlternativeIds.Distinct().Count() != resolution.SelectedAlternativeIds.Count)
+        {
+            violations.Add($"{path}.resolution.selectedAlternativeIds: almeno una scelta, senza duplicati.");
+        }
+
+        var alternativeIds = conflict.Alternatives.Select(a => a.Id).ToHashSet();
+        if (resolution.SelectedAlternativeIds.Any(id => !alternativeIds.Contains(id)))
+        {
+            violations.Add($"{path}.resolution.selectedAlternativeIds: la scelta deve essere fra le alternative del conflitto.");
+        }
+
+        if (string.IsNullOrWhiteSpace(resolution.Reason))
+        {
+            violations.Add($"{path}.resolution.reason: motivo vuoto o solo spazi.");
+        }
+
+        var byId = sources.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First());
+        if (!resolution.EvidenceRefs.Any(r => byId.TryGetValue(r, out var s) && s.Kind == DocumentAnalysisSourceKind.PmRevision))
+        {
+            violations.Add($"{path}.resolution.evidenceRefs: la risoluzione deve citare la modifica PM (fonte PmRevision).");
+        }
     }
 
     private static string CodeFor(AnalysisActorKind actor) => actor == AnalysisActorKind.Ai ? InvalidAgentOutput : PreviewInvalid;

@@ -1,3 +1,4 @@
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,6 +20,25 @@ public sealed record TokenValue(int? Value, string Source)
 public sealed record MaxOutputTokensView(int? Value, bool Confirmed);
 
 public sealed record ReasoningView(bool Requested, string Effective);
+
+/// <summary>Impronta (T102) del modello effettivo di una chiamata: modello e finestra verificata persistiti con la chiamata, più l'hash stabile dei due.</summary>
+public sealed record ModelFingerprintView(string ModelId, TokenValue ContextWindowTokens, string Hash);
+
+/// <summary>
+/// Tentativo di un lavoro logico (T102): outcome winning|failed|interrupted|rejected|unrecorded, stato peggiore fra le chiamate persistite (null se unrecorded),
+/// numero di chiamate, tempo attivo (unione, null se non osservabile), token misurati, finishReason e impronta del modello. Mai prompt, ragionamento, testo di trasporto
+/// né fencing token.
+/// </summary>
+public sealed record AttemptView(
+    int Attempt,
+    string Outcome,
+    string? State,
+    int Calls,
+    long? ActiveMs,
+    TokenValue PromptTokens,
+    TokenValue CompletionTokens,
+    string? FinishReason,
+    ModelFingerprintView? Model);
 
 public sealed record SummaryCallsView(int SummaryCalls, TokenValue SummaryPromptTokens, TokenValue SummaryCompletionTokens);
 
@@ -100,6 +120,57 @@ public static class InferenceMetrics
                 : new SummaryCallsView(summaries.Count, Sum(summaries.Select(s => s.PromptTokens)), Sum(summaries.Select(s => s.CompletionTokens))));
     }
 
+    /// <summary>
+    /// Impronta del modello effettivo di una chiamata (T102): modello e finestra verificata letti dalla riga della chiamata, mai dalla configurazione corrente né dal monitor
+    /// del runtime. Hash = primi 16 esadecimali minuscoli di SHA-256 di «modelId|finestra» (finestra «unavailable» se non verificata).
+    /// </summary>
+    internal static ModelFingerprintView Fingerprint(InferenceCall call)
+    {
+        var input = $"{call.ModelId}|{call.ContextWindowTokens?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unavailable"}";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input))).ToLowerInvariant()[..16];
+        return new ModelFingerprintView(call.ModelId, TokenValue.Measured(call.ContextWindowTokens), hash);
+    }
+
+    /// <summary>
+    /// Tentativi dello stesso lavoro logico (stesso proprietario: mai righe di altri root, di figli o di fratelli), distinti per (tentativo, fencing token) e
+    /// ordinati per numero: il vincente è quello della chiamata finale; gli altri sono falliti, interrotti o rifiutati dal validatore secondo gli stati persistiti.
+    /// Un tentativo numerato fino a <paramref name="attemptsMade"/> senza alcuna riga (lease scaduto prima della scrittura) è «unrecorded»: nessun tempo, token
+    /// o modello inventato. Il tempo attivo è l'unione degli intervalli delle chiamate del tentativo (null se una durata manca): non si somma mai fra tentativi né a recupero e coda.
+    /// </summary>
+    internal static IReadOnlyList<AttemptView> Attempts(InferenceCall final, IReadOnlyCollection<InferenceCall> ownerRows, int attemptsMade)
+    {
+        var groups = ownerRows.GroupBy(r => (r.Attempt, r.FencingToken))
+            .OrderBy(g => g.Key.Attempt).ThenBy(g => g.Min(r => r.StartedAt))
+            .Select(g => AttemptOf(g.Key, g.OrderBy(r => r.StartedAt).ToList(), final))
+            .ToList();
+        var recorded = groups.Select(g => g.Attempt).ToHashSet();
+        groups.AddRange(Enumerable.Range(1, Math.Max(0, attemptsMade)).Where(a => !recorded.Contains(a))
+            .Select(a => new AttemptView(a, "unrecorded", null, 0, null, TokenValue.Unavailable, TokenValue.Unavailable, null, null)));
+        return [.. groups.OrderBy(a => a.Attempt)];
+    }
+
+    private static AttemptView AttemptOf((int Attempt, long FencingToken) key, IReadOnlyList<InferenceCall> calls, InferenceCall final)
+    {
+        var winning = key.Attempt == final.Attempt && key.FencingToken == final.FencingToken;
+        var state = calls.Any(c => c.State == InferenceCallState.Failed) ? InferenceCallState.Failed
+            : calls.Any(c => c.State is InferenceCallState.Interrupted or InferenceCallState.Running) ? InferenceCallState.Interrupted
+            : InferenceCallState.Completed;
+        var outcome = winning ? "winning" : state switch
+        {
+            InferenceCallState.Failed => "failed",
+            InferenceCallState.Interrupted => "interrupted",
+            _ => "rejected",
+        };
+        // Chiamata che rappresenta il tentativo: la finale del vincente, altrimenti l'ultima non di sintesi (la compattazione ha un proprio modello di fase).
+        var main = winning ? final : calls.LastOrDefault(c => c.Phase != AiPhase.Compaction) ?? calls[^1];
+        long? active = calls.Any(c => c.DurationMs is null)
+            ? null
+            : ExecutionTelemetry.UnionLength([.. calls.Select(c => (c.StartedAt.ToUnixTimeMilliseconds(), c.StartedAt.ToUnixTimeMilliseconds() + c.DurationMs!.Value))]);
+        return new AttemptView(
+            key.Attempt, outcome, state.ToString().ToLowerInvariant(), calls.Count, active,
+            Sum(calls.Select(c => c.PromptTokens)), Sum(calls.Select(c => c.CompletionTokens)), main.FinishReason, Fingerprint(main));
+    }
+
     /// <summary>Somma di valori misurati: measured se è uno solo, calculated se più d'uno, unavailable se ne manca anche uno.</summary>
     internal static TokenValue Sum(IEnumerable<int?> values)
     {
@@ -110,5 +181,264 @@ public static class InferenceMetrics
         }
 
         return list.Count == 1 ? TokenValue.Measured(list[0]) : TokenValue.Calculated(list.Sum());
+    }
+}
+
+/// <summary>
+/// Vista «execution» di un root (contracts/http-api.md, D1/F1/F7). Solo misure e metadati: nessun campo afferma il rispetto di un target
+/// temporale, perché Completed non certifica il profilo N. QueueMs/ProcessingMs sono null (unavailable) quando gli intervalli non sono osservabili.
+/// </summary>
+public sealed record ExecutionView(
+    string? InitialRegime,
+    string? Regime,
+    string? ClassificationStatus,
+    string? ClassificationVersion,
+    string? ClassificationRecordHash,
+    string? Reason,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset? OrdinaryDeadlineAt,
+    DateTimeOffset? HardDeadlineAt,
+    DateTimeOffset? EffectiveDeadlineAt,
+    DateTimeOffset? PromotedAt,
+    string? PromotionReason,
+    string? PromotionReceiptHash,
+    long ElapsedMs,
+    long? QueueMs,
+    long? ProcessingMs,
+    long? PreflightMs,
+    long? BackoffMs,
+    long? RecoveryMs,
+    string? Stage,
+    int? CompletedUnits,
+    int? PlannedUnits);
+
+/// <summary>Chiamate del tentativo vincente di un'unità (o del root stesso): nessuna riga di altri tentativi né dei figli.</summary>
+public sealed record UnitMetricsView(
+    Guid? JobId, Guid? UnitId, string Phase, string ModelId, int Attempt, int Calls, long? DurationMs,
+    TokenValue PromptTokens, TokenValue CompletionTokens, TokenValue TotalTokens);
+
+/// <summary>Diagnostica redatta di un tentativo senza risultato: solo stato e numeri, mai testo di trasporto, prompt, documento o ragionamento.</summary>
+public sealed record FailedAttemptView(Guid? JobId, int Attempt, string Phase, string State, string? FinishReason, long? DurationMs);
+
+public sealed record RootMetricsView(
+    int Calls,
+    IReadOnlyList<string> ModelIds,
+    TokenValue PromptTokens,
+    TokenValue CompletionTokens,
+    TokenValue TotalTokens,
+    IReadOnlyList<UnitMetricsView> Units,
+    IReadOnlyList<FailedAttemptView> FailedAttempts);
+
+public sealed record RootTelemetryView(ExecutionView Execution, RootMetricsView Metrics);
+
+/// <summary>
+/// Telemetria di un root (turno, run o preparazione) letta dal database, sempre filtrata per progetto. La durata totale è autorevole e
+/// viene dai timestamp del database (t0 e chiusura, oppure il clock del database per un root in corso). Le metriche aggregano solo le chiamate
+/// del tentativo vincente di ciascun proprietario (il root o, per la preparazione, ogni job figlio): le righe dei figli non si sommano mai
+/// a quelle del padre. Il tempo di elaborazione è l'unione temporale degli intervalli osservati delle chiamate; basta una chiamata senza
+/// durata (crash, interruzione) perché diventi unavailable. Coda, preflight e backoff sono la somma di intervalli persistiti mutuamente esclusivi, null se un intervallo manca; il recupero (T102) è l'intervallo fra la scadenza del lease di un tentativo e il claim che lo riprende, null se un tentativo raggiunto per recupero non ne ha il record (mai zero).
+/// </summary>
+public static class ExecutionTelemetry
+{
+    public static async Task<RootTelemetryView?> ForRootAsync(AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, CancellationToken ct)
+    {
+        var root = await LoadRootAsync(db, projectId, kind, rootId, ct);
+        if (root is null)
+        {
+            return null;
+        }
+
+        var isPreparation = kind == ClassificationOwnerKind.DocumentPreparation;
+        var jobs = isPreparation
+            ? await db.DocumentJobs.AsNoTracking().Where(j => j.ProjectId == projectId && j.PreparationId == rootId)
+                .Select(j => new JobRow(j.Id, j.UnitId, j.Kind, j.Status, j.CompletedAt)).ToListAsync(ct)
+            : [];
+        var calls = await CallsOfAsync(db, projectId, kind, rootId, jobs, ct);
+
+        var now = await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").SingleAsync(ct);
+        var end = root.CompletedAt
+            ?? (isPreparation && root.Terminal ? jobs.Max(j => j.CompletedAt) : null)
+            ?? now;
+        var elapsed = (long)(end - root.RequestedAt).TotalMilliseconds;
+
+        string? promotionHash = null;
+        if (!isPreparation)
+        {
+            var rootKind = kind == ClassificationOwnerKind.ChatTurn ? WorkOwnerKind.ChatTurn : WorkOwnerKind.ProcessingRun;
+            promotionHash = await db.RegimeTransitions.AsNoTracking()
+                .Where(t => t.ProjectId == projectId && t.RootId == rootId && t.RootKind == rootKind && t.ToRegime == ExecutionRegime.Extended)
+                .OrderByDescending(t => t.At).Select(t => t.DerivedPlanHash).FirstOrDefaultAsync(ct);
+        }
+
+        var recordHash = await db.ClassificationRecords.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && r.OwnerKind == kind && r.OwnerId == rootId)
+            .OrderByDescending(r => r.Ordinal).Select(r => r.InputHash).FirstOrDefaultAsync(ct);
+
+        var waits = await WaitTimesAsync(db, projectId, kind, rootId, root, ct);
+        var units = jobs.Where(j => j.Kind == DocumentJobKind.ExtractUnit).ToList();
+        var execution = new ExecutionView(
+            root.InitialRegime?.ToString(), root.Regime?.ToString(), root.ClassificationStatus?.ToString(), root.ClassificationVersion, recordHash, root.ClassificationReason,
+            root.RequestedAt, root.OrdinaryDeadlineAt, root.HardDeadlineAt, root.EffectiveDeadlineAt, root.PromotedAt, root.PromotedReason, promotionHash,
+            elapsed, waits.Queue, ProcessingMs(calls), waits.Preflight, waits.Backoff, waits.Recovery, root.Stage,
+            isPreparation ? units.Count(j => j.Status == DocumentJobStatus.Completed) : null,
+            isPreparation ? units.Count : null);
+        return new RootTelemetryView(execution, Metrics(calls, jobs));
+    }
+
+    /// <summary>Lunghezza dell'unione di intervalli [start, end) in millisecondi: nessun doppio conteggio delle sovrapposizioni.</summary>
+    public static long UnionLength(IReadOnlyCollection<(long Start, long End)> intervals)
+    {
+        long total = 0;
+        long? from = null;
+        long to = 0;
+        foreach (var (start, end) in intervals.Where(i => i.End > i.Start).OrderBy(i => i.Start))
+        {
+            if (from is null)
+            {
+                (from, to) = (start, end);
+            }
+            else if (start <= to)
+            {
+                to = Math.Max(to, end);
+            }
+            else
+            {
+                total += to - from.Value;
+                (from, to) = (start, end);
+            }
+        }
+
+        return from is null ? total : total + (to - from.Value);
+    }
+
+    private sealed record RootRow(
+        DateTimeOffset RequestedAt, DateTimeOffset? CompletedAt, bool Terminal, ExecutionRegime? InitialRegime, ExecutionRegime? Regime, ClassificationStatus? ClassificationStatus,
+        string? ClassificationVersion, string? ClassificationReason, DateTimeOffset? OrdinaryDeadlineAt, DateTimeOffset? HardDeadlineAt, DateTimeOffset? EffectiveDeadlineAt,
+        DateTimeOffset? PromotedAt, string? PromotedReason, string? Stage, int Attempts);
+
+    private sealed record JobRow(Guid Id, Guid? UnitId, DocumentJobKind Kind, DocumentJobStatus Status, DateTimeOffset? CompletedAt);
+
+    private static async Task<RootRow?> LoadRootAsync(AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, CancellationToken ct) => kind switch
+    {
+        ClassificationOwnerKind.ChatTurn => await (
+            from t in db.ChatTurns.AsNoTracking()
+            join c in db.Conversations.AsNoTracking() on t.ConversationId equals c.Id
+            where t.Id == rootId && c.ProjectId == projectId
+            select new RootRow(t.RequestedAt, t.CompletedAt, t.CompletedAt != null, t.InitialRegime, t.Regime, t.ClassificationStatus, t.ClassificationVersion, t.ClassificationReason,
+                t.OrdinaryDeadlineAt, t.HardDeadlineAt, t.EffectiveDeadlineAt, t.PromotedAt, t.PromotedReason, null, t.AttemptCount)).SingleOrDefaultAsync(ct),
+        ClassificationOwnerKind.ProcessingRun => await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == rootId && r.ProjectId == projectId)
+            .Select(r => new RootRow(r.RequestedAt, r.CompletedAt, r.CompletedAt != null, r.InitialRegime, r.Regime, r.ClassificationStatus, r.ClassificationVersion, r.ClassificationReason,
+                r.OrdinaryDeadlineAt, r.HardDeadlineAt, r.EffectiveDeadlineAt, r.PromotedAt, r.PromotedReason, r.LastObservedStage, r.AttemptCount)).SingleOrDefaultAsync(ct),
+        _ => await db.DocumentPreparations.AsNoTracking().Where(p => p.Id == rootId && p.ProjectId == projectId)
+            .Select(p => new RootRow(p.RequestedAt, null,
+                p.Status == PreparationStatus.Ready || p.Status == PreparationStatus.Incomplete || p.Status == PreparationStatus.Failed,
+                p.InitialRegime, p.Regime, p.ClassificationStatus, p.ClassificationVersion, p.ClassificationReason, p.OrdinaryDeadlineAt, p.HardDeadlineAt, p.EffectiveDeadlineAt,
+                p.PromotedAt, p.PromotedReason, p.Status.ToString(), 0)).SingleOrDefaultAsync(ct),
+    };
+
+    private static Task<List<InferenceCall>> CallsOfAsync(
+        AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, IReadOnlyList<JobRow> jobs, CancellationToken ct)
+    {
+        var rows = db.InferenceCalls.AsNoTracking().Where(c => c.ProjectId == projectId);
+        if (kind == ClassificationOwnerKind.ChatTurn)
+        {
+            return rows.Where(c => c.ChatTurnId == rootId).ToListAsync(ct);
+        }
+
+        if (kind == ClassificationOwnerKind.ProcessingRun)
+        {
+            return rows.Where(c => c.ProcessingRunId == rootId).ToListAsync(ct);
+        }
+
+        var ids = jobs.Select(j => (Guid?)j.Id).ToList();
+        return rows.Where(c => ids.Contains(c.DocumentJobId)).ToListAsync(ct);
+    }
+
+    private readonly record struct WaitTimes(long? Queue, long? Preflight, long? Backoff, long? Recovery);
+
+    /// <summary>
+    /// Attese persistite di un root documentale classificato, mutuamente esclusive (Plan §Misure). Preflight = intervallo di misura del primo tentativo. Backoff =
+    /// somma dei backoff dei tentativi falliti (zero se non c'è stato alcun retry; null se un retry è avvenuto senza backoff registrato, per esempio per recupero
+    /// del lease: quel tempo è del recupero, T102; il backoff è completo se ogni tentativo successivo ha il suo backoff o il suo recupero). Coda = attesa fra t0 e l'inizio del preflight più le code di ogni tentativo claimato (da fine preflight o
+    /// fine backoff al claim; un tentativo raggiunto per recupero non ha coda: la sua attesa è il recupero); null se manca il preflight o la coda di un tentativo (mai un totale parziale presentato come intero). I root senza regime
+    /// (001, Pending) e le preparazioni non hanno intervalli: tutto null. Recupero = unione degli intervalli di recupero (zero se nessun tentativo è stato ripreso), null se un tentativo raggiunto senza backoff non ne ha il record.
+    /// </summary>
+    private static async Task<WaitTimes> WaitTimesAsync(AppDbContext db, Guid projectId, ClassificationOwnerKind kind, Guid rootId, RootRow root, CancellationToken ct)
+    {
+        if (kind == ClassificationOwnerKind.DocumentPreparation || root.InitialRegime is null)
+        {
+            return new(null, null, null, null);
+        }
+
+        var rows = await db.ExecutionIntervals.AsNoTracking()
+            .Where(i => i.ProjectId == projectId && i.RootKind == kind && i.RootId == rootId)
+            .Select(i => new { i.Kind, i.Attempt, i.StartedAt, i.EndedAt }).ToListAsync(ct);
+        long Union(IEnumerable<(DateTimeOffset Start, DateTimeOffset End)> items) =>
+            UnionLength([.. items.Select(i => (i.Start.ToUnixTimeMilliseconds(), i.End.ToUnixTimeMilliseconds()))]);
+
+        var preflight = rows.Where(r => r.Kind == ExecutionIntervalKind.Preflight && r.Attempt == 1).ToList();
+        long? preflightMs = preflight.Count == 1 ? Union([(preflight[0].StartedAt, preflight[0].EndedAt)]) : null;
+
+        bool Has(ExecutionIntervalKind k, int attempt) => rows.Any(r => r.Kind == k && r.Attempt == attempt);
+        long UnionOf(ExecutionIntervalKind k) => Union(rows.Where(r => r.Kind == k).Select(r => (r.StartedAt, r.EndedAt)));
+
+        // Il tentativo a+1 è raggiunto o con il backoff del tentativo a (rilascio con retry) o con il suo recupero (lease scaduto): se manca il record di
+        // entrambi, la causa di quell'attesa non è osservabile e né backoff né recupero hanno un totale (mai uno presentato come intero).
+        var transitions = Enumerable.Range(1, Math.Max(0, root.Attempts - 1)).ToList();
+        long? backoffMs = transitions.All(a => Has(ExecutionIntervalKind.Backoff, a) || Has(ExecutionIntervalKind.Recovery, a)) ? UnionOf(ExecutionIntervalKind.Backoff) : null;
+        long? recoveryMs = transitions.All(a => Has(ExecutionIntervalKind.Backoff, a) || Has(ExecutionIntervalKind.Recovery, a)) ? UnionOf(ExecutionIntervalKind.Recovery) : null;
+
+        long? queueMs = null;
+        if (preflight.Count == 1 && root.Attempts >= 1
+            && Enumerable.Range(1, root.Attempts).All(a => Has(ExecutionIntervalKind.Queue, a) || (a > 1 && Has(ExecutionIntervalKind.Recovery, a - 1))))
+        {
+            var beforePreflight = Math.Max(0, (long)(preflight[0].StartedAt - root.RequestedAt).TotalMilliseconds);
+            queueMs = beforePreflight + UnionOf(ExecutionIntervalKind.Queue);
+        }
+
+        return new(queueMs, preflightMs, backoffMs, recoveryMs);
+    }
+
+    /// <summary>Unione degli intervalli osservati di tutte le chiamate (anche dei tentativi falliti); null se una durata non è nota o non c'è telemetria.</summary>
+    private static long? ProcessingMs(IReadOnlyList<InferenceCall> calls)
+    {
+        if (calls.Count == 0 || calls.Any(c => c.DurationMs is null))
+        {
+            return null;
+        }
+
+        return UnionLength([.. calls.Select(c => (c.StartedAt.ToUnixTimeMilliseconds(), c.StartedAt.ToUnixTimeMilliseconds() + c.DurationMs!.Value))]);
+    }
+
+    private static RootMetricsView Metrics(IReadOnlyList<InferenceCall> calls, IReadOnlyList<JobRow> jobs)
+    {
+        var units = new List<UnitMetricsView>();
+        var failed = new List<FailedAttemptView>();
+        var winning = new List<InferenceCall>();
+        foreach (var owner in calls.GroupBy(c => c.DocumentJobId).OrderBy(g => g.Min(c => c.StartedAt)))
+        {
+            var final = owner.FirstOrDefault(c => c.IsFinal);
+            var won = final is null ? [] : owner.Where(c => c.Attempt == final.Attempt && c.FencingToken == final.FencingToken).ToList();
+            winning.AddRange(won);
+            if (final is not null)
+            {
+                units.Add(new UnitMetricsView(
+                    owner.Key, jobs.FirstOrDefault(j => j.Id == owner.Key)?.UnitId, InferenceMetrics.PhaseName(final.Phase), final.ModelId, final.Attempt, won.Count,
+                    won.Any(c => c.DurationMs is null) ? null : won.Sum(c => c.DurationMs),
+                    InferenceMetrics.Sum(won.Select(c => c.PromptTokens)), InferenceMetrics.Sum(won.Select(c => c.CompletionTokens)), InferenceMetrics.Sum(won.Select(c => c.TotalTokens))));
+            }
+
+            failed.AddRange(owner.Except(won).OrderBy(c => c.StartedAt)
+                .Select(c => new FailedAttemptView(owner.Key, c.Attempt, InferenceMetrics.PhaseName(c.Phase), c.State.ToString().ToLowerInvariant(), c.FinishReason, c.DurationMs)));
+        }
+
+        return new RootMetricsView(
+            winning.Count,
+            [.. winning.Where(c => c.IsFinal).Select(c => c.ModelId).Distinct()],
+            InferenceMetrics.Sum(winning.Select(c => c.PromptTokens)),
+            InferenceMetrics.Sum(winning.Select(c => c.CompletionTokens)),
+            InferenceMetrics.Sum(winning.Select(c => c.TotalTokens)),
+            units,
+            failed);
     }
 }

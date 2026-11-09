@@ -1,6 +1,7 @@
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Identity;
 using bProjects.App.Projects;
@@ -23,17 +24,50 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<WorkflowCheckpoint> WorkflowCheckpoints => Set<WorkflowCheckpoint>();
     public DbSet<InferenceCall> InferenceCalls => Set<InferenceCall>();
+    public DbSet<ExecutionInterval> ExecutionIntervals => Set<ExecutionInterval>();
     public DbSet<EvidenceExtractionJob> EvidenceExtractionJobs => Set<EvidenceExtractionJob>();
     public DbSet<EvidenceExtractionVersion> EvidenceExtractionVersions => Set<EvidenceExtractionVersion>();
     public DbSet<EvidenceItem> Evidences => Set<EvidenceItem>();
     public DbSet<EvidenceRelation> EvidenceRelations => Set<EvidenceRelation>();
     public DbSet<EvidenceMessageState> EvidenceMessageStates => Set<EvidenceMessageState>();
     public DbSet<EvidencePromotion> EvidencePromotions => Set<EvidencePromotion>();
+    public DbSet<EvidenceDocumentState> EvidenceDocumentStates => Set<EvidenceDocumentState>();
+    public DbSet<DocumentPromotion> DocumentPromotions => Set<DocumentPromotion>();
     public DbSet<EvidenceBatch> EvidenceBatches => Set<EvidenceBatch>();
     public DbSet<AnalysisEvidenceSelection> AnalysisEvidenceSelections => Set<AnalysisEvidenceSelection>();
     public DbSet<AnalysisEvidenceSelectionItem> AnalysisEvidenceSelectionItems => Set<AnalysisEvidenceSelectionItem>();
     public DbSet<AnalysisEvidenceLink> AnalysisEvidenceLinks => Set<AnalysisEvidenceLink>();
+    public DbSet<AnalysisEvidenceRelation> AnalysisEvidenceRelations => Set<AnalysisEvidenceRelation>();
     public DbSet<EvidenceCoverageReport> EvidenceCoverageReports => Set<EvidenceCoverageReport>();
+    public DbSet<DocumentPolicy> DocumentPolicies => Set<DocumentPolicy>();
+    public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
+    public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
+    public DbSet<UploadReceipt> UploadReceipts => Set<UploadReceipt>();
+    public DbSet<ProjectSourceSelection> ProjectSourceSelections => Set<ProjectSourceSelection>();
+    public DbSet<ProjectSourceSelectionItem> ProjectSourceSelectionItems => Set<ProjectSourceSelectionItem>();
+    public DbSet<DocumentPreparation> DocumentPreparations => Set<DocumentPreparation>();
+    public DbSet<DocumentJob> DocumentJobs => Set<DocumentJob>();
+    public DbSet<ParsedArtifact> ParsedArtifacts => Set<ParsedArtifact>();
+    public DbSet<DocumentBlock> DocumentBlocks => Set<DocumentBlock>();
+    public DbSet<DocumentPortion> DocumentPortions => Set<DocumentPortion>();
+    public DbSet<PreparationIssue> PreparationIssues => Set<PreparationIssue>();
+    public DbSet<SourceSnapshot> SourceSnapshots => Set<SourceSnapshot>();
+    public DbSet<SourceSnapshotItem> SourceSnapshotItems => Set<SourceSnapshotItem>();
+    public DbSet<WorkManifest> WorkManifests => Set<WorkManifest>();
+    public DbSet<ClassificationRecord> ClassificationRecords => Set<ClassificationRecord>();
+    public DbSet<RegimeTransition> RegimeTransitions => Set<RegimeTransition>();
+    public DbSet<DerivedBatch> DerivedBatches => Set<DerivedBatch>();
+    public DbSet<WorkOutput> WorkOutputs => Set<WorkOutput>();
+    public DbSet<RunCatalogNode> RunCatalogNodes => Set<RunCatalogNode>();
+    public DbSet<RunCatalogPage> RunCatalogPages => Set<RunCatalogPage>();
+    public DbSet<RunCatalogMember> RunCatalogMembers => Set<RunCatalogMember>();
+    public DbSet<RunCatalogSet> RunCatalogSets => Set<RunCatalogSet>();
+    public DbSet<RunCatalogSetNode> RunCatalogSetNodes => Set<RunCatalogSetNode>();
+    public DbSet<RunCandidate> RunCandidates => Set<RunCandidate>();
+    public DbSet<RunCandidateOrigin> RunCandidateOrigins => Set<RunCandidateOrigin>();
+    public DbSet<RunCandidateDisposition> RunCandidateDispositions => Set<RunCandidateDisposition>();
+    public DbSet<RunPatch> RunPatches => Set<RunPatch>();
+    public DbSet<RunPatchDisposition> RunPatchDispositions => Set<RunPatchDisposition>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -45,6 +79,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         ConfigureCheckpoints(builder);
         ConfigureInferenceCalls(builder);
         ConfigureEvidence(builder);
+        ConfigureDocuments(builder);
+        ConfigureDocumentWork(builder);
+        ConfigureReconciliation(builder);
+        ConfigureDocumentRegime(builder);
 
         builder.Entity<RefreshSession>(session =>
         {
@@ -54,6 +92,391 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             session.HasIndex(s => s.UserId);
             session.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             session.HasOne<RefreshSession>().WithMany().HasForeignKey(s => s.ReplacedById).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    /// <summary>Documenti di progetto (slice 002): migrazioni additive, nessun dato o vincolo della 001 modificato.</summary>
+    private static void ConfigureDocuments(ModelBuilder builder)
+    {
+        builder.Entity<DocumentPolicy>(policy =>
+        {
+            policy.HasKey(p => p.Id);
+            policy.Property(p => p.Id).ValueGeneratedNever();
+            policy.Property(p => p.LimitsJson).HasColumnType("jsonb");
+            policy.Property(p => p.PolicyHash).HasMaxLength(64);
+            policy.Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
+            policy.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+            // Una sola riga globale; la revisione parte da 1 e cresce a ogni PUT.
+            policy.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPolicies_Singleton", "\"Id\" = 1");
+                t.HasCheckConstraint("CK_DocumentPolicies_Revision", "\"Revision\" >= 1");
+            });
+        });
+
+        ConfigureDocumentArchive(builder);
+        ConfigureDocumentPreparation(builder);
+        ConfigureDocumentParsing(builder);
+    }
+
+    /// <summary>
+    /// Archivio (T006): FK composte con ProjectId impediscono riferimenti fra progetti; i puntatori fra documento e versioni passano da
+    /// chiavi alternative (Id, DocumentId). Le quote aggregate e le riserve non sono vincoli di riga: le impone il servizio di upload.
+    /// </summary>
+    private static void ConfigureDocumentArchive(ModelBuilder builder)
+    {
+        builder.Entity<ProjectDocument>(document =>
+        {
+            document.HasKey(d => d.Id);
+            document.Property(d => d.DisplayName).HasMaxLength(ProjectDocument.MaxDisplayNameLength);
+            document.Property(d => d.CreatedAt).HasDefaultValueSql("now()");
+            document.HasAlternateKey(d => new { d.Id, d.ProjectId });
+            document.HasIndex(d => new { d.ProjectId, d.CreatedAt });   // il nome non è identità: nessun indice univoco su DisplayName
+            document.HasOne<Project>().WithMany().HasForeignKey(d => d.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            document.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            // Il puntatore Ready è a una versione di questo stesso documento (con LatestReadyVersionId nullo la FK non vincola).
+            document.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(d => new { d.LatestReadyVersionId, d.Id })
+                .HasPrincipalKey(v => new { v.Id, v.DocumentId })
+                .OnDelete(DeleteBehavior.Restrict);
+            document.ToTable(t => t.HasCheckConstraint("CK_ProjectDocuments_Name_NotBlank", "\"DisplayName\" ~ '\\S'"));
+        });
+
+        builder.Entity<DocumentVersion>(version =>
+        {
+            version.HasKey(v => v.Id);
+            version.Property(v => v.OriginalName).HasMaxLength(512);
+            version.Property(v => v.MediaType).HasMaxLength(128);
+            version.Property(v => v.Sha256).HasMaxLength(64);
+            version.Property(v => v.StorageKey).HasMaxLength(256);
+            version.Property(v => v.UploadedAt).HasDefaultValueSql("now()");
+            version.HasAlternateKey(v => new { v.Id, v.ProjectId });
+            version.HasAlternateKey(v => new { v.Id, v.DocumentId });
+            version.HasIndex(v => new { v.DocumentId, v.Version }).IsUnique();
+            version.HasIndex(v => v.StorageKey).IsUnique();
+            version.HasIndex(v => v.UploadReceiptId).IsUnique();
+            version.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(v => new { v.DocumentId, v.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<UploadReceipt>().WithMany()
+                .HasForeignKey(v => new { v.UploadReceiptId, v.ProjectId })
+                .HasPrincipalKey(r => new { r.Id, r.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(v => v.UploadedBy).OnDelete(DeleteBehavior.Restrict);
+            version.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentVersions_Version", "\"Version\" >= 1");
+                t.HasCheckConstraint("CK_DocumentVersions_Size", "\"ByteLength\" > 0");
+                t.HasCheckConstraint("CK_DocumentVersions_Sha256", "length(\"Sha256\") = 64");
+            });
+        });
+
+        builder.Entity<UploadReceipt>(receipt =>
+        {
+            receipt.HasKey(r => r.Id);
+            receipt.Property(r => r.InputHash).HasMaxLength(64);
+            receipt.Property(r => r.Status).HasConversion<string>().HasMaxLength(16);
+            receipt.Property(r => r.CreatedAt).HasDefaultValueSql("now()");
+            receipt.HasAlternateKey(r => new { r.Id, r.ProjectId });
+            receipt.HasIndex(r => new { r.ProjectId, r.RequestKey }).IsUnique();
+            receipt.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            receipt.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(r => new { r.DocumentId, r.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            receipt.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(r => new { r.ResultVersionId, r.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            receipt.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UploadReceipts_Reserved", "\"ReservedBytes\" >= 0");
+                // Acquisizione solo da Committed, con la versione risultante; le altre ricevute non ne hanno.
+                t.HasCheckConstraint("CK_UploadReceipts_Result", "(\"Status\" = 'Committed') = (\"ResultVersionId\" IS NOT NULL)");
+            });
+        });
+
+        builder.Entity<ProjectSourceSelection>(selection =>
+        {
+            selection.HasKey(s => s.ProjectId);
+            selection.Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+            selection.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            selection.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(s => s.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+            selection.ToTable(t => t.HasCheckConstraint("CK_ProjectSourceSelections_Revision", "\"Revision\" >= 0"));
+        });
+
+        builder.Entity<ProjectSourceSelectionItem>(item =>
+        {
+            item.HasKey(i => i.Id);
+            item.Property(i => i.Mode).HasConversion<string>().HasMaxLength(16);
+            item.HasIndex(i => new { i.ProjectId, i.DocumentId }).IsUnique();
+            item.HasOne<ProjectSourceSelection>().WithMany().HasForeignKey(i => i.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(i => new { i.DocumentId, i.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // La versione fissata appartiene al documento dell'item.
+            item.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(i => new { i.PinnedVersionId, i.DocumentId })
+                .HasPrincipalKey(v => new { v.Id, v.DocumentId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.ToTable(t => t.HasCheckConstraint("CK_ProjectSourceSelectionItems_Pinned", "(\"Mode\" = 'Pinned') = (\"PinnedVersionId\" IS NOT NULL)"));
+        });
+    }
+
+    /// <summary>
+    /// Artefatti di parsing (T028): una pubblicazione per preparazione, blocchi per ordinal/ref unici nell'artefatto, porzioni per ordinal unico
+    /// nella preparazione. Le FK composte tengono tutto nello stesso progetto e lo stesso job Parse nella stessa preparazione.
+    /// </summary>
+    private static void ConfigureDocumentParsing(ModelBuilder builder)
+    {
+        builder.Entity<ParsedArtifact>(artifact =>
+        {
+            artifact.HasKey(a => a.Id);
+            artifact.Property(a => a.SchemaVersion).HasMaxLength(32);
+            artifact.Property(a => a.StorageKey).HasMaxLength(128);
+            artifact.Property(a => a.Sha256).HasMaxLength(64);
+            artifact.Property(a => a.ParserConfigHash).HasMaxLength(64);
+            artifact.Property(a => a.CreatedAt).HasDefaultValueSql("now()");
+            artifact.HasAlternateKey(a => new { a.Id, a.ProjectId });
+            artifact.HasIndex(a => a.PreparationId).IsUnique();
+            artifact.HasIndex(a => a.StorageKey).IsUnique();
+            artifact.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(a => new { a.PreparationId, a.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            artifact.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(a => new { a.JobId, a.PreparationId })
+                .HasPrincipalKey(j => new { j.Id, j.PreparationId })
+                .OnDelete(DeleteBehavior.Restrict);
+            artifact.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ParsedArtifacts_Size", "\"ByteLength\" > 0");
+                t.HasCheckConstraint("CK_ParsedArtifacts_Counts", "\"BlockCount\" >= 0 AND \"IssueCount\" >= 0 AND \"FencingToken\" >= 1");
+            });
+        });
+
+        builder.Entity<DocumentBlock>(block =>
+        {
+            block.HasKey(b => b.Id);
+            block.Property(b => b.Ref).HasMaxLength(256);
+            block.Property(b => b.Type).HasConversion<string>().HasMaxLength(16);
+            block.Property(b => b.TextHash).HasMaxLength(64);
+            block.Property(b => b.HeadingPathJson).HasColumnType("jsonb");
+            block.Property(b => b.BboxJson).HasColumnType("jsonb");
+            block.Property(b => b.TableCellsJson).HasColumnType("jsonb");
+            block.Property(b => b.CoordinateSystem).HasMaxLength(64);
+            block.Property(b => b.DoclingRef).HasMaxLength(256);
+            block.HasAlternateKey(b => new { b.Id, b.ArtifactId });
+            block.HasAlternateKey(b => new { b.Id, b.ProjectId });
+            block.HasIndex(b => new { b.ArtifactId, b.Ordinal }).IsUnique();
+            block.HasIndex(b => new { b.ArtifactId, b.Ref }).IsUnique();
+            block.HasOne<ParsedArtifact>().WithMany()
+                .HasForeignKey(b => new { b.ArtifactId, b.ProjectId })
+                .HasPrincipalKey(a => new { a.Id, a.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // Il parent appartiene allo stesso artefatto; l'assenza di cicli è verificata dal validatore prima dell'inserimento.
+            block.HasOne<DocumentBlock>().WithMany()
+                .HasForeignKey(b => new { b.ParentId, b.ArtifactId })
+                .HasPrincipalKey(b => new { b.Id, b.ArtifactId })
+                .OnDelete(DeleteBehavior.Restrict);
+            block.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentBlocks_Ordinal", "\"Ordinal\" >= 0");
+                t.HasCheckConstraint("CK_DocumentBlocks_Parent", "\"ParentId\" IS NULL OR \"ParentId\" <> \"Id\"");
+                t.HasCheckConstraint("CK_DocumentBlocks_Page", "\"Page\" IS NULL OR \"Page\" >= 1");
+                t.HasCheckConstraint("CK_DocumentBlocks_Lines", "(\"LineStart\" IS NULL) = (\"LineEnd\" IS NULL) AND (\"LineStart\" IS NULL OR (\"LineStart\" >= 1 AND \"LineEnd\" >= \"LineStart\"))");
+            });
+        });
+
+        builder.Entity<DocumentPortion>(portion =>
+        {
+            portion.HasKey(p => p.Id);
+            portion.Property(p => p.RangesJson).HasColumnType("jsonb");
+            portion.Property(p => p.ContextRangesJson).HasColumnType("jsonb");
+            portion.Property(p => p.TextHash).HasMaxLength(64);
+            portion.Property(p => p.Status).HasConversion<string>().HasMaxLength(16);
+            portion.Property(p => p.ResultHash).HasMaxLength(64);
+            portion.Property(p => p.NoEvidenceReason).HasMaxLength(1_000);
+            portion.HasIndex(p => new { p.PreparationId, p.Ordinal }).IsUnique();
+            portion.HasIndex(p => p.JobId);
+            portion.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(p => new { p.PreparationId, p.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            portion.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(p => new { p.JobId, p.PreparationId })
+                .HasPrincipalKey(j => new { j.Id, j.PreparationId })
+                .OnDelete(DeleteBehavior.Restrict);
+            portion.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPortions_Ordinal", "\"Ordinal\" >= 0");
+                t.HasCheckConstraint("CK_DocumentPortions_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultHash\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<PreparationIssue>(issue =>
+        {
+            issue.HasKey(i => i.Id);
+            issue.Property(i => i.Code).HasMaxLength(64);
+            issue.Property(i => i.Severity).HasConversion<string>().HasMaxLength(16);
+            issue.Property(i => i.Reason).HasMaxLength(1_000);
+            issue.HasIndex(i => i.PreparationId);
+            issue.HasIndex(i => i.BlockId);
+            issue.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(i => new { i.PreparationId, i.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            issue.HasOne<DocumentBlock>().WithMany()
+                .HasForeignKey(i => new { i.BlockId, i.ProjectId })
+                .HasPrincipalKey(b => new { b.Id, b.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            issue.ToTable(t => t.HasCheckConstraint("CK_PreparationIssues_Page", "\"Page\" IS NULL OR \"Page\" >= 1"));
+        });
+    }
+
+    /// <summary>
+    /// Preparazione, job e snapshot (T115): predispone il modello condiviso, non i worker. L'ordine dei vincoli
+    /// (unico parse, una generazione aperta per versione, risultato per Completed, errore per Failed) è verificato in T007.
+    /// </summary>
+    private static void ConfigureDocumentPreparation(ModelBuilder builder)
+    {
+        builder.Entity<DocumentPreparation>(preparation =>
+        {
+            preparation.HasKey(p => p.Id);
+            preparation.Property(p => p.Status).HasConversion<string>().HasMaxLength(16);
+            preparation.Property(p => p.ParserVersion).HasMaxLength(64);
+            preparation.Property(p => p.ConfigHash).HasMaxLength(64);
+            preparation.Property(p => p.ManifestHash).HasMaxLength(64);
+            preparation.Property(p => p.PolicyHash).HasMaxLength(64);
+            preparation.Property(p => p.ErrorCode).HasMaxLength(64);
+            preparation.Property(p => p.ErrorMessage).HasMaxLength(1_000);
+            preparation.Property(p => p.RequestedAt).HasDefaultValueSql("now()");
+            preparation.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+            preparation.HasAlternateKey(p => new { p.Id, p.ProjectId });
+            // (Id, versione file): ancora per i puntatori del ledger documentale, che non possono riferire la preparazione di un'altra versione.
+            preparation.HasAlternateKey(p => new { p.Id, p.DocumentVersionId });
+            preparation.HasIndex(p => new { p.DocumentVersionId, p.Generation }).IsUnique();
+            // Una sola generazione aperta per versione file.
+            preparation.HasIndex(p => p.DocumentVersionId).IsUnique().HasFilter("\"Status\" IN ('Queued', 'Parsing', 'Extracting')").HasDatabaseName("UX_DocumentPreparations_OneOpenPerVersion");
+            preparation.HasIndex(p => p.ParseJobId);
+            preparation.HasIndex(p => p.RetryOfId);
+            preparation.HasIndex(p => p.CurrentEvidenceVersionId);
+            preparation.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(p => new { p.DocumentVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // Il job Parse appartiene a questa stessa preparazione.
+            preparation.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(p => new { p.ParseJobId, p.Id })
+                .HasPrincipalKey(j => new { j.Id, j.PreparationId })
+                .OnDelete(DeleteBehavior.Restrict);
+            preparation.HasOne<DocumentPreparation>().WithMany().HasForeignKey(p => p.RetryOfId).OnDelete(DeleteBehavior.Restrict);
+            preparation.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(p => p.CurrentEvidenceVersionId).OnDelete(DeleteBehavior.Restrict);
+            preparation.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPreparations_Generation", "\"Generation\" >= 1");
+                t.HasCheckConstraint("CK_DocumentPreparations_Calls", "\"CallCount\" >= 0");
+                t.HasCheckConstraint("CK_DocumentPreparations_Deadlines", "\"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\"");
+                t.HasCheckConstraint("CK_DocumentPreparations_Ready_Evidence", "\"Status\" <> 'Ready' OR \"CurrentEvidenceVersionId\" IS NOT NULL");
+                t.HasCheckConstraint("CK_DocumentPreparations_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<DocumentJob>(job =>
+        {
+            job.HasKey(j => j.Id);
+            job.Property(j => j.Kind).HasConversion<string>().HasMaxLength(16);
+            job.Property(j => j.Status).HasConversion<string>().HasMaxLength(16);
+            job.Property(j => j.ConfigJson).HasColumnType("jsonb");
+            job.Property(j => j.WorkflowDefinitionVersion).HasMaxLength(64);
+            job.Property(j => j.LeaseOwner).HasMaxLength(128);
+            job.Property(j => j.ResultHash).HasMaxLength(64);
+            job.Property(j => j.ErrorCode).HasMaxLength(64);
+            job.Property(j => j.ErrorMessage).HasMaxLength(1_000);
+            job.Property(j => j.RequestedAt).HasDefaultValueSql("now()");
+            job.HasAlternateKey(j => new { j.Id, j.PreparationId });
+            job.HasAlternateKey(j => new { j.Id, j.ProjectId });   // owner di checkpoint e telemetria nello stesso progetto
+            // Un solo lavoro per owner e unità logica (UnitId nullo = lavoro della preparazione, es. Parse).
+            job.HasIndex(j => new { j.PreparationId, j.Kind, j.UnitId }).IsUnique().AreNullsDistinct(false);
+            job.HasIndex(j => new { j.ProjectId, j.RequestKey }).IsUnique();
+            job.HasIndex(j => j.RetryOfId);
+            job.HasIndex(j => new { j.RequestedAt, j.Id }).HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("IX_DocumentJobs_Open_Fifo");
+            job.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(j => new { j.PreparationId, j.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<DocumentJob>().WithMany().HasForeignKey(j => j.RetryOfId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(j => j.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+            job.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
+                t.HasCheckConstraint("CK_DocumentJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultHash\" IS NOT NULL");
+                t.HasCheckConstraint("CK_DocumentJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+            });
+        });
+
+        builder.Entity<SourceSnapshot>(snapshot =>
+        {
+            snapshot.HasKey(s => s.Id);
+            snapshot.Property(s => s.Hash).HasMaxLength(64);
+            snapshot.Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+            snapshot.HasAlternateKey(s => new { s.Id, s.ProjectId });
+            snapshot.HasIndex(s => new { s.ProjectId, s.CreatedAt });
+            snapshot.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            snapshot.ToTable(t => t.HasCheckConstraint("CK_SourceSnapshots_Revision", "\"SelectionRevision\" >= 0"));
+        });
+
+        builder.Entity<SourceSnapshotItem>(item =>
+        {
+            item.HasKey(i => i.Id);
+            item.Property(i => i.Availability).HasConversion<string>().HasMaxLength(16);
+            item.HasIndex(i => new { i.SnapshotId, i.DocumentId }).IsUnique();
+            item.HasIndex(i => i.PreparationId);
+            item.HasIndex(i => i.EvidenceVersionId);
+            item.HasOne<SourceSnapshot>().WithMany()
+                .HasForeignKey(i => new { i.SnapshotId, i.ProjectId })
+                .HasPrincipalKey(s => new { s.Id, s.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<ProjectDocument>().WithMany()
+                .HasForeignKey(i => new { i.DocumentId, i.ProjectId })
+                .HasPrincipalKey(d => new { d.Id, d.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(i => new { i.DocumentVersionId, i.DocumentId })
+                .HasPrincipalKey(v => new { v.Id, v.DocumentId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(i => new { i.PreparationId, i.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(i => i.EvidenceVersionId).OnDelete(DeleteBehavior.Restrict);
+            item.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_SourceSnapshotItems_Excluded", "(\"Availability\" = 'Excluded') = (NOT \"Included\")");
+                // Solo Ready ha estrazione selezionabile; un'indisponibile non diventa Ready per effetto dei riferimenti.
+                t.HasCheckConstraint(
+                    "CK_SourceSnapshotItems_Ready",
+                    "(\"Availability\" = 'Ready') = (\"DocumentVersionId\" IS NOT NULL AND \"PreparationId\" IS NOT NULL AND \"EvidenceVersionId\" IS NOT NULL)");
+                t.HasCheckConstraint("CK_SourceSnapshotItems_EvidenceOnlyReady", "\"EvidenceVersionId\" IS NULL OR \"Availability\" = 'Ready'");
+            });
+        });
+
+        // Legacy nullable (SourceSnapshotId nullo = ramo 001 invariato).
+        builder.Entity<ChatTurn>(turn =>
+        {
+            turn.HasIndex(t => t.SourceSnapshotId);
+            turn.HasOne<SourceSnapshot>().WithMany().HasForeignKey(t => t.SourceSnapshotId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProcessingRun>(run =>
+        {
+            run.HasIndex(r => r.SourceSnapshotId);
+            run.HasOne<SourceSnapshot>().WithMany()
+                .HasForeignKey(r => new { r.SourceSnapshotId, r.ProjectId })
+                .HasPrincipalKey(s => new { s.Id, s.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -81,6 +504,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             run.Property(r => r.MafVersion).HasMaxLength(32);
             run.Property(r => r.AgentConfig).HasColumnType("jsonb");
             run.Property(r => r.PromptVersions).HasColumnType("jsonb");
+            run.Property(r => r.DocumentLimitsSnapshot).HasColumnType("jsonb");
             run.Property(r => r.WorkflowSessionId).HasMaxLength(128);
             run.Property(r => r.LeaseOwner).HasMaxLength(128);
             run.Property(r => r.LastObservedStage).HasMaxLength(64);
@@ -118,6 +542,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                     "CK_ProcessingRuns_Completed_Result",
                     "\"Status\" <> 'Completed' OR (\"Kind\" = 'Analysis' AND \"ResultRevisionId\" IS NOT NULL) OR (\"Kind\" = 'Document' AND \"DraftId\" IS NOT NULL)");
                 t.HasCheckConstraint("CK_ProcessingRuns_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
+                // Run documentale di Analizza (definizione project-analysis-documents-* o root classificato): limiti congelati obbligatori e ben formati.
+                // Gli altri run (001, Genera) non hanno snapshot. L'immutabilità è del trigger TR_ProcessingRuns_DocumentLimitsSnapshot.
+                t.HasCheckConstraint(
+                    "CK_ProcessingRuns_DocumentLimitsSnapshot",
+                    "\"Kind\" <> 'Analysis' OR (\"ClassificationStatus\" IS NULL AND \"WorkflowDefinitionVersion\" NOT LIKE 'project-analysis-documents-%') " +
+                    "OR COALESCE(jsonb_typeof(\"DocumentLimitsSnapshot\") = 'object' AND jsonb_typeof(\"DocumentLimitsSnapshot\"->'limits') = 'object' " +
+                    "AND (\"DocumentLimitsSnapshot\"->>'schemaVersion') ~ '^[0-9]+$' AND (\"DocumentLimitsSnapshot\"->>'policyRevision') ~ '^[0-9]+$' " +
+                    "AND (\"DocumentLimitsSnapshot\"->>'hash') ~ '^[0-9a-f]{64}$', false)");
             });
         });
 
@@ -175,6 +607,428 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             });
         });
 
+    /// <summary>
+    /// Cataloghi, candidati e patch del run (002 T122): proiezioni append-only (trigger nella migrazione) con FK al run/progetto, al batch d'origine (DerivedBatch)
+    /// e alle evidenze. Il payload autorevole resta WorkOutput/DerivedBatch; qui solo identità, membership e vincoli (nessun contenuto di EvidenceItem).
+    /// </summary>
+    private static void ConfigureReconciliation(ModelBuilder builder)
+    {
+        const string Hex = "~ '^[0-9a-f]{64}$'";
+        const string Views = "IN ('A', 'B', 'Cross')";
+
+
+        builder.Entity<RunCatalogNode>(node =>
+        {
+            node.HasKey(n => new { n.RunId, n.NodeId });
+            node.Property(n => n.NodeId).HasMaxLength(64);
+            node.Property(n => n.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            node.Property(n => n.BatchId).HasMaxLength(128);
+            node.Property(n => n.View).HasConversion<string>().HasMaxLength(8);
+            node.Property(n => n.MemberSetHash).HasMaxLength(64);
+            node.Property(n => n.DescriptorOutputHash).HasMaxLength(64);
+            node.Property(n => n.PayloadJson).HasColumnType("jsonb");
+            node.HasAlternateKey(n => new { n.RunId, n.NodeId, n.View, n.Level });
+            node.HasIndex(n => new { n.RunId, n.View, n.Level, n.Ordinal }).IsUnique().HasDatabaseName("UX_RunCatalogNodes_Position");
+            node.HasIndex(n => new { n.OwnerKind, n.RunId, n.BatchId });
+            node.HasOne<ProcessingRun>().WithMany().HasForeignKey(n => new { n.RunId, n.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            node.HasOne<DerivedBatch>().WithMany().HasForeignKey(n => new { n.OwnerKind, n.RunId, n.BatchId }).HasPrincipalKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId }).OnDelete(DeleteBehavior.Restrict);
+            node.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCatalogNodes_Hashes", $"\"NodeId\" {Hex} AND \"MemberSetHash\" {Hex} AND \"DescriptorOutputHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunCatalogNodes_Numbers", $"\"Level\" >= 0 AND \"Ordinal\" >= 0 AND \"MemberCount\" >= 1 AND \"View\" {Views} AND \"OwnerKind\" = 'ProcessingRun'");
+                t.HasCheckConstraint("CK_RunCatalogNodes_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<RunCatalogPage>(page =>
+        {
+            page.HasKey(p => new { p.RunId, p.PageId });
+            page.Property(p => p.PageId).HasMaxLength(64);
+            page.Property(p => p.NodeId).HasMaxLength(64);
+            page.Property(p => p.Kind).HasConversion<string>().HasMaxLength(16);
+            page.Property(p => p.PageHash).HasMaxLength(64);
+            page.Property(p => p.PreviousPageHash).HasMaxLength(64);
+            page.Property(p => p.PreviousOrdinal).HasComputedColumnSql("CASE WHEN \"Ordinal\" > 0 THEN \"Ordinal\" - 1 END", stored: true);
+            page.Property(p => p.PayloadJson).HasColumnType("jsonb");
+            page.HasIndex(p => new { p.RunId, p.NodeId, p.Kind, p.Ordinal }).IsUnique().HasDatabaseName("UX_RunCatalogPages_Chain");
+            // Bersaglio della FK di catena (aggiunta in migrazione: EF non modella FK composte con colonne nullable parziali).
+            page.HasAlternateKey(p => new { p.RunId, p.NodeId, p.Kind, p.Ordinal, p.PageHash });
+            page.HasOne<RunCatalogNode>().WithMany().HasForeignKey(p => new { p.RunId, p.NodeId }).OnDelete(DeleteBehavior.Restrict);
+            page.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCatalogPages_Hashes", $"\"PageId\" {Hex} AND \"NodeId\" {Hex} AND \"PageHash\" {Hex} AND (\"PreviousPageHash\" IS NULL OR \"PreviousPageHash\" {Hex})");
+                t.HasCheckConstraint("CK_RunCatalogPages_Chain", "\"Ordinal\" >= 0 AND (\"Ordinal\" = 0) = (\"PreviousPageHash\" IS NULL) AND \"Kind\" IN ('Members', 'Keys', 'Relations')");
+                t.HasCheckConstraint("CK_RunCatalogPages_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<RunCatalogMember>(member =>
+        {
+            member.HasKey(m => new { m.RunId, m.NodeId, m.EvidenceId });
+            member.Property(m => m.NodeId).HasMaxLength(64);
+            member.Property(m => m.ContentHash).HasMaxLength(64);
+            member.Property(m => m.View).HasConversion<string>().HasMaxLength(8);
+            // Unione disgiunta dei membri per vista e livello: la stessa evidenza compare in un solo nodo.
+            member.HasIndex(m => new { m.RunId, m.View, m.Level, m.EvidenceId }).IsUnique().HasDatabaseName("UX_RunCatalogMembers_Level");
+            member.HasIndex(m => m.EvidenceId);
+            member.HasOne<RunCatalogNode>().WithMany().HasForeignKey(m => new { m.RunId, m.NodeId, m.View, m.Level }).HasPrincipalKey(n => new { n.RunId, n.NodeId, n.View, n.Level }).OnDelete(DeleteBehavior.Restrict);
+            member.HasOne<EvidenceItem>().WithMany().HasForeignKey(m => m.EvidenceId).OnDelete(DeleteBehavior.Restrict);
+            member.ToTable(t => t.HasCheckConstraint("CK_RunCatalogMembers_Hash", $"\"ContentHash\" {Hex}"));
+        });
+
+        builder.Entity<RunCatalogSet>(set =>
+        {
+            set.HasKey(s => new { s.RunId, s.SetId });
+            set.Property(s => s.SetId).HasMaxLength(64);
+            set.Property(s => s.View).HasConversion<string>().HasMaxLength(8);
+            set.Property(s => s.MemberSetHash).HasMaxLength(64);
+            set.HasOne<ProcessingRun>().WithMany().HasForeignKey(s => new { s.RunId, s.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            set.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCatalogSets_Hashes", $"\"SetId\" {Hex} AND \"MemberSetHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunCatalogSets_Numbers", $"\"MemberCount\" >= 1 AND \"View\" {Views}");
+            });
+        });
+
+        builder.Entity<RunCatalogSetNode>(member =>
+        {
+            member.HasKey(m => new { m.RunId, m.SetId, m.NodeId });
+            member.Property(m => m.SetId).HasMaxLength(64);
+            member.Property(m => m.NodeId).HasMaxLength(64);
+            member.HasIndex(m => new { m.RunId, m.NodeId });
+            member.HasOne<RunCatalogSet>().WithMany().HasForeignKey(m => new { m.RunId, m.SetId }).OnDelete(DeleteBehavior.Restrict);
+            member.HasOne<RunCatalogNode>().WithMany().HasForeignKey(m => new { m.RunId, m.NodeId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<RunCandidate>(candidate =>
+        {
+            candidate.HasKey(c => new { c.RunId, c.CandidateId });
+            candidate.Property(c => c.CandidateId).HasMaxLength(64);
+            candidate.Property(c => c.SourceHash).HasMaxLength(64);
+            candidate.Property(c => c.InputHash).HasMaxLength(64);
+            candidate.Property(c => c.Kind).HasConversion<string>().HasMaxLength(16);
+            candidate.Property(c => c.ProposedType).HasConversion<string>().HasMaxLength(16);
+            candidate.Property(c => c.PayloadJson).HasColumnType("jsonb");
+            candidate.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => new { c.RunId, c.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            candidate.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCandidates_Hashes", $"\"CandidateId\" {Hex} AND \"SourceHash\" {Hex} AND \"InputHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunCandidates_Payload", "jsonb_typeof(\"PayloadJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<RunCandidateOrigin>(origin =>
+        {
+            origin.HasKey(o => new { o.RunId, o.CandidateId, o.BatchId });
+            origin.Property(o => o.CandidateId).HasMaxLength(64);
+            origin.Property(o => o.BatchId).HasMaxLength(128);
+            origin.Property(o => o.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            origin.Property(o => o.OriginOutputHash).HasMaxLength(64);
+            origin.Property(o => o.Rationale).HasMaxLength(4_000);
+            origin.HasIndex(o => new { o.OwnerKind, o.RunId, o.BatchId });
+            origin.HasOne<RunCandidate>().WithMany().HasForeignKey(o => new { o.RunId, o.CandidateId }).OnDelete(DeleteBehavior.Restrict);
+            origin.HasOne<DerivedBatch>().WithMany().HasForeignKey(o => new { o.OwnerKind, o.RunId, o.BatchId }).HasPrincipalKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId }).OnDelete(DeleteBehavior.Restrict);
+            origin.ToTable(t => t.HasCheckConstraint("CK_RunCandidateOrigins_Hash", $"\"OriginOutputHash\" {Hex} AND \"OwnerKind\" = 'ProcessingRun'"));
+        });
+
+        builder.Entity<RunCandidateDisposition>(disposition =>
+        {
+            disposition.HasKey(d => new { d.RunId, d.CandidateId, d.Version });
+            disposition.Property(d => d.CandidateId).HasMaxLength(64);
+            disposition.Property(d => d.State).HasConversion<string>().HasMaxLength(16);
+            disposition.Property(d => d.ChildCandidateIdsJson).HasColumnType("jsonb");
+            disposition.Property(d => d.ComparisonOutputHashesJson).HasColumnType("jsonb");
+            disposition.Property(d => d.Reason).HasMaxLength(2_000);
+            disposition.HasOne<RunCandidate>().WithMany().HasForeignKey(d => new { d.RunId, d.CandidateId }).OnDelete(DeleteBehavior.Restrict);
+            disposition.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunCandidateDispositions_Shape", "\"Version\" >= 1 AND \"State\" IN ('Pending', 'Expanded', 'Compared', 'Open', 'NotProcessed') " +
+                    "AND jsonb_typeof(\"ChildCandidateIdsJson\") = 'array' AND jsonb_typeof(\"ComparisonOutputHashesJson\") = 'array'");
+                t.HasCheckConstraint("CK_RunCandidateDispositions_State",
+                    "(\"State\" <> 'Expanded' OR jsonb_array_length(\"ChildCandidateIdsJson\") > 0) " +
+                    "AND (\"State\" NOT IN ('Compared', 'Open') OR jsonb_array_length(\"ComparisonOutputHashesJson\") > 0) " +
+                    "AND (\"State\" NOT IN ('Open', 'NotProcessed') OR (\"Reason\" IS NOT NULL AND length(btrim(\"Reason\")) > 0))");
+            });
+        });
+
+        builder.Entity<RunPatch>(patch =>
+        {
+            patch.HasKey(p => new { p.RunId, p.PatchId });
+            patch.Property(p => p.PatchId).HasMaxLength(64);
+            patch.Property(p => p.SourceHash).HasMaxLength(64);
+            patch.Property(p => p.BaseHash).HasMaxLength(64);
+            patch.Property(p => p.TargetKind).HasConversion<string>().HasMaxLength(16);
+            patch.Property(p => p.TargetId).HasMaxLength(128);
+            patch.Property(p => p.ExpectedHash).HasMaxLength(64);
+            patch.Property(p => p.PayloadJson).HasColumnType("jsonb");
+            patch.Property(p => p.OriginOutputHashesJson).HasColumnType("jsonb");
+            patch.HasOne<ProcessingRun>().WithMany().HasForeignKey(p => new { p.RunId, p.ProjectId }).HasPrincipalKey(r => new { r.Id, r.ProjectId }).OnDelete(DeleteBehavior.Restrict);
+            patch.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunPatches_Hashes", $"\"PatchId\" {Hex} AND \"SourceHash\" {Hex} AND \"BaseHash\" {Hex} AND \"ExpectedHash\" {Hex}");
+                t.HasCheckConstraint("CK_RunPatches_Payload", "jsonb_typeof(\"PayloadJson\") = 'object' AND jsonb_typeof(\"OriginOutputHashesJson\") = 'array' AND jsonb_array_length(\"OriginOutputHashesJson\") > 0");
+            });
+        });
+
+        builder.Entity<RunPatchDisposition>(disposition =>
+        {
+            disposition.HasKey(d => new { d.RunId, d.PatchId, d.Version });
+            disposition.Property(d => d.PatchId).HasMaxLength(64);
+            disposition.Property(d => d.Kind).HasConversion<string>().HasMaxLength(24);
+            disposition.Property(d => d.ResultHash).HasMaxLength(64);
+            disposition.Property(d => d.Reason).HasMaxLength(2_000);
+            disposition.HasOne<RunPatch>().WithMany().HasForeignKey(d => new { d.RunId, d.PatchId }).OnDelete(DeleteBehavior.Restrict);
+            disposition.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RunPatchDispositions_Shape", "\"Version\" >= 1 AND \"Kind\" IN ('Applied', 'Duplicate', 'PreservedAsConflict', 'Stale', 'Invalid', 'NotProcessed') " +
+                    $"AND (\"ResultHash\" IS NULL OR \"ResultHash\" {Hex})");
+                t.HasCheckConstraint("CK_RunPatchDispositions_Reason", "\"Kind\" IN ('Applied', 'Duplicate') OR (\"Reason\" IS NOT NULL AND length(btrim(\"Reason\")) > 0)");
+            });
+        });
+    }
+
+    /// <summary>
+    /// Dati di lavoro del workflow documentale (002 T040): manifesto, batch derivati e output committati, append-only (trigger nella migrazione).
+    /// L'owner è polimorfico (kind + id, nessuna FK sull'owner: lease, fence e progetto li verifica lo store sotto lock); il progetto è una FK.
+    /// </summary>
+    private static void ConfigureDocumentWork(ModelBuilder builder)
+    {
+        const string Hex = "~ '^[0-9a-f]{64}$'";
+
+        builder.Entity<WorkManifest>(manifest =>
+        {
+            manifest.HasKey(m => m.Id);
+            manifest.Property(m => m.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            manifest.Property(m => m.ConfigHash).HasMaxLength(64);
+            manifest.Property(m => m.SourceHash).HasMaxLength(64);
+            manifest.Property(m => m.PolicyHash).HasMaxLength(64);
+            manifest.Property(m => m.Hash).HasMaxLength(64);
+            manifest.Property(m => m.RuntimeFingerprint).HasMaxLength(256);
+            manifest.Property(m => m.DefinitionVersion).HasMaxLength(64);
+            manifest.Property(m => m.AlgorithmVersion).HasMaxLength(64);
+            manifest.Property(m => m.PlanJson).HasColumnType("jsonb");
+            manifest.Property(m => m.CreatedAt).HasDefaultValueSql("clock_timestamp()");
+            // Un solo manifesto per owner; la seconda chiave consente a WorkOutput di agganciare il manifesto per hash.
+            manifest.HasAlternateKey(m => new { m.OwnerKind, m.OwnerId });
+            manifest.HasAlternateKey(m => new { m.OwnerKind, m.OwnerId, m.Hash });
+            manifest.HasOne<Project>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            manifest.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_WorkManifests_Hashes", $"\"ConfigHash\" {Hex} AND \"SourceHash\" {Hex} AND \"PolicyHash\" {Hex} AND \"Hash\" {Hex}");
+                t.HasCheckConstraint("CK_WorkManifests_Plan", "jsonb_typeof(\"PlanJson\") = 'object'");
+            });
+        });
+
+        builder.Entity<DerivedBatch>(batch =>
+        {
+            batch.HasKey(b => b.Id);
+            batch.Property(b => b.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            batch.Property(b => b.BatchId).HasMaxLength(128);
+            batch.Property(b => b.Stage).HasMaxLength(32);
+            batch.Property(b => b.View).HasMaxLength(16);
+            batch.Property(b => b.ParentOutputHashes).HasColumnType("jsonb");
+            batch.Property(b => b.InputIdsJson).HasColumnType("jsonb");
+            batch.Property(b => b.TokenProvenance).HasMaxLength(32);
+            batch.Property(b => b.InputHash).HasMaxLength(64);
+            batch.Property(b => b.SchemaVersion).HasMaxLength(32);
+            batch.Property(b => b.PromptVersion).HasMaxLength(64);
+            batch.Property(b => b.CreatedAt).HasDefaultValueSql("clock_timestamp()");
+            // unique(owner,batchId): l'identità del batch è una sola; la chiave con inputHash serve alla FK dell'output.
+            batch.HasAlternateKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId });
+            batch.HasAlternateKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId, b.InputHash });
+            batch.HasIndex(b => new { b.OwnerKind, b.OwnerId, b.Ordinal });
+            batch.HasOne<Project>().WithMany().HasForeignKey(b => b.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            batch.HasOne<WorkManifest>().WithMany()
+                .HasForeignKey(b => new { b.OwnerKind, b.OwnerId })
+                .HasPrincipalKey(m => new { m.OwnerKind, m.OwnerId })
+                .OnDelete(DeleteBehavior.Restrict);
+            batch.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DerivedBatches_InputHash", $"\"InputHash\" {Hex}");
+                t.HasCheckConstraint("CK_DerivedBatches_Parents", "jsonb_typeof(\"ParentOutputHashes\") = 'array'");
+                t.HasCheckConstraint("CK_DerivedBatches_Numbers",
+                    "\"Ordinal\" >= 0 AND (\"Pass\" IS NULL OR \"Pass\" >= 0) AND (\"Level\" IS NULL OR \"Level\" >= 0) AND (\"MeasuredTokens\" IS NULL OR \"MeasuredTokens\" >= 0)");
+                t.HasCheckConstraint("CK_DerivedBatches_TokenProvenance", "\"TokenProvenance\" IN ('measured', 'calibrated_upper_bound', 'unavailable')");
+            });
+        });
+
+        builder.Entity<WorkOutput>(output =>
+        {
+            output.HasKey(o => o.Id);
+            output.Property(o => o.OwnerKind).HasConversion<string>().HasMaxLength(16);
+            output.Property(o => o.Status).HasConversion<string>().HasMaxLength(16);
+            output.Property(o => o.BatchId).HasMaxLength(128);
+            output.Property(o => o.NodeId).HasMaxLength(128);
+            output.Property(o => o.InputHash).HasMaxLength(64);
+            output.Property(o => o.OutputHash).HasMaxLength(64);
+            output.Property(o => o.ManifestHash).HasMaxLength(64);
+            output.Property(o => o.DerivedFromOutputHash).HasMaxLength(64);
+            output.Property(o => o.PayloadJson).HasColumnType("jsonb");
+            output.Property(o => o.StorageKey).HasMaxLength(128);
+            output.Property(o => o.CoveredIdsJson).HasColumnType("jsonb");
+            output.Property(o => o.MapsJson).HasColumnType("jsonb");
+            output.Property(o => o.ExpansionReceiptJson).HasColumnType("jsonb");
+            output.Property(o => o.SchemaVersion).HasMaxLength(32);
+            output.Property(o => o.ValidationVersion).HasMaxLength(64);
+            output.Property(o => o.CommittedAt).HasDefaultValueSql("clock_timestamp()");
+            // Unique(owner,batchId) impedisce anche un inputHash diverso sullo stesso batch: l'hash discordante è errore, non update.
+            output.HasIndex(o => new { o.OwnerKind, o.OwnerId, o.BatchId }).IsUnique().HasDatabaseName("UX_WorkOutputs_OwnerBatch");
+            output.HasIndex(o => new { o.OwnerKind, o.OwnerId, o.OutputHash });
+            output.HasIndex(o => o.StorageKey).HasFilter("\"StorageKey\" IS NOT NULL");
+            output.HasOne<Project>().WithMany().HasForeignKey(o => o.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            output.HasOne<DerivedBatch>().WithMany()
+                .HasForeignKey(o => new { o.OwnerKind, o.OwnerId, o.BatchId, o.InputHash })
+                .HasPrincipalKey(b => new { b.OwnerKind, b.OwnerId, b.BatchId, b.InputHash })
+                .OnDelete(DeleteBehavior.Restrict);
+            output.HasOne<WorkManifest>().WithMany()
+                .HasForeignKey(o => new { o.OwnerKind, o.OwnerId, o.ManifestHash })
+                .HasPrincipalKey(m => new { m.OwnerKind, m.OwnerId, m.Hash })
+                .OnDelete(DeleteBehavior.Restrict);
+            output.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_WorkOutputs_Status", "\"Status\" = 'Committed'");
+                t.HasCheckConstraint("CK_WorkOutputs_Hashes",
+                    $"\"InputHash\" {Hex} AND \"OutputHash\" {Hex} AND \"ManifestHash\" {Hex} AND (\"DerivedFromOutputHash\" IS NULL OR \"DerivedFromOutputHash\" {Hex})");
+                t.HasCheckConstraint("CK_WorkOutputs_Payload",
+                    "(\"PayloadJson\" IS NOT NULL)::int + (\"StorageKey\" IS NOT NULL)::int = 1 AND (\"StorageKey\" IS NULL) = (\"PayloadByteLength\" IS NULL)");
+                t.HasCheckConstraint("CK_WorkOutputs_Fence", "\"CommittedFence\" >= 0 AND (\"PayloadByteLength\" IS NULL OR \"PayloadByteLength\" >= 0)");
+            });
+        });
+    }
+
+    /// <summary>
+    /// Root del regime (002 T046, document-regime-v2): campi nullable sui tre root (i record 001 non li valorizzano), CHECK di coerenza
+    /// (cap finito, Effective&lt;=Hard, PromotionCount in 0/1, DeadlineAt=EffectiveDeadlineAt dove presente) e ClassificationRecord append-only.
+    /// </summary>
+    private static void ConfigureDocumentRegime(ModelBuilder builder)
+    {
+        const string Hex = "~ '^[0-9a-f]{64}$'";
+
+        static void Common<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity, string table) where T : class
+        {
+            entity.Property<ExecutionRegime?>("InitialRegime").HasConversion<string>().HasMaxLength(16);
+            entity.Property<ExecutionRegime?>("Regime").HasConversion<string>().HasMaxLength(16);
+            entity.Property<ClassificationStatus?>("ClassificationStatus").HasConversion<string>().HasMaxLength(16);
+            entity.Property<string?>("ClassificationVersion").HasMaxLength(32);
+            entity.Property<string?>("ClassificationReason").HasMaxLength(64);
+            entity.Property<string?>("PromotedReason").HasMaxLength(64);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint($"CK_{table}_Regime",
+                    "(\"InitialRegime\" IS NULL OR \"InitialRegime\" IN ('Ordinary', 'Extended')) AND (\"Regime\" IS NULL OR \"Regime\" IN ('Ordinary', 'Extended')) " +
+                    "AND (\"ClassificationStatus\" IS NULL OR \"ClassificationStatus\" IN ('Pending', 'Classified', 'Rejected'))");
+                // Pending nasce Extended provvisorio senza InitialRegime; Classified li fissa entrambi; nessun downgrade.
+                t.HasCheckConstraint($"CK_{table}_Classification",
+                    "\"ClassificationStatus\" IS NULL OR (\"ClassificationStatus\" = 'Pending' AND \"InitialRegime\" IS NULL AND \"Regime\" = 'Extended') " +
+                    "OR (\"ClassificationStatus\" = 'Classified' AND \"InitialRegime\" IS NOT NULL AND \"Regime\" IS NOT NULL) " +
+                    "OR (\"ClassificationStatus\" = 'Rejected' AND \"InitialRegime\" IS NULL)");
+                t.HasCheckConstraint($"CK_{table}_NoDowngrade",
+                    "\"Regime\" IS DISTINCT FROM 'Ordinary' OR (\"InitialRegime\" = 'Ordinary' AND COALESCE(\"PromotionCount\", 0) = 0 AND \"OrdinaryDeadlineAt\" IS NOT NULL)");
+                t.HasCheckConstraint($"CK_{table}_Promotion",
+                    "(\"PromotionCount\" IS NULL OR \"PromotionCount\" IN (0, 1)) AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedAt\" IS NOT NULL) " +
+                    "AND (COALESCE(\"PromotionCount\", 0) = 1) = (\"PromotedReason\" IS NOT NULL) " +
+                    "AND (COALESCE(\"PromotionCount\", 0) = 0 OR (\"InitialRegime\" = 'Ordinary' AND \"Regime\" = 'Extended' AND \"PromotedReason\" = 'additional_work'))");
+            });
+        }
+
+        // Preparazione: HardDeadlineAt/EffectiveDeadlineAt/PolicyHash/CallCount esistono già (T115) e hanno già il CHECK Effective<=Hard.
+        builder.Entity<DocumentPreparation>(preparation => Common(preparation, "DocumentPreparations"));
+
+        void LegacyRoot<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity, string table) where T : class
+        {
+            Common(entity, table);
+            entity.Property<string?>("PolicyHash").HasMaxLength(64);
+            entity.HasIndex("RetryOfId");
+            entity.HasOne(typeof(T)).WithMany().HasForeignKey("RetryOfId").OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint($"CK_{table}_Cap",
+                    "(\"HardDeadlineAt\" IS NULL AND \"EffectiveDeadlineAt\" IS NULL) OR (\"HardDeadlineAt\" IS NOT NULL AND \"EffectiveDeadlineAt\" IS NOT NULL " +
+                    "AND \"EffectiveDeadlineAt\" <= \"HardDeadlineAt\" AND \"HardDeadlineAt\" > \"RequestedAt\" AND (\"OrdinaryDeadlineAt\" IS NULL OR \"OrdinaryDeadlineAt\" <= \"HardDeadlineAt\"))");
+                t.HasCheckConstraint($"CK_{table}_DeadlineIsEffective", "\"EffectiveDeadlineAt\" IS NULL OR \"DeadlineAt\" = \"EffectiveDeadlineAt\"");
+                t.HasCheckConstraint($"CK_{table}_RegimeFields", "\"ClassificationStatus\" IS NULL OR \"EffectiveDeadlineAt\" IS NOT NULL");
+                t.HasCheckConstraint($"CK_{table}_PolicyHash", $"\"PolicyHash\" IS NULL OR \"PolicyHash\" {Hex}");
+                t.HasCheckConstraint($"CK_{table}_CallCount", "\"CallCount\" IS NULL OR \"CallCount\" >= 0");
+            });
+        }
+
+        builder.Entity<ChatTurn>(turn => LegacyRoot(turn, "ChatTurns"));
+        builder.Entity<ProcessingRun>(run => LegacyRoot(run, "ProcessingRuns"));
+
+        builder.Entity<ExecutionInterval>(interval =>
+        {
+            interval.HasKey(i => i.Id);
+            interval.Property(i => i.RootKind).HasConversion<string>().HasMaxLength(24);
+            interval.Property(i => i.Kind).HasConversion<string>().HasMaxLength(16);
+            // Un intervallo per (root, tipo, tentativo): il claim ripetuto non lo duplica. Il root è polimorfico (nessuna FK), il progetto sì.
+            interval.HasIndex(i => new { i.RootKind, i.RootId, i.Kind, i.Attempt }).IsUnique().HasDatabaseName("UX_ExecutionIntervals_Root");
+            interval.HasOne<Project>().WithMany().HasForeignKey(i => i.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            interval.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ExecutionIntervals_Order", "\"EndedAt\" >= \"StartedAt\" AND \"Attempt\" >= 1");
+                t.HasCheckConstraint("CK_ExecutionIntervals_Kinds", "\"Kind\" IN ('Queue', 'Preflight', 'Backoff', 'Recovery') AND \"RootKind\" IN ('ProcessingRun', 'ChatTurn', 'DocumentPreparation')");
+            });
+        });
+
+        builder.Entity<ClassificationRecord>(record =>
+        {
+            record.HasKey(r => r.Id);
+            record.Property(r => r.OwnerKind).HasConversion<string>().HasMaxLength(24);
+            record.Property(r => r.Outcome).HasConversion<string>().HasMaxLength(16);
+            record.Property(r => r.Version).HasMaxLength(32);
+            record.Property(r => r.InputHash).HasMaxLength(64);
+            record.Property(r => r.PolicyHash).HasMaxLength(64);
+            record.Property(r => r.Reason).HasMaxLength(64);
+            record.Property(r => r.RuntimeFingerprint).HasMaxLength(256);
+            record.Property(r => r.TokenQuality).HasMaxLength(32);
+            record.Property(r => r.ShapeSkeletonHash).HasMaxLength(64);
+            record.Property(r => r.ProvenanceJson).HasColumnType("jsonb");
+            record.Property(r => r.UnknownReasonsJson).HasColumnType("jsonb");
+            record.Property(r => r.ObservedAt).HasDefaultValueSql("clock_timestamp()");
+            // Unique(owner, ordinal): l'owner è polimorfico (nessuna FK), il progetto sì.
+            record.HasIndex(r => new { r.OwnerKind, r.OwnerId, r.Ordinal }).IsUnique().HasDatabaseName("UX_ClassificationRecords_OwnerOrdinal");
+            record.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            record.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ClassificationRecords_Outcome", "\"Outcome\" IN ('AdmitOrdinary', 'AdmitExtended', 'Reject', 'Fail')");
+                t.HasCheckConstraint("CK_ClassificationRecords_Owner", "\"OwnerKind\" IN ('ProcessingRun', 'ChatTurn', 'DocumentPreparation') AND \"Ordinal\" >= 1");
+                t.HasCheckConstraint("CK_ClassificationRecords_Hashes",
+                    $"\"InputHash\" {Hex} AND \"PolicyHash\" {Hex} AND (\"ShapeSkeletonHash\" IS NULL OR \"ShapeSkeletonHash\" {Hex})");
+                t.HasCheckConstraint("CK_ClassificationRecords_Json", "jsonb_typeof(\"ProvenanceJson\") = 'object' AND jsonb_typeof(\"UnknownReasonsJson\") = 'array'");
+                t.HasCheckConstraint("CK_ClassificationRecords_TokenQuality",
+                    "\"TokenQuality\" IS NULL OR \"TokenQuality\" IN ('measured', 'calibrated_upper_bound', 'unavailable')");
+                t.HasCheckConstraint("CK_ClassificationRecords_Numbers",
+                    "(\"PlannedCalls\" IS NULL OR \"PlannedCalls\" >= 0) AND (\"PayloadTokens\" IS NULL OR \"PayloadTokens\" >= 0) AND (\"ShapeFloorTokens\" IS NULL OR \"ShapeFloorTokens\" >= 0)");
+                // Un'ammissione Ordinary presuppone una sola chiamata iniziale (regola 7).
+                t.HasCheckConstraint("CK_ClassificationRecords_OrdinaryOneCall", "\"Outcome\" <> 'AdmitOrdinary' OR \"PlannedCalls\" = 1");
+            });
+        });
+
+        // Transizione di regime (T047): append-only (trigger della migrazione), una sola per root e regime di arrivo. Il root è polimorfico: nessuna FK.
+        builder.Entity<RegimeTransition>(transition =>
+        {
+            transition.HasKey(r => r.Id);
+            transition.Property(r => r.RootKind).HasConversion<string>().HasMaxLength(24);
+            transition.Property(r => r.FromRegime).HasConversion<string>().HasMaxLength(16);
+            transition.Property(r => r.ToRegime).HasConversion<string>().HasMaxLength(16);
+            transition.Property(r => r.Reason).HasMaxLength(64);
+            transition.Property(r => r.PolicyHash).HasMaxLength(64);
+            transition.Property(r => r.DerivedPlanHash).HasMaxLength(64);
+            transition.Property(r => r.ReceiptJson).HasColumnType("jsonb");
+            transition.HasIndex(r => new { r.RootKind, r.RootId, r.ToRegime }).IsUnique().HasDatabaseName("UX_RegimeTransitions_RootTo");
+            transition.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            transition.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_RegimeTransitions_Root", "\"RootKind\" IN ('ProcessingRun', 'ChatTurn')");
+                // L'unica transizione ammessa: Ordinary→Extended per additional_work, mai un downgrade né un tempo trascorso.
+                t.HasCheckConstraint("CK_RegimeTransitions_Promotion", "\"FromRegime\" = 'Ordinary' AND \"ToRegime\" = 'Extended' AND \"Reason\" = 'additional_work'");
+                t.HasCheckConstraint("CK_RegimeTransitions_Deadlines", "\"NewDeadlineAt\" > \"OldDeadlineAt\" AND \"ElapsedMs\" >= 0 AND \"Fence\" >= 0");
+                t.HasCheckConstraint("CK_RegimeTransitions_Hashes", $"\"PolicyHash\" {Hex} AND \"DerivedPlanHash\" {Hex}");
+                t.HasCheckConstraint("CK_RegimeTransitions_Receipt", "jsonb_typeof(\"ReceiptJson\") = 'object'");
+            });
+        });
+    }
+
     private static void ConfigureCheckpoints(ModelBuilder builder)
     {
         builder.Entity<WorkflowCheckpoint>(checkpoint =>
@@ -188,16 +1042,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             checkpoint.Property(c => c.Payload).HasColumnType("jsonb");
             checkpoint.Property(c => c.MafVersion).HasMaxLength(32);
             checkpoint.Property(c => c.WorkflowDefinitionVersion).HasMaxLength(64);
-            // Unicità V28 e indice oldest-first: l'ordine di scrittura è CommitSequence, univoco per run.
+            // Unicità V28 e indice oldest-first: l'ordine di scrittura è CommitSequence, univoco per owner (ProcessingRun 001, ChatTurn, DocumentJob).
             checkpoint.HasIndex(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
             checkpoint.HasIndex(c => new { c.ProcessingRunId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_OldestFirst");
+            checkpoint.HasIndex(c => new { c.ChatTurnId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
+            checkpoint.HasIndex(c => new { c.ChatTurnId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_Turn_OldestFirst");
+            checkpoint.HasIndex(c => new { c.DocumentJobId, c.WorkflowSessionId, c.CheckpointKey }).IsUnique();
+            checkpoint.HasIndex(c => new { c.DocumentJobId, c.CommitSequence }).IsUnique().HasDatabaseName("IX_WorkflowCheckpoints_Job_OldestFirst");
             checkpoint.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
-            // Il parent è un checkpoint già scritto dello stesso run e della stessa sessione.
-            checkpoint.HasOne<WorkflowCheckpoint>().WithMany()
-                .HasForeignKey(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.ParentCheckpointKey })
-                .HasPrincipalKey(c => new { c.ProcessingRunId, c.WorkflowSessionId, c.CheckpointKey })
+            checkpoint.HasOne<ChatTurn>().WithMany().HasForeignKey(c => c.ChatTurnId).OnDelete(DeleteBehavior.Restrict);
+            checkpoint.HasOne<Project>().WithMany().HasForeignKey(c => c.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            // Il progetto del job è quello del job: FK composta (le righe 001 di ProcessingRun non hanno progetto).
+            checkpoint.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(c => new { c.DocumentJobId, c.ProjectId })
+                .HasPrincipalKey(j => new { j.Id, j.ProjectId })
                 .OnDelete(DeleteBehavior.Restrict);
-            checkpoint.ToTable(t => t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1"));
+            // Il parent è un checkpoint già scritto dello stesso owner e della stessa sessione. EF non esprime una chiave alternativa su colonne
+            // nullable (l'owner è esclusivo): le FK del parent per i tre owner referenziano gli indici unici sopra e sono create dalla migrazione SQL.
+            checkpoint.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_WorkflowCheckpoints_Sequence", "\"CommitSequence\" >= 1");
+                t.HasCheckConstraint("CK_WorkflowCheckpoints_Owner",
+                    "(\"ProcessingRunId\" IS NOT NULL)::int + (\"ChatTurnId\" IS NOT NULL)::int + (\"DocumentJobId\" IS NOT NULL)::int = 1");
+                t.HasCheckConstraint("CK_WorkflowCheckpoints_Project", "\"ProcessingRunId\" IS NOT NULL OR \"ProjectId\" IS NOT NULL");
+            });
         });
     }
 
@@ -219,20 +1087,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             call.HasOne<ChatTurn>().WithMany().HasForeignKey(c => c.ChatTurnId).OnDelete(DeleteBehavior.Restrict);
             call.HasOne<ProcessingRun>().WithMany().HasForeignKey(c => c.ProcessingRunId).OnDelete(DeleteBehavior.Restrict);
             call.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(c => c.EvidenceExtractionJobId).OnDelete(DeleteBehavior.Restrict);
+            // Quarto owner (002): un DocumentJob dello stesso progetto della chiamata.
+            call.HasOne<DocumentJob>().WithMany()
+                .HasForeignKey(c => new { c.DocumentJobId, c.ProjectId })
+                .HasPrincipalKey(j => new { j.Id, j.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             // Letture del risultato logico: righe di un turno/run/lavoro di estrazione per tentativo.
             call.HasIndex(c => new { c.ChatTurnId, c.Attempt });
             call.HasIndex(c => new { c.ProcessingRunId, c.Attempt });
             call.HasIndex(c => new { c.EvidenceExtractionJobId, c.Attempt });
+            call.HasIndex(c => new { c.DocumentJobId, c.Attempt });
             // Un solo risultato logico per turno, per run e per lavoro di estrazione, anche fra tentativi diversi.
             call.HasIndex(c => c.ChatTurnId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerTurn");
             call.HasIndex(c => c.ProcessingRunId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerRun");
             call.HasIndex(c => c.EvidenceExtractionJobId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerExtraction");
+            call.HasIndex(c => c.DocumentJobId).IsUnique().HasFilter("\"IsFinal\"").HasDatabaseName("UX_InferenceCalls_OneFinalPerDocumentJob");
             // Monitor del contesto: ultima inferenza finale del progetto.
             call.HasIndex(c => new { c.ProjectId, c.StartedAt }).IsDescending(false, true).HasFilter("\"IsFinal\"").HasDatabaseName("IX_InferenceCalls_Project_LastFinal");
             call.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_InferenceCalls_Owner",
-                    "(\"ChatTurnId\" IS NOT NULL)::int + (\"ProcessingRunId\" IS NOT NULL)::int + (\"EvidenceExtractionJobId\" IS NOT NULL)::int = 1");
+                    "(\"ChatTurnId\" IS NOT NULL)::int + (\"ProcessingRunId\" IS NOT NULL)::int + (\"EvidenceExtractionJobId\" IS NOT NULL)::int + (\"DocumentJobId\" IS NOT NULL)::int = 1");
                 t.HasCheckConstraint("CK_InferenceCalls_Final", "NOT \"IsFinal\" OR (\"State\" = 'Completed' AND \"Phase\" <> 'Compaction')");
                 t.HasCheckConstraint("CK_InferenceCalls_Tokens",
                     "(\"PromptTokens\" IS NULL OR \"PromptTokens\" >= 0) AND (\"CompletionTokens\" IS NULL OR \"CompletionTokens\" >= 0) " +
@@ -249,6 +1124,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<EvidenceExtractionJob>(job =>
         {
             job.HasKey(j => j.Id);
+            job.Property(j => j.OriginKind).HasConversion<string>().HasMaxLength(16);
             job.Property(j => j.Reason).HasConversion<string>().HasMaxLength(16);
             job.Property(j => j.Status).HasConversion<string>().HasMaxLength(16);
             job.Property(j => j.ExtractorConfig).HasColumnType("jsonb");
@@ -258,6 +1134,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             job.HasOne<Project>().WithMany().HasForeignKey(j => j.ProjectId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<Conversation>().WithMany().HasForeignKey(j => j.ConversationId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<ConversationMessage>().WithMany().HasForeignKey(j => j.MessageId).OnDelete(DeleteBehavior.Restrict);
+            job.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(j => new { j.PreparationId, j.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             job.HasOne<EvidenceBatch>().WithMany().HasForeignKey(j => j.BatchId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(j => j.RetryOfJobId).OnDelete(DeleteBehavior.Restrict);
             job.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(j => j.ResultVersionId).OnDelete(DeleteBehavior.Restrict);
@@ -265,6 +1145,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             // Un solo lavoro aperto per messaggio: doppio invio, rianalisi concorrenti e backfill non lo duplicano.
             job.HasIndex(j => j.MessageId).IsUnique().HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("UX_EvidenceExtractionJobs_OneOpenPerMessage");
             job.HasIndex(j => new { j.RequestedAt, j.Id }).HasFilter("\"Status\" IN ('Queued', 'Running')").HasDatabaseName("IX_EvidenceExtractionJobs_Open_Fifo");
+            // Un solo aggregatore documentale per preparazione, in qualsiasi stato: il retry crea una nuova generazione di preparazione.
+            job.HasIndex(j => j.PreparationId).IsUnique().HasFilter("\"OriginKind\" = 'Document'").HasDatabaseName("UX_EvidenceExtractionJobs_OnePerPreparation");
             job.HasIndex(j => new { j.ProjectId, j.MessageSequence });
             job.HasIndex(j => j.BatchId);
             job.HasIndex(j => j.ResultVersionId);
@@ -274,6 +1156,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             {
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Attempts", "\"AttemptCount\" >= 0 AND \"MaxAttempts\" >= 1");
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Sequence", "\"MessageSequence\" >= 1");
+                // XOR Message oppure Preparation: nessun messaggio fittizio per il ramo documentale.
+                t.HasCheckConstraint("CK_EvidenceExtractionJobs_Origin",
+                    "(\"OriginKind\" = 'Message' AND \"ConversationId\" IS NOT NULL AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL) " +
+                    "OR (\"OriginKind\" = 'Document' AND \"ConversationId\" IS NULL AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL)");
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Completed_Result", "\"Status\" <> 'Completed' OR \"ResultVersionId\" IS NOT NULL");
                 t.HasCheckConstraint("CK_EvidenceExtractionJobs_Failed_Error", "\"Status\" <> 'Failed' OR \"ErrorCode\" IS NOT NULL");
             });
@@ -282,20 +1168,32 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<EvidenceExtractionVersion>(version =>
         {
             version.HasKey(v => v.Id);
+            version.Property(v => v.OriginKind).HasConversion<string>().HasMaxLength(16);
+            version.Property(v => v.ManifestHash).HasMaxLength(64);
             version.Property(v => v.SchemaVersion).HasMaxLength(32);
+            // Ancora del puntatore corrente dei documenti (versione e progetto coerenti).
+            version.HasAlternateKey(v => new { v.Id, v.ProjectId });
             version.Property(v => v.PromptVersion).HasMaxLength(64);
             version.Property(v => v.ModelId).HasMaxLength(256);
             version.Property(v => v.Parameters).HasColumnType("jsonb");
             version.Property(v => v.NoEvidenceReason).HasMaxLength(2_000);
             version.HasIndex(v => new { v.MessageId, v.Version }).IsUnique();
+            version.HasIndex(v => new { v.PreparationId, v.Version }).IsUnique();
             version.HasIndex(v => v.JobId).IsUnique();
             version.HasIndex(v => new { v.ProjectId, v.MessageSequence });
             version.HasOne<Project>().WithMany().HasForeignKey(v => v.ProjectId).OnDelete(DeleteBehavior.Restrict);
             version.HasOne<Conversation>().WithMany().HasForeignKey(v => v.ConversationId).OnDelete(DeleteBehavior.Restrict);
             version.HasOne<ConversationMessage>().WithMany().HasForeignKey(v => v.MessageId).OnDelete(DeleteBehavior.Restrict);
             version.HasOne<EvidenceExtractionJob>().WithMany().HasForeignKey(v => v.JobId).OnDelete(DeleteBehavior.Restrict);
+            version.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(v => new { v.PreparationId, v.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             version.ToTable(t =>
             {
+                t.HasCheckConstraint("CK_EvidenceExtractionVersions_Origin",
+                    "(\"OriginKind\" = 'Message' AND \"ConversationId\" IS NOT NULL AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL AND \"ManifestHash\" IS NULL) " +
+                    "OR (\"OriginKind\" = 'Document' AND \"ConversationId\" IS NULL AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL AND \"ManifestHash\" IS NOT NULL AND \"SchemaVersion\" = 'evidence-1.1.0')");
                 t.HasCheckConstraint("CK_EvidenceExtractionVersions_Version", "\"Version\" >= 1");
                 // Zero evidenze è un esito esplicito e motivato, mai un default.
                 t.HasCheckConstraint("CK_EvidenceExtractionVersions_NoEvidence",
@@ -307,7 +1205,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             evidence.ToTable("Evidences");
             evidence.HasKey(e => e.Id);
-            evidence.Property(e => e.Key).HasMaxLength(16);
+            evidence.Property(e => e.OriginKind).HasConversion<string>().HasMaxLength(16);
+            evidence.Property(e => e.Key).HasMaxLength(32);
             evidence.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
             evidence.Property(e => e.Polarity).HasConversion<string>().HasMaxLength(16);
             evidence.Property(e => e.Certainty).HasConversion<string>().HasMaxLength(16);
@@ -315,11 +1214,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             evidence.HasIndex(e => new { e.VersionId, e.Ordinal }).IsUnique();
             evidence.HasIndex(e => new { e.VersionId, e.Key }).IsUnique();
             evidence.HasIndex(e => new { e.ProjectId, e.MessageId });
+            evidence.HasIndex(e => new { e.ProjectId, e.PreparationId });
             evidence.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(e => e.VersionId).OnDelete(DeleteBehavior.Restrict);
             evidence.HasOne<Project>().WithMany().HasForeignKey(e => e.ProjectId).OnDelete(DeleteBehavior.Restrict);
             evidence.HasOne<ConversationMessage>().WithMany().HasForeignKey(e => e.MessageId).OnDelete(DeleteBehavior.Restrict);
+            evidence.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(e => new { e.PreparationId, e.ProjectId })
+                .HasPrincipalKey(p => new { p.Id, p.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
             evidence.ToTable(t =>
             {
+                t.HasCheckConstraint("CK_Evidences_Origin",
+                    "(\"OriginKind\" = 'Message' AND \"MessageId\" IS NOT NULL AND \"PreparationId\" IS NULL) " +
+                    "OR (\"OriginKind\" = 'Document' AND \"MessageId\" IS NULL AND \"PreparationId\" IS NOT NULL)");
                 t.HasCheckConstraint("CK_Evidences_Ordinal", "\"Ordinal\" >= 1");
                 t.HasCheckConstraint("CK_Evidences_Statement_NotBlank", "\"Statement\" ~ '\\S'");
             });
@@ -364,6 +1271,63 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             promotion.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.PromotedBy).OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<EvidenceDocumentState>(state =>
+        {
+            state.HasKey(s => s.DocumentVersionId);
+            state.HasIndex(s => s.ProjectId);
+            state.HasOne<DocumentVersion>().WithOne()
+                .HasForeignKey<EvidenceDocumentState>(s => new { s.DocumentVersionId, s.ProjectId })
+                .HasPrincipalKey<DocumentVersion>(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            // La preparazione corrente appartiene a questa versione file; la versione Evidence corrente appartiene a questo progetto.
+            state.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(s => new { s.CurrentPreparationId, s.DocumentVersionId })
+                .HasPrincipalKey(p => new { p.Id, p.DocumentVersionId })
+                .OnDelete(DeleteBehavior.Restrict);
+            state.HasOne<EvidenceExtractionVersion>().WithMany()
+                .HasForeignKey(s => new { s.CurrentEvidenceVersionId, s.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            state.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_EvidenceDocumentStates_Revision", "\"Revision\" >= 0");
+                t.HasCheckConstraint("CK_EvidenceDocumentStates_Pointers", "(\"CurrentPreparationId\" IS NULL) = (\"CurrentEvidenceVersionId\" IS NULL)");
+            });
+        });
+
+        builder.Entity<DocumentPromotion>(promotion =>
+        {
+            promotion.HasKey(p => p.Id);
+            promotion.Property(p => p.Reason).HasMaxLength(1_000);
+            promotion.HasIndex(p => new { p.DocumentVersionId, p.PromotedAt });
+            promotion.HasOne<DocumentVersion>().WithMany()
+                .HasForeignKey(p => new { p.DocumentVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(p => new { p.ToPreparationId, p.DocumentVersionId })
+                .HasPrincipalKey(x => new { x.Id, x.DocumentVersionId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<DocumentPreparation>().WithMany()
+                .HasForeignKey(p => new { p.FromPreparationId, p.DocumentVersionId })
+                .HasPrincipalKey(x => new { x.Id, x.DocumentVersionId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<EvidenceExtractionVersion>().WithMany()
+                .HasForeignKey(p => new { p.ToEvidenceVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<EvidenceExtractionVersion>().WithMany()
+                .HasForeignKey(p => new { p.FromEvidenceVersionId, p.ProjectId })
+                .HasPrincipalKey(v => new { v.Id, v.ProjectId })
+                .OnDelete(DeleteBehavior.Restrict);
+            promotion.HasOne<IdentityUser<Guid>>().WithMany().HasForeignKey(p => p.PromotedBy).OnDelete(DeleteBehavior.Restrict);
+            promotion.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_DocumentPromotions_From", "(\"FromPreparationId\" IS NULL) = (\"FromEvidenceVersionId\" IS NULL)");
+                t.HasCheckConstraint("CK_DocumentPromotions_Changes", "\"FromEvidenceVersionId\" IS NULL OR \"FromEvidenceVersionId\" <> \"ToEvidenceVersionId\"");
+            });
+        });
+
         builder.Entity<EvidenceBatch>(batch =>
         {
             batch.HasKey(b => b.Id);
@@ -385,11 +1349,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         builder.Entity<AnalysisEvidenceSelectionItem>(item =>
         {
-            item.HasKey(i => new { i.RunId, i.MessageId });
+            // Chiave per versione selezionata: MessageId è nullable nel ramo documentale. L'unicità storica (run, messaggio) resta come indice.
+            item.HasKey(i => new { i.RunId, i.VersionId });
+            item.Property(i => i.OriginKind).HasConversion<string>().HasMaxLength(16);
             item.HasIndex(i => i.VersionId);
+            item.HasIndex(i => new { i.RunId, i.MessageId }).IsUnique();
+            item.HasIndex(i => new { i.RunId, i.PreparationId }).IsUnique();
             item.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(i => i.RunId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne<ConversationMessage>().WithMany().HasForeignKey(i => i.MessageId).OnDelete(DeleteBehavior.Restrict);
+            item.HasOne<DocumentPreparation>().WithMany().HasForeignKey(i => i.PreparationId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne<EvidenceExtractionVersion>().WithMany().HasForeignKey(i => i.VersionId).OnDelete(DeleteBehavior.Restrict);
+            item.ToTable(t => t.HasCheckConstraint("CK_AnalysisEvidenceSelectionItems_Origin",
+                "(\"OriginKind\" = 'Message' AND \"MessageId\" IS NOT NULL AND \"MessageSequence\" IS NOT NULL AND \"PreparationId\" IS NULL) " +
+                "OR (\"OriginKind\" = 'Document' AND \"MessageId\" IS NULL AND \"MessageSequence\" IS NULL AND \"PreparationId\" IS NOT NULL)"));
         });
 
         builder.Entity<AnalysisEvidenceLink>(link =>
@@ -399,6 +1371,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             link.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(l => l.RunId).OnDelete(DeleteBehavior.Restrict);
             link.HasOne<EvidenceItem>().WithMany().HasForeignKey(l => l.EvidenceId).OnDelete(DeleteBehavior.Restrict);
             link.HasOne<Project>().WithMany().HasForeignKey(l => l.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AnalysisEvidenceRelation>(relation =>
+        {
+            relation.HasKey(r => new { r.RunId, r.FromEvidenceId, r.ToEvidenceId, r.Type });
+            relation.Property(r => r.Type).HasConversion<string>().HasMaxLength(16);
+            relation.Property(r => r.Basis).HasConversion<string>().HasMaxLength(16);
+            relation.Property(r => r.Rationale).HasMaxLength(2_000);
+            relation.HasIndex(r => r.ToEvidenceId);
+            relation.HasIndex(r => r.FromEvidenceId);
+            relation.HasOne<AnalysisEvidenceSelection>().WithMany().HasForeignKey(r => r.RunId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceItem>().WithMany().HasForeignKey(r => r.FromEvidenceId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<EvidenceItem>().WithMany().HasForeignKey(r => r.ToEvidenceId).OnDelete(DeleteBehavior.Restrict);
+            relation.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            relation.ToTable(t => t.HasCheckConstraint("CK_AnalysisEvidenceRelations_NotSelf", "\"FromEvidenceId\" <> \"ToEvidenceId\""));
         });
 
         builder.Entity<EvidenceCoverageReport>(report =>

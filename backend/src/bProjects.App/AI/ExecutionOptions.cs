@@ -37,6 +37,14 @@ public sealed class ExecutionOptions
 
     public TimeSpan ExtractionDeadline => TimeSpan.FromSeconds(ExtractionDeadlineSeconds);
 
+    /// <summary>
+    /// Intervallo del monitor/sweep delle scadenze dei root documentali (T119): chiude i root e i figli scaduti anche con il lease ancora valido e
+    /// anche con lo slot AI occupato. Non è uno scheduler: legge il database, non promuove e non prende in carico lavoro.
+    /// </summary>
+    public int DeadlineSweepIntervalSeconds { get; set; } = 1;
+
+    public TimeSpan DeadlineSweepInterval => TimeSpan.FromSeconds(DeadlineSweepIntervalSeconds);
+
     public TimeSpan LeaseDuration => TimeSpan.FromSeconds(LeaseDurationSeconds);
 
     public TimeSpan RenewInterval => TimeSpan.FromSeconds(RenewIntervalSeconds);
@@ -64,6 +72,11 @@ public sealed class ExecutionOptionsValidator(IOptions<AiOptions>? ai = null) : 
             || o.RetryMaxDelaySeconds <= 0 || o.RunDeadlineSeconds <= 0)
         {
             errors.Add("Execution: durate (lease, rinnovo, backoff, deadline) devono essere positive.");
+        }
+
+        if (o.DeadlineSweepIntervalSeconds < 1)
+        {
+            errors.Add("Execution:DeadlineSweepIntervalSeconds deve essere almeno 1.");
         }
 
         if (o.MaxAttempts < 1)

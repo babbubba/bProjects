@@ -1,0 +1,440 @@
+<section class="docs" aria-labelledby="docs-title">
+  <header>
+    <h2 id="docs-title" class="h5 mb-1">Documenti</h2>
+    <p class="text-secondary small mb-0">
+      Archivio dei file del progetto (PDF testuali, DOCX, Markdown, testo). Gli originali restano
+      sempre scaricabili; un documento diventa una fonte per l'analisi solo quando la sua
+      preparazione è pronta.
+    </p>
+  </header>
+
+  <div role="status" aria-live="polite" data-testid="docs-live">
+    @if (progressNotice()) {
+      <div class="alert alert-info py-2 mb-0" data-testid="docs-progress-notice">
+        {{ progressNotice() }}
+      </div>
+    }
+    @if (notice()) {
+      <div
+        class="alert alert-success py-2 mb-0"
+        tabindex="-1"
+        data-focus="notice"
+        data-testid="docs-notice"
+      >
+        {{ notice() }}
+      </div>
+    }
+  </div>
+  @if (actionError()) {
+    <div
+      class="alert alert-warning py-2 mb-0"
+      role="alert"
+      tabindex="-1"
+      data-focus="action-error"
+      data-testid="docs-action-error"
+    >
+      {{ actionError() }}
+    </div>
+  }
+
+  <form class="docs-upload" aria-labelledby="docs-upload-title" (ngSubmit)="uploadNew()" novalidate>
+    <h3 id="docs-upload-title" class="h6 mb-0">Carica un documento</h3>
+    <div>
+      <label for="docs-file" class="form-label">File</label>
+      @for (k of [fileInputKey()]; track k) {
+        <input
+          id="docs-file"
+          name="file"
+          type="file"
+          class="form-control"
+          accept=".pdf,.docx,.md,.markdown,.txt"
+          data-testid="docs-file"
+          [disabled]="uploading() !== null"
+          (change)="onNewFile($event)"
+        />
+      }
+    </div>
+    <div>
+      <label for="docs-name" class="form-label">Nome del documento (facoltativo)</label>
+      <input
+        id="docs-name"
+        name="displayName"
+        class="form-control"
+        maxlength="200"
+        [(ngModel)]="newName"
+        [disabled]="uploading() !== null"
+      />
+    </div>
+    <div>
+      <button
+        type="submit"
+        class="btn btn-primary btn-sm"
+        data-testid="docs-upload"
+        [disabled]="uploading() !== null"
+      >
+        {{ uploading() === 'new' ? 'Caricamento…' : 'Carica' }}
+      </button>
+    </div>
+    @if (uploading() !== null) {
+      <div data-testid="docs-progress">
+        @if (progressPercent() !== null) {
+          <progress
+            class="docs-progress"
+            max="100"
+            [value]="progressPercent()"
+            aria-label="Avanzamento dell'invio"
+          ></progress>
+          <span class="small text-secondary">{{ progressPercent() }}% inviato</span>
+        } @else {
+          <span class="small text-secondary">Invio del file in corso…</span>
+        }
+        @if (allSent()) {
+          <span class="small text-secondary"> Il server sta acquisendo il file.</span>
+        }
+      </div>
+    }
+  </form>
+
+  @if (uploadError(); as err) {
+    <div
+      class="alert alert-danger py-2 mb-0"
+      role="alert"
+      tabindex="-1"
+      data-focus="upload-error"
+      data-testid="docs-upload-error"
+    >
+      {{ err.message }}
+      @if (err.retrySameKey) {
+        <span>
+          Riselezionando lo stesso file e premendo di nuovo Carica, l'invio viene riconciliato senza
+          duplicati.</span
+        >
+      }
+    </div>
+  }
+
+  <section class="docs-list" aria-labelledby="docs-list-title">
+    <div class="docs-list-head">
+      <h3 id="docs-list-title" class="h6 mb-0">Documenti caricati</h3>
+      <button
+        type="button"
+        class="btn btn-sm btn-outline-secondary"
+        data-testid="docs-refresh"
+        (click)="refresh()"
+      >
+        Aggiorna
+      </button>
+    </div>
+
+    @if (pollStopped()) {
+      <p class="small text-secondary mb-0" role="status" data-testid="docs-poll-stopped">
+        L'aggiornamento automatico si è fermato: alcuni documenti sono ancora in lavorazione, premi
+        Aggiorna per controllare.
+      </p>
+    }
+    @if (blockingCount() > 0) {
+      <p class="small text-warning-emphasis mb-0" data-testid="docs-blocking">
+        {{ blockingCount() }} documento/i incluso/i non ancora pronto/i: finché non sono pronti o
+        esclusi, l'analisi non può partire.
+      </p>
+    }
+    @if (loadError()) {
+      <div class="alert alert-danger py-2 mb-0" role="alert" data-testid="docs-load-error">
+        {{ loadError() }}
+      </div>
+    }
+
+    @if (documents().length === 0 && !loading() && !loadError()) {
+      <p class="text-secondary small mb-0" data-testid="docs-empty">Nessun documento caricato.</p>
+    }
+    @if (loading()) {
+      <p class="text-secondary small mb-0" role="status">Caricamento…</p>
+    }
+
+    <ul class="list-unstyled mb-0 docs-items">
+      @for (doc of documents(); track doc.documentId) {
+        <li class="docs-item" data-testid="docs-item">
+          <div class="docs-item-head">
+            <strong class="docs-name">{{ doc.displayName }}</strong>
+            @if (doc.latestVersion; as latest) {
+              <span [class]="'badge ' + badge(latest.processingStatus)" data-testid="docs-status">
+                {{ processingLabel(latest.processingStatus) }}
+              </span>
+            }
+          </div>
+          <p class="small text-secondary mb-1">
+            {{ doc.versionCount }} {{ doc.versionCount === 1 ? 'versione' : 'versioni' }}
+            @if (doc.latestVersion; as latest) {
+              · ultima: v{{ latest.version }}, {{ formatDate(latest.uploadedAt) }}
+            }
+            · {{ availabilityLabel(doc) }} · {{ modeLabel(doc) }}
+          </p>
+          @if (doc.latestVersion && isInProgress(doc.latestVersion.processingStatus)) {
+            <p class="small text-secondary mb-1" data-testid="docs-queued">
+              Preparazione in attesa o in corso: l'originale è già archiviato e scaricabile.
+            </p>
+          }
+          <div class="docs-actions">
+            <div class="form-check mb-0">
+              <input
+                type="checkbox"
+                class="form-check-input"
+                [id]="'inc-' + doc.documentId"
+                data-testid="docs-include"
+                [checked]="doc.included"
+                [disabled]="busy() || !selection()"
+                (change)="setIncluded(doc, $any($event.target).checked)"
+              />
+              <label class="form-check-label" [for]="'inc-' + doc.documentId"
+                >Includi nelle fonti</label
+              >
+            </div>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              data-testid="docs-versions"
+              [attr.aria-expanded]="expanded() === doc.documentId"
+              [attr.aria-controls]="'ver-' + doc.documentId"
+              (click)="toggleVersions(doc.documentId)"
+            >
+              {{ expanded() === doc.documentId ? 'Nascondi versioni' : 'Versioni' }}
+            </button>
+          </div>
+
+          @if (expanded() === doc.documentId) {
+            <div class="docs-versions" [id]="'ver-' + doc.documentId">
+              @if (detailError()) {
+                <div class="alert alert-danger py-2" role="alert">{{ detailError() }}</div>
+              }
+              @if (!detail() && !detailError()) {
+                <p class="small text-secondary mb-0" role="status">Caricamento versioni…</p>
+              }
+              @if (detail(); as d) {
+                <ul class="list-unstyled mb-2">
+                  @for (v of d.versions; track v.id) {
+                    <li class="docs-version" data-testid="docs-version">
+                      <span>
+                        <strong>v{{ v.version }}</strong> · {{ v.originalName }} ·
+                        {{ sizeLabel(v.byteLength) }} · {{ formatDate(v.uploadedAt) }}
+                      </span>
+                      <span
+                        [class]="'badge ' + versionBadge(v)"
+                        data-testid="docs-version-status"
+                        >{{ versionLabel(v) }}</span
+                      >
+                      @for (c of candidates(v); track c.preparationId) {
+                        <span class="badge text-bg-light border" data-testid="docs-candidate">
+                          Candidata (generazione {{ c.generation }}):
+                          {{ processingLabel(c.processingStatus).toLowerCase() }}, non corrente
+                        </span>
+                        @if (canPromote(c)) {
+                          <span class="small text-secondary" data-testid="docs-candidate-note">
+                            Pronta ma non è usata come fonte finché non la promuovi a corrente.
+                          </span>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-primary"
+                            data-testid="docs-promote"
+                            [disabled]="promoting() !== null"
+                            [attr.aria-busy]="promoting() === v.id"
+                            (click)="promote(doc.documentId, v, c)"
+                          >
+                            {{
+                              promoting() === v.id ? 'Promozione in corso…' : 'Promuovi a corrente'
+                            }}
+                          </button>
+                        }
+                      }
+                      @if (promoteErrorFor(v)) {
+                        <span
+                          class="small text-danger"
+                          role="alert"
+                          tabindex="-1"
+                          data-focus="promote-error"
+                          data-testid="docs-promote-error"
+                          >{{ promoteErrorFor(v) }}</span
+                        >
+                      }
+                      @if (isNotInUse(v)) {
+                        <span class="small text-secondary" data-testid="docs-not-in-use">
+                          Pronta, ma non è la versione in uso come fonte.
+                        </span>
+                      }
+                      @if (canReprocess(v)) {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-warning"
+                          data-testid="docs-reprocess"
+                          [disabled]="reprocessing() !== null"
+                          [attr.aria-busy]="reprocessing() === v.id"
+                          (click)="reprocess(doc.documentId, v)"
+                        >
+                          {{ reprocessing() === v.id ? 'Rielaborazione in corso…' : 'Rielabora' }}
+                        </button>
+                      }
+                      @if (reprocessErrorFor(v)) {
+                        <span
+                          class="small text-danger"
+                          role="alert"
+                          tabindex="-1"
+                          data-focus="reprocess-error"
+                          data-testid="docs-reprocess-error"
+                          >{{ reprocessErrorFor(v) }}</span
+                        >
+                      }
+                      @if (isPinnedTo(doc.documentId, v.id)) {
+                        <span class="badge text-bg-info" data-testid="docs-pinned">Fissata</span>
+                        @if (!isReady(v)) {
+                          <span
+                            class="small text-warning-emphasis"
+                            role="status"
+                            data-testid="docs-pinned-unready"
+                          >
+                            Fissata ma non è pronta: finché non lo sarà, Analizza resta bloccata e
+                            la chat la dichiara indisponibile. Aspetta la preparazione oppure
+                            escludi il documento.
+                          </span>
+                        }
+                      }
+                      @if (v.issuesSummary) {
+                        <span class="small text-danger" data-testid="docs-issue">{{
+                          issueText(v)
+                        }}</span>
+                      }
+                      @if (retryJobId(v)) {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-warning"
+                          data-testid="docs-retry"
+                          [disabled]="retrying() !== null"
+                          [attr.aria-busy]="retrying() === v.id"
+                          (click)="retryParse(v)"
+                        >
+                          {{
+                            retrying() === v.id ? 'Nuovo tentativo in corso…' : 'Riprova la lettura'
+                          }}
+                        </button>
+                      }
+                      @if (retryLink(v); as link) {
+                        <span class="small text-secondary" data-testid="docs-retry-link">
+                          Nuovo tentativo (generazione {{ link.generation }}) collegato al
+                          precedente, avviato il {{ formatDate(link.requestedAt) }}.
+                        </span>
+                      }
+                      @if (retryErrorFor(v)) {
+                        <span
+                          class="small text-danger"
+                          role="alert"
+                          tabindex="-1"
+                          data-focus="retry-error"
+                          data-testid="docs-retry-error"
+                          >{{ retryErrorFor(v) }}</span
+                        >
+                      }
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-primary"
+                        data-testid="docs-download"
+                        (click)="download(doc.documentId, v)"
+                      >
+                        Scarica originale
+                      </button>
+                      @if (v.processingStatus !== 'NotPrepared') {
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          data-testid="docs-read"
+                          [attr.aria-expanded]="reading() === v.id"
+                          [attr.aria-controls]="'read-' + v.id"
+                          (click)="toggleReading(v)"
+                        >
+                          {{ reading() === v.id ? 'Nascondi contenuto' : 'Leggi contenuto' }}
+                        </button>
+                      }
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        data-testid="docs-pin"
+                        [disabled]="busy() || isPinnedTo(doc.documentId, v.id)"
+                        [attr.aria-describedby]="isReady(v) ? null : 'pin-note-' + v.id"
+                        (click)="pin(doc.documentId, v)"
+                      >
+                        Fissa questa versione
+                      </button>
+                      @if (!isReady(v) && !isPinnedTo(doc.documentId, v.id)) {
+                        <span
+                          class="small text-secondary"
+                          [id]="'pin-note-' + v.id"
+                          data-testid="docs-pin-note"
+                        >
+                          Non ancora pronta: puoi fissarla, ma non sarà utilizzabile in Analizza
+                          finché non è pronta.
+                        </span>
+                      }
+                      @if (reading() === v.id) {
+                        <div class="docs-read w-100" [id]="'read-' + v.id">
+                          <app-document-passage
+                            [projectId]="projectId()"
+                            [documentId]="doc.documentId"
+                            [version]="v.version"
+                            [preparation]="readingPreparation(v)"
+                            (downloadRequested)="download(doc.documentId, v)"
+                          />
+                        </div>
+                      }
+                    </li>
+                  }
+                </ul>
+                <div class="docs-actions">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-testid="docs-latest"
+                    [disabled]="busy() || doc.selectionMode === 'LatestReady'"
+                    (click)="useLatestReady(doc.documentId)"
+                  >
+                    Usa l'ultima versione pronta
+                  </button>
+                  <div>
+                    <label class="form-label small mb-0" [for]="'nv-' + doc.documentId"
+                      >Carica una nuova versione</label
+                    >
+                    <input
+                      [id]="'nv-' + doc.documentId"
+                      type="file"
+                      class="form-control form-control-sm"
+                      accept=".pdf,.docx,.md,.markdown,.txt"
+                      data-testid="docs-newversion"
+                      [disabled]="uploading() !== null"
+                      (change)="uploadVersion(doc.documentId, $event)"
+                    />
+                  </div>
+                </div>
+                @if (uploading() === doc.documentId) {
+                  <p class="small text-secondary mb-0 mt-1">
+                    @if (progressPercent() !== null) {
+                      Invio: {{ progressPercent() }}%
+                    } @else {
+                      Invio del file in corso…
+                    }
+                  </p>
+                }
+              }
+            </div>
+          }
+        </li>
+      }
+    </ul>
+
+    @if (nextCursor() && !loading()) {
+      <button
+        type="button"
+        class="btn btn-link align-self-start"
+        data-testid="docs-more"
+        (click)="loadMore()"
+      >
+        Carica altri documenti
+      </button>
+    }
+  </section>
+</section>

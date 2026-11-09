@@ -4,7 +4,11 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AuthService } from '../auth/auth.service';
 import { contextUsage } from './context-usage.fixtures';
-import { CONTEXT_USAGE_DEBOUNCE_MS, ContextUsageStore } from './context-usage.store';
+import {
+  CONTEXT_USAGE_DEBOUNCE_MS,
+  CONTEXT_USAGE_POLL_MS,
+  ContextUsageStore,
+} from './context-usage.store';
 import { ProjectEventsService, ProjectStreamHandlers } from './project-events.service';
 
 const url = (id: string) => `/api/projects/${id}/context-usage`;
@@ -38,6 +42,7 @@ describe('ContextUsageStore', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: CONTEXT_USAGE_DEBOUNCE_MS, useValue: 0 },
+        { provide: CONTEXT_USAGE_POLL_MS, useValue: 30 },
         { provide: ProjectEventsService, useValue: { open } },
         { provide: AuthService, useValue: { isAuthenticated: authed.asReadonly() } },
       ],
@@ -212,5 +217,147 @@ describe('ContextUsageStore', () => {
 
     http.expectOne(url('p-1')).flush(contextUsage());
     expect(open).not.toHaveBeenCalled();
+  });
+
+  describe('riconciliazione dopo perdita eventi o logout (T065)', () => {
+    const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    /** Risponde a tutti i GET aperti (anche quelli accodati dal polling) finché non ne restano. */
+    const drain = async (id = 'p-1') => {
+      for (let i = 0; i < 4; i++) {
+        const open = http.match(url(id));
+        open.forEach((r) => {
+          expect(r.request.method).toBe('GET');
+          r.flush(contextUsage());
+        });
+        await tick();
+      }
+    };
+
+    it('document.state e execution.regime-changed fanno rifare il GET; mai un POST', async () => {
+      store.watch('p-1');
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      await tick();
+
+      handlers['p-1'].onEvent({ name: 'document.state', data: { state: 'Ready' } });
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      await tick();
+
+      handlers['p-1'].onEvent({ name: 'execution.regime-changed', data: { rootId: 'r' } });
+      await tick();
+      const req = http.expectOne(url('p-1'));
+      expect(req.request.method).toBe('GET');
+      req.flush(contextUsage());
+    });
+
+    it('dopo la perdita dello stream sonda con GET periodici finché lo stream non torna', async () => {
+      store.watch('p-1');
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      await tick();
+
+      handlers['p-1'].onDisconnected();
+      await settle(50);
+      const polled = http.match(url('p-1'));
+      expect(polled.length).toBeGreaterThanOrEqual(1);
+      polled.forEach((r) => {
+        expect(r.request.method).toBe('GET');
+        r.flush(contextUsage());
+      });
+      await drain();
+
+      handlers['p-1'].onConnected(); // riconnesso: un GET di riconciliazione, poi basta polling
+      await tick();
+      await drain();
+      await settle(80);
+      http.expectNone(url('p-1'));
+    });
+
+    it('primo tentativo dello stream fallito: il polling parte comunque', async () => {
+      store.watch('p-1');
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      await tick();
+
+      handlers['p-1'].onUnavailable?.();
+      await settle(50);
+
+      const polled = http.match(url('p-1'));
+      expect(polled.length).toBeGreaterThanOrEqual(1);
+      polled.forEach((r) => r.flush(contextUsage()));
+      await drain();
+      handlers['p-1'].onConnected(); // chiude il polling per non lasciare timer
+    });
+
+    it('stream terminato (logout): nessun GET finché la sessione manca, poi riapre lo stream e riconcilia', async () => {
+      store.watch('p-1');
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      await tick();
+      expect(open).toHaveBeenCalledTimes(1);
+
+      authed.set(false);
+      handlers['p-1'].onTerminated?.();
+      await settle(80);
+      http.expectNone(url('p-1'));
+      expect(open).toHaveBeenCalledTimes(1);
+
+      authed.set(true); // ritorno
+      await settle(50);
+      expect(open).toHaveBeenCalledTimes(2);
+      await drain();
+      handlers['p-1'].onConnected();
+      await drain();
+    });
+
+    it('senza sessione al watch: nessuno stream, il ritorno della sessione apre lo stream', async () => {
+      authed.set(false);
+      store.watch('p-1');
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      expect(open).not.toHaveBeenCalled();
+
+      authed.set(true);
+      await settle(50);
+      expect(open).toHaveBeenCalledTimes(1);
+      await drain();
+      handlers['p-1'].onConnected();
+      await drain();
+    });
+
+    it('la chiusura ferma il polling', async () => {
+      const close = store.watch('p-1');
+      await tick();
+      http.expectOne(url('p-1')).flush(contextUsage());
+      await tick();
+      handlers['p-1'].onDisconnected();
+      close();
+      await settle(80);
+
+      http.expectNone(url('p-1'));
+    });
+
+    it('il cambio progetto non eredita il polling del precedente', async () => {
+      const closeA = store.watch('p-A');
+      await tick();
+      http.expectOne(url('p-A')).flush(contextUsage());
+      handlers['p-A'].onDisconnected();
+      closeA();
+      store.watch('p-B');
+      await tick();
+      http.expectOne(url('p-B')).flush(contextUsage());
+      await settle(80);
+
+      http.expectNone(url('p-A'));
+      http.expectNone(url('p-B'));
+    });
+  });
+});
+
+describe('CONTEXT_USAGE_POLL_MS', () => {
+  it('predefinito: 2 s', () => {
+    TestBed.configureTestingModule({});
+    expect(TestBed.inject(CONTEXT_USAGE_POLL_MS)).toBe(2000);
   });
 });

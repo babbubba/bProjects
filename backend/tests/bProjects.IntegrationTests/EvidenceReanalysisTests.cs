@@ -137,7 +137,7 @@ public sealed class EvidenceReanalysisTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var current = await db.EvidenceMessageStates.AsNoTracking().Where(s => s.ProjectId == project).Select(s => s.CurrentVersionId).ToListAsync(Ct);
         var items = (await db.EvidenceExtractionVersions.AsNoTracking().Where(v => current.Contains(v.Id)).OrderBy(v => v.MessageSequence).ToListAsync(Ct))
-            .Select(v => new SelectionItem(v.MessageId, v.MessageSequence, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
+            .Select(v => new SelectionItem(v.MessageId!.Value, v.MessageSequence!.Value, v.Id, v.Version, v.EvidenceCount, v.NoEvidenceReason)).ToList();
         var view = await new EvidenceLedgerStore(db).BuildViewAsync(items, Ct);
         var remapped = Assert.Single(view.Relations);
         Assert.True(remapped.Remapped);

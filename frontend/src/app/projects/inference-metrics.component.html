@@ -36,3 +36,44 @@
     }
   </div>
 }
+@if (timings(); as t) {
+  <dl
+    class="execution-timing small text-secondary"
+    aria-label="Tempi della richiesta AI"
+    data-testid="execution-timing"
+  >
+    @for (x of t; track x.id) {
+      <div class="timing" [attr.data-testid]="'timing-' + x.id" [attr.data-available]="x.available">
+        <dt>{{ x.label }}</dt>
+        &ngsp;
+        <dd>{{ x.text }}</dd>
+      </div>
+    }
+  </dl>
+}
+@if (fingerprint(); as f) {
+  <p
+    class="model-fingerprint small text-secondary mb-0"
+    data-testid="model-fingerprint"
+    title="Modello e finestra letti dalla chiamata, non dalla configurazione corrente"
+  >
+    {{ f }}
+  </p>
+}
+@if (attemptRows(); as rows) {
+  <ol
+    class="attempts small text-secondary"
+    aria-label="Tentativi della richiesta AI"
+    data-testid="attempts"
+  >
+    @for (a of rows; track a.attempt) {
+      <li
+        [attr.data-testid]="'attempt-' + a.attempt"
+        [attr.data-outcome]="a.outcome"
+        [attr.data-available]="a.available"
+      >
+        {{ a.text }}
+      </li>
+    }
+  </ol>
+}

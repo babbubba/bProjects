@@ -3,6 +3,7 @@ using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
 using Microsoft.EntityFrameworkCore;
@@ -139,6 +140,7 @@ public static class EvidenceEndpoints
         group.MapGet("/evidence/batches/{batchId:guid}", Batch);
         group.MapPost("/messages/{messageId:guid}/evidence/promotions", Promote);
         group.MapGet("/analyses/{analysisId:guid}/evidence-selection", Selection);
+        group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/coverage", PreparationCoverage);
         group.MapCoverageEndpoints();
         return app;
     }
@@ -159,11 +161,11 @@ public static class EvidenceEndpoints
             .Select(m => new { m.Id, m.Sequence, m.CreatedAt })
             .ToListAsync(ct);
         var states = await db.EvidenceMessageStates.AsNoTracking().Where(s => s.ProjectId == projectId).ToDictionaryAsync(s => s.MessageId, ct);
-        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId)
+        var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId && v.OriginKind == EvidenceOriginKind.Message)
             .Select(v => new { v.Id, v.MessageId, v.Version, v.EvidenceCount, v.NoEvidenceReason, v.CreatedAt })
             .ToListAsync(ct);
-        var jobs = (await db.EvidenceExtractionJobs.AsNoTracking().Where(j => j.ProjectId == projectId).ToListAsync(ct))
-            .GroupBy(j => j.MessageId)
+        var jobs = (await db.EvidenceExtractionJobs.AsNoTracking().Where(j => j.ProjectId == projectId && j.OriginKind == EvidenceOriginKind.Message).ToListAsync(ct))
+            .GroupBy(j => j.MessageId!.Value)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(j => j.RequestedAt).ThenByDescending(j => j.Id).First());
 
         var items = new List<MessageEvidenceStatusView>();
@@ -195,10 +197,47 @@ public static class EvidenceEndpoints
             latest.Count(j => j.Status == ExtractionJobStatus.Failed))));
     }
 
-    private static async Task<IResult> List(
-        Guid projectId, AppDbContext db, Guid? messageId, string? kind, string? polarity, string? certainty, CancellationToken ct)
+    /// <summary>
+    /// Formato di vista richiesto: assente o 1.0.0 = legacy (solo origine Message), 1.1.0 = envelope misto; altro = 400. Mai una conversione
+    /// silenziosa: l'origine documentale non è esprimibile nel formato legacy (406).
+    /// </summary>
+    internal static IResult? ParseView(string? viewVersion, out bool modern)
     {
+        modern = false;
+        if (viewVersion is null || viewVersion == DocumentEvidenceViews.LegacyViewVersion)
+        {
+            return null;
+        }
+
+        if (viewVersion == DocumentEvidenceViews.ViewVersion)
+        {
+            modern = true;
+            return null;
+        }
+
+        return Problem(StatusCodes.Status400BadRequest, "Versione della vista non supportata", "unsupported_view_version");
+    }
+
+    internal static IResult NotSupportedInLegacy() => Problem(
+        StatusCodes.Status406NotAcceptable, "L'evidenza documentale richiede viewVersion=1.1.0", "evidence_view_not_supported");
+
+    private static async Task<IResult> List(
+        Guid projectId, AppDbContext db, Guid? messageId, string? kind, string? polarity, string? certainty, string? viewVersion, string? originKind,
+        Guid? documentId, Guid? documentVersionId, CancellationToken ct)
+    {
+        if (ParseView(viewVersion, out var modern) is { } badView)
+        {
+            return badView;
+        }
+
         var errors = new Dictionary<string, string[]>();
+        EvidenceOriginKind? origin = null;
+        if (originKind is not null)
+        {
+            if (Enum.TryParse<EvidenceOriginKind>(originKind, ignoreCase: false, out var parsedOrigin) && Enum.IsDefined(parsedOrigin)) { origin = parsedOrigin; }
+            else { errors["originKind"] = ["Origine non valida."]; }
+        }
+
         EvidenceKind? k = null;
         EvidencePolarity? p = null;
         EvidenceCertainty? c = null;
@@ -225,6 +264,12 @@ public static class EvidenceEndpoints
             return Results.ValidationProblem(errors, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
+        var documentIntent = origin == EvidenceOriginKind.Document || documentId is not null || documentVersionId is not null;
+        if (!modern && documentIntent)
+        {
+            return NotSupportedInLegacy();
+        }
+
         if (!await db.Projects.AsNoTracking().AnyAsync(x => x.Id == projectId, ct))
         {
             return Results.NotFound();
@@ -233,21 +278,56 @@ public static class EvidenceEndpoints
         var current = db.EvidenceMessageStates.AsNoTracking().Where(s => s.ProjectId == projectId).Select(s => s.CurrentVersionId);
         var query = from e in db.Evidences.AsNoTracking()
                     join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
-                    where e.ProjectId == projectId && current.Contains(e.VersionId)
+                    where e.ProjectId == projectId && e.OriginKind == EvidenceOriginKind.Message && current.Contains(e.VersionId)
                     select new { e, v };
         if (messageId is { } m) { query = query.Where(x => x.e.MessageId == m); }
         if (k is { } kk) { query = query.Where(x => x.e.Kind == kk); }
         if (p is { } pp) { query = query.Where(x => x.e.Polarity == pp); }
         if (c is { } cc) { query = query.Where(x => x.e.Certainty == cc); }
-        var rows = await query.ToListAsync(ct);
-        return Results.Ok(new
+
+        var items = new List<object>();
+        if (origin != EvidenceOriginKind.Document && !documentIntent)
         {
-            items = rows.OrderBy(x => x.v.MessageSequence).ThenBy(x => x.e.Ordinal).Select(x => ToView(x.e, x.v, isCurrent: true)).ToList(),
-        });
+            var rows = await query.ToListAsync(ct);
+            var messageViews = rows.OrderBy(x => x.v.MessageSequence).ThenBy(x => x.e.Ordinal).Select(x => ToView(x.e, x.v, isCurrent: true)).ToList();
+            if (!modern)
+            {
+                return Results.Ok(new { items = messageViews });
+            }
+
+            items.AddRange(messageViews.Select(v => new { evidenceViewVersion = DocumentEvidenceViews.LegacyViewVersion, evidence = (object)v }));
+        }
+
+        if (modern && origin != EvidenceOriginKind.Message && messageId is null)
+        {
+            var currentDocument = db.EvidenceDocumentStates.AsNoTracking().Where(s => s.ProjectId == projectId && s.CurrentEvidenceVersionId != null)
+                .Select(s => s.CurrentEvidenceVersionId!.Value);
+            var documentQuery = from e in db.Evidences.AsNoTracking()
+                                join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
+                                where e.ProjectId == projectId && e.OriginKind == EvidenceOriginKind.Document && currentDocument.Contains(e.VersionId)
+                                select new { e, v };
+            if (k is { } dk) { documentQuery = documentQuery.Where(x => x.e.Kind == dk); }
+            if (p is { } dp) { documentQuery = documentQuery.Where(x => x.e.Polarity == dp); }
+            if (c is { } dc) { documentQuery = documentQuery.Where(x => x.e.Certainty == dc); }
+            var documentRows = await documentQuery.ToListAsync(ct);
+            var preparations = await DocumentEvidenceViews.PreparationsAsync(db, projectId, documentRows.Select(x => x.e.PreparationId!.Value), ct);
+            items.AddRange(documentRows
+                .Where(x => preparations.TryGetValue(x.e.PreparationId!.Value, out var info)
+                    && (documentId is null || info.DocumentId == documentId) && (documentVersionId is null || info.DocumentVersionId == documentVersionId))
+                .OrderBy(x => preparations[x.e.PreparationId!.Value].DocumentId).ThenBy(x => preparations[x.e.PreparationId!.Value].DocumentVersion).ThenBy(x => x.e.Ordinal)
+                .Select(x => new { evidenceViewVersion = DocumentEvidenceViews.ViewVersion, evidence = (object)DocumentEvidenceViews.ToView(x.e, x.v.Version, isCurrent: true, preparations) }));
+        }
+
+        return Results.Ok(new { items, nextCursor = (string?)null });
     }
 
-    private static async Task<IResult> Detail(Guid projectId, Guid evidenceId, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> Detail(Guid projectId, Guid evidenceId, string? viewVersion, AppDbContext db, CancellationToken ct)
     {
+        if (ParseView(viewVersion, out var modern) is { } badView)
+        {
+            return badView;
+        }
+
         var row = await (from e in db.Evidences.AsNoTracking()
                          join v in db.EvidenceExtractionVersions.AsNoTracking() on e.VersionId equals v.Id
                          where e.Id == evidenceId && e.ProjectId == projectId
@@ -255,6 +335,11 @@ public static class EvidenceEndpoints
         if (row is null)
         {
             return Results.NotFound();
+        }
+
+        if (row.e.OriginKind == EvidenceOriginKind.Document)
+        {
+            return modern ? await DocumentDetailAsync(projectId, row.e, row.v, db, ct) : NotSupportedInLegacy();
         }
 
         var isCurrent = await db.EvidenceMessageStates.AsNoTracking().AnyAsync(s => s.MessageId == row.e.MessageId && s.CurrentVersionId == row.v.Id, ct);
@@ -271,13 +356,37 @@ public static class EvidenceEndpoints
                             join ov in db.EvidenceExtractionVersions.AsNoTracking() on o.VersionId equals ov.Id
                             where otherIds.Contains(o.Id)
                             select new { o.Id, o.Statement, ov.MessageSequence }).ToDictionaryAsync(x => x.Id, ct);
-        return Results.Ok(new EvidenceDetailView(view, messages, [.. relations.Select(r =>
+        var legacy = new EvidenceDetailView(view, messages, [.. relations.Select(r =>
         {
             var outgoing = r.FromEvidenceId == evidenceId;
             var other = others[outgoing ? r.ToEvidenceId : r.FromEvidenceId];
             return new EvidenceRelationDetailView(
-                r.Id, r.Type.ToString(), r.Basis.ToString(), r.Rationale, outgoing ? "outgoing" : "incoming", other.Id, other.Statement, other.MessageSequence);
-        })]));
+                r.Id, r.Type.ToString(), r.Basis.ToString(), r.Rationale, outgoing ? "outgoing" : "incoming", other.Id, other.Statement, other.MessageSequence!.Value);
+        })]);
+        // Richiesta 1.1 su un'evidenza Message: stesso contenuto 1.0.0 dentro l'envelope, senza fonti documentali.
+        return modern
+            ? Results.Ok(new DocumentEvidenceDetailView(DocumentEvidenceViews.LegacyViewVersion, legacy.Evidence, [.. legacy.Relations], [], legacy.Messages))
+            : Results.Ok(legacy);
+    }
+
+    private static async Task<IResult> DocumentDetailAsync(Guid projectId, EvidenceItem item, EvidenceExtractionVersion version, AppDbContext db, CancellationToken ct)
+    {
+        var isCurrent = await db.EvidenceDocumentStates.AsNoTracking().AnyAsync(s => s.ProjectId == projectId && s.CurrentEvidenceVersionId == version.Id, ct);
+        var preparations = await DocumentEvidenceViews.PreparationsAsync(db, projectId, [item.PreparationId!.Value], ct);
+        var view = DocumentEvidenceViews.ToView(item, version.Version, isCurrent, preparations);
+        var relations = await db.EvidenceRelations.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && (r.FromEvidenceId == item.Id || r.ToEvidenceId == item.Id)).OrderBy(r => r.Id).ToListAsync(ct);
+        var otherIds = relations.Select(r => r.FromEvidenceId == item.Id ? r.ToEvidenceId : r.FromEvidenceId).Distinct().ToList();
+        var others = await db.Evidences.AsNoTracking().Where(o => otherIds.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.Statement, ct);
+        return Results.Ok(new DocumentEvidenceDetailView(
+            DocumentEvidenceViews.ViewVersion, view,
+            [.. relations.Select(r =>
+            {
+                var outgoing = r.FromEvidenceId == item.Id;
+                var other = outgoing ? r.ToEvidenceId : r.FromEvidenceId;
+                return (object)new DocumentRelationDetailView(r.Id, r.Type.ToString(), r.Basis.ToString(), r.Rationale, outgoing ? "outgoing" : "incoming", other, others.GetValueOrDefault(other) ?? "");
+            })],
+            await DocumentEvidenceViews.SourcesAsync(db, projectId, [view], preparations, ct), []));
     }
 
     private static async Task<IResult> Versions(Guid projectId, Guid messageId, AppDbContext db, CancellationToken ct)
@@ -302,8 +411,13 @@ public static class EvidenceEndpoints
             [.. promotions.Select(p => ToView(p, names))]));
     }
 
-    private static async Task<IResult> Version(Guid projectId, Guid versionId, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> Version(Guid projectId, Guid versionId, string? viewVersion, AppDbContext db, CancellationToken ct)
     {
+        if (ParseView(viewVersion, out var modern) is { } badView)
+        {
+            return badView;
+        }
+
         var row = await (from v in db.EvidenceExtractionVersions.AsNoTracking()
                          join j in db.EvidenceExtractionJobs.AsNoTracking() on v.JobId equals j.Id
                          where v.Id == versionId && v.ProjectId == projectId
@@ -313,24 +427,84 @@ public static class EvidenceEndpoints
             return Results.NotFound();
         }
 
+        if (row.v.OriginKind == EvidenceOriginKind.Document)
+        {
+            return modern ? await DocumentVersionAsync(projectId, row.v, db, ct) : NotSupportedInLegacy();
+        }
+
         var isCurrent = await db.EvidenceMessageStates.AsNoTracking().AnyAsync(s => s.MessageId == row.v.MessageId && s.CurrentVersionId == versionId, ct);
         var evidences = await db.Evidences.AsNoTracking().Where(e => e.VersionId == versionId).OrderBy(e => e.Ordinal).ToListAsync(ct);
         var relations = await db.EvidenceRelations.AsNoTracking().Where(r => r.VersionId == versionId).OrderBy(r => r.Id).ToListAsync(ct);
         using var parameters = JsonDocument.Parse(row.v.Parameters);
         return Results.Ok(new ExtractionVersionView(
-            Summary(row.v, row.Reason, isCurrent), row.v.MessageId, row.v.MessageSequence, parameters.RootElement.Clone(),
+            Summary(row.v, row.Reason, isCurrent), row.v.MessageId!.Value, row.v.MessageSequence!.Value, parameters.RootElement.Clone(),
             [.. evidences.Select(e => ToView(e, row.v, isCurrent))],
             [.. relations.Select(r => new RelationView(r.Id, r.FromEvidenceId, r.ToEvidenceId, r.Type.ToString(), r.Basis.ToString(), r.Rationale))]));
     }
 
-    private static async Task<IResult> Compare(Guid projectId, Guid fromId, Guid toId, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> DocumentVersionAsync(Guid projectId, EvidenceExtractionVersion version, AppDbContext db, CancellationToken ct)
     {
+        var (view, evidences, preparations) = await LoadDocumentVersionAsync(projectId, version, db, ct);
+        var relations = await db.EvidenceRelations.AsNoTracking().Where(r => r.VersionId == version.Id).OrderBy(r => r.Id).ToListAsync(ct);
+        using var parameters = JsonDocument.Parse(version.Parameters);
+        var info = preparations[version.PreparationId!.Value];
+        return Results.Ok(new DocumentExtractionVersionView(
+            DocumentEvidenceViews.ViewVersion, view, info.DocumentId, info.DocumentVersionId, parameters.RootElement.Clone(), evidences,
+            [.. relations.Select(r => new DocumentRelationView(r.Id, r.Type.ToString(), r.Basis.ToString(), r.Rationale, r.FromEvidenceId, r.ToEvidenceId))],
+            await DocumentEvidenceViews.SourcesAsync(db, projectId, evidences, preparations, ct)));
+    }
+
+    private static async Task<(DocumentVersionSummaryView Summary, List<DocumentEvidenceView> Evidences, Dictionary<Guid, DocumentPreparationInfo> Preparations)> LoadDocumentVersionAsync(
+        Guid projectId, EvidenceExtractionVersion version, AppDbContext db, CancellationToken ct)
+    {
+        var isCurrent = await db.EvidenceDocumentStates.AsNoTracking().AnyAsync(s => s.ProjectId == projectId && s.CurrentEvidenceVersionId == version.Id, ct);
+        var preparations = await DocumentEvidenceViews.PreparationsAsync(db, projectId, [version.PreparationId!.Value], ct);
+        var items = await db.Evidences.AsNoTracking().Where(e => e.VersionId == version.Id).OrderBy(e => e.Ordinal).ToListAsync(ct);
+        return (DocumentEvidenceViews.Summary(version, preparations[version.PreparationId!.Value].Generation, isCurrent),
+            [.. items.Select(e => DocumentEvidenceViews.ToView(e, version.Version, isCurrent, preparations))], preparations);
+    }
+
+    private static async Task<IResult> CompareDocumentsAsync(Guid projectId, EvidenceExtractionVersion from, EvidenceExtractionVersion to, AppDbContext db, CancellationToken ct)
+    {
+        var preparations = await DocumentEvidenceViews.PreparationsAsync(db, projectId, [from.PreparationId!.Value, to.PreparationId!.Value], ct);
+        // Confronto ammesso solo sulla stessa Preparation o fra preparazioni della stessa versione file con lo stesso manifest strutturale (hash non vuoto).
+        var comparable = from.PreparationId == to.PreparationId
+            || (preparations[from.PreparationId.Value].DocumentVersionId == preparations[to.PreparationId.Value].DocumentVersionId
+                && !string.IsNullOrEmpty(from.ManifestHash) && from.ManifestHash == to.ManifestHash);
+        if (!comparable)
+        {
+            return Problem(StatusCodes.Status422UnprocessableEntity, "Le versioni documentali non hanno un mapping strutturale verificabile", "versions_not_comparable");
+        }
+
+        var (_, fromViews, _) = await LoadDocumentVersionAsync(projectId, from, db, ct);
+        var (_, toViews, _) = await LoadDocumentVersionAsync(projectId, to, db, ct);
+        var (summary, entries) = DocumentEvidenceViews.Compare(fromViews, toViews);
+        return Results.Ok(new DocumentVersionDiffView(DocumentEvidenceViews.ViewVersion, from.Id, to.Id, preparations[from.PreparationId.Value].DocumentVersionId, summary, entries));
+    }
+
+    private static async Task<IResult> Compare(Guid projectId, Guid fromId, Guid toId, string? viewVersion, AppDbContext db, CancellationToken ct)
+    {
+        if (ParseView(viewVersion, out var modern) is { } badView)
+        {
+            return badView;
+        }
+
         var versions = await db.EvidenceExtractionVersions.AsNoTracking().Where(v => v.ProjectId == projectId && (v.Id == fromId || v.Id == toId)).ToListAsync(ct);
         var from = versions.SingleOrDefault(v => v.Id == fromId);
         var to = versions.SingleOrDefault(v => v.Id == toId);
         if (from is null || to is null)
         {
             return Results.NotFound();
+        }
+
+        if (from.OriginKind != to.OriginKind)
+        {
+            return Problem(StatusCodes.Status422UnprocessableEntity, "Non si confrontano versioni di origine diversa", "versions_not_comparable");
+        }
+
+        if (from.OriginKind == EvidenceOriginKind.Document)
+        {
+            return modern ? await CompareDocumentsAsync(projectId, from, to, db, ct) : NotSupportedInLegacy();
         }
 
         if (from.MessageId != to.MessageId)
@@ -350,7 +524,7 @@ public static class EvidenceEndpoints
         var currentId = await db.EvidenceMessageStates.AsNoTracking().Where(s => s.MessageId == from.MessageId).Select(s => (Guid?)s.CurrentVersionId).SingleOrDefaultAsync(ct);
         EvidenceView? View(EvidenceSnapshot? s) => s is null ? null : ToView(s, s.VersionId == fromId ? from.Version : to.Version, s.VersionId == currentId);
         return Results.Ok(new VersionDiffView(
-            fromId, toId, from.MessageId,
+            fromId, toId, from.MessageId!.Value,
             new DiffSummaryView(diff.Count(DiffStatus.Added), diff.Count(DiffStatus.Removed), diff.Count(DiffStatus.Unchanged), diff.Count(DiffStatus.Modified), diff.Count(DiffStatus.Ambiguous)),
             [.. diff.Entries.Select(e => new DiffEntryView(
                 e.Status.ToString(), View(e.From), View(e.To), [.. e.Changes.Select(c => new FieldChangeView(c.Field, c.From, c.To))], e.Candidates, e.Overlap))]));
@@ -358,7 +532,7 @@ public static class EvidenceEndpoints
 
     private static async Task<IResult> Job(Guid projectId, Guid jobId, AppDbContext db, CancellationToken ct)
     {
-        var job = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId, ct);
+        var job = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId && j.OriginKind == EvidenceOriginKind.Message, ct);
         return job is null ? Results.NotFound() : Results.Ok(ToView(job));
     }
 
@@ -366,6 +540,23 @@ public static class EvidenceEndpoints
     {
         var batch = await db.EvidenceBatches.AsNoTracking().SingleOrDefaultAsync(b => b.Id == batchId && b.ProjectId == projectId, ct);
         return batch is null ? Results.NotFound() : Results.Ok(await ToViewAsync(db, batch, ct));
+    }
+
+    /// <summary>coverage-2 della preparazione prima dell'analisi: porzioni attese/elaborate/senza evidenza/mancanti e hash. Sola lettura: nessun lavoro, nessun report persistito.</summary>
+    private static async Task<IResult> PreparationCoverage(
+        Guid projectId, Guid documentId, string version, string generation, DocumentCatalog catalog, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var found = await ProjectDocumentEndpoints.FindPreparationAsync(projectId, documentId, version, generation, catalog, db, ct);
+        if (found is null)
+        {
+            return Results.NotFound();
+        }
+
+        var (record, portions) = await DocumentCoverageLoader.PreparationAsync(db, projectId, found.Value.Preparation.Id, ct);
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new PreparationCoverageView(
+            DocumentCoverage.CheckerVersion, record.PreparationId, record.DocumentId, record.DocumentVersionId, record.Generation, record.Status, record.Hashes, record.Portions,
+            [.. DocumentCoverage.PortionFindings(portions).Select(DocumentCoverageLoader.ToView)], DocumentCoverage.Limits));
     }
 
     private static async Task<IResult> Selection(Guid projectId, Guid analysisId, AppDbContext db, CancellationToken ct)
@@ -465,7 +656,7 @@ public static class EvidenceEndpoints
             return replay;
         }
 
-        var failed = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId, ct);
+        var failed = await db.EvidenceExtractionJobs.AsNoTracking().SingleOrDefaultAsync(j => j.Id == jobId && j.ProjectId == projectId && j.OriginKind == EvidenceOriginKind.Message, ct);
         if (failed is null)
         {
             return Results.NotFound();
@@ -476,13 +667,13 @@ public static class EvidenceEndpoints
             return Problem(StatusCodes.Status409Conflict, "Si può ritentare soltanto un lavoro fallito", "job_not_failed", failed.Id);
         }
 
-        if (await OpenJobAsync(db, failed.MessageId, ct) is { } open)
+        if (await OpenJobAsync(db, failed.MessageId!.Value, ct) is { } open)
         {
             return Problem(StatusCodes.Status409Conflict, "Un'estrazione di questo messaggio è già in corso", "extraction_active", open);
         }
 
         var now = await NowAsync(db, ct);
-        var job = EvidenceLedgerStore.NewJob(projectId, conversationId, failed.MessageId, failed.MessageSequence, ExtractionJobReason.Reanalysis, now,
+        var job = EvidenceLedgerStore.NewJob(projectId, conversationId, failed.MessageId!.Value, failed.MessageSequence!.Value, ExtractionJobReason.Reanalysis, now,
             execution.Value, EvidenceLedgerStore.ExtractorConfig(ai.Value, execution.Value), requestedBy, failed.BatchId, failed.Id, key);
         db.EvidenceExtractionJobs.Add(job);
         await db.SaveChangesAsync(ct);
@@ -652,7 +843,7 @@ public static class EvidenceEndpoints
     }
 
     public static ExtractionJobView ToView(EvidenceExtractionJob j) => new(
-        j.Id, j.MessageId, j.MessageSequence, j.Reason.ToString(), j.BatchId, j.RetryOfJobId, j.Status.ToString(), j.RequestedAt, j.StartedAt,
+        j.Id, j.MessageId!.Value, j.MessageSequence!.Value, j.Reason.ToString(), j.BatchId, j.RetryOfJobId, j.Status.ToString(), j.RequestedAt, j.StartedAt,
         j.CompletedAt, j.DeadlineAt, j.AttemptCount, j.MaxAttempts, j.NextAttemptAt, j.ResultVersionId,
         j.ErrorCode is null ? null : new JobError(j.ErrorCode, j.ErrorMessage));
 
@@ -660,7 +851,7 @@ public static class EvidenceEndpoints
         v.Id, v.Version, v.CreatedAt, v.EvidenceCount, v.NoEvidenceReason, v.PromptVersion, v.SchemaVersion, v.ModelId, v.JobId, reason.ToString(), isCurrent);
 
     public static EvidenceView ToView(EvidenceItem e, EvidenceExtractionVersion v, bool isCurrent) =>
-        ToView(EvidenceSnapshot.From(e, v.MessageSequence), v.Version, isCurrent);
+        ToView(EvidenceSnapshot.From(e, v.MessageSequence!.Value), v.Version, isCurrent);
 
     public static EvidenceView ToView(EvidenceSnapshot e, int version, bool isCurrent)
     {

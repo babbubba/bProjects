@@ -66,6 +66,16 @@ services:
       Execution__AnalysisRunDeadlineSeconds: ${EXECUTION_ANALYSIS_RUN_DEADLINE_SECONDS:-1200}
       # Deadline di ogni lavoro di estrazione dalla richiesta (coda inclusa): con parallel=1 le estrazioni attendono chat e run.
       Execution__ExtractionDeadlineSeconds: ${EXECUTION_EXTRACTION_DEADLINE_SECONDS:-3600}
+      # Originali dei documenti (slice 002): volume privato fuori dal webroot, nessuna porta né URL pubblica. Limiti e quote: Documents__* (default
+      # nel codice, modificabili dall'Admin); account Admin: solo con bootstrap-accounts esplicito, mai da questo file.
+      Documents__StorageRoot: /var/lib/bprojects/documents
+      # Parser documenti (T029/T031): vuoto = parsing non configurato (i documenti restano In coda). Con il profilo `parser`: PARSER_BASE_URL=http://parser:8000.
+      Parser__BaseUrl: ${PARSER_BASE_URL:-}
+      Parser__Secret: ${PARSER_INTERNAL_SECRET:-}
+    volumes:
+      - documents:/var/lib/bprojects/documents
+    # default: rete applicativa esistente; parser_net: rete privata verso il parser (nessun egress, vedi servizio parser).
+    networks: [default, parser_net]
     depends_on:
       db:
         condition: service_healthy
@@ -74,6 +84,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Parser documenti (slice 002, T026): Docling CPU offline. Raggiungibile solo dal backend (http://parser:8000) sulla rete interna
+  # parser_net: nessuna porta host, nessun egress, nessun mount degli originali, nessun DB/LLM. Profilo `parser` finche il backend
+  # non lo usa (T029): avviare con `docker compose --profile parser up -d --build parser`.
+  parser:
+    profiles: ["parser"]
+    build:
+      context: ../parser
+      target: runtime
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:size=1g,mode=1777,noexec,nosuid
+    cpus: 2
+    mem_limit: 4g
+    memswap_limit: 4g
+    pids_limit: 256
+    environment:
+      # Segreto condiviso con il backend (da infra/.env). Vuoto = il parser rifiuta ogni conversione.
+      PARSER_INTERNAL_SECRET: ${PARSER_INTERNAL_SECRET:-}
+    networks: [parser_net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   web:
     build:
@@ -86,5 +126,10 @@ services:
       app:
         condition: service_healthy
 
+networks:
+  parser_net:
+    internal: true   # nessun gateway verso l'esterno: il parser non ha egress
+
 volumes:
   pgdata:
+  documents:

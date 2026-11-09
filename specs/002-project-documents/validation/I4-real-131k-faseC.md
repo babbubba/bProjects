@@ -1,0 +1,51 @@
+# I4 reale, campagna diagnostica T067 — FASE C (Qwen3.8-Flash-Next-Smart, W=131072) — COMPLETA
+
+Esecuzione: 2026-11-03, serializzata (una sola inferenza DGX per volta), una ripetizione per test. **STATO: completa.** C1 (reasoning OFF, output 16384): **0/3 PASS**. C2 (reasoning ON, output 32768): **0/3 PASS**. Incidenti di esecuzione: un crash del testhost all'avvio di C2-N3 (0xC0000005, 0 chiamate DGX, non un risultato), un secondo tentativo interrotto da un crash del PC dell'esecutore; ripresa dopo riavvio (Docker Desktop riavviato, parser avviato; la porta 55432 del PG di test e ora in un intervallo riservato da Windows, quindi PG di test ricreato su 127.0.0.1:15432 con lo stesso image `postgres:18`, container `bprojects-002-test-pg2`; DGX verificato idle prima della ripresa: `/slots` 1 slot, `is_processing=false`, n_ctx 131072). C2-N3 rieseguito per intero una volta (risultato sotto). Ripetizioni di N1: non previste (nessun profilo supera N1-N3). T067 resta aperto; nulla spuntato in `tasks.md`. Nessuna asserzione, gold, contratto, validatore, prompt, schema o limite modificato; nessuna modifica al codice rispetto alla Fase A/B. Dati grezzi solo nella cartella diagnostica locale non versionata; qui conteggi e classificazioni, nessun contenuto di reasoning.
+
+## 1. Verifica del DGX
+| Voce | Evidenza |
+| --- | --- |
+| Profilo | `Qwen3.8-Flash-Next-Smart` (case-sensitive; `/props?model=`: `model_path` = `.../UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf` = atteso), llama.cpp b10703-0b5be7e4a, router mode |
+| Argomenti effettivi (da `/v1/models`) | `--ctx-size 131072`, `--parallel 1`, `--cache-type-k/v f16`, `--flash-attn on`, `--fit off`, `--batch-size 2048`, `--ubatch-size 512`, `--n-predict 32768`, `--n-gpu-layers all`, `--no-mmap`, `--jinja`, `--reasoning on`, `--reasoning-budget 12288`, `--reasoning-format deepseek`, `presence-penalty 0.0`, `temperature 1.0`, `top-k 20`, `top-p 0.95`, `min-p 0.0`, `seed 4242`. Tutto = atteso |
+| Contesto effettivo | `/props?model=`: `n_ctx 131072`, `total_slots 1`; `/slots?model=`: 1 slot, `n_ctx 131072`. **W=131072 verificato**; nessuna riduzione di contesto osservata |
+| Caricamento | Il profilo era `unloaded`; caricato con una richiesta minima (thinking OFF, 17 token prompt, 2 token out, `stop`). **Durata di caricamento NON misurata** (errore di cronometraggio: unavailable). Il router NON ha scaricato da solo `Qwen3.6-35B-Smart` (due modelli `loaded`): scaricato con `POST /models/unload` (`{"success":true}`, non distruttivo, nessuna modifica a models.ini); poi solo Qwen3.8-Smart `loaded`, Qwen3.6-35B e Qwen3.5-35B `sleeping` |
+| KV f16 a 131072 | Stima analitica **unavailable**: `/props` non espone n_layer/n_kv_head/head_dim, nessun accesso al GGUF o al host. Memoria libera/usata, KV, offload effettivo: **unavailable** (`--n-gpu-layers all`, nessun offload dichiarato) |
+| reasoning separato | `reasoning_content` separato dal `content` (35523 caratteri in `reasoning_content`, `content` di 1949 caratteri) |
+| Budget 12288 | **Applicazione PROVATA** (chiamata minima, quesito combinatorio, 120 token di input, `enable_thinking=true`, `max_tokens 30000`): `completion_tokens` 13306 = ~12290 reasoning + 1016 visibili, finish `stop`, 567,5 s (~23 token/s). Limite: nessun controfattuale senza budget |
+| Velocita | ~22-24 token/s in generazione contro ~60 token/s di Qwen3.6-Smart (Fase B, stessa prova): ~2,6 volte piu lento |
+| Config modificata sul server | nessuna (solo l'unload del router, reversibile) |
+
+## 2. Configurazione effettiva del client (FASE C)
+Variabili solo nel processo di test: `BPROJECTS_TEST_DGX_MODEL=Qwen3.8-Flash-Next-Smart`, `BPROJECTS_TEST_CTX_WINDOW=131072`, `BPROJECTS_TEST_SAFETY_MARGIN=1024`; C1: `ANALYSIS_MAX_OUTPUT=16384`, `ANALYSIS_THINKING=0`; C2: `ANALYSIS_MAX_OUTPUT=32768`, `ANALYSIS_THINKING=1`. Richieste osservate: C1 `enable_thinking=false`, `max_completion_tokens` 16384 (analisi), 16384 (estrazione), 4096 (chat/bozza); C2 analisi `enable_thinking=true`, 32768. `temperature` 0 (estrazione) / 0,1 (analisi); il client non invia presence_penalty/top_k/top_p (default del profilo: `presence-penalty 0.0`). Parser Docling reale, PostgreSQL reale (55432), MAF 1.26.0, dispatcher/worker in background, timeout richiesta analisi 900 s, deadline 1200 s. Filtri: `--filter-class "*DocumentSmallFlowMafRealTests"` + `--filter-method` `"*N1_pdf_and_docx*"` / `"*N2_markdown*"` / `"*N3_document_vs*"` (1 test ciascuno; `--list-tests`: 5 test nella classe). EvidenceExtractorMafTests non lanciato.
+
+## 3. Risultati (una esecuzione per cella)
+Reasoning stimato = output totali meno token visibili (`/tokenize`); in C1 e ~1-6 token (OFF).
+
+| Config | Test | Esito | Fase in cui si ferma | Dettaglio |
+| --- | --- | --- | --- | --- |
+| C1 | N1 PDF+DOCX | **FAIL** `work_output_invalid` | estrazione del DOCX (preparazione) | estrazione: 2068 in / 1057 out / 47,1 s e 2144 in / 1283 out / 52,7 s, `stop`; analisi NON raggiunta (NOT VERIFIED); test 2 m 06 s |
+| C1 | N2 MD+TXT | **FAIL** `work_output_invalid` | estrazione del MD | estrazione: 2280 in / 1609 out / 65,0 s e 2015 in / 1341 out / 54,7 s, `stop`; analisi NON raggiunta; test 2 m 22 s |
+| C1 | N3 conflitto + tabella | **FAIL** `work_output_invalid` | analisi (raggiunta) | analisi: 6013 in / 6159 out (6158 visibili) / `stop` / 275,1 s; contesto occupato (in+out)/131072 = 9,3%; test 7 m 03 s; 1 violazione riportata: «UUID non valido: formato D lowercase richiesto» |
+| C2 | N1 | **FAIL** `work_output_invalid` | estrazione DOCX | identica a C1-N1 (estrazione indipendente dall'impostazione di Analysis; stesso output a temperature 0): 2068/1057, 2144/1283; analisi NON raggiunta; test 1 m 59 s |
+| C2 | N2 | **FAIL** `work_output_invalid` | estrazione MD | identica a C1-N2; analisi NON raggiunta; test 2 m 20 s |
+| C2 | N3 | **FAIL** `work_output_invalid` | analisi (raggiunta) | analisi: 6011 in / 18325 out (6035 visibili, reasoning ~12290 = budget) / `stop` / 767,8 s (limite richiesta 900 s); contesto (in+out)/131072 = 18,6%; test 15 m 04 s; 4 violazioni riportate |
+
+## 4. Classificazione degli errori
+- **N1 e N2 (C1, C2) — semantica/citazioni (estrazione)**: il JSON dell'estrazione e valido e conforme allo schema (`evidence-1.1.0`), ma una `quote` e una citazione **non verbatim**: il modello cuce intestazione di tabella + una sola riga (es. N1 `e5`: «intestazione + riga Operatore» su un blocco con intestazione + 2 righe consecutive; N2 `e5`: intestazione + riga «Collaudo» saltando «Analisi»). Verificato a posteriori su prompt/risposta: la quote non e sottostringa contigua del blocco. Il codec/validatore rifiuta (`work_output_invalid`) e il documento resta Failed: il test non arriva alla chat ne all'analisi. Nessun errore strutturale JSON, di id, runtime o contesto. Nota: con Qwen3.6-Smart (Fasi A/B) la stessa estrazione passava in N1-N3.
+- **N3 (C1) — id/riferimenti**: JSON valido e completo (3 `results`, 15 sezioni, 9 fonti, 9 voci `evidenceMap`). Nove `evidenceMap[].evidenceIds` (9/9) contengono **l'hash della voce (64 hex, `hash=` del prompt) al posto dell'UUID dell'evidenza** (`evidenza=<UUID>`); inoltre 10 UUID distinti negli id di item sono placeholder fittizi in formato D valido (es. sequenze «a1b2c3d4-e5f6-7890-…»), accettabili come id nuovi ma indice di generazione non ancorata. `results[].batchId` e `visitedEntryIds` sono hash del server riprodotti correttamente (27/27 e 3/3 presenti nel prompt). `noFindingsReason` indica «mancanza di hash di costruzione» (candidati/patch vuoti, come atteso dal contratto). Correttezza semantica (conflitto 30/60 giorni, tabella R-01..R-05 con R-05 esclusa, citazioni): **NOT VERIFIED** (codec fail-fast).
+- **N3 (C2) — id/riferimenti + strutturale (4 violazioni)**: JSON completo (3 `results`, 15 sezioni, 9 fonti, 10 voci `evidenceMap`). (a) `evidenceMap[7].evidenceIds` non rispetta «non vuoto, in ordine UUID, senza duplicati» (id/riferimenti); (b) `evidenceMap.itemId` non presente fra gli item di `analysis` (id/riferimenti, riferimento pendente); (c) due `analysis.sources[]` (indici 1 e 5) dichiarate di tipo `Message` ma con campi documentali (strutturale: tipo di fonte incoerente con i campi). Rispetto a C1-N3 gli `evidenceIds` sono ora UUID di evidenza (9 su 9 con etichetta «evidenza» nel prompt, nessun hash di voce): il tipo di errore cambia. Gli id di item sono UUID placeholder sequenziali (`0f1e2d3c-…-00000000000N`), formato D valido. Semantica (conflitto 30/60 giorni, tabella, citazioni): **NOT VERIFIED**. Reasoning al tetto del budget (~12290 token), output 18325 < 32768, nessun loop.
+- Per tutti: `finish_reason=stop`, nessun `length`, nessun loop, nessun errore di preflight/runtime/modello scaricato, nessuna saturazione di reasoning.
+
+## 5. Confronto con Fasi A e B (una esecuzione per cella, nessuna significativita statistica)
+| Test | A: Qwen3.6-Smart OFF | B: Qwen3.6-Smart ON | C1: Qwen3.8-Smart OFF | C2: Qwen3.8-Smart ON |
+| --- | --- | --- | --- | --- |
+| N1 | PASS | PASS | FAIL (estrazione: quote non verbatim) | FAIL (idem, estrazione) |
+| N2 | FAIL id fonte invece di evidenza | FAIL campo nullo | FAIL (estrazione: quote non verbatim) | FAIL (idem) |
+| N3 | FAIL id item non UUID | FAIL UUID fonte troncato | FAIL (analisi: hash di voce al posto di UUID evidenza) | FAIL (analisi: 4 violazioni, id/riferimenti + tipo fonte) |
+Lettura (osservazioni): Qwen3.8-Smart non migliora il gate; fallisce piu a monte (estrazione) e ~2,6 volte piu lento. Con reasoning ON (C2-N3) l'analisi dura 768 s contro 275 s (C1) e 2,5 volte piu di Qwen3.6-Smart ON (301 s), vicina al limite di 900 s per richiesta, senza migliorare l'esito. Il difetto di estrazione e indipendente dal flag reasoning dell'analisi, quindi C2 su N1/N2 non aggiunge informazione.
+
+## 6. Gate
+**Gate N1-N3 NON soddisfatto** per Qwen3.8-Flash-Next-Smart. Ripetizioni di N1: non eseguite (nessuna configurazione di questa fase supera N1-N3). Nessuna delle sei configurazioni A/B/C1/C2 supera il gate; N1 passa solo con Qwen3.6-Smart.
+
+## 7. Unavailable / NOT VERIFIED
+Durata di caricamento, memoria/KV/offload e stima analitica KV f16, conteggio esatto dei token di reasoning, analisi in N1/N2 (mai raggiunta), semantica di N3 (C1 e C2), ulteriori errori oltre la prima violazione, controfattuale del budget, varianza (n=1).

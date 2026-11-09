@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
 import { ANALYSIS_POLL_MS } from './analysis-preview.component';
-import { MdBlock, parseMarkdown } from './markdown';
+import { citationGroupsOf, MdBlock, parseMarkdown } from './markdown';
 import {
   AnalysisSource,
   DraftView,
@@ -24,6 +24,7 @@ import {
 import { describeFailure } from './failure-text';
 import { InferenceMetricsComponent } from './inference-metrics.component';
 import { ProjectEventsService, ProjectStreamEvent } from './project-events.service';
+import { SourcePart, SourcePartsComponent, partOfSource } from './source-parts.component';
 
 const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -38,6 +39,10 @@ const errorLabels: Record<string, string> = {
   deadline_exceeded: 'Il tempo massimo per la generazione è scaduto.',
   attempts_exhausted: 'I tentativi disponibili per la generazione sono esauriti.',
   checkpoint_incompatible: 'Lo stato della generazione non è compatibile con questa versione.',
+  document_limit_exceeded:
+    'I documenti scelti superano la capacità gestibile in una sola elaborazione: escludine alcuni e riprova.',
+  document_incomplete:
+    'Un documento incluso non è completo o non è pronto: la bozza non è stata generata. Controlla lo stato dei documenti.',
   processing_failed: 'Elaborazione non riuscita.',
 };
 
@@ -59,7 +64,7 @@ type GenerateState = 'idle' | 'sending' | 'uncertain';
  */
 @Component({
   selector: 'app-document-view',
-  imports: [InferenceMetricsComponent, NgTemplateOutlet],
+  imports: [InferenceMetricsComponent, NgTemplateOutlet, SourcePartsComponent],
   templateUrl: './document-view.component.html',
   styleUrl: './document-view.component.scss',
 })
@@ -82,6 +87,8 @@ export class DocumentViewComponent {
   protected readonly commandError = signal('');
   protected readonly sources = signal<AnalysisSource[]>([]);
   protected readonly sourceNotice = signal('');
+  /** Parte documentale scelta da una citazione della bozza: il passaggio si apre nel documento (riuso T030). */
+  protected readonly focusedGroups = signal<SourcePart[][]>([]);
 
   /** Vero mentre un comando è in invio o un run di generazione è attivo (l'anteprima disabilita Genera). */
   readonly active = computed(() => {
@@ -181,9 +188,25 @@ export class DocumentViewComponent {
     return this.sourceIndex().has(id);
   }
 
+  /** Parti documentali di tutte le fonti della revisione (ordine delle fonti; i gruppi multi-blocco restano parti distinte). */
+  protected readonly docParts = computed(() =>
+    this.sources().flatMap((s, i) => {
+      const part = partOfSource(s, `F${i + 1}`);
+      return part ? [part] : [];
+    }),
+  );
+
   protected sourceDescription(source: AnalysisSource, index: number): string {
     if (source.kind === 'PmRevision') return `F${index + 1} · revisione del PM`;
+    if (source.kind === 'DocumentPassage') return `F${index + 1} · passaggio di un documento`;
     return `F${index + 1} · messaggio ${source.messageRole === 'assistant' ? "dell'assistente (solo contesto)" : 'del PM'}`;
+  }
+
+  /** Parte documentale della fonte con la sua etichetta; vuota per fonti non documentali, incomplete o non più presenti nella revisione. */
+  private partOf(sourceId: string): SourcePart[] {
+    const entry = this.sourceIndex().get(sourceId);
+    const part = entry ? partOfSource(entry.source, `F${entry.index + 1}`) : null;
+    return part ? [part] : [];
   }
 
   /** Apre la fonte citata: messaggio evidenziato nel dialogo oppure l'anteprima/revisione del PM. */
@@ -195,6 +218,23 @@ export class DocumentViewComponent {
       return;
     }
     const { source } = entry;
+    if (source.kind === 'DocumentPassage') {
+      // I gruppi vengono solo dalla mappa persistita della bozza (mai dalla sequenza dei sourceIds); senza mappa o senza gruppo si apre la sola parte della fonte.
+      const groups = citationGroupsOf(this.draft()?.sourceMap, id)
+        .map((g) => g.sourceIds.flatMap((sid) => this.partOf(sid)))
+        .filter((parts) => parts.length > 0);
+      const single = this.partOf(id);
+      const shown = groups.length ? groups : single.length ? [single] : [];
+      this.focusedGroups.set(shown);
+      this.sourceNotice.set(
+        shown.length > 1
+          ? `La fonte ${this.sourceLabel(id)} appartiene a ${shown.length} citazioni distinte: mostrate sotto, ciascuna con le proprie parti.`
+          : shown.length
+            ? `Passaggio del documento della fonte ${this.sourceLabel(id)} mostrato sotto.`
+            : 'Il passaggio citato non è consultabile: la fonte è incompleta.',
+      );
+      return;
+    }
     const doc = this.host.nativeElement.ownerDocument;
     const target =
       source.kind === 'Message' && source.messageId
@@ -314,6 +354,7 @@ export class DocumentViewComponent {
     this.run.set(null);
     this.sources.set([]);
     this.sourceNotice.set('');
+    this.focusedGroups.set([]);
     this.idempotencyKey = null;
     this.pendingRevisionId = null;
     this.generateState.set('idle');

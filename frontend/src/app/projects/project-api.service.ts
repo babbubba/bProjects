@@ -36,7 +36,59 @@ export interface InferenceMetrics {
   };
 }
 
+/**
+ * Vista `execution` di un root AI (contratto HTTP 002): solo misure e metadati. Un tempo `null` è «indisponibile»
+ * (intervallo non osservato), mai zero; nessun campo certifica il rispetto di una durata prevista.
+ */
+export interface ExecutionView {
+  initialRegime: 'Ordinary' | 'Extended' | null;
+  regime: 'Ordinary' | 'Extended' | null;
+  classificationStatus: 'Pending' | 'Classified' | 'Rejected' | null;
+  classificationVersion: string | null;
+  classificationRecordHash: string | null;
+  reason: string | null;
+  requestedAt: string;
+  ordinaryDeadlineAt: string | null;
+  hardDeadlineAt: string | null;
+  effectiveDeadlineAt: string | null;
+  promotedAt: string | null;
+  promotionReason: string | null;
+  promotionReceiptHash: string | null;
+  elapsedMs: number;
+  queueMs: number | null;
+  processingMs: number | null;
+  preflightMs: number | null;
+  backoffMs: number | null;
+  recoveryMs: number | null;
+  stage: string | null;
+  completedUnits: number | null;
+  plannedUnits: number | null;
+}
+
 export type ContextUsageKind = 'chat' | 'analysis' | 'document';
+
+/** Impronta (002 T102) del modello effettivo di una chiamata: letta dalla chiamata, mai dalla configurazione o dal monitor. */
+export interface ModelFingerprint {
+  modelId: string;
+  contextWindowTokens: TokenValue;
+  /** Primi 16 esadecimali di SHA-256 di «modelId|finestra». */
+  hash: string;
+}
+
+export type AttemptOutcome = 'winning' | 'failed' | 'interrupted' | 'rejected' | 'unrecorded';
+
+/** Tentativo dello stesso lavoro logico (002 T102); `unrecorded` = nessuna riga persistita: tempi, token e modello null. */
+export interface AttemptView {
+  attempt: number;
+  outcome: AttemptOutcome;
+  state: 'completed' | 'failed' | 'interrupted' | null;
+  calls: number;
+  activeMs: number | null;
+  promptTokens: TokenValue;
+  completionTokens: TokenValue;
+  finishReason: string | null;
+  model: ModelFingerprint | null;
+}
 
 export interface ContextCompositionItem {
   key: string;
@@ -74,6 +126,11 @@ export interface ContextUsage {
     safetyMarginTokens: number;
     remainingTokens: TokenValue;
     staleReason: null | 'newer_messages';
+    /** 002: regime, ricevuta e tempi del root; assente o null nei record 001 e senza telemetria. */
+    execution?: ExecutionView | null;
+    /** 002 T102: tentativi del lavoro logico e impronta del modello effettivo; assenti nei server precedenti. */
+    attempts?: AttemptView[] | null;
+    modelFingerprint?: ModelFingerprint | null;
   };
   composition: null | {
     promptTokens: TokenValue;
@@ -156,6 +213,10 @@ export interface ChatTurnView {
   nextAttemptAt: string | null;
   resultMessageId: string | null;
   error: { code: string; message: string | null } | null;
+  /** 002: selezione fonti fissata alla richiesta; assente nei record 001. */
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
+  execution?: ExecutionView | null;
 }
 
 export type ProcessingRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed';
@@ -180,6 +241,9 @@ export interface ProcessingRunView {
   error: { code: string; message: string | null } | null;
   /** Telemetria della richiesta AI del run; assente o null = nessuna telemetria disponibile. */
   metrics?: InferenceMetrics | null;
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
+  execution?: ExecutionView | null;
 }
 
 export interface AnalyzeResult {
@@ -188,7 +252,8 @@ export interface AnalyzeResult {
   replayed: boolean;
 }
 
-export type AnalysisClassification = 'Declared' | 'Inferred' | 'Assumed';
+/** `Documented` esiste solo in AnalysisContent 1.1.0. */
+export type AnalysisClassification = 'Declared' | 'Documented' | 'Inferred' | 'Assumed';
 
 export interface AnalysisItem {
   id: string;
@@ -199,10 +264,19 @@ export interface AnalysisItem {
 
 export interface AnalysisSource {
   id: string;
-  kind: 'Message' | 'PmRevision';
+  kind: 'Message' | 'PmRevision' | 'DocumentPassage';
   messageId: string | null;
   messageRole: 'user' | 'assistant' | null;
   revisionId: string | null;
+  /** Solo schema 1.1.0 e solo per `DocumentPassage`: nei record 1.0 i campi mancano. [start,end) in UTF-16 nel blocco. */
+  documentId?: string | null;
+  documentVersionId?: string | null;
+  preparationId?: string | null;
+  artifactId?: string | null;
+  blockId?: string | null;
+  start?: number | null;
+  end?: number | null;
+  quote?: string | null;
 }
 
 export interface AnalysisConflict {
@@ -213,7 +287,7 @@ export interface AnalysisConflict {
   resolution: { selectedAlternativeIds: string[]; reason: string; evidenceRefs: string[] } | null;
 }
 
-/** AnalysisContent 1.0.0 (contracts/ai-workflow.md §4), modificabile dal PM tramite form semplice (T035). */
+/** AnalysisContent 1.0.0 o 1.1.0 (`schemaVersion` guida l'union; contracts/ai-workflow.md §1), modificabile dal PM tramite form semplice (T035). */
 export interface AnalysisContent {
   schemaVersion: string;
   analysisId: string;
@@ -253,6 +327,18 @@ export interface AnalysisView {
   canGenerate: boolean;
   /** Metriche del run di analisi che l'ha prodotta; assente o null = record storico senza telemetria. */
   metrics?: InferenceMetrics | null;
+  /** 002: fonti cambiate dopo la richiesta. È un avviso: non revoca la conferma né canGenerate. */
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
+}
+
+/** Voce della mappa storica delle fonti di una bozza (002 T087): campi di gruppo null se il registro Evidence non li conosce. */
+export interface DraftSourceMapEntry {
+  itemId: string;
+  evidenceId: string | null;
+  citationGroupId: string | null;
+  part: number | null;
+  sourceId: string;
 }
 
 /** DraftView del contratto HTTP: bozza Markdown proposta, mai approvata, con la revisione usata. */
@@ -272,6 +358,10 @@ export interface DraftView {
   label: string;
   /** Metriche del run Document che l'ha generata; assente o null = record storico senza telemetria. */
   metrics?: InferenceMetrics | null;
+  sourceSnapshotId?: string | null;
+  hasSourceChanges?: boolean;
+  /** Mappa persistita dal run che ha prodotto la bozza; assente o null = bozza storica: i gruppi non si ricostruiscono mai. */
+  sourceMap?: DraftSourceMapEntry[] | null;
 }
 
 /** RevisionView del contratto HTTP (sottoinsieme): revisione specifica con le fonti del suo contenuto. */

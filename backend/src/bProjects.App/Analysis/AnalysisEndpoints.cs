@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using bProjects.App.AI;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
@@ -32,7 +33,10 @@ public sealed record ProcessingRunView(
     Guid? ResultRevisionId,
     Guid? DraftId,
     RunError? Error,
-    InferenceMetricsView? Metrics = null);
+    InferenceMetricsView? Metrics = null,
+    ExecutionView? Execution = null,
+    Guid? SourceSnapshotId = null,
+    bool? HasSourceChanges = null);
 
 /// <summary>Revisione dell'anteprima con provenienza e conferma (GET .../revisions/{v}).</summary>
 public sealed record RevisionView(
@@ -70,7 +74,9 @@ public sealed record AnalysisView(
     bool CanEdit,
     bool CanConfirm,
     bool CanGenerate,
-    InferenceMetricsView? Metrics = null);
+    InferenceMetricsView? Metrics = null,
+    Guid? SourceSnapshotId = null,
+    bool? HasSourceChanges = null);
 
 /// <summary>
 /// Comando Analizza e letture di run e anteprima (contracts/http-api.md, «Richiesta di analisi formale»).
@@ -99,6 +105,9 @@ public static class AnalysisEndpoints
         IOptions<ExecutionOptions> execution,
         IOptions<AiOptions> ai,
         ProcessingRunEvents events,
+        SourceSelectionService selection,
+        SourceSnapshotStore snapshots,
+        DocumentPolicyService documentPolicy,
         CancellationToken ct)
     {
         if (!http.Request.Headers.TryGetValue("Idempotency-Key", out var raw) || raw.Count != 1
@@ -117,6 +126,14 @@ public static class AnalysisEndpoints
         try
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+            // Lock di progetto delle fonti (upload, selezione, chat) PRIMA di quello della conversazione: ordine progetto → conversazione.
+            // Un progetto senza documenti resta sul ramo 001, senza questo lock.
+            var hasDocuments = await db.ProjectDocuments.AsNoTracking().AnyAsync(d => d.ProjectId == projectId, ct);
+            if (hasDocuments)
+            {
+                await ProjectLock.AcquireAsync(db, projectId, ct);
+            }
 
             // Stesso lock del salvataggio dei messaggi PM: il cutoff è l'ultimo messaggio PM committato, senza race con chi scrive.
             var conversationId = (await db.Database
@@ -143,9 +160,31 @@ public static class AnalysisEndpoints
                     : Results.Ok(replay);
             }
 
+            // Fonti documentali risolte sotto lock alla richiesta (dopo il replay, che non le ricalcola): un documento incluso non pronto
+            // blocca Analizza senza creare alcun run.
+            SourceEvaluation? sources = hasDocuments ? await selection.EvaluateAsync(projectId, ct) : null;
+            if (sources is not null && sources.Blocking.Any())
+            {
+                var blocking = SourceSelectionService.ToView(sources, await selection.PreparationStatusesAsync(projectId, ct)).BlockingSources;
+                return Results.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Fonti documentali non pronte",
+                    extensions: new Dictionary<string, object?> { ["code"] = "sources_not_ready", ["blockingSources"] = blocking });
+            }
+
+            var documentary = SourceSnapshotStore.HasReadySource(sources);
             if (cutoff is null)
             {
-                return Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager", "no_pm_input");
+                // Nessun messaggio PM: con almeno una fonte pronta il ramo documentale parte con cutoff 0 (nessun input di dialogo);
+                // senza, con documenti nel progetto manca ogni input analizzabile, altrimenti ramo 001.
+                if (!documentary)
+                {
+                    return sources is not null
+                        ? Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager o un documento pronto", "no_source_input")
+                        : Problem(StatusCodes.Status422UnprocessableEntity, "Serve almeno un messaggio del project manager", "no_pm_input");
+                }
+
+                cutoff = 0;
             }
 
             var active = await db.ProcessingRuns.AsNoTracking()
@@ -170,13 +209,29 @@ public static class AnalysisEndpoints
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.AnalysisRunDeadline,
-                WorkflowDefinitionVersion = ProcessingRun.AnalysisWorkflowVersion,
+                // Definizione/prompt/schema documentali v2 persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
+                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.AnalysisDefinitionV6 : ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
-                PromptVersions = JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
+                PromptVersions = documentary ? SourceSnapshotStore.AnalysisPromptVersionsV6() : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };
+            if (sources is not null)
+            {
+                run.SourceSnapshotId = snapshots.Add(projectId, sources, now).Id;   // manifest fissato alla richiesta, mai al claim
+            }
+
+            if (documentary)
+            {
+                // Ramo documentale: Pending (Extended provvisorio, cap dal t0), nessuna misura né invio nel POST; classificazione nel dispatcher (T124).
+                // Un'unica lettura della policy: limiti del Pending e snapshot persistito nella stessa transazione del run sono la stessa fotografia.
+                // Da qui in poi i limiti del run sono quelli dello snapshot (immutabile), mai la policy corrente.
+                var policySnapshot = (await documentPolicy.GetAsync(ct)).Snapshot;
+                DocumentRootRegime.Pending(run, now, policySnapshot.Limits);
+                run.DocumentLimitsSnapshot = RunLimitsSnapshot.Of(policySnapshot).ToJson();
+            }
+
             db.ProcessingRuns.Add(run);
             await db.SaveChangesAsync(ct);
             // Registro delle evidenze: i messaggi PM entro il cutoff senza versione corrente né lavoro aperto (preesistenti o falliti)
@@ -209,9 +264,20 @@ public static class AnalysisEndpoints
         return run is null ? Results.NotFound() : Results.Ok(await ViewAsync(db, run, ct));
     }
 
+    /// <summary>Avviso di sola lettura «fonti cambiate»: null senza snapshot (record 001 o progetto senza documenti), altrimenti il confronto fra il manifest fissato e la risoluzione attuale (T097).</summary>
+    internal static async Task<bool?> SourceChangesAsync(AppDbContext db, Guid projectId, Guid? snapshotId, CancellationToken ct) =>
+        snapshotId is { } id ? (await new SourceSnapshotStore(db).ChangedAsync(projectId, [id], ct)).Contains(id) : null;
+
     /// <summary>ProcessingRunView con le metriche del risultato logico: solo per un run Completed (un Failed non ha metriche).</summary>
     public static async Task<ProcessingRunView> ViewAsync(AppDbContext db, ProcessingRun run, CancellationToken ct) =>
-        ToView(run, run.Status == ProcessingRunStatus.Completed ? await InferenceMetrics.ForRunAsync(db, run.ProjectId, run.Id, ct) : null);
+        ToView(run, run.Status == ProcessingRunStatus.Completed ? await InferenceMetrics.ForRunAsync(db, run.ProjectId, run.Id, ct) : null) with
+        {
+            // Solo i root documentali (regime valorizzato): il run 001 mantiene la vista invariata.
+            Execution = run.InitialRegime is null
+                ? null
+                : (await ExecutionTelemetry.ForRootAsync(db, run.ProjectId, ClassificationOwnerKind.ProcessingRun, run.Id, ct))?.Execution,
+            HasSourceChanges = await SourceChangesAsync(db, run.ProjectId, run.SourceSnapshotId, ct),
+        };
 
     private static async Task<IResult> GetAnalysis(Guid projectId, Guid analysisId, HttpContext http, AppDbContext db, CancellationToken ct)
     {
@@ -288,7 +354,9 @@ public static class AnalysisEndpoints
             CanConfirm: canEdit && isLatest && revision.ValidationState == AnalysisValidationState.Unvalidated,
             CanGenerate: canEdit && isLatest && active.Count == 0 && revision.ValidationState == AnalysisValidationState.PmConfirmed,
             // Metriche del run che ha prodotto l'analisi (non della revisione): rilette dopo il reload insieme al risultato.
-            await InferenceMetrics.ForRunAsync(db, projectId, analysisId, ct)), run);
+            await InferenceMetrics.ForRunAsync(db, projectId, analysisId, ct),
+            run.SourceSnapshotId,
+            await SourceChangesAsync(db, projectId, run.SourceSnapshotId, ct)), run);
     }
 
     private static async Task<IResult> GetRevision(Guid projectId, Guid analysisId, string version, HttpContext http, AppDbContext db, CancellationToken ct)
@@ -358,7 +426,8 @@ public static class AnalysisEndpoints
         run.ResultRevisionId,
         run.DraftId,
         run.ErrorCode is null ? null : new RunError(run.ErrorCode, run.ErrorMessage),
-        metrics);
+        metrics,
+        SourceSnapshotId: run.SourceSnapshotId);
 
     private static string LocationOf(Guid projectId, Guid runId) => $"/api/projects/{projectId}/processing-runs/{runId}";
 

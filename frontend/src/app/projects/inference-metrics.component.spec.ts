@@ -5,11 +5,18 @@ import {
   calculated,
   contextUsage,
   estimated,
+  execution,
   metrics,
   unavailable,
 } from './context-usage.fixtures';
 import { ContextUsageStore } from './context-usage.store';
-import { InferenceMetrics, InferencePhase } from './project-api.service';
+import {
+  AttemptView,
+  ExecutionView,
+  InferenceMetrics,
+  InferencePhase,
+  ModelFingerprint,
+} from './project-api.service';
 import { InferenceMetricsComponent } from './inference-metrics.component';
 
 describe('InferenceMetricsComponent', () => {
@@ -21,6 +28,9 @@ describe('InferenceMetricsComponent', () => {
       metrics?: InferenceMetrics | null;
       running?: boolean;
       phase?: InferencePhase;
+      execution?: ExecutionView | null;
+      attempts?: AttemptView[] | null;
+      modelFingerprint?: ModelFingerprint | null;
     } = {},
   ) {
     for (const [key, value] of Object.entries(inputs)) fixture.componentRef.setInput(key, value);
@@ -188,5 +198,223 @@ describe('InferenceMetricsComponent', () => {
 
     expect(el.innerHTML).not.toContain('PENSIERO-SEGRETO');
     expect(el.textContent).not.toMatch(/ragionamento attivo|reasoning/i);
+  });
+  describe('tempi per fase (T065)', () => {
+    const timing = (id: string) =>
+      el
+        .querySelector<HTMLElement>(`[data-testid=timing-${id}]`)
+        ?.textContent?.replace(/\s+/g, ' ')
+        .trim();
+
+    it('mostra coda, preflight, calcolo, backoff e totale dalle sole misure del server', () => {
+      render({ metrics: metrics(), execution: execution() });
+
+      expect(timing('queue')).toBe('Coda 1,2 s');
+      expect(timing('preflight')).toBe('Preflight 300 ms');
+      expect(timing('processing')).toBe('Calcolo 6,5 s');
+      expect(timing('backoff')).toBe('Backoff 0 ms');
+      expect(timing('elapsed')).toBe('Totale trascorso 9,0 s');
+    });
+
+    it('il recupero osservato è mostrato come tempo distinto dalla coda; zero osservato non è indisponibile', () => {
+      render({ metrics: metrics(), execution: execution({ recoveryMs: 7000, queueMs: 1200 }) });
+      expect(timing('recovery')).toBe('Recupero 7,0 s');
+      expect(timing('queue')).toBe('Coda 1,2 s');
+
+      render({ metrics: metrics(), execution: execution({ recoveryMs: 0 }) });
+      expect(timing('recovery')).toBe('Recupero 0 ms');
+      expect(
+        el.querySelector('[data-testid=timing-recovery]')!.getAttribute('data-available'),
+      ).toBe('true');
+    });
+
+    it('un intervallo null è «indisponibile» e non zero; un recupero non registrato resta indisponibile', () => {
+      render({
+        metrics: metrics(),
+        execution: execution({
+          queueMs: null,
+          processingMs: null,
+          backoffMs: null,
+          recoveryMs: null,
+        }),
+      });
+
+      expect(timing('queue')).toBe('Coda indisponibile');
+      expect(timing('processing')).toBe('Calcolo indisponibile');
+      expect(timing('backoff')).toBe('Backoff indisponibile');
+      expect(timing('recovery')).toBe('Recupero indisponibile');
+      expect(el.querySelector('[data-testid=timing-queue]')!.getAttribute('data-available')).toBe(
+        'false',
+      );
+      expect(el.textContent).not.toMatch(/Coda 0|Calcolo 0|Backoff 0|Recupero 0/);
+    });
+
+    it('senza execution (record 001) non mostra alcun tempo e la riga delle metriche è invariata', () => {
+      render({ metrics: metrics(), execution: null });
+
+      expect(el.querySelector('[data-testid=execution-timing]')).toBeNull();
+      expect(line()).toBe('CTX 49.152 · Max output 8.192 · Generati 1.347 token');
+    });
+
+    it('è un elenco con etichetta accessibile e non usa barre di avanzamento o percentuali', () => {
+      render({ metrics: metrics(), execution: execution() });
+
+      const list = el.querySelector('[data-testid=execution-timing]')!;
+      expect(list.getAttribute('aria-label')).toBe('Tempi della richiesta AI');
+      expect(list.querySelectorAll('dt').length).toBe(list.querySelectorAll('dd').length);
+      expect(el.querySelector('[role=progressbar], progress')).toBeNull();
+      expect(list.textContent).not.toContain('%');
+    });
+  });
+
+  describe('tentativi e impronta del modello (T102)', () => {
+    const fingerprint = (over: Partial<ModelFingerprint> = {}): ModelFingerprint => ({
+      modelId: 'modello-effettivo',
+      contextWindowTokens: calculated(8192),
+      hash: '0123456789abcdef',
+      ...over,
+    });
+    const attempt = (over: Partial<AttemptView> = {}): AttemptView => ({
+      attempt: 1,
+      outcome: 'winning',
+      state: 'completed',
+      calls: 1,
+      activeMs: 5000,
+      promptTokens: calculated(100),
+      completionTokens: calculated(20),
+      finishReason: 'stop',
+      model: fingerprint(),
+      ...over,
+    });
+    const row = (n: number) =>
+      el
+        .querySelector<HTMLElement>(`[data-testid=attempt-${n}]`)
+        ?.textContent?.replace(/\s+/g, ' ')
+        .trim();
+
+    it('distingue il tentativo fallito da quello vincente dello stesso lavoro', () => {
+      render({
+        metrics: metrics(),
+        attempts: [
+          attempt({
+            outcome: 'failed',
+            state: 'failed',
+            activeMs: 3000,
+            finishReason: 'error',
+            model: fingerprint({ modelId: 'modello-primo', hash: 'fedcba9876543210' }),
+          }),
+          attempt({ attempt: 2 }),
+        ],
+        modelFingerprint: fingerprint(),
+      });
+
+      expect(row(1)).toBe(
+        'Tentativo 1 · Fallito · Tempo attivo 3,0 s · 1 chiamata · Modello modello-primo',
+      );
+      expect(row(2)).toBe(
+        'Tentativo 2 · Vincente · Tempo attivo 5,0 s · 1 chiamata · Modello modello-effettivo',
+      );
+      expect(el.querySelector('[data-testid=attempt-1]')!.getAttribute('data-outcome')).toBe(
+        'failed',
+      );
+      expect(el.querySelector('[data-testid=attempt-2]')!.getAttribute('data-outcome')).toBe(
+        'winning',
+      );
+      expect(el.querySelector('[data-testid=attempts]')!.getAttribute('aria-label')).toBe(
+        'Tentativi della richiesta AI',
+      );
+    });
+
+    it('un tentativo non registrato o senza durata resta indisponibile, mai zero né modello inventato', () => {
+      render({
+        metrics: metrics(),
+        attempts: [
+          attempt({
+            outcome: 'unrecorded',
+            state: null,
+            calls: 0,
+            activeMs: null,
+            promptTokens: unavailable,
+            completionTokens: unavailable,
+            finishReason: null,
+            model: null,
+          }),
+          attempt({ attempt: 2, outcome: 'interrupted', state: 'interrupted', activeMs: null }),
+          attempt({ attempt: 3 }),
+        ],
+      });
+
+      expect(row(1)).toBe(
+        'Tentativo 1 · Non registrato · Tempo attivo indisponibile · Modello indisponibile',
+      );
+      expect(row(2)).toBe(
+        'Tentativo 2 · Interrotto · Tempo attivo indisponibile · 1 chiamata · Modello modello-effettivo',
+      );
+      expect(el.querySelector('[data-testid=attempt-1]')!.getAttribute('data-available')).toBe(
+        'false',
+      );
+      expect(el.textContent).not.toMatch(/Tempo attivo 0/);
+    });
+
+    it('mostra il modello effettivo della chiamata con la sua impronta e la finestra solo se verificata', () => {
+      render({ metrics: metrics(), modelFingerprint: fingerprint() });
+      const text = el
+        .querySelector('[data-testid=model-fingerprint]')!
+        .textContent!.replace(/\s+/g, ' ')
+        .trim();
+      expect(text).toBe(
+        'Modello effettivo modello-effettivo · finestra 8.192 · impronta 0123456789abcdef',
+      );
+
+      render({
+        metrics: metrics(),
+        modelFingerprint: fingerprint({ contextWindowTokens: unavailable }),
+      });
+      expect(el.querySelector('[data-testid=model-fingerprint]')!.textContent).toContain(
+        'finestra n/d',
+      );
+    });
+
+    it('senza dati dal server (record storico o server precedente) non mostra tentativi né impronta', () => {
+      render({ metrics: metrics(), attempts: null, modelFingerprint: null });
+      expect(el.querySelector('[data-testid=attempts]')).toBeNull();
+      expect(el.querySelector('[data-testid=model-fingerprint]')).toBeNull();
+    });
+
+    it('un solo tentativo vincente non produce elenco e mostra solo l impronta', () => {
+      render({ metrics: metrics(), attempts: [attempt()], modelFingerprint: fingerprint() });
+      expect(el.querySelector('[data-testid=attempts]')).toBeNull();
+      expect(el.querySelector('[data-testid=model-fingerprint]')).not.toBeNull();
+    });
+
+    it('il tempo totale t0 resta autorevole e distinto dal tempo attivo dei tentativi', () => {
+      render({
+        metrics: metrics(),
+        execution: execution({ elapsedMs: 40000, recoveryMs: 7000 }),
+        attempts: [
+          attempt({ outcome: 'failed', state: 'failed', activeMs: 3000 }),
+          attempt({ attempt: 2 }),
+        ],
+      });
+      expect(
+        el.querySelector('[data-testid=timing-elapsed]')!.textContent!.replace(/\s+/g, ' ').trim(),
+      ).toBe('Totale trascorso 40,0 s');
+      expect(
+        el.querySelector('[data-testid=timing-recovery]')!.textContent!.replace(/\s+/g, ' ').trim(),
+      ).toBe('Recupero 7,0 s');
+      expect(el.textContent).not.toContain('8,0 s'); // nessuna somma dei tempi attivi dei tentativi
+    });
+
+    it('non espone ragionamento, prompt o campi non previsti dal contratto', () => {
+      const hostile = {
+        ...attempt({ outcome: 'failed', state: 'failed' }),
+        prompt: 'PROMPT-SEGRETO',
+        reasoningContent: 'PENSIERO-SEGRETO',
+        endpoint: 'http://dgx.interno',
+      } as AttemptView;
+      render({ metrics: metrics(), attempts: [hostile, attempt({ attempt: 2 })] });
+      expect(el.innerHTML).not.toContain('SEGRETO');
+      expect(el.innerHTML).not.toContain('dgx.interno');
+    });
   });
 });

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,9 @@ namespace bProjects.App.AI;
 
 /// <summary>
 /// Esito di un'esecuzione conversazionale, in attesa del commit atomico (T018): testo completo della risposta e
-/// sessione MAF aggiornata. Nulla è stato scritto: né messaggi, né snapshot, né watermark.
+/// sessione MAF aggiornata. Nulla è stato scritto: né messaggi, né snapshot, né watermark. Per la chat documentale (002 T058)
+/// <paramref name="DocumentSnapshotHash"/> è l'hash della selezione congelata (filtra i riferimenti dello snapshot di sessione) e
+/// <paramref name="Document"/> la risposta validata con le sue fonti, ricontrollate dal commit nella stessa transazione.
 /// </summary>
 public sealed record ConversationalReply(
     string Text,
@@ -19,7 +22,9 @@ public sealed record ConversationalReply(
     RestoredChatSession Restored,
     Conversation Conversation,
     ChatTurn Turn,
-    string ChatConfigVersion);
+    string ChatConfigVersion,
+    string? DocumentSnapshotHash = null,
+    DocumentChatAnswer? Document = null);
 
 /// <summary>Chi committa atomicamente risposta, snapshot, watermark e Completed (T018). Deve rifiutare se lease/fencing/revisione non sono più validi.</summary>
 public interface IChatTurnCommitter
@@ -55,16 +60,20 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
         var trigger = await db.ConversationMessages.AsNoTracking()
             .SingleAsync(m => m.Id == turn.TriggerMessageId && m.ConversationId == conversation.Id && m.Role == MessageRole.User, ct);
 
+        // Fonti documentali indisponibili nello snapshot del turno: il modello lo sa prima di generare (la nota finale non basta da sola).
+        // Senza snapshot o senza fonti indisponibili le istruzioni restano esattamente quelle del dialogo 001.
+        var unavailable = await ChatSourceNotice.UnavailableCountAsync(db, turn.Id, ct);
+        var instructions = unavailable > 0 ? Instructions + "\n\n" + ChatSourceNotice.ModelGuard(unavailable) : Instructions;
         var options = new ChatOptions
         {
             ModelId = chatOptions.ModelId,
             MaxOutputTokens = chatOptions.MaxOutputTokens,
             Temperature = chatOptions.Temperature,
             RawRepresentationFactory = chatOptions.RawRepresentationFactory,
-            Instructions = Instructions,
+            Instructions = instructions,
         };
         var agent = new ChatClientAgent(
-            await factory.CreateCompactingClientAsync(Instructions, ct),
+            await factory.CreateCompactingClientAsync(instructions, ct),
             new ChatClientAgentOptions
             {
                 Name = AgentName,
@@ -139,7 +148,8 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
 
     private static string LoadPrompt() => LoadPrompt("conversation.md");
 
-    private static string LoadPrompt(string file)
+    /// <summary>Prompt incorporato in AI/Prompts (condiviso con la chat documentale, che ha il proprio file).</summary>
+    internal static string LoadPrompt(string file)
     {
         using var stream = typeof(ConversationalAgent).Assembly.GetManifestResourceStream("Prompts." + file)
             ?? throw new InvalidOperationException($"Prompt {file} non incorporato nell'assembly.");
@@ -153,13 +163,27 @@ public sealed class ConversationalAgent(AgentFactory factory, ChatOptions chatOp
 /// <see cref="IChatTurnCommitter"/>. Il token ricevuto si annulla quando il lease si perde.
 /// </summary>
 public sealed class ConversationalTurnExecutor(
-    IServiceScopeFactory scopes, ConversationalAgent agent, ChatTurnEvents? events = null) : IChatTurnExecutor
+    IServiceScopeFactory scopes, ConversationalAgent agent, ChatTurnEvents? events = null, DocumentChatTurnExecutor? documentChat = null) : IChatTurnExecutor
 {
     public async Task ExecuteAsync(ChatTurnClaim claim, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (documentChat is not null && await UsesDocumentGraphAsync(db, claim.TurnId, ct))
+        {
+            // Snapshot congelato alla richiesta con almeno una fonte Ready e inclusa (stessa regola di Analizza): grafo 2 della chat documentale (T058/T123).
+            await documentChat.ExecuteAsync(claim, ct);
+            return;
+        }
+
         var reply = await agent.RunAsync(db, claim, onDelta: events?.DeltaSink(claim), ct);
+        // Fonti documentali non pronte congelate nello snapshot del turno: la risposta lo dichiara (testo deterministico, non del modello).
+        var unavailable = await ChatSourceNotice.UnavailableCountAsync(db, claim.TurnId, ct);
+        if (unavailable > 0)
+        {
+            reply = reply with { Text = ChatSourceNotice.Append(reply.Text, unavailable) };
+        }
+
         // Un commit rifiutato (lease perso, revisione cambiata) o già riconciliato non modifica nulla: il dispatcher
         // tenta Failed solo con owner/fencing, quindi un vecchio worker non cambia mai l'esito.
         var result = await scope.ServiceProvider.GetRequiredService<IChatTurnCommitter>().CommitAsync(claim, reply, ct);
@@ -175,4 +199,12 @@ public sealed class ConversationalTurnExecutor(
             await events.PublishStateAsync(claim.TurnId); // post-commit: Completed rimanda al resultMessageId persistito
         }
     }
+
+    /// <summary>
+    /// Il turno non ha un campo di definizione: la selezione fissata alla richiesta (<c>SourceSnapshotId</c>, immutabile) decide il grafo, mai la selezione corrente.
+    /// Senza snapshot, o con righe soltanto escluse o non pronte, il turno resta sul dialogo 001 (che dichiara le fonti non pronte).
+    /// </summary>
+    internal static async Task<bool> UsesDocumentGraphAsync(AppDbContext db, Guid turnId, CancellationToken ct) =>
+        await db.ChatTurns.AsNoTracking().Where(t => t.Id == turnId && t.SourceSnapshotId != null)
+            .AnyAsync(t => db.SourceSnapshotItems.Any(i => i.SnapshotId == t.SourceSnapshotId && i.Included && i.Availability == SourceAvailability.Ready), ct);
 }

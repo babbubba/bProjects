@@ -19,19 +19,43 @@ public static class TestEnvironment
     public const string PostgresVariable = "BPROJECTS_TEST_POSTGRES";
     public const string DgxEndpointVariable = "BPROJECTS_TEST_DGX_ENDPOINT";
 
+    /// <summary>
+    /// Opt-in esplicito per qualunque inferenza reale sul DGX: solo il valore esatto <c>1</c>. Endpoint, modello e chiave presenti
+    /// nell'ambiente NON bastano; senza opt-in i getter DGX restituiscono null e i test reali risultano Skipped (mai PASS).
+    /// </summary>
+    public const string DgxAllowVariable = "BPROJECTS_TEST_DGX_ALLOW";
+
     /// <summary>Connessione amministrativa a un PostgreSQL di test (può creare database).</summary>
     public static string? PostgresAdminConnectionString => Read(PostgresVariable);
 
-    /// <summary>Base URL OpenAI-compatibile del modello interno su DGX Spark, es. http://host:8000/v1.</summary>
-    public static string? DgxEndpoint => Read(DgxEndpointVariable);
+    public static bool DgxAllowed => DgxAllowedFrom(Read);
+
+    internal static bool DgxAllowedFrom(Func<string, string?> read) => read(DgxAllowVariable) == "1";
+
+    /// <summary>Base URL OpenAI-compatibile del modello interno su DGX Spark, es. http://host:8000/v1. Null senza opt-in.</summary>
+    public static string? DgxEndpoint => DgxAllowed ? Read(DgxEndpointVariable) : null;
 
     public const string DgxApiKeyVariable = "BPROJECTS_TEST_DGX_API_KEY";
     public const string DgxModelVariable = "BPROJECTS_TEST_DGX_MODEL";
 
-    /// <summary>Chiave del server interno: solo da variabile d'ambiente, mai stampata né salvata.</summary>
-    public static string? DgxApiKey => Read(DgxApiKeyVariable);
+    /// <summary>Chiave del server interno: solo da variabile d'ambiente, mai stampata né salvata. Null senza opt-in.</summary>
+    public static string? DgxApiKey => DgxAllowed ? Read(DgxApiKeyVariable) : null;
 
-    public static string? DgxModel => Read(DgxModelVariable);
+    /// <summary>Null senza opt-in.</summary>
+    public static string? DgxModel => DgxAllowed ? Read(DgxModelVariable) : null;
+
+    /// <summary>Motivo per cui il DGX non è utilizzabile (opt-in mancante o endpoint mancante), oppure null se lo è.</summary>
+    public static string? DgxUnavailableReason() => DgxUnavailableReason(Read);
+
+    internal static string? DgxUnavailableReason(Func<string, string?> read)
+    {
+        if (!DgxAllowedFrom(read))
+        {
+            return $"{DgxAllowVariable}=1 non impostata: opt-in esplicito DGX mancante, nessuna inferenza reale eseguita (non è un PASS).";
+        }
+
+        return read(DgxEndpointVariable) is null ? $"{DgxEndpointVariable} non impostata: DGX Spark non disponibile." : null;
+    }
 
     /// <summary>Opzioni AI reali per i test MafReal; Skipped se endpoint, chiave o modello mancano.</summary>
     public static AiOptions RequireDgxOptions()
@@ -86,7 +110,8 @@ public static class TestEnvironment
 
     public static Uri RequireDgx()
     {
-        Assert.SkipWhen(DgxEndpoint is null, $"{DgxEndpointVariable} non impostata: DGX Spark non disponibile.");
+        var reason = DgxUnavailableReason();
+        Assert.SkipWhen(reason is not null, reason ?? string.Empty);
         return new Uri(DgxEndpoint!.TrimEnd('/') + "/");
     }
 

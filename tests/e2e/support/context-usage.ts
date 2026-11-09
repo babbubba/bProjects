@@ -86,7 +86,7 @@ export function usageOf(o: UsageOptions = {}): Json {
     limits: {
       safetyMarginTokens: margin,
       phases: Object.fromEntries(
-        ['chat', 'analysis', 'document', 'compaction'].map((p) => [
+        ['chat', 'analysis', 'document', 'compaction', 'extraction'].map((p) => [
           p,
           { maxOutputTokens: reserved, enableThinking: false, inputBudgetTokens: ctx - reserved - margin },
         ]),

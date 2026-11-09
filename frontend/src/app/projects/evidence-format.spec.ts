@@ -1,12 +1,20 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { EvidenceView } from './evidence-api.service';
 import {
+  DocumentEvidenceSource,
+  EvidenceEnvelope,
+  EvidenceView,
+  SourceDocumentView,
+} from './evidence-api.service';
+import {
+  evidenceRows,
   excerpt,
   highlightSegments,
   isPromotionConflict,
   isUncertainOutcome,
   jobErrorText,
+  locatorText,
   problemOf,
+  sourceGroups,
   stateBadge,
   structureFields,
 } from './evidence-format';
@@ -152,5 +160,148 @@ describe('HTTP problem helpers', () => {
     expect(isUncertainOutcome(new Error('boom'))).toBe(true);
     expect(isUncertainOutcome(http(409, { code: 'extraction_active' }))).toBe(false);
     expect(isUncertainOutcome(http(404))).toBe(false);
+  });
+});
+
+const part = (over: Partial<DocumentEvidenceSource>): DocumentEvidenceSource => ({
+  sourceId: 's-1',
+  kind: 'Document',
+  role: 'Primary',
+  citationGroupId: 'g-1',
+  part: 0,
+  documentId: 'd-1',
+  documentVersionId: 'dv-1',
+  preparationId: 'p-1',
+  artifactId: 'a-1',
+  blockId: 'b-1',
+  start: 0,
+  end: 3,
+  quote: 'abc',
+  ...over,
+});
+
+const resolved = (over: Partial<SourceDocumentView> = {}): SourceDocumentView => ({
+  sourceId: 's-1',
+  documentId: 'd-1',
+  documentVersionId: 'dv-1',
+  documentVersion: 2,
+  originalName: 'spec.pdf',
+  preparationId: 'p-1',
+  generation: 1,
+  artifactId: 'a-1',
+  blockId: 'b-1',
+  blockRef: 'p1',
+  locator: { page: null, headingPath: [], bbox: null, sourceLines: null, doclingRef: null },
+  passageUrl: '',
+  downloadUrl: '',
+  ...over,
+});
+
+describe('sourceGroups', () => {
+  it('groups parts by citation, orders them and never merges their quotes', () => {
+    const groups = sourceGroups(
+      [
+        part({ sourceId: 's-2', part: 1, blockId: 'b-2', quote: 'due' }),
+        part({ sourceId: 's-1', part: 0, quote: 'uno' }),
+        part({ sourceId: 's-3', citationGroupId: 'g-2', quote: 'altro' }),
+      ],
+      [resolved({ sourceId: 's-1' })],
+    );
+    expect(groups.map((g) => g.parts.map((p) => p.source.quote))).toEqual([
+      ['uno', 'due'],
+      ['altro'],
+    ]);
+    expect(groups[0].parts[0].resolved).not.toBeNull();
+    expect(groups[0].parts[1].resolved).toBeNull();
+  });
+});
+
+describe('locatorText', () => {
+  it('reports only what the server resolved, never a presumed page', () => {
+    expect(locatorText(null)).toBe('Posizione non risolvibile');
+    expect(locatorText(resolved())).toBe('spec.pdf v2');
+    expect(
+      locatorText(
+        resolved({
+          locator: {
+            page: 4,
+            headingPath: ['A', 'B'],
+            bbox: null,
+            sourceLines: { start: 3, end: 5 },
+            doclingRef: null,
+          },
+        }),
+      ),
+    ).toBe('spec.pdf v2 · pagina 4 · A › B · righe 3-5');
+  });
+});
+
+describe('evidenceRows', () => {
+  it('discriminates by evidenceViewVersion, gives documents no message and counts unknown versions', () => {
+    const message = {
+      id: 'e-1',
+      messageSequence: 7,
+      qualifiers: [],
+      kind: 'Goal',
+      polarity: 'Affirmed',
+      certainty: 'Declared',
+      statement: 's',
+      subject: 'x',
+      action: null,
+      object: null,
+      scope: null,
+      purpose: null,
+      instrument: null,
+      channel: null,
+      recipient: null,
+    };
+    const doc = {
+      id: 'e-2',
+      kind: 'Goal',
+      polarity: 'Affirmed',
+      certainty: 'Inferred',
+      statement: 'd',
+      origin: {
+        kind: 'Document',
+        documentId: 'd-1',
+        documentVersionId: 'dv-1',
+        preparationId: 'p-1',
+      },
+      content: {
+        schemaVersion: '1.1.0',
+        kindRationale: null,
+        qualifiers: [{ type: 'Quantity', text: '3' }],
+        structure: {
+          subject: null,
+          action: 'fa',
+          object: null,
+          scope: null,
+          purpose: null,
+          instrument: null,
+          channel: null,
+          recipient: null,
+        },
+        sources: [part({})],
+      },
+    };
+    const { rows, unsupported } = evidenceRows([
+      { evidenceViewVersion: '1.0.0', evidence: message },
+      { evidenceViewVersion: '1.1.0', evidence: doc },
+      { evidenceViewVersion: '9.9.9', evidence: {} },
+      { evidenceViewVersion: '1.1.0', evidence: message },
+    ] as unknown as EvidenceEnvelope[]);
+    expect(unsupported).toBe(2);
+    expect(rows.map((r) => [r.origin, r.messageSequence])).toEqual([
+      ['Message', 7],
+      ['Document', null],
+    ]);
+    expect(rows[1].fields).toEqual([{ label: 'Azione', value: 'fa' }]);
+    expect(rows[1].groups).toHaveLength(1);
+    expect(rows[1].document).toEqual({
+      documentId: 'd-1',
+      documentVersionId: 'dv-1',
+      preparationId: 'p-1',
+    });
+    expect(rows[0].document).toBeNull();
   });
 });

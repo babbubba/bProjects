@@ -1,0 +1,1282 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  DocumentDetailView,
+  DocumentListItem,
+  DocumentVersionView,
+  SourceSelectionView,
+} from './documents-api.service';
+import { DOCUMENTS_POLL, ProjectDocumentsComponent } from './project-documents.component';
+
+const P = 'p-1';
+const BASE = `/api/projects/${P}`;
+
+function item(over: Partial<DocumentListItem> = {}): DocumentListItem {
+  return {
+    documentId: 'd-1',
+    displayName: 'Capitolato',
+    createdAt: '2030-01-01T10:00:00Z',
+    versionCount: 1,
+    latestVersion: {
+      id: 'v-1',
+      version: 1,
+      processingStatus: 'Queued',
+      uploadedAt: '2030-01-01T10:00:00Z',
+    },
+    applicableVersionId: null,
+    included: true,
+    selectionMode: 'LatestReady',
+    availability: 'Unavailable',
+    reason: 'preparation_queued',
+    ...over,
+  };
+}
+
+function version(over: Partial<DocumentVersionView> = {}): DocumentVersionView {
+  return {
+    id: 'v-1',
+    documentId: 'd-1',
+    projectId: P,
+    version: 1,
+    originalName: 'capitolato.md',
+    mediaType: 'text/markdown',
+    byteLength: 2048,
+    sha256: 'x',
+    uploadedBy: 'u',
+    uploadedAt: '2030-01-01T10:00:00Z',
+    processingStatus: 'Queued',
+    applicationStatus: 'NotApplicable',
+    currentPreparationId: null,
+    currentEvidenceVersionId: null,
+    bundleRevision: 0,
+    candidatePreparations: [],
+    latestJobId: null,
+    included: true,
+    selectionMode: 'LatestReady',
+    isApplicable: false,
+    previousReadyVersionId: null,
+    issuesSummary: null,
+    allowedActions: ['download'],
+    ...over,
+  };
+}
+
+function selection(revision = 1, over: Partial<SourceSelectionView> = {}): SourceSelectionView {
+  return {
+    revision,
+    items: [
+      {
+        documentId: 'd-1',
+        included: true,
+        mode: 'LatestReady',
+        versionId: null,
+        resolvedVersionId: null,
+        preparationId: null,
+        availability: 'Unavailable',
+      },
+    ],
+    blockingSources: [],
+    ...over,
+  };
+}
+
+function detail(versions: DocumentVersionView[]): DocumentDetailView {
+  return {
+    documentId: 'd-1',
+    projectId: P,
+    displayName: 'Capitolato',
+    createdBy: 'u',
+    createdAt: '2030-01-01T10:00:00Z',
+    versions,
+    sourcePreference: { included: true, mode: 'LatestReady', versionId: null },
+    availability: 'Unavailable',
+    applicableVersionId: null,
+  };
+}
+
+describe('ProjectDocumentsComponent', () => {
+  let fixture: ComponentFixture<ProjectDocumentsComponent>;
+  let http: HttpTestingController;
+  let el: HTMLElement;
+  const pollCfg = { intervalMs: 600000, maxPolls: 60 };
+
+  const settle = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fixture.whenStable();
+    fixture.detectChanges();
+  };
+
+  const q = (testId: string) => el.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+
+  const flushLoad = async (
+    items: DocumentListItem[] = [item()],
+    sel: SourceSelectionView = selection(),
+    etag = `"${sel.revision}"`,
+  ) => {
+    http
+      .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+      .flush({ items, nextCursor: null });
+    http.expectOne(`${BASE}/source-selection`).flush(sel, { headers: { ETag: etag } });
+    await settle();
+  };
+
+  const chooseFile = (input: HTMLInputElement, file: File) => {
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    input.dispatchEvent(new Event('change'));
+  };
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({
+      imports: [ProjectDocumentsComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: DOCUMENTS_POLL, useValue: pollCfg },
+      ],
+    });
+    pollCfg.intervalMs = 600000;
+    pollCfg.maxPolls = 60;
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(ProjectDocumentsComponent);
+    fixture.componentRef.setInput('projectId', P);
+    el = fixture.nativeElement;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => http.verify());
+
+  it('shows the real state of each document in Italian, with no AI interface', async () => {
+    await flushLoad();
+    expect(el.querySelectorAll('[data-testid="docs-item"]')).toHaveLength(1);
+    expect(q('docs-status')!.textContent).toContain('In coda');
+    expect(q('docs-queued')!.textContent).toContain("l'originale è già archiviato");
+    expect(el.textContent).toContain('Non disponibile come fonte');
+    expect(el.textContent).not.toMatch(/assistente|chatbot|generato dall/i);
+  });
+
+  it('shows an empty state and a readable load error', async () => {
+    await flushLoad([], selection(0, { items: [] }));
+    expect(q('docs-empty')).not.toBeNull();
+
+    void (fixture.componentInstance as unknown as { refresh(): Promise<void> }).refresh();
+    http
+      .expectOne((r) => r.url === `${BASE}/documents`)
+      .flush({ code: 'x' }, { status: 503, statusText: 'Unavailable' });
+    http
+      .expectOne(`${BASE}/source-selection`)
+      .flush({}, { status: 503, statusText: 'Unavailable' });
+    await settle();
+    expect(q('docs-load-error')!.textContent).toContain('non disponibile');
+  });
+
+  it('uploads with real progress, a new idempotency key and refreshes the list', async () => {
+    await flushLoad([], selection(0, { items: [] }));
+    chooseFile(q('docs-file') as HTMLInputElement, new File(['abc'], 'a.md'));
+    q('docs-upload')!.click();
+    await settle();
+
+    const req = http.expectOne(`${BASE}/documents`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(q('docs-progress')!.textContent).toContain('Invio del file in corso');
+    req.event({ type: 1, loaded: 50, total: 100 });
+    await settle();
+    expect(q('docs-progress')!.textContent).toContain('50% inviato');
+    expect(q('docs-upload')!.hasAttribute('disabled')).toBe(true);
+
+    req.flush(version({ originalName: 'a.md' }), { status: 201, statusText: 'Created' });
+    await settle();
+    await flushLoad([item()], selection());
+    expect(q('docs-notice')!.textContent).toContain('caricato come versione 1');
+    expect(q('docs-notice')!.textContent).toContain('in coda');
+    expect(el.querySelectorAll('[data-testid="docs-item"]')).toHaveLength(1);
+  });
+
+  it('keeps the same idempotency key when retrying the same file after an uncertain outcome', async () => {
+    await flushLoad([], selection(0, { items: [] }));
+    const file = new File(['abc'], 'a.md', { lastModified: 1 });
+    chooseFile(q('docs-file') as HTMLInputElement, file);
+    q('docs-upload')!.click();
+    await settle();
+    const first = http.expectOne(`${BASE}/documents`);
+    const key = first.request.headers.get('Idempotency-Key');
+    first.error(new ProgressEvent('error'), { status: 0 });
+    await settle();
+    expect(q('docs-upload-error')!.textContent).toContain('non raggiungibile');
+
+    q('docs-upload')!.click();
+    await settle();
+    const retry = http.expectOne(`${BASE}/documents`);
+    expect(retry.request.headers.get('Idempotency-Key')).toBe(key);
+    retry.flush(version(), { status: 200, statusText: 'OK' });
+    await settle();
+    await flushLoad([item()]);
+    expect(q('docs-notice')!.textContent).toContain('già stato caricato');
+  });
+
+  it.each([
+    [413, { code: 'file_too_large' }, 'dimensione massima'],
+    [415, null, 'Formato non supportato'],
+    [422, null, 'non è valido'],
+    [507, { code: 'quota_exceeded' }, 'quota'],
+    [408, { code: 'upload_timeout' }, 'tempo consentito'],
+  ])(
+    'shows a readable error for upload status %i and drops the key when not retryable',
+    async (status, body, text) => {
+      await flushLoad([], selection(0, { items: [] }));
+      chooseFile(
+        q('docs-file') as HTMLInputElement,
+        new File(['abc'], 'a.md', { lastModified: 1 }),
+      );
+      q('docs-upload')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents`).flush(body, { status, statusText: 'x' });
+      await settle();
+      const alert = q('docs-upload-error')!;
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.textContent).toContain(text);
+      expect(q('docs-upload')!.hasAttribute('disabled')).toBe(false);
+    },
+  );
+
+  it('requires a file before uploading', async () => {
+    await flushLoad([], selection(0, { items: [] }));
+    q('docs-upload')!.click();
+    await settle();
+    expect(q('docs-upload-error')!.textContent).toContain('Scegli un file');
+  });
+
+  it('uploads a new version for the chosen document', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version()]));
+    await settle();
+
+    chooseFile(q('docs-newversion') as HTMLInputElement, new File(['v2'], 'capitolato-v2.md'));
+    await settle();
+    const req = http.expectOne(`${BASE}/documents/d-1/versions`);
+    expect(req.request.headers.get('Idempotency-Key')).toBeTruthy();
+    req.flush(version({ version: 2, originalName: 'capitolato-v2.md' }), {
+      status: 201,
+      statusText: 'Created',
+    });
+    await settle();
+    await flushLoad([item({ versionCount: 2 })]);
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version(), version({ id: 'v-2', version: 2 })]));
+    await settle();
+    expect(q('docs-notice')!.textContent).toContain('versione 2');
+    expect(el.querySelectorAll('[data-testid="docs-version"]')).toHaveLength(2);
+  });
+
+  it('excludes a document sending the complete selection with If-Match', async () => {
+    await flushLoad();
+    (q('docs-include') as HTMLInputElement).click();
+    await settle();
+
+    const put = http.expectOne(`${BASE}/source-selection`);
+    expect(put.request.method).toBe('PUT');
+    expect(put.request.headers.get('If-Match')).toBe('"1"');
+    expect(put.request.body).toEqual({
+      items: [{ documentId: 'd-1', included: false, mode: 'LatestReady', versionId: null }],
+    });
+    put.flush(
+      selection(2, {
+        items: [{ ...selection().items[0], included: false, availability: 'Excluded' }],
+      }),
+      { headers: { ETag: '"2"' } },
+    );
+    await settle();
+    http
+      .expectOne((r) => r.url === `${BASE}/documents`)
+      .flush({
+        items: [item({ included: false, availability: 'Excluded', reason: 'excluded_by_pm' })],
+        nextCursor: null,
+      });
+    await settle();
+    expect(q('docs-notice')!.textContent).toContain('Preferenze di fonte salvate');
+    expect(el.textContent).toContain('Esclusa dalle fonti');
+    expect((q('docs-include') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('reloads and explains a 409 selection conflict', async () => {
+    await flushLoad();
+    (q('docs-include') as HTMLInputElement).click();
+    await settle();
+    http
+      .expectOne(`${BASE}/source-selection`)
+      .flush(
+        { code: 'source_selection_conflict', currentRevision: 5 },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await settle();
+    await flushLoad([item({ included: false })], selection(5), '"5"');
+
+    const alert = q('docs-action-error')!;
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toContain('sono cambiate');
+    expect(component().selectionRevision()).toBe(5);
+  });
+
+  it('does not call Ready a version whose aggregate bundle is not committed, and shows candidates as distinct', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(
+      detail([
+        version({ id: 'v-1', version: 1, processingStatus: 'Ready' }),
+        version({
+          id: 'v-2',
+          version: 2,
+          processingStatus: 'Ready',
+          currentPreparationId: 'prep-2',
+          currentEvidenceVersionId: 'ev-2',
+          candidatePreparations: [
+            {
+              preparationId: 'prep-3',
+              generation: 3,
+              processingStatus: 'Ready',
+              evidenceVersionId: 'ev-3',
+              createdAt: '2030-01-02T10:00:00Z',
+              canPromote: true,
+            },
+          ],
+        }),
+      ]),
+    );
+    await settle();
+    const statuses = [...el.querySelectorAll('[data-testid="docs-version-status"]')].map((s) =>
+      s.textContent!.trim(),
+    );
+    expect(statuses).toEqual(['Estrazione non consolidata', 'Pronto']);
+    const candidate = el.querySelector('[data-testid="docs-candidate"]')!;
+    expect(candidate.textContent).toContain('Candidata (generazione 3)');
+    expect(candidate.textContent).toContain('non corrente');
+    // Solo la versione senza bundle consolidato dichiara di non essere pronta per l'analisi.
+    expect(el.querySelectorAll('[data-testid="docs-pin-note"]')).toHaveLength(1);
+  });
+
+  it('pins a ready version and offers the pin on a not-ready one with its consequence stated', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(
+      detail([
+        version({
+          id: 'v-1',
+          version: 1,
+          processingStatus: 'Ready',
+          currentPreparationId: 'prep-1',
+          currentEvidenceVersionId: 'ev-1',
+        }),
+        version({ id: 'v-2', version: 2, processingStatus: 'Queued' }),
+      ]),
+    );
+    await settle();
+
+    const pins = [...el.querySelectorAll<HTMLButtonElement>('[data-testid="docs-pin"]')];
+    expect(pins[0].disabled).toBe(false);
+    expect(pins[1].disabled).toBe(false);
+    const notes = [...el.querySelectorAll<HTMLElement>('[data-testid="docs-pin-note"]')];
+    expect(notes.length).toBe(1); // solo la versione non pronta ha l'avviso, la pronta no
+    expect(notes[0].textContent).toContain('Analizza');
+
+    pins[0].click();
+    await settle();
+    const put = http.expectOne(`${BASE}/source-selection`);
+    expect(put.request.body).toEqual({
+      items: [{ documentId: 'd-1', included: true, mode: 'Pinned', versionId: 'v-1' }],
+    });
+    put.flush(
+      selection(2, {
+        items: [
+          { ...selection().items[0], mode: 'Pinned', versionId: 'v-1', availability: 'Ready' },
+        ],
+      }),
+      { headers: { ETag: '"2"' } },
+    );
+    await settle();
+    http
+      .expectOne((r) => r.url === `${BASE}/documents`)
+      .flush({
+        items: [item({ selectionMode: 'Pinned', availability: 'Ready', reason: null })],
+        nextCursor: null,
+      });
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(
+        detail([
+          version({ id: 'v-1', processingStatus: 'Ready' }),
+          version({ id: 'v-2', version: 2 }),
+        ]),
+      );
+    await settle();
+    expect(q('docs-pinned')).not.toBeNull();
+    expect(el.textContent).toContain('Versione fissata');
+  });
+
+  it('lets the PM pin a not-ready version and then states it stays unavailable for Analizza', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ id: 'v-1', version: 1, processingStatus: 'Queued' })]));
+    await settle();
+    expect(q('docs-pinned-unready')).toBeNull();
+
+    q('docs-pin')!.click();
+    await settle();
+    const put = http.expectOne(`${BASE}/source-selection`);
+    expect(put.request.body).toEqual({
+      items: [{ documentId: 'd-1', included: true, mode: 'Pinned', versionId: 'v-1' }],
+    });
+    put.flush(
+      selection(2, {
+        items: [
+          { ...selection().items[0], mode: 'Pinned', versionId: 'v-1', resolvedVersionId: 'v-1' },
+        ],
+        blockingSources: [
+          {
+            documentId: 'd-1',
+            displayName: 'Capitolato',
+            versionId: 'v-1',
+            version: 1,
+            status: 'Queued',
+            allowedActions: ['exclude'],
+          },
+        ],
+      }),
+      { headers: { ETag: '"2"' } },
+    );
+    await settle();
+    http
+      .expectOne((r) => r.url === `${BASE}/documents`)
+      .flush({
+        items: [item({ selectionMode: 'Pinned', availability: 'Unavailable' })],
+        nextCursor: null,
+      });
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ id: 'v-1', version: 1, processingStatus: 'Queued' })]));
+    await settle();
+
+    expect(q('docs-pinned')).not.toBeNull();
+    const consequence = q('docs-pinned-unready')!;
+    expect(consequence.getAttribute('role')).toBe('status');
+    expect(consequence.textContent).toContain('non è pronta');
+    expect(consequence.textContent).toContain('Analizza');
+    expect(consequence.textContent).toContain('escludi');
+  });
+
+  it('downloads the original keeping the server file name', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ version: 1 })]));
+    await settle();
+
+    const created = vi.fn(() => 'blob:x');
+    const revoked = vi.fn();
+    URL.createObjectURL = created;
+    URL.revokeObjectURL = revoked;
+    let downloadName = '';
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloadName = this.download;
+    });
+
+    q('docs-download')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1/versions/1/download`).flush(new Blob(['abc']), {
+      headers: { 'Content-Disposition': 'attachment; filename="originale.md"' },
+    });
+    await settle();
+    expect(created).toHaveBeenCalled();
+    expect(downloadName).toBe('originale.md');
+    click.mockRestore();
+  });
+
+  it('reports a failed download without breaking the archive', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version()]));
+    await settle();
+    q('docs-download')!.click();
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1/versions/1/download`)
+      .flush(new Blob([]), { status: 503, statusText: 'Unavailable' });
+    await settle();
+    expect(q('docs-action-error')!.textContent).toContain('Riprova');
+  });
+
+  it('shows the preparation failure of a version and the blocking sources', async () => {
+    await flushLoad(
+      [
+        item({
+          latestVersion: {
+            id: 'v-1',
+            version: 1,
+            processingStatus: 'Failed',
+            uploadedAt: '2030-01-01T10:00:00Z',
+          },
+        }),
+      ],
+      selection(1, {
+        blockingSources: [
+          {
+            documentId: 'd-1',
+            displayName: 'Capitolato',
+            versionId: 'v-1',
+            version: 1,
+            status: 'Failed',
+            allowedActions: [],
+          },
+        ],
+      }),
+    );
+    expect(q('docs-status')!.textContent).toContain('Preparazione non riuscita');
+    expect(q('docs-blocking')!.textContent).toContain('1 documento');
+
+    q('docs-versions')!.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(
+      detail([
+        version({
+          processingStatus: 'Failed',
+          issuesSummary: {
+            code: 'parse_failed',
+            message: 'La preparazione del documento non è riuscita',
+          },
+        }),
+      ]),
+    );
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1/versions/1/preparations/latest`)
+      .flush({ allowedActions: ['download'], parseJobId: 'job-1' });
+    await settle();
+    expect(q('docs-issue')!.textContent).toContain('non è riuscita');
+    expect(q('docs-retry')).toBeNull();
+  });
+
+  it('exposes accessible controls: labelled inputs, live region, expandable versions', async () => {
+    await flushLoad();
+    expect(el.querySelector('label[for="docs-file"]')).not.toBeNull();
+    expect(el.querySelector('label[for="docs-name"]')).not.toBeNull();
+    expect(q('docs-live')!.getAttribute('aria-live')).toBe('polite');
+    const toggle = q('docs-versions')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    await settle();
+    http.expectOne(`${BASE}/documents/d-1`).flush(detail([version()]));
+    await settle();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(el.querySelector(`#${toggle.getAttribute('aria-controls')}`)).not.toBeNull();
+  });
+
+  it('opens the prepared content of a not-ready version without presenting it as ready (T030)', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ processingStatus: 'Extracting' })]));
+    await settle();
+
+    q('docs-read')!.click();
+    await settle();
+    const prefix = `${BASE}/documents/d-1/versions/1/preparations/latest`;
+    http.expectOne(prefix).flush({
+      id: 'g-1',
+      documentVersionId: 'v-1',
+      documentId: 'd-1',
+      version: 1,
+      generation: 1,
+      processingStatus: 'Extracting',
+      isReady: false,
+      contentState: 'Parsed',
+      blockCount: 1,
+      retryOfId: null,
+      requestedAt: '2030-01-01T10:00:00Z',
+      issuesSummary: null,
+      issues: [],
+      allowedActions: ['download'],
+    });
+    await settle();
+    http
+      .expectOne((r) => r.url === `${prefix}/blocks`)
+      .flush({
+        preparationId: 'g-1',
+        processingStatus: 'Extracting',
+        isReady: false,
+        items: [
+          {
+            id: 'b-0',
+            ref: 'r0',
+            ordinal: 0,
+            parentId: null,
+            type: 'Paragraph',
+            text: 'Testo letto',
+            headingPath: [],
+            page: 1,
+            bbox: null,
+            lines: null,
+            tableCells: null,
+          },
+        ],
+        nextCursor: null,
+      });
+    await settle();
+
+    expect(q('docs-read')!.getAttribute('aria-expanded')).toBe('true');
+    expect(q('passage-block')!.textContent).toContain('Testo letto');
+    expect(q('passage-status')!.textContent).not.toContain('Pronto');
+    expect(q('passage-notready')).not.toBeNull();
+  });
+
+  it('offers no content reader for a version that was never prepared', async () => {
+    await flushLoad();
+    q('docs-versions')!.click();
+    await settle();
+    http
+      .expectOne(`${BASE}/documents/d-1`)
+      .flush(detail([version({ processingStatus: 'NotPrepared' })]));
+    await settle();
+    expect(q('docs-read')).toBeNull();
+  });
+
+  describe('retry parsing (T117)', () => {
+    const PREP = `${BASE}/documents/d-1/versions/1/preparations/latest`;
+    const RETRY_URL = `${BASE}/document-jobs/job-1/retry`;
+    const failedItem = () =>
+      item({
+        latestVersion: {
+          id: 'v-1',
+          version: 1,
+          processingStatus: 'Failed',
+          uploadedAt: '2030-01-01T10:00:00Z',
+        },
+      });
+    const failedVersion = () => version({ processingStatus: 'Failed' });
+    const prepView = (actions: string[], over: Record<string, unknown> = {}) => ({
+      id: 'g-1',
+      documentVersionId: 'v-1',
+      documentId: 'd-1',
+      version: 1,
+      generation: 1,
+      processingStatus: 'Failed',
+      isReady: false,
+      contentState: 'NotParsed',
+      blockCount: null,
+      retryOfId: null,
+      requestedAt: '2030-01-01T10:00:00Z',
+      issuesSummary: null,
+      issues: [],
+      allowedActions: actions,
+      parseJobId: 'job-1',
+      ...over,
+    });
+    const retryReply = {
+      jobId: 'job-2',
+      preparationId: 'g-2',
+      generation: 2,
+      retryOfJobId: 'job-1',
+      retryOfPreparationId: 'g-1',
+      status: 'Queued',
+      requestedAt: '2030-01-01T11:00:00Z',
+      deadlineAt: '2030-01-01T12:00:00Z',
+    };
+
+    const openFailed = async (actions: string[], over: Record<string, unknown> = {}) => {
+      await flushLoad([failedItem()]);
+      q('docs-versions')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([failedVersion()]));
+      await settle();
+      http.expectOne(PREP).flush(prepView(actions, over));
+      await settle();
+    };
+    const retryRequests = () => http.match((r) => r.method === 'POST' && r.url === RETRY_URL);
+    const drainGets = () => http.match((r) => r.method === 'GET');
+    /** Dopo un conflitto la vista si rilegge con soli GET: lista, dettaglio, preparazione. */
+    const flushReread = async (actions: string[]) => {
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [failedItem()], nextCursor: null });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([failedVersion()]));
+      await settle();
+      http.expectOne(PREP).flush(prepView(actions));
+      await settle();
+    };
+
+    it('offre il pulsante solo se allowedActions contiene retry', async () => {
+      await openFailed(['download', 'retry']);
+      expect(q('docs-retry')).not.toBeNull();
+    });
+
+    it('non offre il pulsante senza retry in allowedActions', async () => {
+      await openFailed(['download']);
+      expect(q('docs-retry')).toBeNull();
+    });
+
+    it('non offre il pulsante se manca il job di parsing', async () => {
+      await openFailed(['download', 'retry'], { parseJobId: null });
+      expect(q('docs-retry')).toBeNull();
+    });
+
+    it('non legge la preparazione né offre retry per una versione Ready', async () => {
+      await flushLoad();
+      q('docs-versions')!.click();
+      await settle();
+      http
+        .expectOne(`${BASE}/documents/d-1`)
+        .flush(detail([version({ processingStatus: 'Ready' })]));
+      await settle();
+      http.expectNone(PREP);
+      expect(q('docs-retry')).toBeNull();
+    });
+
+    it('invia il retry con Idempotency-Key e mostra il nuovo job collegato con lo stato persistito', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      const [req] = retryRequests();
+      expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+      req.flush(retryReply, { status: 202, statusText: 'Accepted' });
+      await settle();
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [item()], nextCursor: null });
+      await settle();
+      http
+        .expectOne(`${BASE}/documents/d-1`)
+        .flush(detail([version({ processingStatus: 'Queued' })]));
+      await settle();
+      expect(q('docs-notice')!.textContent).toContain('generazione 2');
+      expect(q('docs-retry-link')!.textContent).toContain('collegato al precedente');
+      expect(q('docs-retry')).toBeNull();
+      expect(el.textContent).toContain('In coda');
+    });
+
+    it('il doppio click invia una sola richiesta', async () => {
+      await openFailed(['download', 'retry']);
+      const button = q('docs-retry')!;
+      button.click();
+      button.click();
+      await settle();
+      const reqs = retryRequests();
+      expect(reqs.length).toBe(1);
+      reqs[0].flush(retryReply, { status: 202, statusText: 'Accepted' });
+      await settle();
+      drainGets();
+    });
+
+    it('con la rete persa conserva la stessa Idempotency-Key nel replay', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      const [first] = retryRequests();
+      const key = first.request.headers.get('Idempotency-Key');
+      first.error(new ProgressEvent('error'), { status: 0 });
+      await settle();
+      expect(q('docs-retry-error')!.textContent).toContain('incerto');
+      expect(q('docs-retry')).not.toBeNull();
+
+      q('docs-retry')!.click();
+      await settle();
+      const [second] = retryRequests();
+      expect(second.request.headers.get('Idempotency-Key')).toBe(key);
+      second.flush(retryReply, { status: 202, statusText: 'Accepted' });
+      await settle();
+      drainGets();
+    });
+
+    it('409 job_active è un errore accessibile e la vista viene riletta con soli GET', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      retryRequests()[0].flush({ code: 'job_active' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await flushReread(['download']);
+      expect(q('docs-retry-error')!.textContent).toContain('in corso');
+      expect(q('docs-retry-error')!.getAttribute('role')).toBe('alert');
+      expect(q('docs-retry')).toBeNull();
+      expect(http.match((r) => r.method !== 'GET').length).toBe(0);
+    });
+
+    it('409 job_superseded spiega l’esito senza ritentare', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-retry')!.click();
+      await settle();
+      retryRequests()[0].flush({ code: 'job_superseded' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await flushReread(['download']);
+      expect(q('docs-retry-error')!.textContent).toContain('più recente');
+      expect(q('docs-retry')).toBeNull();
+      expect(retryRequests().length).toBe(0);
+    });
+
+    it('Aggiorna (refresh) non invia mai un retry', async () => {
+      await openFailed(['download', 'retry']);
+      q('docs-refresh')!.click();
+      await settle();
+      expect(http.match((r) => r.method === 'POST').length).toBe(0);
+      http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+      http.match(() => true);
+    });
+  });
+
+  describe('aggiornamento automatico degli stati', () => {
+    const mountWithPoll = (config: { intervalMs: number; maxPolls: number }) => {
+      pollCfg.intervalMs = config.intervalMs;
+      pollCfg.maxPolls = config.maxPolls;
+    };
+    const wait = () => new Promise((r) => setTimeout(r, 40));
+    const pollGet = () =>
+      http.expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+
+    it('rilegge con GET finché in lavorazione e si ferma a Ready', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 5 });
+      await flushLoad([item()]);
+      await wait();
+      pollGet().flush({
+        items: [
+          item({
+            latestVersion: {
+              id: 'v-1',
+              version: 1,
+              processingStatus: 'Ready',
+              uploadedAt: '2030-01-01T10:00:00Z',
+            },
+            availability: 'Ready',
+            reason: null,
+          }),
+        ],
+        nextCursor: null,
+      });
+      http.expectOne(`${BASE}/source-selection`).flush(selection(2), { headers: { ETag: '"2"' } });
+      await settle();
+      expect(q('docs-status')!.textContent).toContain('Pronto');
+      await wait();
+      http.expectNone((r) => r.url === `${BASE}/documents`);
+    });
+
+    it('è limitato: dopo maxPolls si ferma, lo dichiara e non invia altre richieste', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 2 });
+      await flushLoad([item()]);
+      for (let i = 0; i < 2; i++) {
+        await wait();
+        pollGet().flush({ items: [item()], nextCursor: null });
+        http.expectOne(`${BASE}/source-selection`).flush(selection(), { headers: { ETag: '"1"' } });
+        await settle();
+      }
+      await wait();
+      http.expectNone((r) => r.url === `${BASE}/documents`);
+      expect(q('docs-poll-stopped')).not.toBeNull();
+    });
+
+    it('continua a rileggere finché una versione NON ultima del dettaglio aperto è in lavorazione (rielaborazione), poi il dettaglio mostra la candidata', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 5 });
+      const ready = item({
+        latestVersion: { id: 'v-2', version: 2, processingStatus: 'Ready', uploadedAt: '2030-01-01T10:00:00Z' },
+        availability: 'Ready',
+        reason: null,
+        applicableVersionId: 'v-2',
+      });
+      await flushLoad([ready]);
+      q('docs-versions')!.click();
+      await settle();
+      // v1 e in rielaborazione (Queued) mentre l'elenco mostra solo l'ultima versione, gia Ready: l'elenco da solo non basterebbe a riavviare il polling.
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ id: 'v-1', version: 1, processingStatus: 'Queued' }), version({ id: 'v-2', version: 2, processingStatus: 'Ready' })]));
+      await settle();
+      await wait();
+      pollGet().flush({ items: [ready], nextCursor: null });
+      http.expectOne(`${BASE}/source-selection`).flush(selection(), { headers: { ETag: '"1"' } });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(
+        detail([
+          version({ id: 'v-1', version: 1, processingStatus: 'Ready', candidatePreparations: [{ preparationId: 'prep-2', generation: 2, processingStatus: 'Ready', evidenceVersionId: 'ev-2', createdAt: '2030-01-02T10:00:00Z', canPromote: true }] }),
+          version({ id: 'v-2', version: 2, processingStatus: 'Ready' }),
+        ]),
+      );
+      await settle();
+      expect(q('docs-candidate')).not.toBeNull();
+      await wait();
+      http.expectNone((r) => r.url === `${BASE}/documents`);   // tutto pronto: il polling si ferma
+      http.match(() => true);
+    });
+
+    it('non invia mai richieste diverse da GET', async () => {
+      mountWithPoll({ intervalMs: 5, maxPolls: 3 });
+      await flushLoad([item()]);
+      await wait();
+      expect(http.match((r) => r.method !== 'GET').length).toBe(0);
+      http.match(() => true);
+    });
+  });
+
+  describe('bundle corrente, candidate e promozione (T101)', () => {
+    const candidate = (over: Record<string, unknown> = {}) => ({
+      preparationId: 'prep-3',
+      generation: 3,
+      processingStatus: 'Ready',
+      evidenceVersionId: 'ev-3',
+      createdAt: '2030-01-02T10:00:00Z',
+      canPromote: true,
+      ...over,
+    });
+    const readyItem = () =>
+      item({
+        latestVersion: {
+          id: 'v-2',
+          version: 2,
+          processingStatus: 'Ready',
+          uploadedAt: '2030-01-01T10:00:00Z',
+        },
+        availability: 'Ready',
+        reason: null,
+        applicableVersionId: 'v-2',
+      });
+    const withBundle = (over: Partial<DocumentVersionView> = {}) =>
+      version({
+        id: 'v-2',
+        version: 2,
+        processingStatus: 'Ready',
+        applicationStatus: 'Applicable',
+        isApplicable: true,
+        currentPreparationId: 'prep-2',
+        currentEvidenceVersionId: 'ev-2',
+        bundleRevision: 2,
+        candidatePreparations: [candidate()],
+        ...over,
+      });
+    const open = async (v: DocumentVersionView) => {
+      await flushLoad([readyItem()]);
+      q('docs-versions')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([v]));
+      await settle();
+    };
+    const PROMOTE = `${BASE}/documents/d-1/versions/2/preparations/3/promote`;
+    const REPREP = `${BASE}/documents/d-1/versions/2/preparations`;
+    const posts = (url: string) => http.match((r) => r.method === 'POST' && r.url === url);
+    const flushReread = async (v: DocumentVersionView) => {
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [readyItem()], nextCursor: null });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([v]));
+      await settle();
+    };
+
+    it('comunica diversamente la fonte corrente e la candidata Ready non ancora promossa', async () => {
+      await open(withBundle());
+      expect(q('docs-version-status')!.textContent!.trim()).toBe('Pronto');
+      const c = q('docs-candidate')!;
+      expect(c.textContent).toContain('Candidata (generazione 3)');
+      expect(c.textContent).toContain('non corrente');
+      expect(q('docs-candidate-note')!.textContent).toContain('non è usata come fonte');
+      expect(q('docs-promote')).not.toBeNull();
+    });
+
+    it('non offre la promozione per una candidata fallita o non promovibile', async () => {
+      await open(
+        withBundle({
+          candidatePreparations: [candidate({ processingStatus: 'Failed', canPromote: false })],
+        }),
+      );
+      expect(q('docs-candidate')).not.toBeNull();
+      expect(q('docs-promote')).toBeNull();
+    });
+
+    it('promuove con expectedRevision del bundle e rilegge lo stato reale', async () => {
+      await open(withBundle());
+      q('docs-promote')!.click();
+      await settle();
+      const [req] = posts(PROMOTE);
+      expect(req.request.body).toEqual({ expectedRevision: 2 });
+      req.flush({
+        documentId: 'd-1',
+        documentVersionId: 'v-2',
+        bundleRevision: 3,
+        currentPreparationId: 'prep-3',
+        currentEvidenceVersionId: 'ev-3',
+        generation: 3,
+        promotion: null,
+      });
+      await settle();
+      await flushReread(withBundle({ bundleRevision: 3, candidatePreparations: [] }));
+      expect(q('docs-notice')!.textContent).toContain('generazione 3');
+      expect(q('docs-candidate')).toBeNull();
+    });
+
+    it('il doppio click sulla promozione invia una sola richiesta', async () => {
+      await open(withBundle());
+      const button = q('docs-promote')!;
+      button.click();
+      button.click();
+      await settle();
+      expect(posts(PROMOTE)).toHaveLength(1);
+    });
+
+    it('409 di conflitto: messaggio esplicito, stato riletto e nessuna ripetizione automatica', async () => {
+      await open(withBundle());
+      q('docs-promote')!.click();
+      await settle();
+      posts(PROMOTE)[0].flush(
+        { code: 'promotion_conflict', currentRevision: 5 },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await settle();
+      await flushReread(withBundle({ bundleRevision: 5, candidatePreparations: [] }));
+      const alert = q('docs-promote-error')!;
+      expect(alert.textContent).toContain('Il bundle corrente è cambiato');
+      expect(alert.textContent).toContain('revisione 5');
+      expect(posts(PROMOTE)).toHaveLength(0);
+    });
+
+    it('422 non promovibile: spiega che la candidata non è completa', async () => {
+      await open(withBundle());
+      q('docs-promote')!.click();
+      await settle();
+      posts(PROMOTE)[0].flush(
+        { code: 'preparation_not_promotable' },
+        { status: 422, statusText: 'Unprocessable' },
+      );
+      await settle();
+      await flushReread(withBundle({ candidatePreparations: [] }));
+      expect(q('docs-promote-error')!.textContent).toContain('non è completa');
+    });
+
+    it('la rielaborazione invia POST con Idempotency-Key e mostra la candidata collegata', async () => {
+      await open(withBundle({ candidatePreparations: [] }));
+      q('docs-reprocess')!.click();
+      await settle();
+      const [req] = posts(REPREP);
+      expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+      req.flush(
+        {
+          jobId: 'j-9',
+          preparationId: 'g-9',
+          generation: 4,
+          retryOfJobId: 'j-1',
+          retryOfPreparationId: 'g-1',
+          status: 'Queued',
+          requestedAt: '2030-01-03T10:00:00Z',
+          deadlineAt: '2030-01-03T11:00:00Z',
+        },
+        { status: 202, statusText: 'Accepted' },
+      );
+      await settle();
+      await flushReread(
+        withBundle({
+          candidatePreparations: [
+            candidate({
+              preparationId: 'g-9',
+              generation: 4,
+              processingStatus: 'Queued',
+              canPromote: false,
+            }),
+          ],
+        }),
+      );
+      expect(q('docs-notice')!.textContent).toContain('candidata');
+      expect(q('docs-notice')!.textContent).toContain('versione corrente resta');
+      expect(q('docs-promote')).toBeNull();
+    });
+
+    it('esito incerto della rielaborazione: stessa chiave nel secondo invio, un solo job', async () => {
+      await open(withBundle({ candidatePreparations: [] }));
+      q('docs-reprocess')!.click();
+      await settle();
+      const first = posts(REPREP)[0];
+      const key = first.request.headers.get('Idempotency-Key');
+      first.error(new ProgressEvent('error'));
+      await settle();
+      expect(q('docs-reprocess-error')!.textContent).toContain('incerto');
+      q('docs-reprocess')!.click();
+      await settle();
+      const second = posts(REPREP)[0];
+      expect(second.request.headers.get('Idempotency-Key')).toBe(key);
+      second.flush({ code: 'preparation_active' }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await flushReread(withBundle({ candidatePreparations: [] }));
+      expect(q('docs-reprocess-error')!.textContent).toContain('già una preparazione in corso');
+    });
+
+    it('rielaborazione non offerta mentre la versione è in lavorazione', async () => {
+      await open(withBundle({ processingStatus: 'Parsing', candidatePreparations: [] }));
+      expect(q('docs-reprocess')).toBeNull();
+    });
+
+    it('un refresh o la riapertura rileggono con soli GET, senza comandi automatici', async () => {
+      await open(withBundle());
+      void (fixture.componentInstance as unknown as { refresh(): Promise<void> }).refresh();
+      http
+        .expectOne((r) => r.url === `${BASE}/documents` && r.method === 'GET')
+        .flush({ items: [readyItem()], nextCursor: null });
+      http.expectOne(`${BASE}/source-selection`).flush(selection(), { headers: { ETag: '"1"' } });
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([withBundle()]));
+      await settle();
+      expect(http.match((r) => r.method !== 'GET')).toHaveLength(0);
+    });
+
+    it('una candidata in lavorazione tiene attivo il polling in sola lettura anche con la fonte Ready', async () => {
+      pollCfg.intervalMs = 5;
+      await open(
+        withBundle({
+          candidatePreparations: [candidate({ processingStatus: 'Extracting', canPromote: false })],
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 40));
+      const poll = http.match((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+      expect(poll.length).toBeGreaterThan(0);
+      http.match(() => true);
+    });
+
+    it('una versione pronta ma non in uso come fonte è etichettata come tale', async () => {
+      await open(
+        withBundle({
+          applicationStatus: 'NotApplicable',
+          isApplicable: false,
+          candidatePreparations: [],
+        }),
+      );
+      expect(q('docs-not-in-use')!.textContent).toContain('non è la versione in uso');
+    });
+  });
+
+  // T107 (accessibilità): ogni stato ha un testo proprio (mai solo colore), gli errori hanno ruolo e focus, gli esiti da
+  // polling sono annunciati nella live region senza rubare il focus. La revisione con lettore di schermo reale resta umana.
+  describe('accessibilità (T107)', () => {
+    const statuses = [
+      'NotPrepared',
+      'Queued',
+      'Parsing',
+      'Extracting',
+      'Ready',
+      'Incomplete',
+      'Failed',
+    ] as const;
+
+    it('ogni stato di preparazione ha un testo distinto nel badge: il colore non è l’unico segnale', async () => {
+      const items = statuses.map((s, i) =>
+        item({
+          documentId: `d-${i}`,
+          displayName: `Doc ${i}`,
+          latestVersion: {
+            id: `v-${i}`,
+            version: 1,
+            processingStatus: s,
+            uploadedAt: '2030-01-01T10:00:00Z',
+          },
+        }),
+      );
+      await flushLoad(items, selection(1, { items: [] }));
+      const texts = [...el.querySelectorAll('[data-testid="docs-status"]')].map((n) =>
+        n.textContent!.trim(),
+      );
+      expect(texts).toHaveLength(statuses.length);
+      expect(texts.every((t) => t.length > 0)).toBe(true);
+      expect(new Set(texts).size).toBe(statuses.length);
+    });
+
+    it('un errore di caricamento riceve il focus ed è un alert con testo, senza dipendere dal colore', async () => {
+      await flushLoad([], selection(0, { items: [] }));
+      chooseFile(
+        q('docs-file') as HTMLInputElement,
+        new File(['abc'], 'a.exe', { lastModified: 1 }),
+      );
+      q('docs-upload')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents`).flush(null, { status: 415, statusText: 'x' });
+      await settle();
+      const alert = q('docs-upload-error')!;
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.textContent!.trim().length).toBeGreaterThan(10);
+      await settle(); // focusSoon (setTimeout 0) scatta dopo il primo render
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('l’esito di un caricamento è annunciato dalla live region e ne riceve il focus', async () => {
+      await flushLoad([], selection(0, { items: [] }));
+      chooseFile(q('docs-file') as HTMLInputElement, new File(['abc'], 'a.md', { lastModified: 1 }));
+      q('docs-upload')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents`).flush(version({ originalName: 'a.md' }), {
+        status: 201,
+        statusText: 'Created',
+      });
+      await settle();
+      await flushLoad([item()], selection());
+      const notice = q('docs-notice')!;
+      expect(q('docs-live')!.contains(notice)).toBe(true);
+      expect(q('docs-live')!.getAttribute('role')).toBe('status');
+      await settle();
+      expect(document.activeElement).toBe(notice);
+    });
+
+    it('un documento che termina la preparazione durante il polling è annunciato senza spostare il focus', async () => {
+      pollCfg.intervalMs = 5;
+      await flushLoad([item()], selection());
+      const toggle = q('docs-versions')!;
+      toggle.focus();
+      expect(q('docs-progress-notice')).toBeNull();
+
+      await new Promise((r) => setTimeout(r, 30));
+      const ready = item({
+        latestVersion: {
+          id: 'v-1',
+          version: 1,
+          processingStatus: 'Failed',
+          uploadedAt: '2030-01-01T10:00:00Z',
+        },
+      });
+      const polls = http.match((r) => r.url === `${BASE}/documents` && r.method === 'GET');
+      expect(polls.length).toBeGreaterThan(0);
+      polls[0].flush({ items: [ready], nextCursor: null });
+      http.match((r) => r.url === `${BASE}/source-selection`).forEach((r) => r.flush(selection()));
+      await settle();
+      http.match(() => true);
+
+      const note = q('docs-progress-notice')!;
+      expect(q('docs-live')!.contains(note)).toBe(true);
+      expect(note.textContent).toContain('Capitolato');
+      expect(note.textContent).toContain('preparazione non riuscita');
+      expect(document.activeElement).toBe(toggle);
+    });
+
+    it('i comandi non hanno uno stato che si comunica solo con il colore: ogni pulsante e campo ha un nome', async () => {
+      await flushLoad();
+      q('docs-versions')!.click();
+      await settle();
+      http.expectOne(`${BASE}/documents/d-1`).flush(detail([version({ processingStatus: 'Ready' })]));
+      await settle();
+      const unnamed = [...el.querySelectorAll<HTMLElement>('button, input, progress')].filter((n) => {
+        const label = n.id ? el.querySelector(`label[for="${n.id}"]`) : null;
+        return !(
+          n.textContent?.trim() ||
+          n.getAttribute('aria-label') ||
+          n.getAttribute('aria-labelledby') ||
+          label?.textContent?.trim()
+        );
+      });
+      expect(unnamed.map((n) => n.outerHTML)).toEqual([]);
+    });
+  });
+
+  function component() {
+    return fixture.componentInstance as unknown as { selectionRevision(): number | null };
+  }
+});

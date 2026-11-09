@@ -173,7 +173,7 @@ public sealed class WorkflowCheckpointStoreTests(PostgresDatabaseFixture databas
 
         // run inesistente
         await Assert.ThrowsAsync<CheckpointFencedException>(async () =>
-            await new PostgresCheckpointStore(context, run.Writer with { ProcessingRunId = Guid.NewGuid() }).CreateCheckpointAsync("s1", json));
+            await new PostgresCheckpointStore(context, run.Writer with { OwnerId = Guid.NewGuid() }).CreateCheckpointAsync("s1", json));
         Assert.Equal(["1"], await QueryAsync($"SELECT count(*)::text FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = '{run.Id}'"));
 
         // un nuovo claim (fencing token incrementato) esclude il vecchio owner e ammette il nuovo

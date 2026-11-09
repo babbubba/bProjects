@@ -249,6 +249,101 @@ describe('ProjectEventsService', () => {
   });
 });
 
+describe('ProjectEventsService perdita eventi (T065)', () => {
+  const token = signal<string | null>('tok-1');
+  const refresh = vi.fn(async () => true);
+  const originalFetch = globalThis.fetch;
+  const wait = () => new Promise((r) => setTimeout(r, 20));
+  const handlers = () => ({
+    onConnected: vi.fn(),
+    onEvent: vi.fn(),
+    onDisconnected: vi.fn(),
+    onUnavailable: vi.fn(),
+    onTerminated: vi.fn(),
+  });
+  let service: ProjectEventsService;
+
+  beforeEach(() => {
+    token.set('tok-1');
+    refresh.mockReset();
+    refresh.mockResolvedValue(true);
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: AuthService, useValue: { accessToken: token.asReadonly(), refresh } },
+        { provide: SSE_BACKOFF_MS, useValue: [60_000] },
+      ],
+    });
+    service = TestBed.inject(ProjectEventsService);
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('un primo tentativo che non si connette segnala la perdita una sola volta (il GET riconcilia)', async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('offline');
+    }) as unknown as typeof fetch;
+    const h = handlers();
+    const close = service.open('p', h);
+    await wait();
+
+    expect(h.onConnected).not.toHaveBeenCalled();
+    expect(h.onUnavailable).toHaveBeenCalledTimes(1);
+    expect(h.onDisconnected).not.toHaveBeenCalled(); // contratto invariato: solo dopo una connessione
+    expect(h.onTerminated).not.toHaveBeenCalled();
+    close();
+  });
+
+  it('uscita definitiva (refresh fallito, 404, nessun token): onTerminated e nessuna riconnessione', async () => {
+    refresh.mockResolvedValue(false);
+    globalThis.fetch = vi.fn(
+      async () => new Response(null, { status: 401 }),
+    ) as unknown as typeof fetch;
+    const unauthorized = handlers();
+    service.open('p-401', unauthorized);
+    await wait();
+    expect(unauthorized.onTerminated).toHaveBeenCalledTimes(1);
+
+    globalThis.fetch = vi.fn(
+      async () => new Response(null, { status: 404 }),
+    ) as unknown as typeof fetch;
+    const missing = handlers();
+    service.open('p-404', missing);
+    await wait();
+    expect(missing.onTerminated).toHaveBeenCalledTimes(1);
+
+    token.set(null);
+    const noToken = handlers();
+    service.open('p-none', noToken);
+    await wait();
+    expect(noToken.onTerminated).toHaveBeenCalledTimes(1);
+  });
+
+  it('la chiusura volontaria non chiama onTerminated', async () => {
+    globalThis.fetch = vi.fn(
+      async (_u: string, init: RequestInit) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              init.signal!.addEventListener('abort', () =>
+                c.error(new DOMException('a', 'AbortError')),
+              );
+            },
+          }),
+          { status: 200 },
+        ),
+    ) as unknown as typeof fetch;
+    const h = handlers();
+    const close = service.open('p', h);
+    await wait();
+    close();
+    await wait();
+
+    expect(h.onTerminated).not.toHaveBeenCalled();
+  });
+});
+
 describe('ProjectEventsService idle watchdog (fake timers)', () => {
   const IDLE = 45_000;
   const token = signal<string | null>('tok-1');

@@ -120,10 +120,108 @@ export interface EvidenceRelationDetail {
   otherMessageSequence: number;
 }
 
+/** Versioni di vista del contratto 002: 1.0.0 = evidenza di messaggio (legacy), 1.1.0 = evidenza di documento. */
+export const EVIDENCE_VIEW_LEGACY = '1.0.0';
+export const EVIDENCE_VIEW_DOCUMENT = '1.1.0';
+
+/** Una parte di citazione documentale; le parti di una citazione multi-blocco condividono `citationGroupId` e restano separate. */
+export interface DocumentEvidenceSource {
+  sourceId: string;
+  kind: string;
+  role: string;
+  citationGroupId: string;
+  part: number;
+  documentId: string;
+  documentVersionId: string;
+  preparationId: string;
+  artifactId: string;
+  blockId: string;
+  /** Offset UTF-16 nel testo del blocco (start incluso, end escluso). */
+  start: number;
+  end: number;
+  quote: string;
+}
+
+export interface DocumentEvidenceView {
+  id: string;
+  versionId: string;
+  version: number;
+  isCurrent: boolean;
+  projectId: string;
+  ordinal: number;
+  key: string;
+  kind: EvidenceKind;
+  polarity: EvidencePolarity;
+  certainty: EvidenceCertainty;
+  statement: string;
+  origin: {
+    kind: 'Document';
+    documentId: string;
+    documentVersionId: string;
+    preparationId: string;
+  };
+  content: {
+    schemaVersion: string;
+    kindRationale: string | null;
+    structure: {
+      subject: string | null;
+      action: string | null;
+      object: string | null;
+      scope: string | null;
+      purpose: string | null;
+      instrument: string | null;
+      channel: string | null;
+      recipient: string | null;
+    };
+    qualifiers: EvidenceQualifier[];
+    sources: DocumentEvidenceSource[];
+  };
+}
+
+/** Locator risolto dal server: i dati assenti sono null, mai una pagina presunta. */
+export interface SourceDocumentView {
+  sourceId: string;
+  documentId: string;
+  documentVersionId: string;
+  documentVersion: number;
+  originalName: string;
+  preparationId: string;
+  generation: number;
+  artifactId: string;
+  blockId: string;
+  blockRef: string;
+  locator: {
+    page: number | null;
+    headingPath: string[];
+    bbox: { coordinates: number[]; coordinateSystem: string | null } | null;
+    sourceLines: { start: number; end: number } | null;
+    doclingRef: string | null;
+  };
+  passageUrl: string;
+  downloadUrl: string;
+}
+
+/** Elemento di lista con envelope: la provenienza si legge da `evidenceViewVersion`, mai dal testo. */
+export type EvidenceEnvelope =
+  | { evidenceViewVersion: '1.0.0'; evidence: EvidenceView }
+  | { evidenceViewVersion: '1.1.0'; evidence: DocumentEvidenceView };
+
+export interface DocumentRelationDetail {
+  id: string;
+  type: string;
+  basis: string;
+  rationale: string | null;
+  direction: 'outgoing' | 'incoming';
+  otherEvidenceId: string;
+  otherStatement: string;
+}
+
 export interface EvidenceDetailView {
-  evidence: EvidenceView;
-  messages: { id: string; sequence: number; role: 'user' | 'assistant'; text: string }[];
-  relations: EvidenceRelationDetail[];
+  evidenceViewVersion: string;
+  evidence: EvidenceView | DocumentEvidenceView;
+  relations: (EvidenceRelationDetail | DocumentRelationDetail)[];
+  sourceDocuments: SourceDocumentView[];
+  sourceMessages: { id: string; sequence: number; role: 'user' | 'assistant'; text: string }[];
 }
 
 export interface EvidenceFilters {
@@ -131,6 +229,9 @@ export interface EvidenceFilters {
   kind?: string;
   polarity?: string;
   certainty?: string;
+  originKind?: string;
+  documentId?: string;
+  documentVersionId?: string;
 }
 
 export interface VersionSummary {
@@ -245,6 +346,8 @@ export interface CoverageFinding {
   /** Solo per SemanticRisk: low | medium. */
   confidence: string | null;
   details: string | null;
+  /** Solo coverage-2: errore deterministico che impedisce di considerare chiusa la verifica. */
+  blocking?: boolean;
 }
 
 export interface CoverageCounts {
@@ -263,11 +366,104 @@ export interface CoverageReportSummary {
   counts: CoverageCounts;
 }
 
+/** Solo coverage-2: sintesi per ID e per porzioni. Non esiste un booleano di completezza: la copertura per ID non certifica la fedelta al testo. */
+export interface CoverageDocumentSummary {
+  expectedEvidence: number;
+  representedEvidence: number;
+  portionsExpected: number;
+  portionsProcessed: number;
+  portionsNoEvidence: number;
+  portionsMissing: number;
+  blockingFindings: number;
+  /** Solo coverage-3 (letti solo se checkerVersion è «coverage-3»): contatori dei Gap, distinti dal supporto agli elementi. */
+  expectedGaps?: number;
+  assessedGaps?: number;
+  answeredGaps?: number;
+  openGaps?: number;
+  unassessedGaps?: number;
+  /** Solo revisioni con stadio Gap (definizione v6), derivati dal server: assenti nei report v5 e mai dedotti dalla loro assenza. */
+  absenceProvenGaps?: number;
+  absenceUnprovenGaps?: number;
+  answeredWithOpenConflictGaps?: number;
+}
+
+export type GapOutcome = 'AnsweredInSnapshot' | 'Open';
+export type GapReason = 'Answered' | 'NoAnswer' | 'Partial' | 'Ambiguous';
+
+/** Solo coverage-3: valutazione AI di un Gap nello snapshot congelato. Non è un supporto di requisito né una conferma del PM. */
+export interface GapAssessmentView {
+  gapEvidenceId: string;
+  gapEvidenceVersionId: string;
+  sourceSnapshotHash: string;
+  outcome: GapOutcome;
+  reason: GapReason;
+  rationale: string;
+  supportingEvidenceIds: string[];
+  openItemId: string | null;
+  openConflictId: string | null;
+  originBatchId: string;
+  /** Solo stadio Gap (v6), derivati dal server e opzionali: assenti nei report v5. `absenceProven` ha senso per i soli esiti NoAnswer. */
+  searchBasis?: string;
+  retrievalComplete?: boolean;
+  absenceProven?: boolean;
+  answeredWithOpenConflict?: boolean;
+}
+
+export interface ReconciliationLevel {
+  view: string;
+  level: number;
+  nodes: number;
+  pages: number;
+}
+
+export interface ReconciliationCandidate {
+  candidateId: string;
+  kind: string;
+  proposedType: string;
+  state: string;
+  reason: string | null;
+  childCandidateIds: string[];
+  terminal: boolean;
+}
+
+export interface ReconciliationPatch {
+  patchId: string;
+  targetKind: string;
+  targetId: string;
+  state: string;
+  reason: string | null;
+  blocking: boolean;
+}
+
+export interface ReconciliationOpenPoint {
+  kind: 'conflict' | 'question';
+  id: string;
+  description: string;
+  alternatives: { itemId: string; text: string; classification: string; evidenceRefs: string[] }[];
+}
+
+/** Residui della riconciliazione gerarchica letti dalle proiezioni del run; projected=false: nessuna proiezione per questa analisi. */
+export interface ReconciliationCoverage {
+  projected: boolean;
+  levels: ReconciliationLevel[];
+  candidates: ReconciliationCandidate[];
+  patches: ReconciliationPatch[];
+  frontier: { candidateId: string; reason: string }[];
+  openPoints: ReconciliationOpenPoint[];
+}
+
 export interface CoverageReportView extends CoverageReportSummary {
   inputHash: string;
   createdBy: string | null;
   findings: CoverageFinding[];
   limits: string[];
+  summary?: CoverageDocumentSummary;
+  reconciliation?: ReconciliationCoverage;
+  /** Solo coverage-3: revisione AI originaria cui appartengono le valutazioni (distinta da `revisionId`, la corrente). */
+  aiRevisionId?: string;
+  /** Solo coverage-3. Mai letti per altre versioni: un campo assente o ostile non è «zero Gap». */
+  gapAssessmentsHash?: string;
+  gapAssessments?: GapAssessmentView[];
 }
 
 const enc = encodeURIComponent;
@@ -291,20 +487,26 @@ export class EvidenceApiService {
     );
   }
 
-  async listEvidence(projectId: string, filters: EvidenceFilters = {}): Promise<EvidenceView[]> {
-    let params = new HttpParams();
+  /** Lista mista (messaggi e documenti) nel formato 1.1.0: ogni elemento porta il proprio `evidenceViewVersion`. */
+  async listEvidence(
+    projectId: string,
+    filters: EvidenceFilters = {},
+  ): Promise<EvidenceEnvelope[]> {
+    let params = new HttpParams().set('viewVersion', EVIDENCE_VIEW_DOCUMENT);
     for (const [name, value] of Object.entries(filters)) {
       if (value) params = params.set(name, value);
     }
     const page = await firstValueFrom(
-      this.http.get<{ items: EvidenceView[] }>(`${this.base(projectId)}/evidence`, { params }),
+      this.http.get<{ items: EvidenceEnvelope[] }>(`${this.base(projectId)}/evidence`, { params }),
     );
     return page.items;
   }
 
   getEvidence(projectId: string, evidenceId: string): Promise<EvidenceDetailView> {
     return firstValueFrom(
-      this.http.get<EvidenceDetailView>(`${this.base(projectId)}/evidence/${enc(evidenceId)}`),
+      this.http.get<EvidenceDetailView>(`${this.base(projectId)}/evidence/${enc(evidenceId)}`, {
+        params: { viewVersion: EVIDENCE_VIEW_DOCUMENT },
+      }),
     );
   }
 

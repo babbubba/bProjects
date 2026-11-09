@@ -254,7 +254,7 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             .OrderBy(r => r.Pattern, StringComparer.Ordinal).ThenBy(r => r.Method, StringComparer.Ordinal)
             .ToList();
 
-        // Nessun endpoint oltre a quelli del contratto: niente approvazione cliente, pubblicazione, KB, upload, ricerca web, signup o amministrazione.
+        // Nessun endpoint oltre a quelli del contratto: niente approvazione cliente, pubblicazione, KB, ricerca web, signup o amministrazione (salvo archivio, preferenze e limiti dei documenti della 002).
         const string p = "/api/projects/{projectId:guid}";
         string[] contract =
         [
@@ -296,12 +296,33 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             $"POST {p}/analyses/{{analysisId:guid}}/coverage-reports",
             $"GET {p}/analyses/{{analysisId:guid}}/coverage-reports",
             $"GET {p}/analyses/{{analysisId:guid}}/coverage-reports/{{reportId:guid}}",
+            // Archivio documenti e preferenze di fonte (slice 002, contracts/http-api.md §Documenti e §Selezione persistente; T014/T015).
+            $"POST {p}/documents",
+            $"POST {p}/documents/{{documentId:guid}}/versions",
+            $"GET {p}/documents",
+            $"GET {p}/documents/{{documentId:guid}}",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/download",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/evidence/versions",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/blocks",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/coverage",
+            $"GET {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/passages/{{blockId:guid}}",
+            $"POST {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations",
+            $"POST {p}/documents/{{documentId:guid}}/versions/{{version}}/preparations/{{generation}}/promote",
+            $"POST {p}/document-jobs/{{jobId:guid}}/retry",
+            $"GET {p}/source-selection",
+            $"PUT {p}/source-selection",
+            $"GET {p}/source-snapshots/{{snapshotId:guid}}",   // manifest storico (T097)
+            // Limiti dei documenti (slice 002, contracts/http-api.md): unico endpoint di amministrazione, ruolo Admin (T005).
+            "GET /api/admin/document-limits",
+            "PUT /api/admin/document-limits",
         ];
         var actual = routes.Select(r => $"{r.Method} {r.Pattern}{(r.Anonymous ? " (anonimo)" : "")}").ToList();
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(33, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze
+        Assert.Equal(52, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, rielaborazione e promozione del bundle, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin)
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {
@@ -1107,7 +1128,8 @@ public sealed class ContentSecurityTests : IAsyncLifetime
         // Nessuno strumento, funzione, ricerca, retrieval o altro canale di uscita e' offerto al modello.
         Assert.All(_dgx.Calls, AssertNoTools);
         var services = App.Services;
-        Assert.Null(services.GetService<IHttpClientFactory>()); // nessun altro HttpClient configurato nell'app
+        // Unico HttpClient tipizzato ammesso oltre al modello: il parser interno (rete privata, contratto parser).
+        Assert.NotNull(services.GetRequiredService<bProjects.App.Documents.ParserClient>()); // il parser e' l'unico client tipizzato; le uscite verso il modello restano vincolate dalle asserzioni su _dgx.Calls
         var jwt = services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme);
         Assert.True(string.IsNullOrEmpty(jwt.Authority) && string.IsNullOrEmpty(jwt.MetadataAddress)); // nessuna discovery OIDC in uscita
         Assert.Null(jwt.ConfigurationManager);

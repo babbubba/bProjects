@@ -1,4 +1,4 @@
-import { parseMarkdown, safeHref } from './markdown';
+import { parseMarkdown, safeHref, splitSourceMarkers } from './markdown';
 
 type Nodes = { t: string; v?: string; id?: string; href?: string }[];
 
@@ -59,5 +59,25 @@ describe('markdown sicuro', () => {
     expect(safeHref('vbscript:x')).toBeNull();
     expect(safeHref('//evil.example')).toBeNull();
     expect(safeHref('https://example.com')).toBe('https://example.com/');
+  });
+});
+
+describe('splitSourceMarkers (chat)', () => {
+  it('separa testo e marcatori nell\'ordine, senza interpretare HTML', () => {
+    expect(
+      splitSourceMarkers('Il <b>login</b> usa SSO [fonte:aa-1][fonte:bb-2] e basta.'),
+    ).toEqual([
+      { t: 'text', v: 'Il <b>login</b> usa SSO ' },
+      { t: 'source', id: 'aa-1' },
+      { t: 'source', id: 'bb-2' },
+      { t: 'text', v: ' e basta.' },
+    ]);
+  });
+
+  it('lascia come testo i marcatori malformati e il testo vuoto', () => {
+    expect(splitSourceMarkers('[fonte:] [fonte:a b] [fonte:x')).toEqual([
+      { t: 'text', v: '[fonte:] [fonte:a b] [fonte:x' },
+    ]);
+    expect(splitSourceMarkers('')).toEqual([]);
   });
 });

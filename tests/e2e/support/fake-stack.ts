@@ -1,5 +1,8 @@
-import type { Page, Route } from '@playwright/test';
+import { FakeParsing } from './fake-parsing';
+import type { Page, Request, Route } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { emptyUsage } from './context-usage';
+import type { FakeLifecycle } from './fake-lifecycle';
 
 // Stack finto per le prove d'errore (T050): API HTTP e flusso SSE sostituiti nel browser, cosi' i guasti
 // (POST incerto, stream caduto, run Failed, PUT rifiutato) sono provocati in modo deterministico, senza DGX e senza
@@ -38,6 +41,29 @@ export interface ProjectState {
   /** Ritardo (ms) e stato HTTP di errore opzionale di GET context-usage. */
   usageDelayMs: number;
   usageStatus: number | null;
+  /** Archivio documenti (slice 002): solo cio' che serve a rispondere come il server; nessun parser, nessun modello. */
+  documents: FakeDocument[];
+  /** Preferenze di fonte: revisione e voci per documento. */
+  selection: { revision: number; items: Map<string, { included: boolean; mode: string; versionId: string | null }> };
+  /** Ricevute di idempotenza dell'upload: chiave -> impronta del contenuto e versione creata. */
+  uploadReceipts: Map<string, { fingerprint: string; versionId: string }>;
+  /** Quota degli originali in byte (null = illimitata): oltre, l'upload risponde 507 quota_exceeded. */
+  documentQuotaBytes: number | null;
+}
+
+export interface FakeDocVersion {
+  id: string;
+  version: number;
+  originalName: string;
+  mediaType: string;
+  bytes: Buffer;
+  uploadedAt: string;
+}
+
+export interface FakeDocument {
+  id: string;
+  displayName: string;
+  versions: FakeDocVersion[];
 }
 
 const iso = (offsetSeconds = 0) => new Date(Date.UTC(2030, 0, 1, 10, 0, offsetSeconds)).toISOString();
@@ -62,7 +88,48 @@ export function analysisContent(analysisId: string, projectId: string, goal = 'R
   };
 }
 
-const isActive = (r: Json) => r['status'] === 'Queued' || r['status'] === 'Running';
+const sha256Hex = (data: Buffer) => createHash('sha256').update(data).digest('hex');
+
+const mediaTypeOf = (name: string): string =>
+  /\.pdf$/i.test(name)
+    ? 'application/pdf'
+    : /\.docx$/i.test(name)
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : /\.(md|markdown)$/i.test(name)
+        ? 'text/markdown'
+        : 'text/plain';
+
+interface Multipart {
+  file: { name: string; bytes: Buffer } | null;
+  fields: Record<string, string>;
+}
+
+/** Multipart minimale: un file e campi testuali. I byte del file non passano per una stringa (nessuna alterazione). */
+function parseMultipart(body: Buffer, contentType: string): Multipart {
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType);
+  const result: Multipart = { file: null, fields: {} };
+  if (!boundary) return result;
+  const delimiter = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+  let at = body.indexOf(delimiter);
+  while (at >= 0) {
+    const next = body.indexOf(delimiter, at + delimiter.length);
+    if (next < 0) break;
+    const part = body.subarray(at + delimiter.length + 2, next - 2); // salta CRLF dopo il delimitatore e prima del successivo
+    const split = part.indexOf(Buffer.from('\r\n\r\n'));
+    if (split >= 0) {
+      const head = part.subarray(0, split).toString('utf-8');
+      const content = part.subarray(split + 4);
+      const name = /name="([^"]*)"/.exec(head)?.[1];
+      const fileName = /filename="([^"]*)"/.exec(head)?.[1];
+      if (fileName !== undefined) result.file = { name: fileName, bytes: Buffer.from(content) };
+      else if (name) result.fields[name] = content.toString('utf-8');
+    }
+    at = next;
+  }
+  return result;
+}
+
+const isActive =(r: Json) => r['status'] === 'Queued' || r['status'] === 'Running';
 const withoutClientId = ({ clientMessageId: _c, ...view }: Json): Json => view;
 
 export class FakeStack {
@@ -71,6 +138,12 @@ export class FakeStack {
   /** Sessione valida: refresh/login riescono (il cookie di refresh non e' simulato). */
   session = false;
   private readonly faults = new Map<string, Fault[]>();
+  /** Parsing simulato (I2): null = nessun parser, ogni versione resta «In coda» come in I1. */
+  parsing: FakeParsing | null = null;
+  /** Ciclo di vita delle versioni (T103): bundle corrente, candidate, rielaborazione e promozione CAS; richiede `parsing`. */
+  lifecycle: FakeLifecycle | null = null;
+  /** Server «spento» (riavvio simulato): ogni richiesta /api cade con connessione resettata e non viene registrata fra le chiamate. */
+  down = false;
   private seq = 0;
 
   constructor() {
@@ -80,6 +153,7 @@ export class FakeStack {
   addProject(id: string, name: string): ProjectState {
     const state: ProjectState = {
       id, name, messages: [], turns: [], runs: [], revisions: [], analysisId: null, draft: null, keys: new Map(), usage: null, usageDelayMs: 0, usageStatus: null,
+      documents: [], selection: { revision: 0, items: new Map() }, uploadReceipts: new Map(), documentQuotaBytes: null,
     };
     this.projects.set(id, state);
     return state;
@@ -212,6 +286,124 @@ export class FakeStack {
     };
   }
 
+  // --- Archivio documenti.
+
+  private pref(p: ProjectState, d: FakeDocument) {
+    return p.selection.items.get(d.id) ?? { included: true, mode: 'LatestReady', versionId: null };
+  }
+
+  private documentListItem(p: ProjectState, d: FakeDocument): Json {
+    const pref = this.pref(p, d);
+    const latest = d.versions.at(-1)!;
+    return {
+      documentId: d.id, displayName: d.displayName, createdAt: d.versions[0].uploadedAt, versionCount: d.versions.length,
+      latestVersion: { id: latest.id, version: latest.version, processingStatus: this.statusOf(latest), uploadedAt: latest.uploadedAt },
+      applicableVersionId: null, included: pref.included, selectionMode: pref.mode,
+      availability: this.availabilityOf(pref.included, latest), reason: pref.included ? this.reasonOf(latest) : 'excluded_by_pm',
+    };
+  }
+
+  private versionView(p: ProjectState, d: FakeDocument, v: FakeDocVersion): Json {
+    const pref = this.pref(p, d);
+    return {
+      id: v.id, documentId: d.id, projectId: p.id, version: v.version, originalName: v.originalName, mediaType: v.mediaType,
+      byteLength: v.bytes.length, sha256: sha256Hex(v.bytes), uploadedBy: 'Pm Uno', uploadedAt: v.uploadedAt, processingStatus: this.statusOf(v),
+      applicationStatus: 'NotApplicable', currentPreparationId: this.parsing?.latest(v.id)?.id ?? null, currentEvidenceVersionId: null, bundleRevision: 0,
+      candidatePreparations: [], ...(this.lifecycle ? this.lifecycle.view(v.id) : {}), latestJobId: this.parsing?.latest(v.id)?.jobId ?? null, included: pref.included, selectionMode: pref.mode, isApplicable: false,
+      previousReadyVersionId: null, issuesSummary: this.parsing?.issuesSummary(v.id) ?? null, allowedActions: ['Download'],
+    };
+  }
+
+  private documentDetail(p: ProjectState, d: FakeDocument): Json {
+    const pref = this.pref(p, d);
+    return {
+      documentId: d.id, projectId: p.id, displayName: d.displayName, createdBy: 'Pm Uno', createdAt: d.versions[0].uploadedAt,
+      versions: d.versions.map((v) => this.versionView(p, d, v)),
+      sourcePreference: { included: pref.included, mode: pref.mode, versionId: pref.versionId },
+      availability: this.availabilityOf(pref.included, d.versions.at(-1)!), applicableVersionId: null,
+    };
+  }
+
+  private statusOf(v: FakeDocVersion): string {
+    return this.parsing ? this.parsing.status(v.id) : 'Queued';
+  }
+
+  private availabilityOf(included: boolean, latest: FakeDocVersion): string {
+    if (!included) return 'Excluded';
+    return this.statusOf(latest) === 'Ready' ? 'Ready' : 'Unavailable';
+  }
+
+  private reasonOf(latest: FakeDocVersion): string | null {
+    const status = this.statusOf(latest);
+    return status === 'Ready' ? null : status === 'Failed' ? 'preparation_failed' : status === 'Incomplete' ? 'preparation_incomplete' : 'preparation_queued';
+  }
+
+  private selectionResponse(p: ProjectState, route: Route): Promise<void> {
+    const items = p.documents.map((d) => {
+      const pref = this.pref(p, d);
+      return {
+        documentId: d.id, included: pref.included, mode: pref.mode, versionId: pref.versionId, resolvedVersionId: null,
+        preparationId: null, availability: this.availabilityOf(pref.included, d.versions.at(-1)!),
+      };
+    });
+    const blockingSources = p.documents
+      .filter((d) => this.pref(p, d).included && this.statusOf(d.versions.at(-1)!) !== 'Ready')
+      .map((d) => ({
+        documentId: d.id, displayName: d.displayName, versionId: d.versions.at(-1)!.id, version: d.versions.at(-1)!.version,
+        status: this.statusOf(d.versions.at(-1)!), allowedActions: ['Exclude'],
+      }));
+    return route.fulfill({
+      status: 200, contentType: 'application/json', headers: { etag: `"${p.selection.revision}"` },
+      body: JSON.stringify({ revision: p.selection.revision, items, blockingSources }),
+    });
+  }
+
+  /** Upload (nuovo documento se `target` e' null, altrimenti nuova versione): idempotenza per chiave, quota, guasti iniettabili. */
+  private async uploadDocument(
+    p: ProjectState,
+    request: Request,
+    call: Call,
+    target: FakeDocument | null,
+    faulted: (endpoint: string, save: () => void) => Promise<boolean>,
+    problem: (status: number, code: string, extra?: Json) => Promise<void>,
+    json: (status: number, payload: unknown) => Promise<void>,
+  ): Promise<void> {
+    if (!call.key) return problem(400, 'idempotency_key_required');
+    const form = parseMultipart(request.postDataBuffer() ?? Buffer.alloc(0), request.headers()['content-type'] ?? '');
+    const file = form.file;
+    if (!file) return problem(400, 'malformed_request');
+    const fingerprint = sha256Hex(
+      Buffer.concat([Buffer.from(`${target?.id ?? ''}|${file.name}|${form.fields['displayName'] ?? ''}|`), file.bytes]),
+    );
+    const known = p.uploadReceipts.get(call.key);
+    if (known) {
+      if (known.fingerprint !== fingerprint) return problem(409, 'idempotency_conflict');
+      for (const d of p.documents) {
+        const v = d.versions.find((x) => x.id === known.versionId);
+        if (v) return json(200, this.versionView(p, d, v));
+      }
+    }
+    const used = p.documents.reduce((n, d) => n + d.versions.reduce((m, v) => m + v.bytes.length, 0), 0);
+    if (p.documentQuotaBytes !== null && used + file.bytes.length > p.documentQuotaBytes) return problem(507, 'quota_exceeded');
+    let created: { d: FakeDocument; v: FakeDocVersion } | undefined;
+    const save = () => {
+      const index = ++this.seq;
+      const version: FakeDocVersion = {
+        id: `v-${index}`, version: (target?.versions.length ?? 0) + 1, originalName: file.name, mediaType: mediaTypeOf(file.name),
+        bytes: file.bytes, uploadedAt: iso(500 + index),
+      };
+      const d: FakeDocument = target ?? { id: `d-${index}`, displayName: form.fields['displayName']?.trim() || file.name, versions: [] };
+      if (!target) p.documents.push(d);
+      d.versions.push(version);
+      this.parsing?.onUpload(version);
+      p.uploadReceipts.set(call.key!, { fingerprint, versionId: version.id });
+      created = { d, v: version };
+    };
+    if (await faulted('uploadDocument', save)) return;
+    save();
+    return json(201, this.versionView(p, created!.d, created!.v));
+  }
+
   // --- Installazione nella pagina.
 
   async install(page: Page): Promise<void> {
@@ -230,6 +422,7 @@ export class FakeStack {
     } catch {
       body = null;
     }
+    if (this.down && path.startsWith('/api/')) return void (await route.abort('connectionreset'));
     const call: Call = {
       method, path, key: request.headers()['idempotency-key'] ?? null, ifMatch: request.headers()['if-match'] ?? null, body,
     };
@@ -385,6 +578,72 @@ export class FakeStack {
         save();
         return void (await json(202, run));
       }
+    }
+    // Archivio documenti (slice 002): le versioni restano 'Queued' perche' non c'e' alcun parser.
+    if (this.parsing) {
+      const parsing = this.parsing;
+      const docs = {
+        findVersion: (docId: string, ver: number) => {
+          const d = p.documents.find((x) => x.id === docId);
+          const v = d?.versions.find((x) => x.version === ver);
+          return d && v ? { docId: d.id, v } : undefined;
+        },
+        findByJob: (jobId: string) => {
+          for (const d of p.documents) for (const v of d.versions) {
+            const gen = parsing.gens.get(v.id)?.find((g) => g.jobId === jobId);
+            if (gen) return { docId: d.id, v, gen };
+          }
+          return undefined;
+        },
+      };
+      if (await parsing.handle(rest, method, request, call.key, docs, { json, problem, faulted }, route)) return;
+      if (this.lifecycle && (await this.lifecycle.handle(rest, method, call.key, call.body, docs, { json, problem }))) return;
+    }
+    if (rest === '/documents' && method === 'GET') {
+      this.parsing?.tick();
+      return void (await json(200, { items: p.documents.map((d) => this.documentListItem(p, d)), nextCursor: null }));
+    }
+    if (rest === '/documents' && method === 'POST') {
+      return void (await this.uploadDocument(p, request, call, null, faulted, problem, json));
+    }
+    const doc = /^\/documents\/([^/]+)(\/.*)?$/.exec(rest);
+    if (doc) {
+      const d = p.documents.find((x) => x.id === doc[1]);
+      if (!d) return void (await problem(404, 'not_found'));
+      const sub = doc[2] ?? '';
+      if (sub === '' && method === 'GET') return void (await json(200, this.documentDetail(p, d)));
+      if (sub === '/versions' && method === 'POST') {
+        return void (await this.uploadDocument(p, request, call, d, faulted, problem, json));
+      }
+      const ver = /^\/versions\/(\d+)(\/download)?$/.exec(sub);
+      const v = ver ? d.versions.find((x) => x.version === Number(ver[1])) : undefined;
+      if (ver && method === 'GET') {
+        if (!v) return void (await problem(404, 'not_found'));
+        if (!ver[2]) return void (await json(200, this.versionView(p, d, v)));
+        if (await faulted('download', () => undefined)) return;
+        return void (await route.fulfill({
+          status: 200,
+          body: v.bytes,
+          headers: {
+            'content-type': v.mediaType,
+            'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(v.originalName)}`,
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+          },
+        }));
+      }
+    }
+    if (rest === '/source-selection' && method === 'GET') {
+      return void (await this.selectionResponse(p, route));
+    }
+    if (rest === '/source-selection' && method === 'PUT') {
+      if (call.ifMatch !== `"${p.selection.revision}"`) {
+        return void (await problem(409, 'source_selection_conflict', { currentRevision: p.selection.revision }));
+      }
+      const input = body as { items: { documentId: string; included: boolean; mode: string; versionId: string | null }[] };
+      p.selection.items = new Map(input.items.map((i) => [i.documentId, { included: i.included, mode: i.mode, versionId: i.versionId }]));
+      p.selection.revision += 1;
+      return void (await this.selectionResponse(p, route));
     }
     if (rest === '/draft' && method === 'GET') {
       return void (p.draft ? await json(200, p.draft) : await problem(404, 'draft_not_available'));

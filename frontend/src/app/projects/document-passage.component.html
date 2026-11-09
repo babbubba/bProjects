@@ -1,0 +1,103 @@
+<section class="passage" [attr.aria-labelledby]="titleId">
+  <h4 [id]="titleId" class="h6 mb-0">
+    Contenuto del documento{{ prep() ? ' (v' + prep()!.version + ')' : '' }}
+  </h4>
+
+  @if (prep(); as p) {
+    <p class="small mb-1" data-testid="passage-status">
+      <span [class]="'badge ' + badge(p)">{{ statusLabel(p.processingStatus) }}</span>
+      @if (p.blockCount !== null) {
+        · {{ p.blockCount }} blocchi
+      }
+    </p>
+    @if (!p.isReady) {
+      <p class="small text-warning-emphasis mb-1" role="status" data-testid="passage-notready">
+        Il testo è stato letto dal documento ma la preparazione non è pronta: non è ancora una fonte
+        utilizzabile per l'analisi.
+      </p>
+    }
+    @if (p.issues.length > 0) {
+      <ul class="small mb-1" aria-label="Segnalazioni del parsing">
+        @for (i of p.issues; track $index) {
+          <li data-testid="passage-issue" [class.text-danger]="i.severity === 'Blocking'">
+            {{ i.reason }}
+            @if (i.page !== null) {
+              (pagina {{ i.page }})
+            }
+          </li>
+        }
+      </ul>
+    }
+  }
+
+  @if (error()) {
+    <div class="alert alert-danger py-2 mb-0" role="alert" data-testid="passage-error-load">
+      {{ error() }}
+    </div>
+  }
+  @if (unparsed()) {
+    <p class="small text-secondary mb-0" role="status" data-testid="passage-unparsed">
+      Il contenuto non è ancora disponibile: la lettura del documento non è terminata.
+    </p>
+  }
+  @if (loading()) {
+    <p class="small text-secondary mb-0" role="status">Caricamento…</p>
+  }
+
+  @if (passageError()) {
+    <div class="alert alert-warning py-2 mb-0" role="alert" data-testid="passage-error">
+      {{ passageError() }}
+    </div>
+  }
+  @if (passage(); as ps) {
+    <section class="passage-open" aria-label="Passaggio selezionato" data-testid="passage-open">
+      <p class="small text-secondary mb-1">{{ location(ps.block) }}</p>
+      @if (ps.quote; as q) {
+        <p class="passage-text" data-testid="passage-quote">
+          {{ q.before }}<mark>{{ q.text }}</mark
+          >{{ q.after }}
+        </p>
+      } @else {
+        <p class="passage-text" data-testid="passage-quote">{{ ps.block.text }}</p>
+      }
+      <div class="passage-actions">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary"
+          data-testid="passage-download"
+          (click)="downloadRequested.emit()"
+        >
+          Scarica originale ({{ ps.original.originalName }})
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closePassage()">
+          Chiudi passaggio
+        </button>
+      </div>
+    </section>
+  }
+
+  @if (showBlocks()) {
+    <ol class="list-unstyled mb-0 passage-blocks">
+      @for (b of blocks(); track b.id) {
+        <li class="passage-block" data-testid="passage-block">
+          <p class="small text-secondary mb-0">{{ b.type }} · {{ location(b) }}</p>
+          <p class="passage-text mb-1">{{ b.text }}</p>
+          <button type="button" class="btn btn-sm btn-link p-0" (click)="openPassage(b.id)">
+            Mostra passaggio
+          </button>
+        </li>
+      }
+    </ol>
+
+    @if (nextCursor() && !loading()) {
+      <button
+        type="button"
+        class="btn btn-link align-self-start"
+        data-testid="passage-more"
+        (click)="loadMore()"
+      >
+        Carica altri blocchi
+      </button>
+    }
+  }
+</section>

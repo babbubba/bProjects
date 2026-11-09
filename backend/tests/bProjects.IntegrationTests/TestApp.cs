@@ -10,6 +10,8 @@ public sealed class TestApp(string? connectionString = null) : WebApplicationFac
     public const string PmPassword = "Test-Password-Uno-1!";
     public const string SecondPmUser = "pm.due";
     public const string SecondPmPassword = "Test-Password-Due-2!";
+    public const string AdminUser = "admin.uno";
+    public const string AdminPassword = "Test-Password-Admin-3!";
     public const string SigningKey = "test-signing-key-0123456789-abcdefghij";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -24,5 +26,7 @@ public sealed class TestApp(string? connectionString = null) : WebApplicationFac
         builder.UseSetting("Bootstrap:Accounts:0:Password", PmPassword);
         builder.UseSetting("Bootstrap:Accounts:1:UserName", SecondPmUser);
         builder.UseSetting("Bootstrap:Accounts:1:Password", SecondPmPassword);
+        builder.UseSetting("Bootstrap:Admins:0:UserName", AdminUser);
+        builder.UseSetting("Bootstrap:Admins:0:Password", AdminPassword);
     }
 }
