@@ -338,6 +338,10 @@ public sealed class DocumentAnalysisWorkflow(
     // senza alcuna invocazione del modello, senza Gap la gerarchia v4 invariata con la sola definizione v5 nel manifest.
     public const string DefinitionVersionV5 = "project-analysis-documents-v5";
 
+    // v6 (D1, AI §13.7): come la v5 per il single-call e la gerarchia v4, ma oltre una chiamata con almeno un Gap la valutazione e UNA chiamata dedicata su ledger completo (stadio Gap).
+    // Le chiavi `gap*` sostituiscono `reconcileGapPolicy`; nessuna combinazione mista e riconosciuta.
+    public const string DefinitionVersionV6 = "project-analysis-documents-v6";
+
     /// <summary>
     /// Chiave di freeze <c>reconcileGapPolicy</c> (T143, AI §13.6): marcatore di identità del run che dichiara che la v5 non supporta la valutazione Gap gerarchica.
     /// Vive solo in <c>ProcessingRun.PromptVersions</c> e in <see cref="ContractOf"/>: nessun effetto sul calcolo, né sul manifest né sul <c>configHash</c> del piano.
@@ -441,16 +445,50 @@ public sealed class DocumentAnalysisWorkflow(
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
             && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run)
-            && run.PromptVersionMatches("reconcileGapPolicy", ReconcileGapPolicyV1) && OutputPolicyOf(run) != OutputPolicyState.Unsupported)
+            && run.PromptVersionMatches("reconcileGapPolicy", ReconcileGapPolicyV1) && OutputPolicyOf(run) != OutputPolicyState.Unsupported
+            && !GapKeys.Any(k => HasKey(run, k)))
         {
             return 5;
+        }
+
+        // v6 (D1, AI §13.7): le chiavi del single-call v6 (prompt document-analysis-v6, schema AI alias-2, policy di stima dell'output congelata) e della gerarchia v4, tutte le chiavi `gap*` dello stadio e NESSUNA
+        // `reconcileGapPolicy` (sostituita). Chiavi mancanti, diverse o miste con quelle del v5 ⇒ workflow_incompatible, mai reinterpretate. Una v6 senza versioni congelate non e confrontabile.
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV6 && run.PromptVersions is not null && run.PromptVersionMatches("analysis", PromptVersionV6)
+            && run.PromptVersionMatches("analysisSchema", DocumentAnalysisContent.SchemaVersionValue)
+            && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
+            && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
+            && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run) && OutputPolicyOf(run) == OutputPolicyState.Current
+            && GapStage.FreezeKeys.All(kv => HasKey(run, kv.Key) && run.PromptVersionMatches(kv.Key, kv.Value)) && !HasKey(run, "reconcileGapPolicy"))
+        {
+            return 6;
         }
 
         // v4: le versioni del percorso alias più quelle della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch).
         return run.WorkflowDefinitionVersion == DefinitionVersionV4 && alias && HierarchyMatches(run) ? 4 : null;
     }
 
-    /// <summary>Versioni della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch): comuni a v4 e v5.</summary>
+    private static readonly string[] GapKeys = [.. GapStage.FreezeKeys.Keys];
+
+    /// <summary>La chiave e presente fra le versioni congelate del run (qualunque valore): serve a riconoscere le combinazioni miste fra v5 e v6.</summary>
+    private static bool HasKey(ProcessingRun run, string key)
+    {
+        if (run.PromptVersions is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(run.PromptVersions);
+            return document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object && document.RootElement.TryGetProperty(key, out _);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Versioni della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch): comuni a v4, v5 e v6.</summary>
     private static bool HierarchyMatches(ProcessingRun run) =>
         run.PromptVersionMatches("reconcile", ReconcileAliasContracts.PromptVersion) && run.PromptVersionMatches("reconcileAiSchema", ReconcileAliasContracts.SchemaVersion)
         && run.PromptVersionMatches("reconcileAlgorithm", DocumentReconcilePlan.AlgorithmVersion) && run.PromptVersionMatches("reconcileCatalog", ReconcileAliasContracts.CatalogVersion);
@@ -500,7 +538,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract == 5 ? GapPromptOf(run) : PromptVersionV3, contract == 5 && OutputPolicyOf(run) == OutputPolicyState.Current, ct) : RunGraphAsync(db, claim, limits, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -529,7 +567,7 @@ public sealed class DocumentAnalysisWorkflow(
         definitionVersion switch
         {
             DefinitionVersionV3 or DefinitionVersionV4 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight),
-            DefinitionVersionV5 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136): schema del DTO alias-2
+            DefinitionVersionV5 or DefinitionVersionV6 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136) e v6: schema del DTO alias-2
             _ => BuildRegimePayload(),
         };
 
@@ -574,7 +612,7 @@ public sealed class DocumentAnalysisWorkflow(
         }
     }
 
-    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, DocumentLimits frozenLimits, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null, string definition = DefinitionVersionV4)
+    private async Task RunReconcileGraphAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, DocumentLimits frozenLimits, CancellationToken ct, AnalysisAliasCatalog? aliasCatalog = null, string definition = DefinitionVersionV4, GapStageMode? gapStage = null)
     {
         var profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Analysis, ct);
         var facts = await DocumentAnalysisSources.LoadDirectoryFactsAsync(db, claim.RunId, ct);
@@ -587,7 +625,7 @@ public sealed class DocumentAnalysisWorkflow(
         // ma i tetti di livelli, candidati e byte derivati sono sempre quelli dello snapshot.
         var alias = aliasCatalog is null ? null : new ReconcileAliasMode(
             aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), definition);
-        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias);
+        var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias, gapStage);
         var maxCalls = alias is null ? documents.Value.MaxAiCallsPerRun : frozenLimits.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
@@ -616,7 +654,7 @@ public sealed class DocumentAnalysisWorkflow(
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         // v5 (T136): catalogo con il contratto alias-2 nell'identità, prompt document-analysis-v4 e schema alias-2; v3/v4 invariati.
-        var gaps = contract == 5;
+        var gaps = contract >= 5;
         var catalog = AnalysisAliasCatalog.Build(input, gaps ? SchemaVersionV5 : SchemaVersionV3);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
         var instructions = !gaps ? InstructionsV3 : promptVersion == PromptVersionV6 ? InstructionsV6 : promptVersion == PromptVersionV5 ? InstructionsV5 : InstructionsV4;
@@ -654,6 +692,12 @@ public sealed class DocumentAnalysisWorkflow(
                 return;
             }
 
+            if (contract == 6)
+            {
+                await RunStagedAsync(db, claim, input, catalog, limits, structured, ct);
+                return;
+            }
+
             if (gaps)
             {
                 // v5 (T143, decisione C + D, AI §13.6). Con almeno un Gap la valutazione gerarchica non è supportata: fail-fast PRIMA di piano, port e riserva di chiamate
@@ -685,7 +729,7 @@ public sealed class DocumentAnalysisWorkflow(
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisAliasPlan(
             claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes,
-            contract switch { 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
+            contract switch { 6 => DefinitionVersionV6, 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
         var maxCalls = contract >= 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
@@ -701,6 +745,38 @@ public sealed class DocumentAnalysisWorkflow(
                 throw;
             }
         }
+    }
+
+    /// <summary>
+    /// Instradamento v6 oltre una chiamata (D1, AI §13.7), deciso a runtime da snapshot congelato e misura. (b2) senza Gap: gerarchia v4-equivalente, nessuno stadio. (b1) con almeno un Gap: preflight dello stadio
+    /// (controllo 1, ledger intero + maggiorazione prudente dei riferimenti) PRIMA di piano, port e riserva: oltre budget di input o di output ⇒ fail-fast tipizzato a zero invii in tutto il run (<c>document_limit_exceeded</c>,
+    /// <c>gap_ledger_exceeds_input</c> / <c>gap_assessment_exceeds_output</c>). Altrimenti gerarchia v4-equivalente più UN batch dello stadio Gap (nuovo valore di Stage, stesso grafo e stesso port).
+    /// </summary>
+    private async Task RunStagedAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, AnalysisAliasCatalog catalog, DocumentLimits limits, bool structured, CancellationToken ct)
+    {
+        var gapCount = catalog.Data.Evidence.Count(e => e.Kind == EvidenceKind.Gap);
+        var hierarchyCatalog = AnalysisAliasCatalog.Build(input, SchemaVersionV3);   // identità alias-1 come in v4: il DTO del batch è reconcile-alias-1
+        if (gapCount == 0)
+        {
+            await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, DefinitionVersionV6);
+            return;
+        }
+
+        var meta = await GapStageMetadata.LoadAsync(db, input, ct);
+        var stageMessages = GapStageBuilder.Message(GapStageBuilder.Build(input, catalog, meta, null));
+        var measure = await factory.Preflight.MeasureAsync(
+            new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, stageMessages, structured ? GapStageContracts.JsonSchema().GetRawText() : null), ct);
+        if (measure.Quality == TokenCountQuality.Unavailable)
+        {
+            throw new RuntimeUnverifiedException("conteggio del payload dello stadio Gap non disponibile (nessun tokenizer o calibrazione identificata)");
+        }
+
+        if (GapStageBudget.Evaluate(measure, gapCount, routing: true) is { Fits: false } verdict)
+        {
+            throw verdict.ToException();
+        }
+
+        await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, DefinitionVersionV6, new GapStageMode(meta));
     }
 
     /// <summary>Messaggio unico del batch: dati del server, dialogo come contesto e tutte le evidenze integrali con le loro fonti. A capo sempre «\n».</summary>

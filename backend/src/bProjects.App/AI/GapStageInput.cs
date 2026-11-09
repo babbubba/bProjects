@@ -111,11 +111,14 @@ public sealed record GapStageReferences(
         return new(questions, conflicts, gapQuestion, missing);
     }
 
-    /// <summary>Forma canonica e hash dei riferimenti (chiave, id canonico, testo): entra nell'<c>inputHash</c> del batch dello stadio.</summary>
+    /// <summary>
+    /// Hash canonico dei riferimenti (chiave, testo, evidenze, domanda di ogni Gap): entra nell'<c>inputHash</c> del batch dello stadio. Indipendente dal run (niente id canonici, derivati dall'id del run): uguale
+    /// per un root di retry sulle stesse fonti.
+    /// </summary>
     public string Hash() => CanonicalJson.HashText(ReconciliationCodec.Canonical(new
     {
-        questions = Questions.Select(q => new { key = q.Key, id = q.ItemId, text = q.Text, evidence = q.EvidenceAliases }).ToList(),
-        conflicts = Conflicts.Select(c => new { key = c.Key, id = c.ConflictId, description = c.Description, evidence = c.EvidenceAliases }).ToList(),
+        questions = Questions.Select(q => new { key = q.Key, text = q.Text, evidence = q.EvidenceAliases }).ToList(),
+        conflicts = Conflicts.Select(c => new { key = c.Key, description = c.Description, evidence = c.EvidenceAliases }).ToList(),
         gapQuestion = GapQuestion.OrderBy(kv => AnalysisAliasPattern.Number(kv.Key)).Select(kv => new { gap = kv.Key, question = kv.Value }).ToList(),
     }));
 }
@@ -160,9 +163,9 @@ public sealed record GapStageVerdict(bool Fits, string? Reason, string Message)
 public static class GapStageBudget
 {
     /// <summary>Maggiorazione prudente fissata dalla versione per la sezione dei riferimenti canonici non ancora nota al controllo (1) del routing.</summary>
-    public const int ReferenceAllowanceFixedTokens = 3000;
+    public const int ReferenceAllowanceFixedTokens = 1000;
 
-    public const int ReferenceAllowancePerGapTokens = 250;
+    public const int ReferenceAllowancePerGapTokens = 150;
 
     public static int ReferenceAllowance(int gaps) => ReferenceAllowanceFixedTokens + (ReferenceAllowancePerGapTokens * gaps);
 

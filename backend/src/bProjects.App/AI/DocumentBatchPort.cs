@@ -32,6 +32,11 @@ public interface IDocumentBatchPlan
     /// <summary>Versioni di schema e validazione con cui un output Committed è riusabile.</summary>
     WorkLookupExpectation Expectation { get; }
 
+    /// <summary>
+    /// Versioni di schema e validazione di UN batch, quando differiscono da quelle del piano (es. lo stadio Gap della riconciliazione v6 ha schema e validazione propri). Predefinito: <see cref="Expectation"/>.
+    /// </summary>
+    WorkLookupExpectation ExpectationFor(BatchRef batch) => Expectation;
+
     /// <summary>Agente della fase.</summary>
     BatchAgentSpec Agent { get; }
 
@@ -263,13 +268,13 @@ public sealed class DocumentBatchPort(
     public async ValueTask<bool> LookupAsync(BatchRef batch, CancellationToken ct)
     {
         using var span = DocumentTiming.Span("port.lookup");
-        if ((await store.LookupAsync(batch.BatchId, batch.InputHash, plan.Expectation, ct)).Kind == WorkLookupKind.Hit)
+        if ((await store.LookupAsync(batch.BatchId, batch.InputHash, plan.ExpectationFor(batch), ct)).Kind == WorkLookupKind.Hit)
         {
             return true;
         }
 
         // Retry PM (T099): su Miss, un output compatibile di un root precedente è importato senza AI; altrimenti si procede col lavoro normale.
-        return (await store.TryImportAsync(batch.BatchId, plan.Expectation, ct)).Kind is WorkImportKind.Imported or WorkImportKind.Replayed;
+        return (await store.TryImportAsync(batch.BatchId, plan.ExpectationFor(batch), ct)).Kind is WorkImportKind.Imported or WorkImportKind.Replayed;
     }
 
     public ValueTask ReserveCallAsync(BatchRef batch, CancellationToken ct) => calls.ReserveAsync(batch, ct);

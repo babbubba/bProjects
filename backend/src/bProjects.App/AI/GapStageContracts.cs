@@ -120,3 +120,100 @@ public static class GapStageContracts
     private static GapStageValidation Reject(IReadOnlyList<string> violations) =>
         new(ReconciliationOutcome.Invalid, DocumentWorkException.WorkOutputInvalid, violations, null, [], null, null);
 }
+
+/// <summary>Contenuto verificato del payload di un WorkOutput dello stadio Gap (<c>gap-stage-output-1</c>).</summary>
+public sealed record GapStageRecords(
+    ReconciliationOutcome Outcome, IReadOnlyList<AiGapAssessment> Records, IReadOnlyList<string> MissingGaps, string AiOutputHash, string GapAssessmentsHash, string CatalogHash, string RefsHash);
+
+/// <summary>
+/// Payload del WorkOutput dello stadio (<c>gap-stage-output-1</c>): <c>gapAssessments</c> canonici, <c>gapAssessmentsHash</c>, <c>aiOutputHash</c>, catalogo alias del run con il suo hash e l'identità dei
+/// riferimenti Open (<c>refsHash</c>). Ricomposizione e replay ne verificano l'integrità senza reinferire; nessuna valutazione è mai sintetizzata dal server.
+/// </summary>
+public static class GapStagePayload
+{
+    public static string Build(GapStageValidation validation, AnalysisAliasCatalog catalog, GapStageReferences references, int candidates, int gaps)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(references);
+        var output = validation.Output ?? throw new ArgumentException("Un output non valido non ha payload.", nameof(validation));
+        var node = new JsonObject
+        {
+            ["schemaVersion"] = GapStage.OutputSchema,
+            ["outcome"] = validation.Outcome.ToString(),
+            ["gaps"] = new JsonArray([.. validation.MissingGaps.Select(g => (JsonNode)JsonValue.Create($"gap_not_assessed: evidenza {g}: Gap senza valutazione finale (gap-assessment-1).")!)]),
+            ["gapAssessmentsVersion"] = GapAssessmentRules.Version,
+            ["gapAssessmentsHash"] = validation.GapAssessmentsHash,
+            ["aiOutputHash"] = validation.AiOutputHash,
+            ["catalogHash"] = catalog.CatalogHash,
+            ["catalog"] = JsonNode.Parse(catalog.Encode()),
+            ["ai"] = JsonNode.Parse(GapStageContracts.Canonical(output)),
+            ["gapAssessments"] = JsonNode.Parse(GapAssessmentRules.Canonical(output.GapAssessments)),
+            ["stage"] = new JsonObject
+            {
+                ["algorithm"] = GapStage.Algorithm, ["searchBasis"] = GapStage.SearchBasisLedgerExhaustive, ["retrievalComplete"] = true, ["candidates"] = candidates, ["gaps"] = gaps,
+                ["refsHash"] = references.Hash(),
+                ["keys"] = new JsonObject(GapStage.FreezeKeys.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => KeyValuePair.Create<string, JsonNode?>(kv.Key, JsonValue.Create(kv.Value)))),
+            },
+        };
+        return node.ToJsonString();
+    }
+
+    /// <summary>
+    /// Legge e verifica il payload committato: schema, hash del catalogo (<c>checkpoint_incompatible</c>), DTO strict e <c>aiOutputHash</c>, record e <c>gapAssessmentsHash</c> (<c>work_output_invalid</c>),
+    /// identità dei riferimenti (<c>checkpoint_incompatible</c>) e riesecuzione delle regole sul DTO contro catalogo e riferimenti: lo stesso esito del commit, nessuna inferenza.
+    /// </summary>
+    public static GapStageRecords Read(string payloadJson, AnalysisAliasCatalog catalog, GapStageReferences references)
+    {
+        ArgumentNullException.ThrowIfNull(payloadJson);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(references);
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            var root = document.RootElement;
+            if (root.GetProperty("schemaVersion").GetString() != GapStage.OutputSchema || root.GetProperty("gapAssessmentsVersion").GetString() != GapAssessmentRules.Version)
+            {
+                throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il WorkOutput non è del contratto dello stadio Gap.");
+            }
+
+            var catalogHash = root.GetProperty("catalogHash").GetString()!;
+            if (catalogHash != catalog.CatalogHash || CanonicalJson.Canonicalize(root.GetProperty("catalog").GetRawText()) != catalog.Encode())
+            {
+                throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il catalogo dello stadio Gap ha un hash diverso da quello congelato.");
+            }
+
+            var refsHash = root.GetProperty("stage").GetProperty("refsHash").GetString()!;
+            if (refsHash != references.Hash())
+            {
+                throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "I riferimenti Open dello stadio Gap non coincidono con quelli dell'analisi assemblata.");
+            }
+
+            var aiRaw = root.GetProperty("ai").GetRawText();
+            var dto = GapStageContracts.Decode(aiRaw);
+            if (GapStageContracts.Hash(dto) != root.GetProperty("aiOutputHash").GetString())
+            {
+                throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Il DTO committato dello stadio Gap ha un hash diverso da aiOutputHash.");
+            }
+
+            var recordsRaw = root.GetProperty("gapAssessments").GetRawText();
+            var canonical = GapAssessmentRules.Canonical(dto.GapAssessments);
+            if (CanonicalJson.Canonicalize(recordsRaw) != canonical || root.GetProperty("gapAssessmentsHash").GetString() != GapAssessmentRules.Hash(dto.GapAssessments))
+            {
+                throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Le valutazioni dei Gap committate hanno un hash o una forma diversi da gapAssessmentsHash o dal DTO.");
+            }
+
+            var validation = GapStageContracts.Validate(aiRaw, catalog, references);
+            if (!validation.IsReusableWorkOutput || validation.Outcome.ToString() != root.GetProperty("outcome").GetString())
+            {
+                throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Il WorkOutput dello stadio Gap non supera la validazione server o ha un esito diverso da quello persistito.");
+            }
+
+            return new(validation.Outcome, dto.GapAssessments, validation.MissingGaps, validation.AiOutputHash!, validation.GapAssessmentsHash!, catalogHash, refsHash);
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Il payload del WorkOutput dello stadio Gap non è nel formato atteso.");
+        }
+    }
+}

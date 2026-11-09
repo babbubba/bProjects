@@ -212,3 +212,62 @@ internal static class DocumentReconcileAssembly
         return rows;
     }
 }
+
+/// <summary>Valutazione di un Gap verificata dall'assembly dello stadio Gap (v6): il record del modello con gli id risolti del catalogo e dell'analisi assemblata.</summary>
+internal sealed record GapStageResolved(string GapAlias, Guid GapEvidenceId, AiGapAssessment Record, Guid? OpenItemId, Guid? OpenConflictId);
+
+internal static class DocumentReconcileGapStage
+{
+    /// <summary>
+    /// Assembly dello stadio Gap (D1, AI §13.7): verifica che il payload committato abbia ESATTAMENTE un record finale per Gap del catalogo e che <c>openItem</c>/<c>openConflict</c> si risolvano in una domanda
+    /// o in un conflitto canonico dell'analisi assemblata. NON modifica item, conflitti, EvidenceMap o EvidenceRefs e non sintetizza né corregge valutazioni: un record mancante è <c>coverage_incomplete</c>
+    /// (<c>gap_not_assessed</c>), un riferimento non risolvibile è <c>work_output_invalid</c>.
+    /// </summary>
+    public static IReadOnlyList<GapStageResolved> Verify(ReconcileAssembly assembled, AnalysisAliasCatalog catalog, GapStageReferences references, string payloadJson)
+    {
+        ArgumentNullException.ThrowIfNull(assembled);
+        var read = GapStagePayload.Read(payloadJson, catalog, references);
+        if (read.MissingGaps.Count > 0)
+        {
+            throw new DocumentWorkException(
+                DocumentWorkException.CoverageIncomplete,
+                $"Lo stadio Gap è valido ma {read.MissingGaps.Count} Gap non hanno una valutazione finale: " + string.Join(" | ", read.MissingGaps.Take(5).Select(g => $"gap_not_assessed: {g}")));
+        }
+
+        var gaps = catalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).ToList();
+        var byGap = read.Records.GroupBy(r => r.Gap, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        if (gaps.Any(g => !byGap.TryGetValue(g.Alias, out var list) || list.Count != 1) || byGap.Keys.Any(k => gaps.All(g => g.Alias != k)))
+        {
+            throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, "Lo stadio Gap non porta esattamente un record finale per ogni Gap del catalogo.");
+        }
+
+        var questions = assembled.Analysis.OpenQuestions.Select(q => q.Id).ToHashSet();
+        var conflicts = assembled.Analysis.Conflicts.Select(c => c.Id).ToHashSet();
+        var resolved = new List<GapStageResolved>(gaps.Count);
+        foreach (var gap in gaps)
+        {
+            var record = byGap[gap.Alias][0];
+            Guid? item = null;
+            Guid? conflict = null;
+            if (record.OpenItem is not null)
+            {
+                var question = references.Questions.FirstOrDefault(q => q.Key == record.OpenItem);
+                item = question is not null && questions.Contains(question.ItemId)
+                    ? question.ItemId
+                    : throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, $"La domanda aperta {record.OpenItem} del Gap {gap.Alias} non è una domanda canonica dell'analisi assemblata.");
+            }
+
+            if (record.OpenConflict is not null)
+            {
+                var found = references.Conflicts.FirstOrDefault(c => c.Key == record.OpenConflict);
+                conflict = found is not null && conflicts.Contains(found.ConflictId)
+                    ? found.ConflictId
+                    : throw new DocumentWorkException(DocumentWorkException.WorkOutputInvalid, $"Il conflitto aperto {record.OpenConflict} del Gap {gap.Alias} non è un conflitto canonico dell'analisi assemblata.");
+            }
+
+            resolved.Add(new(gap.Alias, gap.EvidenceId, record, item, conflict));
+        }
+
+        return resolved;
+    }
+}

@@ -356,7 +356,7 @@ public sealed class DocumentGapStageInputTests
         var routing = GapStageBudget.Evaluate(measure, 2, routing: true);
         Assert.False(routing.Fits);                                       // la maggiorazione porta oltre il budget
         Assert.Equal("gap_ledger_exceeds_input", routing.Reason);
-        Assert.Equal(3000 + 250 * 2, GapStageBudget.ReferenceAllowance(2));   // fissata dalla versione
+        Assert.Equal(1000 + 150 * 2, GapStageBudget.ReferenceAllowance(2));   // fissata dalla versione
         Assert.Contains("maggiorazione", routing.Message, StringComparison.Ordinal);
 
         var small = await MeasureAsync(meter, GapStageBuilder.Build(Ledger(10, 2).Input, Ledger(10, 2).Catalog, Meta(Ledger(10, 2).Input), null));
