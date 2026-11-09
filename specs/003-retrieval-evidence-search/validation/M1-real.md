@@ -1,8 +1,8 @@
 # M1 — prima misura reale (T019)
 
 - Data: 2026-11-09. Autorizzazione del committente: solo embedding, solo T019 (nessun LLM generativo, riordino, load/unload esplicito, cambio di modello).
-- Stato: misure (a)-(e) eseguite una volta, `baseline-m1.json` scritta. **La valutazione/gate T020 NON è eseguita qui** (spetta al committente): nessun PASS dichiarato.
-- Id del modello nel router: **`bge-m3-Q5`** (configurazione `Retrieval:Embedding:ModelId`; nel router non esiste la sezione `[bge-m3]`). Artefatto atteso e osservato `bge-m3-Q5_K_M.gguf`, dimensione 1024, SHA-256 dei pesi NotVerified. I default di prodotto in `RetrievalOptions` non sono cambiati: la scelta dell'id di produzione è da decidere (T020/provisioning).
+- Stato: misure (a)-(e) eseguite una volta, `baseline-m1.json` scritta. La valutazione di T020 è in fondo a questo documento (gate tecnico, non accettazione del prodotto).
+- Id del modello nel router: **`bge-m3-Q5`** (configurazione `Retrieval:Embedding:ModelId`; nel router non esiste la sezione `[bge-m3]`). Artefatto atteso e osservato `bge-m3-Q5_K_M.gguf`, dimensione 1024, SHA-256 dei pesi NotVerified. Il default di prodotto `Retrieval:Embedding:ModelId` è stato allineato a `bge-m3-Q5` dopo la misura (decisione del committente).
 - Primo tentativo con l'id `bge-m3`: HTTP 500 «failed to load» (id inesistente nel router); registrato per completezza.
 - Comando: `BPROJECTS_TEST_DGX_ALLOW=1 BPROJECTS_EVAL_WRITE_BASELINE=1 dotnet test --project tests/bProjects.IntegrationTests --filter-class "*RetrievalEvaluationRealTests"` (5 min 34 s).
 - Configurazione: `IndexConfigHash` 1c74f8a47666cce29fd987509caaa42810b2dadbc888f892b4fefe04b2d01a54; FTS italian (OR dei termini, ts_rank_cd); pool 50; RRF k=60; nessun riordino; hash gold 401ab635fe3ac1691683af773a030787938d5b2812bec227182657db35890a8a; hash del rapporto 32cf94f97e0a104b6461cd7e129c2969522878779553febe60adbdbf1bdd9976.
@@ -116,13 +116,35 @@ Metodo: i vettori delle query sono calcolati una volta; si misura la SOLA query 
 
 In nessuna variante il planner ha usato l'indice `eval_hnsw`, nemmeno con `enable_seqscan=off`: il piano parte da `IX_RetrievalIndexEntries_BlockId_IndexConfigHash` e da bitmap/seq scan sui blocchi filtrati, poi ordina per distanza. Le latenze (p50 ~49-61 ms, p95 ~73-86 ms su ~6,3k voci) e le classifiche sono quindi quelle della scansione esatta; l'overlap 100% non dimostra nulla sull'HNSW. Per confrontare davvero servirebbe una query che permetta l'uso dell'indice (ordinamento per distanza con filtro di progetto non sargabile) o un indice parziale/per progetto: richiede modifica del codice di prodotto, non eseguita. Misurato: scansione esatta con ~6,3k voci, p50 61,25 ms, p95 76,84 ms (SOLA query SQL, vettori già calcolati); ricerca ibrida completa per query p50 122,9 ms, p95 143,4 ms. Non misurato: HNSW effettivo, scale maggiori.
 
-## Checklist T020 (non compilata come PASS: «da valutare» dal committente)
+## Query: 56 nel rapporto, 54 nelle tabelle aggregate (verifica documentale)
 
-| Criterio (tasks T020) | Dato misurato | Stato |
+Le 56 query sono quelle del gold congelato (`Evaluation/retrieval-cases.json`: N4 = 12, T082 = 19, T083 = 25). Le 56 attraversano il motore di ricerca (latenza per query n = 56 e traccia del registro). Le tabelle aggregate di Recall/Hit contano solo le query con **almeno un riscontro documentale** (`docFindings.Count > 0` nel harness): 12 + 19 + 23 = 54. Le due escluse sono **T083 `P1` e `P2`** («Quale limite giornaliero di ordini / termine di pagamento ha comunicato il PM?»), il cui unico riscontro del gold è `pm-message.txt` (classificazione `Declared`): sono riscontri **Message**, che per progetto sono sempre offerti e non classificati dal recupero (limite già dichiarato) e verificati come presenti nel pacchetto (T083: 4/4). Nessun gold e nessun risultato è stato modificato; N4 non ne ha di esclusi.
+
+## Deroga HNSW (decisione del committente, 2026-11-09)
+
+La misura (b) **non è stata completata**: in nessuna variante il planner ha usato l'indice HNSW, quindi non esiste alcun risultato HNSW (l'overlap 100% è la scansione esatta confrontata con sé stessa). Il committente autorizza la deroga al confronto esatta vs HNSW per M1 e mantiene la scansione esatta; non si modifica la query né gli indici. Motivi dichiarati: esatta p50 ≈ 61 ms / p95 ≈ 77 ms sulla sola query densa, ~6,3k voci nei database di prova, Recall@10 RRF 100% sui corpus sintetici, nessuna evidenza attuale che giustifichi modifiche. Da rivalutare in una futura attività di ottimizzazione con volumi e filtri rappresentativi. La deroga non si estende ad altri gate della 002 o della 003.
+
+## Valutazione T020 (gate tecnico M1) — 2026-11-09
+
+Gate **tecnico**, su gold sintetico e con le riserve sotto. **Non è accettazione del prodotto** (nessuna decisione PM; SC-012 e corpus anonimizzato aperti).
+
+| Criterio (tasks T020) | Dato misurato | Esito |
 |---|---|---|
-| Recall@10 ibrido sul gold congelato ≥ 95% | blocco RRF: N4 100%, T082 100%, T083 100% | da valutare |
-| Perdita di mappatura blocco→evidenza = 0 | 0 su tutti i corpora (mappatura 1:1 per costruzione) | da valutare (limite: non misura l'estrazione reale) |
-| R-1: lessicale PG vs BM25 (regressione > 2 pt da spiegare) | T082 −10,5 pt e T083 −17,4 pt di Recall@10 lessicale; N4 0 pt (granularità diversa dal lab su T082) | da valutare |
-| R-1: scansione esatta vs HNSW | HNSW mai nel piano; esatta p50 61 ms / p95 77 ms | da valutare (confronto non eseguibile senza modifiche) |
-| R-3, R-5: aggiornamento di research.md con la misura | non eseguito (compito di T020) | da valutare |
-| Elenco delle deroghe | da redigere in T020 | da valutare |
+| Recall@10 ibrido sul gold congelato ≥ 95% | blocco RRF: N4 100%, T082 100%, T083 100% | **Soddisfatto** (corpus sintetici) |
+| Perdita di mappatura blocco→evidenza = 0 | 0 su tutti i corpora | **Soddisfatto formalmente; non dimostra l'estrazione reale** (1 evidenza per blocco, 1:1 per costruzione); da misurare sul ledger reale prima di M3 |
+| R-1: lessicale PG vs BM25 (regressione > 2 pt da spiegare) | T082 −10,5 pt, T083 −17,4 pt Recall@10 | **Regressione confermata, causa non isolata** (ipotesi: motore e granularità); non blocca il gate perché SC-002 è sull'ibrido |
+| R-1: esatta vs HNSW | non eseguibile con la query attuale | **Derogato** dal committente; nessun risultato HNSW; esatta mantenuta |
+| R-3, R-5 e R-1 in `research.md` | aggiornati con la misura | **Fatto** |
+| Elenco delle deroghe | vedi sotto | **Fatto** |
+
+Elenco delle deroghe e riserve (M1):
+1. Confronto esatta vs HNSW non completato (derogato). Nessun valore HNSW esiste.
+2. Corpus sintetici del laboratorio, query di un solo autore, nessun corpus anonimizzato (SC-012 aperto).
+3. Parser finto a paragrafi (~3,1k blocchi), non i ~460 blocchi Docling di T082 del laboratorio: il confronto col lab non è a parità di granularità. Nessun PDF.
+4. Mappatura 1:1 per costruzione: la perdita 0 non misura l'estrazione reale (002:T138, 002:T150 aperti).
+5. Lessicale PG sotto il riferimento del laboratorio su T082/T083: regressione > 2 pt non spiegata da un esperimento a parità.
+6. Hit@1 dell'RRF su T082 (68,4%) inferiore al denso da solo (94,7%): non è un criterio di M1; verifica in T026/T027.
+7. SHA-256 dei pesi NotVerified (provisioning T046 al DGX admin).
+8. Tempi misurati con il preset del router precedente alla riconfigurazione del 2026-11-09: indicativi, non requisiti.
+
+Esito: nessuna condizione di STOP di T020 si è verificata (Recall@10 ibrido ≥ 95% e perdita di mappatura 0 sul gold sintetico). **M1 è chiusa come gate tecnico, con le deroghe e riserve elencate.** Non si dichiara verificato nulla che l'evidenza non dimostri: in particolare la copertura dell'estrazione reale e l'indipendenza delle query.
