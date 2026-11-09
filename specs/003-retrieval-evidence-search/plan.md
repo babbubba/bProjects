@@ -159,7 +159,8 @@ Specificato in [contracts/evaluation.md](contracts/evaluation.md): **promozione*
 5. **Evidenze `Message` sempre incluse** potrebbero non entrare nel budget: `retrievalComplete = false` (R-3).
 6. **Lettura conservativa di D-3** (stadio non invocato in degrado): da confermare nell'analisi; l'alternativa richiede una nuova decisione (R-7).
 7. **Lab non ha eseguito analisi/bozza bProjects**: l'effetto sulla valutazione Gap completa è dimostrato solo su pilota (4/10 esiti completi con figli, 2/10 con padri); T040 è il gate reale.
-8. **La 002 non è accettata**: la 003 si appoggia a un'implementazione che può cambiare; mitigato da T001 e T037.
+8. **M4 eccede «solo la sorgente»**: il formato VOCE `gap-stage-message-1` non porta testo di contesto; i padri richiedono un nuovo formato versionato e una nuova chiave di freeze. Decisione normativa **residua**, da richiedere al committente prima di T041 (non blocca M1–M3).
+9. **La 002 non è accettata**: la 003 si appoggia a un'implementazione che può cambiare; mitigato da T001 e T037.
 
 ## Complexity Tracking
 

@@ -13,9 +13,9 @@
 
 ## Requirement Completeness
 
-- [x] Nessun marcatore [NEEDS CLARIFICATION] (le ambiguità sostanziali sono in «Decisioni aperte» con raccomandazione)
+- [x] Nessun marcatore [NEEDS CLARIFICATION] (le cinque decisioni aperte sono state risolte dal committente il 2026-11-09; vedi «Clarifications»)
 - [x] Requisiti testabili e non ambigui
-- [x] Criteri di successo misurabili (soglie definitive: Decisione aperta 1)
+- [x] Criteri di successo misurabili (soglie approvate 2026-11-09, D-1)
 - [ ] Criteri di successo indipendenti dalla tecnologia — SC-002/SC-003 citano metriche del laboratorio (Recall, Hit@1); accettato perché sono le metriche di valutazione richieste (C7)
 - [x] Scenari di accettazione definiti
 - [x] Casi limite identificati

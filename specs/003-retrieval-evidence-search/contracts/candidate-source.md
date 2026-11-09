@@ -11,7 +11,7 @@ Il contratto è quello di [002 `ai-workflow.md` §13.7](../../002-project-docume
 | Candidati | intero ledger non-Gap in ordine di catalogo | evidenze risolte dai blocchi recuperati (vedi §2), ordine deterministico |
 | `searchBasis` | `ledger_exhaustive` | `retrieval` |
 | `retrievalComplete` | `true` | calcolato (§3) |
-| Formato messaggio | `gap-stage-message-1` | **stesso** (nessuna modifica) |
+| Formato messaggio | `gap-stage-message-1` | **stesso** in M1–M3 (nessuna modifica); l’espansione ai padri (M4) richiederebbe un nuovo formato versionato e l’approvazione del committente |
 | DTO, prompt, validatore, assembly | `gap-stage-alias-1`, `document-gap-v1`, `GapAssessmentRules`, §13.2 | **stessi** |
 | Chiamate LLM dello stadio | una | una (il recupero non usa LLM) |
 | `absenceProven` | calcolato (§13.7) | **sempre `false`** |
