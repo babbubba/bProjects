@@ -153,6 +153,28 @@ if (args.Contains("bootstrap-accounts"))
     return;
 }
 
+// Ricostruzione esplicita dell'indice derivato di recupero (003 T011): mai all'avvio; richiede Retrieval:Enabled=true. Il token `clear` (senza trattini: un `--opzione` seguito da altro verrebbe letto come chiave/valore dalla configurazione) parte da un indice vuoto.
+if (args.Contains("rebuild-retrieval-index"))
+{
+    var retrieval = app.Services.GetRequiredService<IOptions<RetrievalOptions>>().Value;
+    if (!retrieval.Enabled)
+    {
+        Console.Error.WriteLine("Retrieval:Enabled è false: nessuna ricostruzione eseguita.");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    using var scope = app.Services.CreateScope();
+    using var embeddingClient = new EmbeddingClient(retrieval);
+    using var readiness = new RetrievalModelReadiness(retrieval, embeddingClient);
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var summary = await new RetrievalIndexMaintenance(db, new RetrievalIndexBuilder(db, embeddingClient, readiness, retrieval))
+        .RebuildAsync(args.Contains("clear"));
+    Console.WriteLine($"Indice di recupero: preparazioni {summary.Preparations}, Ready {summary.Ready}, Failed {summary.Failed}, voci rimosse {summary.EntriesRemoved}");
+    Environment.ExitCode = summary.Failed == 0 ? 0 : 1;
+    return;
+}
+
 // Errori non gestiti: Problem Details senza messaggi o contenuti; il log riporta solo tipo e classe di errore.
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
