@@ -13,6 +13,9 @@ namespace bProjects.IntegrationTests;
 /// <summary>Servizi REALI del recupero (003 T019): <see cref="EmbeddingClient"/> e <see cref="RetrievalModelReadiness"/> con l'handler HTTP di default contro l'endpoint del router; nessun riordino.</summary>
 internal sealed class RealRetrievalRig : IRetrievalRig, IDisposable
 {
+    /// <summary>Id del modello nel router (nella config del router non esiste [bge-m3]: esiste [bge-m3-Q5] sull'artefatto atteso); sovrascrivibile con BPROJECTS_EVAL_EMBEDDING_MODEL_ID. Non cambia i default di prodotto.</summary>
+    public static string ModelId => Environment.GetEnvironmentVariable("BPROJECTS_EVAL_EMBEDDING_MODEL_ID") is { Length: > 0 } id ? id : "bge-m3-Q5";
+
     public RealRetrievalRig(string endpoint, string apiKey)
     {
         Options = new RetrievalOptions
@@ -20,7 +23,7 @@ internal sealed class RealRetrievalRig : IRetrievalRig, IDisposable
             Enabled = true,
             RuntimeCheckSeconds = 600,
             TimeoutSeconds = 120,   // la prima richiesta può includere il caricamento on-demand del modello da parte del router
-            Embedding = { Endpoint = endpoint, ApiKey = apiKey },   // ModelId bge-m3, artefatto bge-m3-Q5_K_M.gguf, dimensione 1024: default di RetrievalOptions (D-5)
+            Embedding = { Endpoint = endpoint, ApiKey = apiKey, ModelId = ModelId },   // id del router (Retrieval:Embedding:ModelId); artefatto atteso e dimensione 1024: default di RetrievalOptions (D-5)
         };
         Embedding = new EmbeddingClient(Options);
         Readiness = new RetrievalModelReadiness(Options, Embedding);
