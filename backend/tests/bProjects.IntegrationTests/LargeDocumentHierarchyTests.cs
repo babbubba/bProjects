@@ -59,7 +59,7 @@ public sealed class LargeDocumentHierarchyTests : ReconcileRig
 
         Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
         var args = ("r", (object)run);
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, await Scalar<string>(RunSignalSql.Definition, args));   // T141: il POST reale congela la v5; senza Gap la gerarchia oltre contesto è quella v4 (gold invariato)
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV6, await Scalar<string>(RunSignalSql.Definition, args));   // D1 (T148): il POST reale congela la v6; senza Gap la gerarchia oltre contesto è quella v4 (gold invariato)
         var batches = await Count(RunSignalSql.Batches, args);
         Assert.True(batches > 1);
         Assert.True(await Count(RunSignalSql.Nodes, args) > 0);

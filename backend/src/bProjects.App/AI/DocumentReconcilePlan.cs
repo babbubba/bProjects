@@ -169,7 +169,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     public WorkLookupExpectation Expectation => new(_schemaVersion, ValidationVersion);
 
     /// <summary>Il batch dello stadio Gap (v6) ha schema e validazione propri; i batch della gerarchia conservano quelli del piano.</summary>
-    public WorkLookupExpectation ExpectationFor(BatchRef batch) => IsGapBatch(batch) ? new(GapStage.AiSchema, GapStage.ValidationVersion) : Expectation;
+    public async ValueTask<WorkLookupExpectation> ExpectationForAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) =>
+        _gap is not null && await StageReplayAsync(batch.Ordinal, prior, ct) is not null ? new(GapStage.AiSchema, GapStage.ValidationVersion) : Expectation;
 
     public BatchAgentSpec Agent { get; }
 

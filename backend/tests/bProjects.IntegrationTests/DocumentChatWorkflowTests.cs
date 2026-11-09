@@ -568,6 +568,9 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
     {
         public const int Window = 4000;
 
+        /// <summary>Finestra riportata da /props (default <see cref="Window"/>): una prova che richiede più contesto la dichiara qui e nelle <c>AiOptions</c>.</summary>
+        public int ContextWindow { get; init; } = Window;
+
         public List<ChatRequest> Requests { get; } = [];
 
         public Func<ChatRequest, string>? Responder { get; init; }
@@ -584,7 +587,7 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
                 case "/v1/models":
                     return Json("""{"object":"list","data":[{"id":"Qwen-A","object":"model","status":{"value":"loaded","args":["llama-server"]}}]}""");
                 case "/props":
-                    return Json("{\"default_generation_settings\":{\"n_ctx\":" + Window + ",\"params\":{\"n_predict\":-1}},\"total_slots\":1}");
+                    return Json("{\"default_generation_settings\":{\"n_ctx\":" + ContextWindow + ",\"params\":{\"n_predict\":-1}},\"total_slots\":1}");
                 case "/tokenize":
                 {
                     using var doc = JsonDocument.Parse(body);

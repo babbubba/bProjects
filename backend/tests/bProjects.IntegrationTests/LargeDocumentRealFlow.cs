@@ -328,7 +328,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     private async Task VerifyStructureAsync(Verdicts v, Guid run, Guid project)
     {
         var args = ("r", (object)run);
-        v.Check("[STRUTTURALE] la definizione del run e project-analysis-documents-v5 (T141)", await Scalar<string>(RunSignalSql.Definition, args) == DocumentAnalysisWorkflow.DefinitionVersionV5);
+        v.Check("[STRUTTURALE] la definizione del run e project-analysis-documents-v6 (T141, D1/T148)", await Scalar<string>(RunSignalSql.Definition, args) == DocumentAnalysisWorkflow.DefinitionVersionV6);
         var batches = await Count(RunSignalSql.Batches, args);
         var nodes = await Count(RunSignalSql.Nodes, args);
         var aliasOutputs = await Count(RunSignalSql.AliasOutputs, args);

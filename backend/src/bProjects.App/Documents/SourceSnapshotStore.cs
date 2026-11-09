@@ -16,6 +16,9 @@ namespace bProjects.App.Documents;
 /// </summary>
 public sealed class SourceSnapshotStore(AppDbContext db)
 {
+    /// <summary>Definizione congelata dalle NUOVE richieste di Analizza (D1, AI §13.7): v6, con lo stadio Gap dedicato oltre una chiamata. Le costanti `AnalysisDefinition` e `AnalysisPromptVersions()` della v5 restano come storico (T141) e come fixture dei test.</summary>
+    public const string AnalysisDefinitionV6 = DocumentAnalysisWorkflow.DefinitionVersionV6;
+
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV6;
@@ -188,6 +191,24 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             reconcileAlgorithm = DocumentReconcilePlan.AlgorithmVersion, reconcileCatalog = ReconcileAliasContracts.CatalogVersion,
             reconcileGapPolicy = DocumentAnalysisWorkflow.ReconcileGapPolicyV1,
             analysisOutputPolicy = AnalysisOutputEstimate.PolicyVersion,
+        });
+
+    /// <summary>
+    /// Versioni congelate di una nuova richiesta di Analizza v6 (D1, AI §13.7, T148): le chiavi del single-call v6 (prompt document-analysis-v6, schema del canonico 1.1.0, schema AI alias-2, catalogo, id canonici, algoritmo
+    /// analysis-single-v3, validazione v3, policy di stima dell'output single-call-output-estimate-1), quelle della gerarchia v4 invariata (prompt, schema AI del batch, algoritmo del motore, catalogo del batch) e le sei chiavi dello
+    /// stadio Gap (`gapStage`, `gapPrompt`, `gapAiSchema`, `gapMessageFormat`, `gapPolicy`, `gapEstimate`). `reconcileGapPolicy` NON c'è: è sostituita dalle chiavi `gap*`. Instradamento e presenza di Gap si decidono a runtime.
+    /// </summary>
+    public static string AnalysisPromptVersionsV6() =>
+        JsonSerializer.Serialize(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["analysis"] = AnalysisPromptVersion, ["analysisSchema"] = AnalysisSchemaVersion, ["analysisAiSchema"] = DocumentAnalysisWorkflow.SchemaVersionV5,
+            ["aliasCatalog"] = AnalysisAliasCatalog.Version, ["canonIds"] = AnalysisAliasCatalog.CanonIdsVersion,
+            ["algorithm"] = DocumentAnalysisWorkflow.AlgorithmVersionV5, ["validation"] = DocumentAnalysisWorkflow.ValidationVersionV5,
+            ["reconcile"] = ReconcileAliasContracts.PromptVersion, ["reconcileAiSchema"] = ReconcileAliasContracts.SchemaVersion,
+            ["reconcileAlgorithm"] = DocumentReconcilePlan.AlgorithmVersion, ["reconcileCatalog"] = ReconcileAliasContracts.CatalogVersion,
+            ["analysisOutputPolicy"] = AnalysisOutputEstimate.PolicyVersion,
+            ["gapStage"] = GapStage.FreezeKeys["gapStage"], ["gapPrompt"] = GapStage.FreezeKeys["gapPrompt"], ["gapAiSchema"] = GapStage.FreezeKeys["gapAiSchema"],
+            ["gapMessageFormat"] = GapStage.FreezeKeys["gapMessageFormat"], ["gapPolicy"] = GapStage.FreezeKeys["gapPolicy"], ["gapEstimate"] = GapStage.FreezeKeys["gapEstimate"],
         });
 
     /// <summary>Versioni congelate di una nuova richiesta di Genera v3 (T127): prompt, schema del canonico 1.1.0, schema AI della bozza, catalogo, algoritmo e validazione.</summary>

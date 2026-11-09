@@ -33,9 +33,10 @@ public interface IDocumentBatchPlan
     WorkLookupExpectation Expectation { get; }
 
     /// <summary>
-    /// Versioni di schema e validazione di UN batch, quando differiscono da quelle del piano (es. lo stadio Gap della riconciliazione v6 ha schema e validazione propri). Predefinito: <see cref="Expectation"/>.
+    /// Versioni di schema e validazione di UN batch, quando differiscono da quelle del piano (es. lo stadio Gap della riconciliazione v6 ha schema e validazione propri). Asincrona perché il lookup precede ogni altra
+    /// operazione del piano in un processo ripreso da un checkpoint: il piano ricostruisce dagli output Committed ciò che gli serve. Predefinito: <see cref="Expectation"/>.
     /// </summary>
-    WorkLookupExpectation ExpectationFor(BatchRef batch) => Expectation;
+    ValueTask<WorkLookupExpectation> ExpectationForAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) => new(Expectation);
 
     /// <summary>Agente della fase.</summary>
     BatchAgentSpec Agent { get; }
@@ -268,13 +269,13 @@ public sealed class DocumentBatchPort(
     public async ValueTask<bool> LookupAsync(BatchRef batch, CancellationToken ct)
     {
         using var span = DocumentTiming.Span("port.lookup");
-        if ((await store.LookupAsync(batch.BatchId, batch.InputHash, plan.ExpectationFor(batch), ct)).Kind == WorkLookupKind.Hit)
+        if ((await store.LookupAsync(batch.BatchId, batch.InputHash, await plan.ExpectationForAsync(batch, this, ct), ct)).Kind == WorkLookupKind.Hit)
         {
             return true;
         }
 
         // Retry PM (T099): su Miss, un output compatibile di un root precedente è importato senza AI; altrimenti si procede col lavoro normale.
-        return (await store.TryImportAsync(batch.BatchId, plan.ExpectationFor(batch), ct)).Kind is WorkImportKind.Imported or WorkImportKind.Replayed;
+        return (await store.TryImportAsync(batch.BatchId, await plan.ExpectationForAsync(batch, this, ct), ct)).Kind is WorkImportKind.Imported or WorkImportKind.Replayed;
     }
 
     public ValueTask ReserveCallAsync(BatchRef batch, CancellationToken ct) => calls.ReserveAsync(batch, ct);

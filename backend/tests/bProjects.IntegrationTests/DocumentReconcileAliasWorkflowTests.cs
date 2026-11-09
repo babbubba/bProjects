@@ -695,7 +695,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
             }
         }
 
-        var run = v5 ? await StartNativeAsync(client, project) : await StartV4Async(client, project);   // v5: run nativo del POST (T141); v4: riportato alla definizione storica
+        var run = v5 ? await StartNativeAsync(client, project) : await StartV4Async(client, project);   // v5: run storico dal POST (fixture HistoricalAnalysisV5); v4: riportato alla definizione storica
         return (run, await ClaimAsync(run), project);
     }
 
@@ -1030,7 +1030,10 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     private async Task FreezeHistoricalAsync(Guid run, string definition, string versions) =>
         await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = @v::jsonb WHERE \"Id\" = @r", ("d", definition), ("v", versions), ("r", run));
 
-    /// <summary>Run creato dal vero endpoint Analizza (POST): dal T141 è v5 con le sue chiavi, mai riscritte dal test (nessun pin).</summary>
+    /// <summary>
+    /// Run v5 STORICO: creato dal vero endpoint Analizza (oggi v6, D1/T148) e riportato alla definizione e alle chiavi che l'endpoint congelava dal T141 al T148 (<see cref="HistoricalAnalysisV5"/>), come un run richiesto allora.
+    /// Solo fixture: i test v5 che lo usano restano invariati.
+    /// </summary>
     private async Task<Guid> StartNativeAsync(HttpClient client, Guid project)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
@@ -1038,6 +1041,8 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         var response = await client.SendAsync(request, Ct);
         Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
         var run = (await Json(response)).GetProperty("id").GetGuid();
+        Assert.Equal("project-analysis-documents-v6", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // oggi l'endpoint congela la v6
+        await FreezeHistoricalAsync(run, V5, V5Hierarchical);
         Assert.Equal(V5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
         Assert.Equal(

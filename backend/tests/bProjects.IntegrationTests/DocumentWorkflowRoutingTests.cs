@@ -149,7 +149,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal([Graph.DocAnalysisV5], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r AND \"SchemaVersion\" = '1.1.0'", ("r", run)));
         Assert.Equal(1, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV5], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV6], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
 
         // T124 (invariato per v3): il payload dell'analisi non e determinabile prima del claim (selezione evidenze congelata sotto lease): T unavailable => Extended workload_unknown.
         await AssertClassifiedBeforeFirstClaim("ProcessingRuns", "ProcessingRun", run, expectedPayloadMeasured: false);
@@ -445,7 +445,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(2, row.Attempts);
         Assert.Equal([Graph.DocAnalysisV5, Graph.DocAnalysisV5], _model.Graphs);
         Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV5], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV6], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
 
         // Replay: un run terminale non si rielabora e non invia nulla.
         Assert.False(await Dispatcher().RunOnceAsync(Ct));
@@ -569,18 +569,18 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         JsonSerializer.Serialize(keys.ToDictionary(k => k.Key, k => k.Value));
 
     [Fact]
-    public async Task A_new_analyze_request_is_frozen_as_v5_with_all_the_version_keys_and_the_dispatcher_routes_it_to_the_documentary_workflow()
+    public async Task A_new_analyze_request_is_frozen_as_v6_with_all_the_version_keys_and_the_dispatcher_routes_it_to_the_documentary_workflow()
     {
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         await NewReadyDocument(client, project, "regole", Statement);
 
         var run = await StartAnalysis(client, project);
-
+        // Freeze al POST (D1, T148): definizione v6 e TUTTE le chiavi (single-call v6 + gerarchia v4 + sei chiavi dello stadio Gap, nessuna policy Gap temporanea), nessuna decisione single-call/gerarchico alla richiesta.
         // Freeze al POST: definizione v5 e TUTTE le chiavi (single-call v5 + gerarchia v4 + policy Gap), nessuna decisione single-call/gerarchico alla richiesta.
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, (await RunRow(run)).Definition);
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV6, (await RunRow(run)).Definition);
         var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
-        Assert.Equal(V5Keys.Append((Key: "analysisOutputPolicy", Value: "single-call-output-estimate-1")).OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
+        Assert.Equal(AnalysisV6Fixture.Keys().OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
         Assert.Equal(0, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         Assert.Empty(_model.Graphs);
 
@@ -588,7 +588,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
         Assert.Equal(("Completed", null), (await RunRow(run)).Pair());
         Assert.Equal([Graph.DocAnalysisV5], _model.Graphs);   // prompt document-analysis-v4, mai il prompt v3 (nessun fallback semantico a v4)
-        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV5], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
+        Assert.Equal([DocumentAnalysisWorkflow.DefinitionVersionV6], await Strings("SELECT DISTINCT \"WorkflowDefinitionVersion\" FROM \"WorkflowCheckpoints\" WHERE \"ProcessingRunId\" = @o", ("o", run)));
         Assert.Equal(1, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"Status\" = 'Committed' AND \"SchemaVersion\" = 'document-analysis-alias-2'", ("r", run)));
     }
 
@@ -740,7 +740,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.Equal(("Completed", null), (await RunRow(v5)).Pair());
         Assert.Equal([Graph.DocAnalysisV3, Graph.DocAnalysisV5], _model.Graphs);         // il v5 ha inviato la propria chiamata: nessun riuso di WorkOutput per sola uguaglianza di fonti
         Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV4, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4)));
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5)));
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV6, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5)));
         Assert.NotEqual(await Scalar<string>("SELECT \"Hash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v4)), await Scalar<string>("SELECT \"Hash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", v5)));
         Assert.Equal("document-analysis-alias-1", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v4)));
         Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", v5)));

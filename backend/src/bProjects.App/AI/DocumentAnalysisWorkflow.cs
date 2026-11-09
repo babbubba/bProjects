@@ -414,7 +414,7 @@ public sealed class DocumentAnalysisWorkflow(
     // (prompt document-reconcile-v3, DTO reconcile-alias-1). Le nuove richieste di Analizza congelano la v4; v2 e v3 storici o in volo restano invariati.
     public const string DefinitionVersionV4 = "project-analysis-documents-v4";
 
-    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata), v4 (alias con gerarchia) o v5 (single-call con Gap + gerarchia v4 + policy Gap, T141); null = definizione, prompt o versioni non supportati (workflow_incompatible).</summary>
+    /// <summary>Contratto di analisi documentale di un run: v2 (storico, frozen), v3 (alias, solo singola chiamata), v4 (alias con gerarchia) o v5 (single-call con Gap + gerarchia v4 + policy Gap, T141) o v6 (come v5 ma con stadio Gap dedicato su ledger completo al posto della policy Gap, D1/T148); null = definizione, prompt o versioni non supportati o miste (workflow_incompatible).</summary>
     public static int? ContractOf(ProcessingRun run)
     {
         if (run.MafVersion != Conversation.CurrentMafVersion)

@@ -116,9 +116,9 @@ public sealed class DocumentLimitsSnapshotTests : ReconcileRig
         Assert.Equal(RunLimitsSnapshot.ComputeHash(1, policy.Revision, policy.Limits), parsed.Hash);
         // Non è il PolicyHash del root (solo timer): due fotografie diverse con scopi diversi.
         Assert.NotEqual(await Scalar<string>("SELECT \"PolicyHash\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)), parsed.Hash);
-        // T141: il run creato dal POST reale è v5 e snapshot dei limiti e versioni congelate nascono insieme nella stessa transazione del run.
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
-        Assert.Equal("hierarchical-gap-incomplete-1", await Scalar<string>("SELECT \"PromptVersions\"->>'reconcileGapPolicy' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        // D1 (T148): il run creato dal POST reale è v6 e snapshot dei limiti e versioni congelate nascono insieme nella stessa transazione del run.
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV6, await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal("gap-stage-1", await Scalar<string>("SELECT \"PromptVersions\"->>'gapStage' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // v6: chiavi dello stadio Gap al posto della policy Gap temporanea
     }
 
     [Fact]

@@ -122,20 +122,20 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
     // ================================================================ freeze alla richiesta
 
     [Fact]
-    public async Task A_new_analyze_request_freezes_the_v5_definition_with_the_v4_prompt_alias_2_schema_catalog_canonical_id_and_hierarchy_versions()
+    public async Task A_new_analyze_request_freezes_the_v6_definition_with_the_v6_prompt_alias_2_schema_catalog_canonical_id_hierarchy_and_gap_stage_versions()
     {
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
         await NewDocument(client, project, "regole", Statement1);
 
-        // POST reale senza riscritture (StartRunAsync riporta il run alle chiavi storiche v4): dal T141 le nuove richieste sono v5 (AI §13.1 e §13.6).
+        // POST reale senza riscritture (StartRunAsync riporta il run alle chiavi storiche v4): dal T148 (D1) le nuove richieste sono v6 (AI §13.7).
         var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
         var response = await client.SendAsync(request, Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var run = (await Json(response)).GetProperty("id").GetGuid();
 
-        Assert.Equal("project-analysis-documents-v5", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        Assert.Equal("project-analysis-documents-v6", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         var prompts = JsonDocument.Parse(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))).RootElement;
         Assert.Equal("document-analysis-v6", prompts.GetProperty("analysis").GetString());
         Assert.Equal("1.1.0", prompts.GetProperty("analysisSchema").GetString());
@@ -148,7 +148,8 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
         Assert.Equal("reconcile-alias-1", prompts.GetProperty("reconcileAiSchema").GetString());
         Assert.Equal("global-reconcile-v1", prompts.GetProperty("reconcileAlgorithm").GetString());
         Assert.Equal("reconcile-alias-catalog-1", prompts.GetProperty("reconcileCatalog").GetString());
-        Assert.Equal("hierarchical-gap-incomplete-1", prompts.GetProperty("reconcileGapPolicy").GetString());
+        Assert.Equal("gap-stage-1", prompts.GetProperty("gapStage").GetString());
+        Assert.False(prompts.TryGetProperty("reconcileGapPolicy", out _));   // sostituita dalle chiavi gap*
     }
 
     // ================================================================ analisi completa

@@ -464,3 +464,38 @@ public sealed class DocumentGapStageMetadataTests : ReconcileRig
         Assert.Single(stage.Candidates);
     }
 }
+
+/// <summary>
+/// 002 T144 (PG) — una fonte esclusa dallo snapshot congelato non entra mai nel ledger dello stadio (né come candidata né nei metadati).
+/// </summary>
+[Trait("Category", TestCategories.Integration)]
+public sealed class DocumentGapStageExcludedSourceTests : ReconcileRig
+{
+    [Fact]
+    public async Task A_document_excluded_from_the_frozen_snapshot_is_never_part_of_the_stage_ledger()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var kept = await NewDocument(client, project, "inclusa", "Requisito 1: il fornitore consegna entro 30 giorni", "aaa");
+        var excluded = await NewDocument(client, project, "esclusa", "Requisito 2: testo di una fonte esclusa dallo snapshot", "bbb");
+        var run = await StartRunAsync(client, project);
+        await Execute(
+            "UPDATE \"SourceSnapshotItems\" SET \"Included\" = false, \"Availability\" = 'Excluded', \"DocumentVersionId\" = NULL, \"PreparationId\" = NULL, \"EvidenceVersionId\" = NULL WHERE \"DocumentId\" = @d AND \"SnapshotId\" = (SELECT \"SourceSnapshotId\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r)",
+            ("d", excluded.Document), ("r", run));
+        var claim = await ClaimAsync(run);
+
+        var input = await PrepareAsync(claim);
+
+        using var scope = App.Services.CreateScope();
+        var meta = await GapStageMetadata.LoadAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), input, Ct);
+        var catalog = AnalysisAliasCatalog.Build(input, AnalysisAliasContracts.SchemaVersionV2);
+        var text = GapStageBuilder.Message(GapStageBuilder.Build(input, catalog, meta, null)).Single().Text;
+
+        Assert.Single(input.Evidence);
+        Assert.Contains("fornitore consegna", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("fonte esclusa", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"esclusa\"", text, StringComparison.Ordinal);
+        Assert.Contains("documento=\"inclusa\"", text, StringComparison.Ordinal);
+        Assert.Equal(kept.Document, input.Evidence[0].Sources[0].DocumentId);
+    }
+}

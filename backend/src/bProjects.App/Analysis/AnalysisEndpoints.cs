@@ -210,10 +210,10 @@ public static class AnalysisEndpoints
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.AnalysisRunDeadline,
                 // Definizione/prompt/schema documentali v2 persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
-                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.AnalysisDefinition : ProcessingRun.AnalysisWorkflowVersion,
+                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.AnalysisDefinitionV6 : ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
-                PromptVersions = documentary ? SourceSnapshotStore.AnalysisPromptVersions() : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
+                PromptVersions = documentary ? SourceSnapshotStore.AnalysisPromptVersionsV6() : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };

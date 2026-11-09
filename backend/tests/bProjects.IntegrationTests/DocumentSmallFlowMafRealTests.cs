@@ -692,7 +692,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
         // Dal T131 (157c1fe) le nuove richieste di Analizza congelano la definizione v4 (alias con riconciliazione gerarchica; DocumentSmallFlowTests
         // asserisce già V4 sullo stesso percorso): l'attesa V3 era un falso negativo del test, non un criterio di accettazione.
         v.Check($"{label}: revisione 1.1.0 (workflow documentale v4 con alias)", view.GetProperty("schemaVersion").GetString() == "1.1.0"
-            && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersionV5);
+            && await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)) == DocumentAnalysisWorkflow.DefinitionVersionV6);
         return new AnalysisOutcome(run, view.GetProperty("currentRevisionId").GetGuid(), JsonNode.Parse(view.GetProperty("content").GetRawText())!);
     }
 
@@ -701,7 +701,7 @@ public sealed class DocumentSmallFlowMafRealTests : ArchiveTestBase
     {
         var l = "T142";
         var definition = await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis.Analysis));
-        v.Check($"{l}: workflow project-analysis-documents-v5 (non un run storico v4)", definition == DocumentAnalysisWorkflow.DefinitionVersionV5 && definition == "project-analysis-documents-v5", definition);
+        v.Check($"{l}: workflow project-analysis-documents-v6 (D1; non un run storico v4)", definition == DocumentAnalysisWorkflow.DefinitionVersionV6 && definition == "project-analysis-documents-v6", definition);
         // Versioni effettive (correzioni T142): analisi con il prompt document-analysis-v6 congelato e tutte le estrazioni dei messaggi PM con extraction-v3.
         var analysisPrompt = await Scalar<string>("SELECT \"PromptVersions\"->>'analysis' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", analysis.Analysis));
         v.Check($"{l}: prompt di analisi congelato document-analysis-v6", analysisPrompt == DocumentAnalysisWorkflow.PromptVersionV6, analysisPrompt);
