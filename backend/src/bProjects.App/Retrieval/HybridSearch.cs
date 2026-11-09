@@ -112,11 +112,21 @@ public sealed class HybridSearch(AppDbContext db, EmbeddingClient embedding, Ret
     }
 
     /// <summary>Entrambi i segnali sulle stesse condizioni e fusione RRF. Un errore di embedding si propaga (nessun ritorno al solo lessicale).</summary>
-    public async Task<HybridSearchResult> SearchAsync(RetrievalScope scope, string query, int pool, CancellationToken ct = default)
+    public async Task<HybridSearchResult> SearchAsync(RetrievalScope scope, string query, int pool, CancellationToken ct = default) =>
+        await SearchAsync(scope, query, pool, Rrf.K, ct);
+
+    /// <summary>Come sopra, con profondità e costante RRF della politica (003 T022).</summary>
+    public async Task<HybridSearchResult> SearchAsync(RetrievalScope scope, string query, RetrievalPolicy policy, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        return await SearchAsync(scope, query, policy.Pool, policy.RrfK, ct);
+    }
+
+    private async Task<HybridSearchResult> SearchAsync(RetrievalScope scope, string query, int pool, int k, CancellationToken ct)
     {
         var lexical = await LexicalAsync(scope, query, pool, ct);
         var dense = await DenseAsync(scope, query, pool, ct);
-        return new(lexical, dense, Rrf.Fuse(lexical.Blocks, dense.Blocks));
+        return new(lexical, dense, Rrf.Fuse(lexical.Blocks, dense.Blocks, k));
     }
 
     private static NpgsqlParameter[] Common(RetrievalScope scope) =>

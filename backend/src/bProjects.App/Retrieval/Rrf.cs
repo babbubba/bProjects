@@ -16,10 +16,12 @@ public static class Rrf
 {
     public const int K = 60;
 
-    public static IReadOnlyList<FusedBlock> Fuse(IEnumerable<RankedBlock> lexical, IEnumerable<RankedBlock> dense)
+    /// <summary>Fusione con la costante <paramref name="k"/> della politica (predefinita <see cref="K"/>).</summary>
+    public static IReadOnlyList<FusedBlock> Fuse(IEnumerable<RankedBlock> lexical, IEnumerable<RankedBlock> dense, int k = K)
     {
         ArgumentNullException.ThrowIfNull(lexical);
         ArgumentNullException.ThrowIfNull(dense);
+        ArgumentOutOfRangeException.ThrowIfLessThan(k, 1);
         var lex = Best(lexical);
         var den = Best(dense);
         var ids = lex.Keys.Union(den.Keys);
@@ -27,7 +29,7 @@ public static class Rrf
         {
             var l = lex.TryGetValue(id, out var lr) ? lr : (int?)null;
             var d = den.TryGetValue(id, out var dr) ? dr : (int?)null;
-            var score = (l is null ? 0.0 : 1.0 / (K + l.Value)) + (d is null ? 0.0 : 1.0 / (K + d.Value));
+            var score = (l is null ? 0.0 : 1.0 / (k + l.Value)) + (d is null ? 0.0 : 1.0 / (k + d.Value));
             return (Id: id, Lexical: l, Dense: d, Score: score);
         });
 
