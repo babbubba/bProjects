@@ -3,7 +3,7 @@
 **Feature Branch**: `feature/003-retrieval-evidence-search`
 **Feature**: `003-retrieval-evidence-search`
 **Created**: 2026-11-09
-**Status**: Draft — specifica funzionale; nessuna implementazione, piano o task. Nessun requisito è accettato
+**Status**: Draft — specifica funzionale con le cinque decisioni aperte risolte dal committente il 2026-11-09; piano e task in `plan.md`/`tasks.md`; nessuna implementazione. Nessun requisito è accettato
 **Input**: Terza vertical slice: sostituire la sorgente dei candidati dello stadio Gap della 002 (oggi l'intero ledger) con un recupero di evidenze su passaggi originali, ibrido lessicale + semantico con riordino, quando il ledger supera il budget; mantenere provenienza, determinismo e distinzione fra «non recuperato» e «assente».
 
 **Fonti di questa specifica** (nessuna riscritta): [transition §F](../../docs/roadmap/slice-002-003-transition.md) (perimetro, C1–C7, scartati, confine unico); [ai-workflow.md §13.7–13.8](../002-project-documents/contracts/ai-workflow.md) (contratto dello stadio Gap); [copertura implementativa](../../docs/roadmap/implementation-coverage.md); esperimenti del branch `research/slice-003-lab` (commit `f005c8d`, in sola lettura): `report-finale.md`, `phase-2/report.md`, `research-preliminare.md`, `results/*`. Le misure citate sono **evidenze sperimentali su dati sintetici, non requisiti né accettazioni**.
@@ -20,6 +20,16 @@ Risposte ricavate dai documenti esistenti e dalle decisioni già prese, non nuov
 - Q: Si adottano i sommari SKRAG, la selezione preventiva o l'NLI come filtro? → A: No: scartati dalle evidenze (transition §F; phase-2 B2/B3, report NLI).
 - Q: Il recupero può dichiarare che una risposta non esiste? → A: No: un recupero senza risultati pertinenti non è una prova di assenza; `retrievalComplete` non si converte mai in «assente» (vedi 002 §13.7, tabella a cinque stati).
 - Q: La valutazione continua (C7) è un task applicativo che ricrea i benchmark? → A: No: gold e script del laboratorio sono promossi a test; il laboratorio resta riferimento storico invariato.
+
+### Session 2026-11-09 (decisioni del committente sulle cinque decisioni aperte)
+
+Decisioni **approvate dal committente** il 2026-11-09; sostituiscono le raccomandazioni precedenti dove diverse.
+
+- Q: Soglie di accettazione numeriche (D-1)? → A: Recall@10 ≥ 95%, Hit@1 con riordino ≥ 95%, 0 falsi `AnsweredInSnapshot` e regressione ≤ 2 punti si applicano al **gold sintetico CONGELATO**; le regressioni si misurano rispetto alla **baseline dichiarata sullo STESSO insieme di query** (stessi gold, stessi input per hash). Nessuna soglia sul corpus cliente finché non esiste una prima misura.
+- Q: Corpus e autori per la valutazione indipendente (D-2)? → A: L'**accettazione piena** richiede un corpus anonimizzato e almeno 20 query scritte da un secondo autore. Altrimenti l'esito è «accettata con riserva», che DEVE evidenziare esplicitamente che manca la validazione su corpus anonimizzato e su query indipendenti e **NON equivale all'accettazione piena**.
+- Q: Servizi di ricerca non disponibili (D-3, **modificata** dal committente)? → A: **Embedding indisponibile ⇒ errore tipizzato, zero invii LLM, nessun fallback silenzioso.** **Riordino indisponibile ⇒ consentito un ranking RRF DIAGNOSTICO** con `retrievalComplete = false`, che NON può dichiarare completata una valutazione Gap. In modalità degradata NON si emettono risultati definitivi `AnsweredInSnapshot`, dichiarazioni di assenza di evidenze né attestazioni di completezza dei conflitti; il workflow rende esplicito il mancato completamento e conserva la causa tipizzata; nessun risultato parziale è presentato come valido; nessun aumento automatico di budget né cambio di modello per aggirare il problema. Sostituisce la raccomandazione «ordine RRF con avviso».
+- Q: Ambito della ricerca (D-4)? → A: La 003 serve **solo** il recupero per la valutazione Gap (Chat, bozza e ricerca per il PM sono fuori perimetro); i componenti restano riutilizzabili per evoluzioni future **senza interfacce speculative con una sola implementazione** (YAGNI).
+- Q: Pinning dei modelli (D-5)? → A: Modelli fissati per **nome, artefatto e dimensione dei vettori** nella readiness; SHA-256 dei pesi registrato al provisioning; fino ad allora «non verificato» nei rapporti.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -93,7 +103,7 @@ Come responsabile della qualità voglio che l'introduzione del recupero non alte
 - Passaggio che spezza una clausola da condizioni/eccezioni: il contesto padre selettivo deve poter ricomporre la clausola entro il budget; altrimenti la perdita è registrata.
 - Documento in PDF o in altro formato non provato: nessuna garanzia di qualità; l'esclusione dal perimetro di accettazione è dichiarata.
 - Più progetti con corpora simili nello stesso database: il confinamento per progetto è obbligatorio e va provato (oggi non provato nel laboratorio).
-- Servizi di embedding o riordino non disponibili, lenti o con risposta malformata: errore tipizzato o esito esplicitamente non completo; nessun esito completo con candidati parziali.
+- Servizio di embedding non disponibile, lento o con risposta malformata: errore tipizzato a zero invii LLM (FR-020). Riordino non disponibile: ranking RRF diagnostico con `retrievalComplete = false`, nessuna valutazione Gap completata e nessun esito definitivo (FR-035); nessun esito completo con candidati parziali.
 - Modello di embedding o parametri cambiati: gli indici derivati sono invalidati e ricostruiti; i run storici conservano il proprio registro.
 - Punteggi del riordino negativi o non calibrati: usati solo come ordinamento, mai come probabilità né come soglia di verità.
 - Ledger che cresce dopo il run: il registro dei candidati è riferito allo snapshot congelato, non al ledger corrente.
@@ -130,7 +140,8 @@ Come responsabile della qualità voglio che l'introduzione del recupero non alte
 - **FR-017**: `retrievalComplete` DEVE valere `false` se il recupero ha avuto errori, cutoff che escludono candidati non valutati, esclusioni per budget di candidati ritenuti pertinenti dal ranking, o servizi non disponibili.
 - **FR-018**: Un Gap senza riscontri e con `retrievalComplete = false` o `searchBasis = retrieval` DEVE essere rappresentato come «assenza non provata»; «assenza provata» è riservata alla sorgente esaustiva completa.
 - **FR-019**: `retrievalComplete` NON DEVE mai essere convertito in «assente», né il silenzio del recupero in `NoAnswer` provato.
-- **FR-020**: Errori e indisponibilità dei servizi di ricerca DEVONO essere registrati e propagati nel registro; il comportamento (fail-fast tipizzato oppure esito non completo marcato) è oggetto di una decisione aperta.
+- **FR-020** *(risolto 2026-11-09, D-3)*: Errori e indisponibilità dei servizi di ricerca DEVONO essere registrati e propagati nel registro. Embedding indisponibile ⇒ errore tipizzato a zero invii LLM, senza fallback silenzioso. Riordino indisponibile ⇒ ranking RRF **diagnostico** con `retrievalComplete = false`, ammesso solo come registro consultabile.
+- **FR-035** *(nuovo, D-3)*: In modalità degradata (riordino indisponibile) il sistema NON DEVE emettere risultati definitivi `AnsweredInSnapshot`, dichiarazioni di assenza di evidenze né attestazioni di completezza dei conflitti, NON DEVE dichiarare completata la valutazione Gap, DEVE rendere esplicito il mancato completamento conservando la causa tipizzata e NON DEVE presentare risultati parziali come validi. Nessun aumento automatico di budget né cambio di modello per aggirare il problema.
 - **FR-021**: Nessun esito DEVE apparire completo se uno qualunque dei candidati richiesti non è stato valutato.
 
 **Estrazione e indice**
@@ -148,7 +159,8 @@ Come responsabile della qualità voglio che l'introduzione del recupero non alte
 - **FR-026**: Il sistema DEVE includere una valutazione ripetibile con gold versionati, query e metriche (Recall@1/5/10/20, Hit@1, falsi `AnsweredInSnapshot`, conflitti persi, citazioni invalide) promossi a test dai materiali del laboratorio.
 - **FR-027**: La valutazione DEVE registrare per hash input, gold, configurazione e versione dei servizi; i risultati DEVONO essere confrontabili fra esecuzioni.
 - **FR-028**: La valutazione DEVE poter essere eseguita su servizi reali (opt-in esplicito) e senza di essi con componenti simulati, distinguendo le due modalità nel rapporto.
-- **FR-029**: Soglie di regressione DEVONO essere definite e applicate come condizione di accettazione (valori nelle «Decisioni aperte»).
+- **FR-029** *(risolto 2026-11-09, D-1)*: Le soglie Recall@10 ≥ 95%, Hit@1 con riordino ≥ 95%, 0 falsi `AnsweredInSnapshot` e regressione ≤ 2 punti DEVONO essere applicate come condizione di accettazione sul **gold sintetico congelato**; le regressioni si misurano rispetto alla baseline dichiarata sullo stesso insieme di query.
+- **FR-036** *(nuovo, D-2)*: L'esito di accettazione DEVE distinguere «accettata» (corpus anonimizzato + ≥ 20 query di un secondo autore, soglie rispettate) da «accettata con riserva», che DEVE dichiarare esplicitamente la mancanza di validazione su corpus anonimizzato e query indipendenti e non è accettazione piena.
 - **FR-030**: Ogni rapporto di valutazione DEVE dichiarare provenienza dei dati (sintetici/cliente), autore delle query e limiti noti.
 
 **Compatibilità e vincoli**
@@ -156,7 +168,8 @@ Come responsabile della qualità voglio che l'introduzione del recupero non alte
 - **FR-031**: Run, snapshot, WorkOutput, prompt, gold e checkpoint storici della 001 e 002 NON DEVONO essere riscritti.
 - **FR-032**: Non DEVONO essere introdotte interfacce con una sola implementazione, nuovi microservizi, grafi di conoscenza né framework estranei alla slice; un nuovo servizio o dipendenza strutturale richiede ADR proporzionato.
 - **FR-033**: Nessun dato di progetto DEVE lasciare l'infrastruttura interna; nessun fallback verso servizi cloud.
-- **FR-034**: Readiness, versione dei modelli (nome, artefatto, dimensione vettori) e disponibilità dei servizi DEVONO essere verificate e riportate prima dell'uso, in modo analogo alla readiness del modello generativo; l'hash dei pesi, se non esposto, DEVE essere dichiarato non verificato.
+- **FR-034** *(precisato 2026-11-09, D-5)*: Readiness, versione dei modelli (nome, artefatto, dimensione vettori) e disponibilità dei servizi DEVONO essere verificate e riportate prima dell'uso, in modo analogo alla readiness del modello generativo (T126); nome, artefatto e dimensione dei vettori sono **fissati** nella configurazione e una difformità blocca l'uso; lo SHA-256 dei pesi è registrato al provisioning e, finché assente, DEVE essere dichiarato «non verificato».
+- **FR-037** *(nuovo, D-4)*: Il perimetro funzionale è il solo recupero per lo stadio Gap; Chat, bozza e ricerca per il PM NON DEVONO essere servite dalla 003. I componenti DEVONO restare separabili e riutilizzabili senza introdurre interfacce con una sola implementazione.
 
 ### Requisiti architetturali vincolanti (derivati dalla ricerca)
 
@@ -199,8 +212,8 @@ Evidence ledger con provenienza (FR-007 della 002); snapshot congelato per run; 
 ### Measurable Outcomes
 
 - **SC-001**: Su un progetto con ledger oltre il budget dello stadio Gap, Analizza non termina più con `gap_ledger_exceeds_input` e valuta tutti i Gap annotati (esito, supporti, stato di ricerca).
-- **SC-002**: Sul gold sintetico (T082, T083, N4) il Recall@10 dei passaggi figli ibridi è almeno pari al riferimento del laboratorio (100% su passaggi brevi) e Hit@1 con riordino ≥ 95%; la soglia definitiva è una decisione aperta.
-- **SC-003**: Falsi `AnsweredInSnapshot` = 0 sul gold di valutazione; conflitti persi dopo risoluzione deterministica degli ID ≤ valore del laboratorio (1–2 su 10 casi) e nessuno per esclusioni a monte del recupero.
+- **SC-002** *(soglie approvate 2026-11-09)*: Sul gold sintetico **congelato** (T082, T083, N4) il Recall@10 dei passaggi figli ibridi è ≥ 95% (riferimento del laboratorio: 100% su passaggi brevi) e Hit@1 con riordino ≥ 95%; nessuna regressione > 2 punti rispetto alla baseline dichiarata sullo **stesso insieme di query**.
+- **SC-003**: Falsi `AnsweredInSnapshot` = 0 sul gold sintetico congelato; conflitti persi dopo risoluzione deterministica degli ID ≤ valore del laboratorio (1–2 su 10 casi) e nessuno per esclusioni a monte del recupero.
 - **SC-004**: Citazioni invalide dopo risoluzione deterministica ≤ 2 su 10 casi (riferimento del laboratorio); ogni citazione accettata è verificata letteralmente su un passaggio fornito.
 - **SC-005**: 0 passaggi di versioni escluse o di altri progetti fra i candidati in test dedicati.
 - **SC-006**: Ricostruzione di un indice da zero produce lo stesso insieme di passaggi indicizzati; i run storici restano invariati byte per byte.
@@ -208,6 +221,8 @@ Evidence ledger con provenienza (FR-007 della 002); snapshot congelato per run; 
 - **SC-008**: Nessun Gap con `retrievalComplete = false` o sorgente `retrieval` è mai rappresentato come assenza provata (0 occorrenze in test).
 - **SC-009**: Latenza del recupero per Gap, a indice pronto e con riordino, misurata e riportata (riferimento di laboratorio 1,1–2,2 s/query; nessun obiettivo di prestazione assunto fino al piano).
 - **SC-010**: La valutazione continua è eseguibile in CI senza servizi reali (simulati) e con servizi reali su opt-in; ogni rapporto dichiara provenienza dei dati e limiti.
+- **SC-011** *(nuovo, D-3)*: Con embedding indisponibile: errore tipizzato e 0 invii LLM; con riordino indisponibile: registro RRF diagnostico con `retrievalComplete = false`, 0 risultati `AnsweredInSnapshot` definitivi, 0 dichiarazioni di assenza o di completezza dei conflitti, causa tipizzata conservata (test dedicati).
+- **SC-012** *(nuovo, D-2)*: Il rapporto di accettazione riporta «accettata» solo con corpus anonimizzato e ≥ 20 query di un secondo autore; in assenza, riporta «accettata con riserva» con la lacuna evidenziata (0 occorrenze di «accettata» senza i due requisiti).
 
 ## Assumptions
 
@@ -231,10 +246,14 @@ Evidence ledger con provenienza (FR-007 della 002); snapshot congelato per run; 
 
 ## Decisioni aperte
 
-Da risolvere con il committente prima di `speckit-plan`; nessuna è stata inventata. Raccomandazione fra parentesi.
+**Nessuna decisione aperta.** Le cinque decisioni della bozza sono state **risolte dal committente il 2026-11-09** e registrate in «Clarifications» (Session 2026-11-09) e nei requisiti FR-020, FR-029, FR-034, FR-035, FR-036, FR-037 e SC-002, SC-003, SC-011, SC-012:
 
-1. **Soglie di accettazione numeriche (FR-029, SC-002/SC-003).** Raccomandazione: Recall@10 ≥ 95% e Hit@1 con riordino ≥ 95% sul gold sintetico, 0 falsi `AnsweredInSnapshot`, nessuna regressione > 2 punti rispetto alla baseline salvata; soglie sul corpus cliente da fissare dopo una prima misura.
-2. **Corpus e autori per la valutazione indipendente.** Raccomandazione: almeno un corpus anonimizzato (o quasi reale) e 20+ query scritte da un secondo autore (PM) prima dell'accettazione; senza di esso la 003 resta «accettata con riserva» come la 001.
-3. **Comportamento con embedding o riordino non disponibili (FR-020).** Raccomandazione: errore tipizzato a zero invii per l'embedding; con riordino indisponibile, ordine RRF consentito solo con `retrievalComplete = false` e avviso visibile al PM; nessun fallback silenzioso.
-4. **Ambito della ricerca oltre lo stadio Gap.** Raccomandazione: la 003 serve solo lo stadio Gap; Chat e bozza restano fuori e un'eventuale ricerca per il PM è una slice successiva.
-5. **Pinning dei modelli e verifica degli hash.** Raccomandazione: fissare nome, artefatto e dimensione vettori nella readiness e registrare lo SHA-256 dei pesi al provisioning del DGX; fino ad allora dichiarare «non verificato» nel rapporto.
+| # | Tema | Esito (2026-11-09) |
+| --- | --- | --- |
+| 1 | Soglie numeriche | Recall@10 ≥ 95%, Hit@1 con riordino ≥ 95%, 0 falsi `AnsweredInSnapshot`, regressione ≤ 2 punti; sul gold sintetico congelato, baseline sullo stesso insieme di query. Approvata come raccomandata, con precisazione. |
+| 2 | Valutazione indipendente | Accettazione piena solo con corpus anonimizzato e ≥ 20 query di un secondo autore; altrimenti «accettata con riserva» con lacuna esplicita, non equivalente alla piena. |
+| 3 | Servizi non disponibili | **Modificata**: embedding ⇒ errore tipizzato, zero invii LLM; riordino ⇒ RRF diagnostico con `retrievalComplete = false`, nessun esito definitivo né completamento Gap. |
+| 4 | Ambito | Solo il recupero per la valutazione Gap; componenti riutilizzabili senza interfacce speculative. |
+| 5 | Pinning modelli | Nome, artefatto e dimensione vettori fissati in readiness; SHA-256 al provisioning, «non verificato» fino ad allora. |
+
+Questioni tecniche che il piano risolve con misura (non decisioni normative): motore d'indice (`research.md` R-1), mapping blocco→evidenza (R-3), parametri di cutoff e budget dei padri (R-6).
