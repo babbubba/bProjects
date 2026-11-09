@@ -164,3 +164,19 @@ Con la policy `single-call-output-estimate-1` un documento con Gap la cui uscita
 
 ### Baseline
 Backend 3613 test, 0 falliti, 84 ignorati (DGX/parser reali e benchmark non eseguiti nella suite ordinaria). Per pianificare: decisioni T138 e T142, autorizzazione di una nona esecuzione T082, prova T126, poi la catena T067 → T104 e T083 → T090 → T109/T110 → T111 → T114.
+
+## 16. Verbale di chiusura tecnica (2026-11-09) — NON è un'accettazione
+
+Branch `feature/002-implementation`. Stato ufficiale: **NOT ACCEPTED**.
+
+**Livelli (mandato di chiusura):**
+1. *Implementazione completata*: **sì, per tutto ciò che è implementabile e approvato.** D1 (stadio Gap su ledger completo, `project-analysis-documents-v6`, T144–T148), UI coverage (T149), D2 `message-format-2` (T151), D3 avviso strutturale (T152), emendamenti documentali (T153). T126 è implementato (`2b4239b`) e T138 realizzato da T144–T149; restano aperti per l'evidenza, non per il codice.
+2. *Tecnicamente verificata (offline)*: **sì.** Backend `dotnet test --solution bProjects.sln` con PostgreSQL 18 e MAF 1.26.0 reali, modello finto: 3762 test, 3678 PASS, 0 FAIL, 84 SKIP (58 DGX opt-in assente, 21 parser reale assente, 3 traccia V7/review assente, 1 benchmark, 1 symlink). Frontend: build OK (warning budget iniziale 650,39 kB vs 650,00, +386 byte, preesistente), Vitest 438/438, E2E offline T149 14/14, axe 0 violazioni. Gli SKIP non sono PASS. Nessun test storico v2–v5 indebolito; 24+4 asserzioni di freeze aggiornate alla v6 (dettaglio nei commit T148/T151–T153).
+3. *Funzionalmente verificata (gate reali)*: **no.** Nessuna inferenza DGX eseguita in questa fase; la nona esecuzione T082 non è autorizzata.
+4. *ACCEPTED*: **no.**
+
+**Gate pendenti (14 task aperti su 153, T138 e T150 inclusi):** T126 (prova DGX, decisione D6), T142 (≥3 N4 reali con D2), T067, T104, T082, T083, T090, T109, T110, T150 (gate DGX «SC-004-Gap», criterio PASS in tasks.md), T107 e T111 (umani), T114 (gate finale). T138 resta `[ ]`: chiudibile solo con l'evidenza T150 o con decisione formale del committente. Predecessori: T067←T126,T142; T090←T082,T083; T104←T067; T109←T090; T110←T067,T090; T111←tutti; T114←T109,T110,T111,T142.
+
+**Limiti dichiarati:** ledger oltre il budget di input (o Gap oltre il budget di output) di una chiamata ⇒ fail-fast tipizzato, perimetro NON coperto dalla 002 (non trasferito automaticamente alla 003); costanti di budget dello stadio Gap (1000+150·Gap; ceil((100+260·Gap)·1,25)) da ricalibrare al primo run DGX; il Gap deve avere una domanda canonica nella gerarchia (`gap_reference_missing` altrimenti); `document-analysis-v6.md` afferma ancora che il nome del documento non compare nelle evidenze (tensione con `documento=`, D4: nessun v7 senza fallimento dimostrato).
+
+**Non fatto/da decidere:** aggiornare `CLAUDE.md` riga 13 (T126, T138, T142, T150 tra gli aperti) richiede approvazione esplicita; D6 (modalità di prova T126 su DGX).
