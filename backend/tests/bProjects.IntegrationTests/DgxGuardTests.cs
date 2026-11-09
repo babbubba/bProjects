@@ -106,7 +106,7 @@ public sealed class DgxGuardTests
         foreach (var file in TestSources())
         {
             var text = File.ReadAllText(file);
-            if (Path.GetFileName(file) == "DgxGuardTests.cs" || !Regex.IsMatch(text, @"Trait\(\s*""Category""\s*,\s*(TestCategories\.MafReal|""MafReal"")\s*\)"))
+            if (Path.GetFileName(file) == "DgxGuardTests.cs" || !Regex.IsMatch(text, @"Trait\(\s*""Category""\s*,\s*(TestCategories\.MafReal|""MafReal""|""RetrievalEvalReal"")\s*\)"))
             {
                 continue;
             }

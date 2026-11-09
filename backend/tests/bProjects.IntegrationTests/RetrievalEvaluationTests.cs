@@ -171,24 +171,24 @@ public sealed class RetrievalEvaluationTests
 
     // ---------------------------------------------------------------- fixture di scenario
 
-    private sealed record QueryTrace(string Id, IReadOnlyList<Guid> Fused)
+    internal sealed record QueryTrace(string Id, IReadOnlyList<Guid> Fused)
     {
         public bool Equals(QueryTrace? other) => other is not null && Id == other.Id && Fused.SequenceEqual(other.Fused);
 
         public override int GetHashCode() => HashCode.Combine(Id, Fused.Count);
     }
 
-    private sealed record ScenarioRun(CorpusReport Report, IReadOnlyList<QueryTrace> Traces, double SearchMilliseconds, int Searches);
+    internal sealed record ScenarioRun(CorpusReport Report, IReadOnlyList<QueryTrace> Traces, double SearchMilliseconds, int Searches, IReadOnlyList<double> QueryMilliseconds);
 
-    private sealed class ScenarioFixture
+    internal sealed class ScenarioFixture
     {
         private readonly RetrievalDb _database;
-        private readonly RetrievalRig _rig;
+        private readonly IRetrievalRig _rig;
         private readonly EvalScenario _scenario;
         private readonly List<(SeededDocument Doc, IReadOnlyList<Guid> EvidenceIds, Guid EvidenceVersion)> _docs = [];
         private readonly Dictionary<string, Guid> _messageEvidence = [];
 
-        private ScenarioFixture(RetrievalDb database, RetrievalRig rig, EvalScenario scenario)
+        private ScenarioFixture(RetrievalDb database, IRetrievalRig rig, EvalScenario scenario)
         {
             _database = database;
             _rig = rig;
@@ -201,7 +201,7 @@ public sealed class RetrievalEvaluationTests
 
         public double IndexSeconds { get; private set; }
 
-        public static async Task<ScenarioFixture> SetupAsync(RetrievalDb database, RetrievalRig rig, EvalScenario scenario)
+        public static async Task<ScenarioFixture> SetupAsync(RetrievalDb database, IRetrievalRig rig, EvalScenario scenario)
         {
             var fixture = new ScenarioFixture(database, rig, scenario) { Project = await database.SeedProjectAsync(scenario.Name) };
             var stopwatch = Stopwatch.StartNew();
@@ -227,6 +227,15 @@ public sealed class RetrievalEvaluationTests
 
             fixture.IndexSeconds = stopwatch.Elapsed.TotalSeconds;
             return fixture;
+        }
+
+        /// <summary>Blocchi richiesti dal gold per query (solo riscontri documentali, risolti sul testo originale): serve alle misure di T019 sul segnale denso.</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<Guid>> RequiredBlocks()
+        {
+            var blocksByFile = _docs.ToDictionary(d => d.Doc.Name, d => (IReadOnlyList<(Guid, string)>)[.. d.Doc.BlockIds.Zip(d.Doc.Texts)]);
+            return EvaluationCorpus.LoadCases(_scenario.Name).ToDictionary(
+                c => c.Id,
+                c => (IReadOnlyList<Guid>)[.. c.Gold.Where(g => !_scenario.MessageFiles.Contains(g.File)).Select(g => RetrievalGold.Resolve(blocksByFile[g.File], g.Contains)).Distinct()]);
         }
 
         public Task<Guid> SnapshotAsync(IReadOnlyList<SeededDocument>? excluded) =>
@@ -283,12 +292,14 @@ public sealed class RetrievalEvaluationTests
             var mappingLoss = 0;
             var invalidCitations = 0;
             var elapsed = 0.0;
+            var perQueryMs = new List<double>();
 
             foreach (var query in cases)
             {
                 var stopwatch = Stopwatch.StartNew();
                 var result = await search.SearchAsync(scope, query.Query, Pool, Ct);
                 elapsed += stopwatch.Elapsed.TotalMilliseconds;
+                perQueryMs.Add(stopwatch.Elapsed.TotalMilliseconds);
 
                 var fused = result.Fused.Select(f => f.BlockId).ToList();
                 traces.Add(new(query.Id, fused));
@@ -364,7 +375,7 @@ public sealed class RetrievalEvaluationTests
                 MetricSet.From(EvaluationMetrics.Aggregate(lexicalMetrics)), MetricSet.From(EvaluationMetrics.Aggregate(denseMetrics)),
                 MetricSet.From(EvaluationMetrics.Aggregate(hybridMetrics)), MetricSet.From(EvaluationMetrics.Aggregate(evidenceMetrics)),
                 mappingLoss, invalidCitations, messageRequired, messageOffered, evaluated, lost, conflictReports, perQuery);
-            return new(report, traces, elapsed, cases.Count);
+            return new(report, traces, elapsed, cases.Count, perQueryMs);
         }
 
         private static async Task<Dictionary<Guid, List<Citation>>> LoadCitationsAsync(AppDbContext db, IReadOnlyList<Guid> versions)
@@ -415,7 +426,7 @@ public sealed class RetrievalEvaluationTests
             null);
     }
 
-    private static string UpstreamStatus(string task)
+    internal static string UpstreamStatus(string task)
     {
         var tasks = FindUp(Path.Combine("specs", "002-project-documents", "tasks.md"));
         if (tasks is null)
@@ -427,7 +438,7 @@ public sealed class RetrievalEvaluationTests
         return line is null ? "non determinato (task non trovato)" : Regex.IsMatch(line, @"^\s*- \[[xX]\]") ? "completato (checkbox spuntata)" : "aperto (checkbox non spuntata)";
     }
 
-    private static string? FindUp(string relative)
+    internal static string? FindUp(string relative)
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
@@ -450,7 +461,7 @@ public sealed class RetrievalEvaluationTests
     }
 
     /// <summary>Metriche piatte per il confronto con la baseline: corpus × livello/segnale × Recall@k e Hit@k.</summary>
-    private static SortedDictionary<string, double> Flatten(EvaluationReport report)
+    internal static SortedDictionary<string, double> Flatten(EvaluationReport report)
     {
         var flat = new SortedDictionary<string, double>(StringComparer.Ordinal);
         foreach (var corpus in report.Corpora)

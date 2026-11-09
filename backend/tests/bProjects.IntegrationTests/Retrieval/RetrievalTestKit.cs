@@ -13,7 +13,14 @@ namespace bProjects.IntegrationTests;
 internal sealed record SeededDocument(Guid ProjectId, Guid DocumentId, Guid VersionId, Guid PreparationId, Guid ArtifactId, int Version, string Name, IReadOnlyList<Guid> BlockIds, IReadOnlyList<string> Texts);
 
 /// <summary>Servizi finti del recupero: server di embedding FINTO (nessuna rete, nessun DGX), client, readiness e opzioni.</summary>
-internal sealed class RetrievalRig : IDisposable
+internal interface IRetrievalRig
+{
+    RetrievalIndexBuilder Builder(AppDbContext db);
+
+    HybridSearch Search(AppDbContext db);
+}
+
+internal sealed class RetrievalRig : IRetrievalRig, IDisposable
 {
     public RetrievalRig(FakeEmbeddingServer? server = null)
     {
