@@ -131,7 +131,22 @@ public sealed class RetrievalEvaluationRerankRealTests
             log("caso riordino non pronto: " + unreachableCase);
             File.WriteAllText(Path.Combine(outDirectory, "reranker-not-ready.txt"), unreachableCase + "\n");
             rig.Readiness.InvalidateReranker();
-            await rig.Readiness.WaitUntilRerankerReadyAsync(TimeSpan.FromMinutes(2), Ct);
+            var waited = await rig.Readiness.WaitUntilRerankerReadyAsync(TimeSpan.FromMinutes(2), Ct);
+            if (!waited.Snapshot.IsReady && waited.Snapshot.State == RetrievalModelState.ModelUnloaded)
+            {
+                // Il router carica il modello alla prima richiesta (come per l'embedding in T019): una richiesta di riordino ordinaria e minima, non un comando di load.
+                log("riordino scaricato: una richiesta di riordino minima per il caricamento on-demand del router");
+                try
+                {
+                    await rig.Reranker.RerankAsync("probe", ["probe a", "probe b"], Ct);
+                }
+                catch (RetrievalException failure)
+                {
+                    log($"richiesta minima di riordino fallita: {failure.Code}");
+                }
+
+                rig.Readiness.InvalidateReranker();
+            }
         }
 
         var rerankerReady = await rig.Readiness.GetRerankerSnapshotAsync(Ct);

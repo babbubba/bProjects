@@ -1,0 +1,271 @@
+{
+  "metrics": {
+    "ALL.block.rerank.hit@1": 0.851852,
+    "ALL.block.rerank.hit@10": 1,
+    "ALL.block.rerank.hit@20": 1,
+    "ALL.block.rerank.hit@5": 1,
+    "ALL.block.rerank.hit@50": 1,
+    "ALL.block.rerank.recall@1": 0.777778,
+    "ALL.block.rerank.recall@10": 1,
+    "ALL.block.rerank.recall@20": 1,
+    "ALL.block.rerank.recall@5": 1,
+    "ALL.block.rerank.recall@50": 1,
+    "ALL.block.rrf.hit@1": 0.740741,
+    "ALL.block.rrf.hit@10": 1,
+    "ALL.block.rrf.hit@20": 1,
+    "ALL.block.rrf.hit@5": 1,
+    "ALL.block.rrf.hit@50": 1,
+    "ALL.block.rrf.recall@1": 0.666667,
+    "ALL.block.rrf.recall@10": 1,
+    "ALL.block.rrf.recall@20": 1,
+    "ALL.block.rrf.recall@5": 0.990741,
+    "ALL.block.rrf.recall@50": 1,
+    "ALL.queries.documentFindings": 54,
+    "N4-fixtures.block.rerank.hit@1": 0.833333,
+    "N4-fixtures.block.rerank.hit@10": 1,
+    "N4-fixtures.block.rerank.hit@20": 1,
+    "N4-fixtures.block.rerank.hit@5": 1,
+    "N4-fixtures.block.rerank.hit@50": 1,
+    "N4-fixtures.block.rerank.recall@1": 0.833333,
+    "N4-fixtures.block.rerank.recall@10": 1,
+    "N4-fixtures.block.rerank.recall@20": 1,
+    "N4-fixtures.block.rerank.recall@5": 1,
+    "N4-fixtures.block.rerank.recall@50": 1,
+    "N4-fixtures.block.rrf.hit@1": 0.75,
+    "N4-fixtures.block.rrf.hit@10": 1,
+    "N4-fixtures.block.rrf.hit@20": 1,
+    "N4-fixtures.block.rrf.hit@5": 1,
+    "N4-fixtures.block.rrf.hit@50": 1,
+    "N4-fixtures.block.rrf.recall@1": 0.75,
+    "N4-fixtures.block.rrf.recall@10": 1,
+    "N4-fixtures.block.rrf.recall@20": 1,
+    "N4-fixtures.block.rrf.recall@5": 1,
+    "N4-fixtures.block.rrf.recall@50": 1,
+    "N4-fixtures.queries.documentFindings": 12,
+    "T082-single.block.rerank.hit@1": 1,
+    "T082-single.block.rerank.hit@10": 1,
+    "T082-single.block.rerank.hit@20": 1,
+    "T082-single.block.rerank.hit@5": 1,
+    "T082-single.block.rerank.hit@50": 1,
+    "T082-single.block.rerank.recall@1": 0.921053,
+    "T082-single.block.rerank.recall@10": 1,
+    "T082-single.block.rerank.recall@20": 1,
+    "T082-single.block.rerank.recall@5": 1,
+    "T082-single.block.rerank.recall@50": 1,
+    "T082-single.block.rrf.hit@1": 0.736842,
+    "T082-single.block.rrf.hit@10": 1,
+    "T082-single.block.rrf.hit@20": 1,
+    "T082-single.block.rrf.hit@5": 1,
+    "T082-single.block.rrf.hit@50": 1,
+    "T082-single.block.rrf.recall@1": 0.657895,
+    "T082-single.block.rrf.recall@10": 1,
+    "T082-single.block.rrf.recall@20": 1,
+    "T082-single.block.rrf.recall@5": 0.973684,
+    "T082-single.block.rrf.recall@50": 1,
+    "T082-single.queries.documentFindings": 19,
+    "T083-multi.block.rerank.hit@1": 0.73913,
+    "T083-multi.block.rerank.hit@10": 1,
+    "T083-multi.block.rerank.hit@20": 1,
+    "T083-multi.block.rerank.hit@5": 1,
+    "T083-multi.block.rerank.hit@50": 1,
+    "T083-multi.block.rerank.recall@1": 0.630435,
+    "T083-multi.block.rerank.recall@10": 1,
+    "T083-multi.block.rerank.recall@20": 1,
+    "T083-multi.block.rerank.recall@5": 1,
+    "T083-multi.block.rerank.recall@50": 1,
+    "T083-multi.block.rrf.hit@1": 0.73913,
+    "T083-multi.block.rrf.hit@10": 1,
+    "T083-multi.block.rrf.hit@20": 1,
+    "T083-multi.block.rrf.hit@5": 1,
+    "T083-multi.block.rrf.hit@50": 1,
+    "T083-multi.block.rrf.recall@1": 0.630435,
+    "T083-multi.block.rrf.recall@10": 1,
+    "T083-multi.block.rrf.recall@20": 1,
+    "T083-multi.block.rrf.recall@5": 1,
+    "T083-multi.block.rrf.recall@50": 1,
+    "T083-multi.queries.documentFindings": 23
+  },
+  "latencyMs": {
+    "total": {
+      "n": 56,
+      "p50": 551.36,
+      "p95": 626.3,
+      "mean": 502.46,
+      "max": 894.77
+    },
+    "search": {
+      "n": 56,
+      "p50": 140.91,
+      "p95": 169.88,
+      "mean": 136.73,
+      "max": 172.07
+    },
+    "rerankOnly": {
+      "n": 56,
+      "p50": 407.32,
+      "p95": 489.91,
+      "mean": 365.73,
+      "max": 772.19
+    }
+  },
+  "comparison": {
+    "available": true,
+    "sameInputs": true,
+    "notes": [
+      "Input (hash di gold, documenti e query) identici a quelli di M1."
+    ],
+    "deltas": [
+      {
+        "corpus": "N4-fixtures",
+        "metric": "hit@1",
+        "m1Rrf": 0.75,
+        "runRrf": 0.75,
+        "runRerank": 0.8333333333333334,
+        "rerankVsM1Points": 8.333,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "T082-single",
+        "metric": "hit@1",
+        "m1Rrf": 0.684211,
+        "runRrf": 0.7368421052631579,
+        "runRerank": 1,
+        "rerankVsM1Points": 31.579,
+        "rrfVsM1Points": 5.263
+      },
+      {
+        "corpus": "T083-multi",
+        "metric": "hit@1",
+        "m1Rrf": 0.73913,
+        "runRrf": 0.7391304347826086,
+        "runRerank": 0.7391304347826086,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "ALL",
+        "metric": "hit@1",
+        "m1Rrf": 0.7222222037037037,
+        "runRrf": 0.7407407407407407,
+        "runRerank": 0.8518518518518519,
+        "rerankVsM1Points": 12.963,
+        "rrfVsM1Points": 1.852
+      },
+      {
+        "corpus": "N4-fixtures",
+        "metric": "recall@1",
+        "m1Rrf": 0.75,
+        "runRrf": 0.75,
+        "runRerank": 0.8333333333333334,
+        "rerankVsM1Points": 8.333,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "T082-single",
+        "metric": "recall@1",
+        "m1Rrf": 0.605263,
+        "runRrf": 0.6578947368421053,
+        "runRerank": 0.9210526315789473,
+        "rerankVsM1Points": 31.579,
+        "rrfVsM1Points": 5.263
+      },
+      {
+        "corpus": "T083-multi",
+        "metric": "recall@1",
+        "m1Rrf": 0.630435,
+        "runRrf": 0.6304347826086957,
+        "runRerank": 0.6304347826086957,
+        "rerankVsM1Points": -0,
+        "rrfVsM1Points": -0
+      },
+      {
+        "corpus": "ALL",
+        "metric": "recall@1",
+        "m1Rrf": 0.6481481851851852,
+        "runRrf": 0.6666666666666666,
+        "runRerank": 0.7777777777777778,
+        "rerankVsM1Points": 12.963,
+        "rrfVsM1Points": 1.852
+      },
+      {
+        "corpus": "N4-fixtures",
+        "metric": "recall@5",
+        "m1Rrf": 1,
+        "runRrf": 1,
+        "runRerank": 1,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "T082-single",
+        "metric": "recall@5",
+        "m1Rrf": 0.973684,
+        "runRrf": 0.9736842105263158,
+        "runRerank": 1,
+        "rerankVsM1Points": 2.632,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "T083-multi",
+        "metric": "recall@5",
+        "m1Rrf": 1,
+        "runRrf": 1,
+        "runRerank": 1,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "ALL",
+        "metric": "recall@5",
+        "m1Rrf": 0.9907406666666666,
+        "runRrf": 0.9907407407407407,
+        "runRerank": 1,
+        "rerankVsM1Points": 0.926,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "N4-fixtures",
+        "metric": "recall@10",
+        "m1Rrf": 1,
+        "runRrf": 1,
+        "runRerank": 1,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "T082-single",
+        "metric": "recall@10",
+        "m1Rrf": 1,
+        "runRrf": 1,
+        "runRerank": 1,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "T083-multi",
+        "metric": "recall@10",
+        "m1Rrf": 1,
+        "runRrf": 1,
+        "runRerank": 1,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      },
+      {
+        "corpus": "ALL",
+        "metric": "recall@10",
+        "m1Rrf": 1,
+        "runRrf": 1,
+        "runRerank": 1,
+        "rerankVsM1Points": 0,
+        "rrfVsM1Points": 0
+      }
+    ]
+  },
+  "rerankerReadiness": {
+    "initial": "ModelUnloaded",
+    "final": "Ready",
+    "model": "bge-reranker-v2-m3",
+    "artifact": "bge-reranker-v2-m3-Q5_K_M.gguf"
+  },
+  "unreachableCase": "stato iniziale del riordino: stato ModelUnloaded; modello bge-reranker-v2-m3; artefatto atteso bge-reranker-v2-m3-Q5_K_M.gguf, osservato n/d; dimensione osservata n/d; SHA-256 NotVerified; esito del pipeline: Diagnostic; stadio invocabile: False; cause: [reranker_unavailable]"
+}

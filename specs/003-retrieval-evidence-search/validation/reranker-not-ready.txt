@@ -1,0 +1,1 @@
+stato iniziale del riordino: stato ModelUnloaded; modello bge-reranker-v2-m3; artefatto atteso bge-reranker-v2-m3-Q5_K_M.gguf, osservato n/d; dimensione osservata n/d; SHA-256 NotVerified; esito del pipeline: Diagnostic; stadio invocabile: False; cause: [reranker_unavailable]
