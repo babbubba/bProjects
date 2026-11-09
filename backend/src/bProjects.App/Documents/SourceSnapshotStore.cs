@@ -187,6 +187,7 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             reconcile = ReconcileAliasContracts.PromptVersion, reconcileAiSchema = ReconcileAliasContracts.SchemaVersion,
             reconcileAlgorithm = DocumentReconcilePlan.AlgorithmVersion, reconcileCatalog = ReconcileAliasContracts.CatalogVersion,
             reconcileGapPolicy = DocumentAnalysisWorkflow.ReconcileGapPolicyV1,
+            analysisOutputPolicy = AnalysisOutputEstimate.PolicyVersion,
         });
 
     /// <summary>Versioni congelate di una nuova richiesta di Genera v3 (T127): prompt, schema del canonico 1.1.0, schema AI della bozza, catalogo, algoritmo e validazione.</summary>

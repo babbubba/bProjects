@@ -367,6 +367,41 @@ public sealed class DocumentAnalysisWorkflow(
 
     public static string InstructionsV6 => PromptV6.Value;
 
+    /// <summary>Chiave delle versioni del run che congela la policy di stima dell'output della chiamata singola (T082): assente nei run storici.</summary>
+    public const string OutputPolicyKey = "analysisOutputPolicy";
+
+    /// <summary>Stato della policy di instradamento sull'output congelata in un run: <c>Absent</c> = run storico (solo budget di input), <c>Current</c>, <c>Unsupported</c> = chiave presente con valore ignoto o non testuale (incompatibile).</summary>
+    public enum OutputPolicyState
+    {
+        Absent,
+        Current,
+        Unsupported,
+    }
+
+    public static OutputPolicyState OutputPolicyOf(ProcessingRun run)
+    {
+        if (run.PromptVersions is null)
+        {
+            return OutputPolicyState.Absent;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(run.PromptVersions);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object || !document.RootElement.TryGetProperty(OutputPolicyKey, out var value))
+            {
+                return OutputPolicyState.Absent;
+            }
+
+            return value.ValueKind == System.Text.Json.JsonValueKind.String && value.GetString() == AnalysisOutputEstimate.PolicyVersion
+                ? OutputPolicyState.Current
+                : OutputPolicyState.Unsupported;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return OutputPolicyState.Unsupported;
+        }
+    }
     /// <summary>Prompt congelato di un run v5: v4 (storico) o v5 (nuove richieste); le versioni ignote sono già escluse da <see cref="ContractOf"/>.</summary>
     public static string GapPromptOf(ProcessingRun run) =>
         run.PromptVersionMatches("analysis", PromptVersionV6) ? PromptVersionV6 : run.PromptVersionMatches("analysis", PromptVersionV5) ? PromptVersionV5 : PromptVersionV4;
@@ -406,7 +441,7 @@ public sealed class DocumentAnalysisWorkflow(
             && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
             && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
             && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run)
-            && run.PromptVersionMatches("reconcileGapPolicy", ReconcileGapPolicyV1))
+            && run.PromptVersionMatches("reconcileGapPolicy", ReconcileGapPolicyV1) && OutputPolicyOf(run) != OutputPolicyState.Unsupported)
         {
             return 5;
         }
@@ -465,7 +500,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract == 5 ? GapPromptOf(run) : PromptVersionV3, ct) : RunGraphAsync(db, claim, limits, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract == 5 ? GapPromptOf(run) : PromptVersionV3, contract == 5 && OutputPolicyOf(run) == OutputPolicyState.Current, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -577,7 +612,7 @@ public sealed class DocumentAnalysisWorkflow(
     /// alla riconciliazione gerarchica con alias (T131) con i tetti della policy congelata; v5 (T143, §13.6): con almeno un Gap fail-fast senza chiamate (<c>document_limit_exceeded</c>,
     /// motivo <c>hierarchical_gap_assessment_unsupported</c>), senza Gap gerarchia come v4 con la definizione v5.
     /// </summary>
-    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, string promptVersion, CancellationToken ct)
+    private async Task RunAliasGraphAsync(AppDbContext db, AnalysisRunClaim claim, int contract, DocumentLimits limits, string promptVersion, bool outputPolicy, CancellationToken ct)
     {
         var input = await DocumentAnalysisSources.LoadAsync(db, claim.RunId, ct);
         // v5 (T136): catalogo con il contratto alias-2 nell'identità, prompt document-analysis-v4 e schema alias-2; v3/v4 invariati.
@@ -594,8 +629,24 @@ public sealed class DocumentAnalysisWorkflow(
             throw new RuntimeUnverifiedException("conteggio del payload dell'analisi non disponibile (nessun tokenizer o calibrazione identificata)");
         }
 
-        if (!measure.Fits)
+        // T082: oltre al budget di input, la risposta attesa deve entrare nel tetto di output O del profilo (stima prudente e versionata, congelata nel run). Se non entra o non
+        // è stimabile con affidabilità, la chiamata singola non è sicura: stesso ramo del payload oltre contesto (gerarchia senza Gap; con Gap fail-fast C + D, mai un invio che può troncare).
+        var outputExceeded = false;
+        long outputEstimate = 0;
+        if (outputPolicy && measure.Fits)
         {
+            var statements = input.Evidence.ToDictionary(x => x.EvidenceId, x => x.Statement.Length);
+            var nonGapLengths = catalog.Data.Evidence.Where(x => x.Kind != EvidenceKind.Gap).Select(x => statements[x.EvidenceId]).ToList();
+            var gapEvidence = catalog.Data.Evidence.Count(x => x.Kind == EvidenceKind.Gap);
+            outputEstimate = AnalysisOutputEstimate.Estimate(nonGapLengths, gapEvidence, catalog.Data.Relations.Count);
+            outputExceeded = AnalysisOutputEstimate.Exceeds(nonGapLengths, gapEvidence, catalog.Data.Relations.Count, measure.Profile.OutputTokens);
+        }
+
+        if (!measure.Fits || outputExceeded)
+        {
+            var limitText = outputExceeded
+                ? $"hanno una risposta attesa di circa {outputEstimate} token (stima prudente {AnalysisOutputEstimate.PolicyVersion}) che supera il budget di output ({measure.Profile.OutputTokens} token)"
+                : $"superano il budget di input dell'analisi a singola chiamata ({measure.InputBudgetTokens} token)";
             if (contract == 4)
             {
                 // v4 (T131): oltre una chiamata, riconciliazione gerarchica con alias nello stesso motore (nessuna seconda pipeline).
@@ -612,8 +663,8 @@ public sealed class DocumentAnalysisWorkflow(
                 {
                     throw new DocumentWorkException(
                         DocumentWorkException.CallLimitExceeded,
-                        $"{DocumentWorkException.HierarchicalGapAssessmentUnsupported}: le fonti selezionate ({measure.Tokens} token, qualità della misura: {measure.Quality}) superano il budget di input "
-                        + $"dell'analisi a singola chiamata ({measure.InputBudgetTokens} token) e contengono {gapCount} evidenze di tipo Gap: la valutazione dei Gap oltre il contesto non è ancora supportata "
+                        $"{DocumentWorkException.HierarchicalGapAssessmentUnsupported}: le fonti selezionate ({measure.Tokens} token, qualità della misura: {measure.Quality}) {limitText} "
+                        + $"e contengono {gapCount} evidenze di tipo Gap: la valutazione dei Gap oltre il contesto non è ancora supportata "
                         + "e nessuna elaborazione è stata eseguita (nessuna chiamata al modello). Riduci la selezione delle fonti e riprova.");
                 }
 

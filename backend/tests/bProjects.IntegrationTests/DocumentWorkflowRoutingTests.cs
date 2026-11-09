@@ -557,7 +557,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
 
     // ================================================================ T141: routing positivo v5 e storico v2/v3/v4 invariato
 
-    /// <summary>Le dodici chiavi di versione di una nuova richiesta v5 (AI §13.1 + §13.6), nell'ordine di congelamento.</summary>
+    /// <summary>Le dodici chiavi OBBLIGATORIE di versione di una richiesta v5 (AI §13.1 + §13.6); una nuova richiesta congela anche `analysisOutputPolicy` (T082, opzionale per i run storici).</summary>
     private static readonly (string Key, string Value)[] V5Keys =
     [
         ("analysis", "document-analysis-v6"), ("analysisSchema", "1.1.0"), ("analysisAiSchema", "document-analysis-alias-2"), ("aliasCatalog", "alias-catalog-1"),
@@ -580,7 +580,7 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         // Freeze al POST: definizione v5 e TUTTE le chiavi (single-call v5 + gerarchia v4 + policy Gap), nessuna decisione single-call/gerarchico alla richiesta.
         Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV5, (await RunRow(run)).Definition);
         var frozen = JsonSerializer.Deserialize<Dictionary<string, string>>(await Scalar<string>("SELECT \"PromptVersions\"::text FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)))!;
-        Assert.Equal(V5Keys.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
+        Assert.Equal(V5Keys.Append((Key: "analysisOutputPolicy", Value: "single-call-output-estimate-1")).OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"), frozen.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => $"{k.Key}={k.Value}"));
         Assert.Equal(0, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
         Assert.Empty(_model.Graphs);
 
@@ -1278,5 +1278,46 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         private static int Words(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
         private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+    }
+
+    // ------------------------------------------------------------------ T082: chiave opzionale della policy di output
+
+    [Fact]
+    public async Task A_v5_run_without_the_optional_output_policy_key_is_a_compatible_historic_run()
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v5', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", PromptsJson(V5Keys)), ("r", run));
+
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.NotEqual("workflow_incompatible", row.ErrorCode);
+        Assert.Equal("Completed", row.Status);
+    }
+
+    [Theory]
+    [InlineData("\"single-call-output-estimate-9\"")]
+    [InlineData("\"\"")]
+    [InlineData("null")]
+    [InlineData("3")]
+    [InlineData("[\"single-call-output-estimate-1\"]")]
+    public async Task A_v5_run_with_an_unknown_or_malformed_output_policy_value_fails_as_incompatible_without_any_send(string jsonValue)
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        await NewReadyDocument(client, project, "regole", Statement);
+        var run = await StartAnalysis(client, project);
+        var prompts = PromptsJson(V5Keys).TrimEnd('}') + ",\"analysisOutputPolicy\":" + jsonValue + "}";
+        await Execute("UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = 'project-analysis-documents-v5', \"PromptVersions\" = @p::jsonb WHERE \"Id\" = @r", ("p", prompts), ("r", run));
+
+        await DrainAsync();
+
+        var row = await RunRow(run);
+        Assert.Equal(("Failed", "workflow_incompatible"), (row.Status, row.ErrorCode));
+        Assert.Empty(_model.Graphs);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
     }
 }

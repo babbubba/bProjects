@@ -673,7 +673,7 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     // ================================================================ v5 oltre contesto (T143, contracts/ai-workflow.md §13.6)
 
     private const string V5Hierarchical =
-        """{"analysis":"document-analysis-v6","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
+        """{"analysis":"document-analysis-v6","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-2","analysisOutputPolicy":"single-call-output-estimate-1","aliasCatalog":"alias-catalog-1","canonIds":"canon-ids-1","algorithm":"analysis-single-v3","validation":"document-analysis-validation-v3","reconcile":"document-reconcile-v3","reconcileAiSchema":"reconcile-alias-1","reconcileAlgorithm":"global-reconcile-v1","reconcileCatalog":"reconcile-alias-catalog-1","reconcileGapPolicy":"hierarchical-gap-incomplete-1"}""";
 
     private const string V5 = "project-analysis-documents-v5";
 
@@ -1110,5 +1110,95 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         }
 
         return (run, await ClaimAsync(run));
+    }
+
+    // ================================================================ T082: instradamento sul budget di OUTPUT (stima prudente congelata nel run)
+
+    /// <summary>Corpus di documenti le cui evidenze hanno pochi "token" per il tokenizer a parole del modello finto ma molti caratteri: l'input entra (budget 2480) e l'output atteso, che dipende da numero e lunghezza degli enunciati, supera il tetto di 1500.</summary>
+    private async Task<Guid> OutputCorpusAsync(HttpClient client, int docs, int chars, int gaps)
+    {
+        var project = await NewProject(client);
+        for (var n = 1; n <= docs; n++)
+        {
+            var subject = n == 1 ? "aaa" : n == docs ? "zzz" : $"mmm{n}";
+            await NewDocument(client, project, $"doc{n}", $"Requisito {n}: " + new string('x', chars), subject, kind: n <= gaps ? EvidenceKind.Gap : EvidenceKind.Requirement);
+        }
+
+        return project;
+    }
+
+    private DocumentChatWorkflowTests.FakeChatModel HierarchyOrSingleModel() =>
+        new() { Responder = r => r.AllText.Contains("Tipo di batch:", StringComparison.Ordinal) ? Dto(ParseAlias(r.AllText)) : AliasModelRepliesV5.Reply(r.AllText) };
+
+    private static int AmpleInputWindow => WindowForBudget(20_000);   // l'input entra largamente: l'unico limite in gioco e l'output (1500)
+
+    [Fact]
+    public async Task V5_whose_expected_output_exceeds_the_output_budget_takes_the_hierarchy_without_a_gap_although_the_input_fits()
+    {
+        using var client = await App.LoginAsync();
+        var project = await OutputCorpusAsync(client, docs: 4, chars: 400, gaps: 0);
+        var run = await StartNativeAsync(client, project);
+        Assert.Equal(AnalysisOutputEstimate.PolicyVersion, await Scalar<string>("SELECT \"PromptVersions\"->>'analysisOutputPolicy' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+        var model = HierarchyOrSingleModel();
+
+        var result = await RunAsync(await ClaimAsync(run), model, contextWindow: AmpleInputWindow);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+        Assert.NotEmpty(model.Requests);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'document-analysis-alias-2'", ("r", run)));
+        Assert.Equal(model.Requests.Count, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'reconcile-alias-1'", ("r", run)));
+        Assert.Equal(V5, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task V5_whose_expected_output_fits_the_output_budget_stays_a_single_call_the_criterion_depends_on_count_and_size_not_on_the_corpus()
+    {
+        using var client = await App.LoginAsync();
+        var project = await OutputCorpusAsync(client, docs: 2, chars: 40, gaps: 0);   // meno evidenze e piu corte
+        var run = await StartNativeAsync(client, project);
+        var model = HierarchyOrSingleModel();
+
+        var result = await RunAsync(await ClaimAsync(run), model, contextWindow: AmpleInputWindow);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+        Assert.Single(model.Requests);
+        Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
+    }
+
+    [Fact]
+    public async Task V5_whose_expected_output_exceeds_the_output_budget_with_a_gap_keeps_the_fail_fast_and_never_evaluates_the_gap_in_a_truncating_single_call()
+    {
+        using var client = await App.LoginAsync();
+        var project = await OutputCorpusAsync(client, docs: 4, chars: 400, gaps: 1);
+        var run = await StartNativeAsync(client, project);
+        var model = Tripwire();
+
+        var result = await RunAsync(await ClaimAsync(run), model, contextWindow: AmpleInputWindow);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "document_limit_exceeded"), (result.Status, result.ErrorCode));
+        Assert.Empty(model.Requests);
+        var row = await RunRow(run);
+        Assert.Equal(("Failed", "document_limit_exceeded", 0), (row.Status, row.Code, row.Calls));
+        Assert.StartsWith(DocumentWorkException.HierarchicalGapAssessmentUnsupported + ": ", row.Message, StringComparison.Ordinal);
+        Assert.Contains("budget di output", row.Message);
+        Assert.Contains(AnalysisOutputEstimate.PolicyVersion, row.Message);
+        await AssertNothingProducedAsync(run);
+    }
+
+    [Fact]
+    public async Task A_historic_v5_run_without_the_output_policy_keeps_the_input_only_routing_and_the_single_call()
+    {
+        using var client = await App.LoginAsync();
+        var project = await OutputCorpusAsync(client, docs: 4, chars: 400, gaps: 0);
+        var run = await StartNativeAsync(client, project);
+        await Execute("UPDATE \"ProcessingRuns\" SET \"PromptVersions\" = \"PromptVersions\" - 'analysisOutputPolicy' WHERE \"Id\" = @r", ("r", run));
+        Assert.True(string.IsNullOrEmpty(await Scalar<string?>("SELECT \"PromptVersions\"->>'analysisOutputPolicy' FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))));
+        var model = HierarchyOrSingleModel();
+
+        var result = await RunAsync(await ClaimAsync(run), model, contextWindow: AmpleInputWindow);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+        Assert.Single(model.Requests);   // comportamento storico invariato: solo il budget di input
+        Assert.Equal("document-analysis-alias-2", await Scalar<string>("SELECT \"SchemaVersion\" FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r", ("r", run)));
     }
 }
