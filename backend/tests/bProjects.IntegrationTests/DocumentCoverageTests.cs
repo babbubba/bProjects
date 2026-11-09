@@ -40,6 +40,7 @@ public sealed class DocumentCoverageCheckerTests
         ["item_rewritten_by_pm"] = FindingCategory.PmAssessment,
         ["conflict_resolved_by_pm"] = FindingCategory.PmAssessment,
         ["gap_open_reference_removed_by_pm"] = FindingCategory.PmAssessment,
+        ["item_repeats_conflict_alternative"] = FindingCategory.SemanticRisk,
     };
 
     // ---------------------------------------------------------------- omissione nota bloccante

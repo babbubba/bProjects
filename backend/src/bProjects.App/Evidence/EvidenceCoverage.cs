@@ -278,6 +278,14 @@ public static partial class EvidenceCoverage
         return result;
     }
 
+    /// <summary>Token numerici del testo come MULTIINSIEME ordinato (cifre con la virgola normalizzata a punto, più i numeri in parole in cifre): D3, confronto strutturale di ripetizione.</summary>
+    internal static IReadOnlyList<string> NumberTokens(string text)
+    {
+        var tokens = Digits().Matches(text).Select(m => m.Value.Replace(',', '.')).ToList();
+        tokens.AddRange(Token().Matches(text.ToLowerInvariant()).Select(m => m.Value).Where(NumberWords.ContainsKey).Select(w => NumberWords[w]));
+        return [.. tokens.Order(StringComparer.Ordinal)];
+    }
+
     /// <summary>Radici (prime cinque lettere) delle parole significative: almeno quattro lettere, senza parole funzionali.</summary>
     public static IReadOnlyList<string> Words(string text) =>
         [.. Token().Matches(Normalize(text)).Select(m => m.Value).Where(w => w.Length >= 4 && !StopWords.Contains(w) && !w.All(char.IsDigit))
@@ -481,6 +489,12 @@ public static class CoverageEndpoints
         }
 
         var loaded = await DocumentCoverageLoader.LoadAsync(db, run, selection, aiRevision, revision, draft, ct);
+        if (DocumentCoverage.AppliesStructuralRepetition(run.WorkflowDefinitionVersion))
+        {
+            // D3: avviso strutturale non bloccante solo per le revisioni v6 (AI §13.8); v5 e precedenti restano identici.
+            loaded = loaded with { Input = loaded.Input with { StructuralRepetition = true } };
+        }
+
         if (origin.Output is not null)
         {
             return await CreateWithGapsAsync(db, run, revision, aiRevision, draftId, createdBy, loaded, origin.Output, origin.Stage, Find, ct);
@@ -638,7 +652,7 @@ public sealed record GapAssessmentRecord(
 public sealed record DocumentCoverageInput(
     IReadOnlyList<DocumentCoverageEvidence> Evidence, IReadOnlyCollection<(Guid ItemId, Guid EvidenceId)> Links, DocumentAnalysisContent Ai,
     DocumentAnalysisContent Target, string? DraftMarkdown, IReadOnlyDictionary<Guid, string> OriginalTexts, IReadOnlyList<DocumentCoveragePortion> Portions,
-    IReadOnlyList<DocumentCoverageRelation> Relations, ReconciliationCoverageSection? Reconciliation = null, IReadOnlyList<GapAssessmentRecord>? Gaps = null, bool GapStage = false);
+    IReadOnlyList<DocumentCoverageRelation> Relations, ReconciliationCoverageSection? Reconciliation = null, IReadOnlyList<GapAssessmentRecord>? Gaps = null, bool GapStage = false, bool StructuralRepetition = false);
 
 public sealed record DocumentCoverageFinding(
     FindingCategory Category, string Code, string Message, Guid? EvidenceId, string? Alias, Guid? ItemId, string? Section, string? Confidence, string? Details, bool Blocking);
@@ -917,6 +931,10 @@ public static class DocumentCoverage
         findings.AddRange(PortionFindings(input.Portions));
         findings.AddRange(ReconciliationFindings(input.Reconciliation));
         findings.AddRange(GapReferenceFindings(input, targetItems));
+        if (input.StructuralRepetition)
+        {
+            findings.AddRange(StructuralRepetitionFindings(input, targetItems));
+        }
 
         foreach (var conflict in input.Target.Conflicts.Where(c => c.Status == AnalysisConflictStatus.Resolved))
         {
@@ -1001,6 +1019,45 @@ public static class DocumentCoverage
             {
                 yield return Doc(FindingCategory.PmAssessment, "gap_open_reference_removed_by_pm",
                     $"{alias}: il conflitto aperto indicato dalla valutazione AI non è più nella revisione verificata: rimosso dal PM.", record.GapEvidenceId, alias, null, "conflicts", null, conflict.ToString());
+            }
+        }
+    }
+
+    /// <summary>D3 (AI §13.8): l'avviso di ripetizione strutturale si applica solo alle revisioni della definizione v6; i report v5 e precedenti restano identici.</summary>
+    public static bool AppliesStructuralRepetition(string? workflowDefinition) => workflowDefinition == DocumentAnalysisWorkflow.DefinitionVersionV6;
+
+    /// <summary>
+    /// D3 — avviso STRUTTURALE (semantic risk, confidenza media, mai bloccante) per un item ordinario che ripete l'alternativa di un conflitto: stesso insieme NON vuoto di evidenze collegate, stessa
+    /// classificazione, stesso multiinsieme di token numerici e stesso numero di marcatori di negazione (controllo di polarità: «entro 30» ≠ «non entro 30»). Nessun testo è modificato, rifiutato o
+    /// rimosso e non c'è alcuna deduplicazione semantica/probabilistica: il PM decide. La Coherence esatta del composer resta invariata.
+    /// </summary>
+    private static IEnumerable<DocumentCoverageFinding> StructuralRepetitionFindings(DocumentCoverageInput input, Dictionary<Guid, DocumentSectionItem> targetItems)
+    {
+        HashSet<Guid> EvidenceOf(Guid itemId) => input.Links.Where(l => l.ItemId == itemId).Select(l => l.EvidenceId).ToHashSet();
+
+        var alternatives = targetItems.Values.Where(i => i.ConflictId is not null).ToList();
+        foreach (var ordinary in targetItems.Values.Where(i => i.ConflictId is null))
+        {
+            var evidence = EvidenceOf(ordinary.Item.Id);
+            if (evidence.Count == 0)
+            {
+                continue;
+            }
+
+            var numbers = EvidenceCoverage.NumberTokens(ordinary.Item.Text);
+            var negations = EvidenceCoverage.Negation().Matches(ordinary.Item.Text).Count;
+            foreach (var alternative in alternatives.Where(a => a.Item.Classification == ordinary.Item.Classification))
+            {
+                if (EvidenceCoverage.NumberTokens(alternative.Item.Text).SequenceEqual(numbers, StringComparer.Ordinal)
+                    && EvidenceCoverage.Negation().Matches(alternative.Item.Text).Count == negations
+                    && evidence.SetEquals(EvidenceOf(alternative.Item.Id)))
+                {
+                    var first = evidence.Order().First();
+                    var alias = input.Evidence.FirstOrDefault(e => e.EvidenceId == first)?.Alias;
+                    yield return Doc(FindingCategory.SemanticRisk, "item_repeats_conflict_alternative",
+                        $"L'elemento in {ordinary.Section} ripete un'alternativa del conflitto (stesse evidenze, classificazione e numeri): «{EvidenceCoverage.Short(ordinary.Item.Text)}». Avviso strutturale, nulla è stato modificato.",
+                        first, alias, ordinary.Item.Id, ordinary.Section, "medium", alternative.Item.Id.ToString());
+                }
             }
         }
     }
