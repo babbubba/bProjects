@@ -78,3 +78,7 @@ Altre capacità del prodotto ancora future rispetto alla 001: KB e retrieval con
 ricerca web controllata, editor JSON visuale avanzato, revisione AI per sezione,
 export PDF/DOCX, amministrazione estesa e infrastruttura completa di backup e
 osservabilità del piano MVP. Non sono automaticamente incluse nella 002.
+
+## Roadmap: 004 — Shared Knowledge Base (futura, nessuna spec né task)
+
+La 003 copre solo il retrieval di evidenze per lo stadio Gap; non è la Knowledge Base aziendale del piano MVP. La **004 — Shared Knowledge Base** dovrà comprendere: KB `GLOBAL`, `PRODUCT` e `CUSTOMER` (la KB `PROJECT` resta il perimetro documentale delle slice 002/003); gestione delle versioni; approvazione e pubblicazione da parte dell'Admin; collegamento cliente/prodotto/versione al progetto; conoscenza dei progetti precedenti; retrieval nella chat e nell'analisi riutilizzando il motore della 003; ricerca web controllata secondo il perimetro del piano MVP. Nessun elemento della 004 va anticipato nella 003.
