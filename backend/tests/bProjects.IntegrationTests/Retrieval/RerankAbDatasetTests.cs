@@ -99,6 +99,35 @@ public sealed class RerankAbDatasetTests
         }
     }
 
+    [Fact]
+    [Trait("Category", TestCategories.Integration)]
+    public async Task The_development_set_indexes_and_both_variants_rerank_the_same_candidates_with_provenance_sent_only_in_B()
+    {
+        await using var database = await RetrievalDb.CreateAsync();
+        var scenario = new EvalScenario(AbEvaluation.DevSet, Path.Combine("..", "Evaluation", AbEvaluation.DevSet), [.. AbEvaluation.DocumentFiles(AbEvaluation.DevSet)], [], null);
+        var server = new FakeRerankServer { Scores = (_, docs) => [.. docs.Select((_, i) => (double)i)] };
+        using var rig = new RetrievalRig(rerankServer: server);
+        var fixture = await RetrievalEvaluationTests.ScenarioFixture.SetupAsync(database, rig, scenario);
+        await using var db = database.NewContext();
+        var scope = await RetrievalScope.FromSnapshotAsync(db, await fixture.SnapshotAsync(excluded: null), fixture.IndexConfigHash, TestContext.Current.CancellationToken);
+        var result = await rig.Search(db).SearchAsync(scope, "garanzia sulle apparecchiature", RetrievalPolicy.V1, TestContext.Current.CancellationToken);
+        Assert.NotEmpty(result.Fused);
+
+        string[] Sent() => [.. System.Text.Json.JsonDocument.Parse(server.Bodies.Last()).RootElement.GetProperty("documents").EnumerateArray().Select(e => e.GetString()!)];
+        var orderA = await rig.Reranking(db).OrderAsync("garanzia sulle apparecchiature", result.Fused, RetrievalPolicy.V1, TestContext.Current.CancellationToken);
+        var sentA = Sent();
+        var orderB = await rig.Reranking(db).OrderAsync("garanzia sulle apparecchiature", result.Fused, RetrievalPolicy.V2, TestContext.Current.CancellationToken);
+        var sentB = Sent();
+
+        Assert.Equal(orderA.Order(), orderB.Order());   // stessi candidati
+        Assert.DoesNotContain(sentA, d => d.StartsWith("Documento: ", StringComparison.Ordinal));
+        Assert.All(sentB, d => Assert.StartsWith("Documento: ", d));
+        Assert.Contains(sentB, d => d.Contains("\nSezione: ", StringComparison.Ordinal));   // i file Markdown hanno il percorso dei titoli
+        Assert.Contains(sentB, d => d.StartsWith("Documento: offerta-commerciale-orione.md\nSezione: Offerta commerciale Orione > Garanzia\n", StringComparison.Ordinal));
+        Assert.Equal(sentA.Length, sentB.Length);
+        Assert.All(sentA.Zip(sentB), t => Assert.EndsWith(t.First, t.Second));   // il testo del blocco è intero in entrambe
+    }
+
     // ---- calcoli del confronto
 
     private static QueryMetrics Metrics(string id, params int?[] positions) => EvaluationMetrics.ForQuery(id, positions);
