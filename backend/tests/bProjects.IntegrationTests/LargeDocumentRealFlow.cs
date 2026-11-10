@@ -84,6 +84,9 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     /// <summary>Rifiuto di una configurazione incompatibile con la prova PRIMA di ogni upload e inferenza di contenuto (motivo non nullo = FAIL strutturale).</summary>
     protected virtual string? RejectProfile(DocumentRuntimeProfile profile) => null;
 
+    /// <summary>Verifica delle opzioni AI RISOLTE dal runtime dell'applicazione in prova (T040: fattore di stima dell'estrazione). Null = compatibile; altrimenti NO-GO: nessun upload, nessuna inferenza.</summary>
+    protected virtual string? RejectOptions(AiOptions options) => null;
+
     /// <summary>Documenti del progetto esclusi dal PM prima di Analizza: le loro evidenze non fanno parte dello snapshot e non vanno attese nella copertura.</summary>
     /// <summary>Testi di documenti inclusi nello snapshot ma non nel corpus generato (T040: documento d'estensione): le loro citazioni valgono nel controllo di provenienza.</summary>
     protected virtual IEnumerable<string> ExtraSourceTexts => [];
@@ -118,6 +121,11 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         if (EnvInt("BPROJECTS_TEST_SAFETY_MARGIN") is { } margin)
         {
             options.SafetyMarginTokens = margin;
+        }
+
+        if (double.TryParse(Environment.GetEnvironmentVariable("BPROJECTS_TEST_EXTRACTION_OUTPUT_EXPANSION"), NumberStyles.Float, CultureInfo.InvariantCulture, out var expansion))
+        {
+            options.ExtractionOutputExpansion = expansion;   // solo per provare configurazioni diverse: la campagna T040 le rifiuta (NO-GO)
         }
 
         MafDiagnostics.RecordConfig(options);
@@ -303,6 +311,13 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         if (RequiredWindowTokens is { } requiredWindow && profile.WindowTokens != requiredWindow)
         {
             v.Check($"[STRUTTURALE] finestra misurata {profile.WindowTokens} diversa da quella richiesta dalla prova ({requiredWindow}): nessun upload, nessuna inferenza", false);
+            v.Flush();
+            return;
+        }
+
+        if (RejectOptions(App.Services.GetRequiredService<IOptions<AiOptions>>().Value) is { } optionsRejection)
+        {
+            v.Check($"[STRUTTURALE] opzioni AI risolte incompatibili con la prova: {optionsRejection}. NO-GO: nessun upload, nessuna inferenza", false);
             v.Flush();
             return;
         }

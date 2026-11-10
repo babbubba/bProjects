@@ -247,10 +247,13 @@ public sealed class RetrievalGapCampaignTests
         Assert.NotEmpty(manifest["config"]!["llm"]!["unverified"]!.AsArray());
         Assert.Equal(0, manifest["thresholds"]!["lostConflicts"]!["belowThatTolerance"]!.GetValue<int>());
         Assert.Equal(0, manifest["thresholds"]!["lostConflicts"]!["upstream"]!.GetValue<int>());
-        Assert.Equal(2, manifest["freeze"]!["version"]!.GetValue<int>());
-        Assert.Equal(RetrievalGapCampaign.SupersededManifestSha256, manifest["freeze"]!["supersedes"]!.GetValue<string>());
+        Assert.Equal(3, manifest["freeze"]!["version"]!.GetValue<int>());
+        Assert.Equal(RetrievalGapCampaign.Run1ManifestSha256, manifest["freeze"]!["supersedes"]!.GetValue<string>());   // v3 sostituisce la v2 USATA dal Run 1
+        Assert.Equal([RetrievalGapCampaign.SupersededManifestSha256, RetrievalGapCampaign.Run1ManifestSha256], manifest["freeze"]!["history"]!.AsArray().Select(h => h!["sha256"]!.GetValue<string>()));
+        Assert.NotEqual(RetrievalGapCampaign.Run1ManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
         Assert.NotEqual(RetrievalGapCampaign.SupersededManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
-        Assert.Contains("Nessuna campagna DGX", manifest["freeze"]!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("Run 1", manifest["freeze"]!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("8.0 -> 16.0", manifest["freeze"]!["configDifferenceFromRun1"]!.GetValue<string>(), StringComparison.Ordinal);
 
         // corpus, gold, domande e attese: contenuto per scenario identico a quello della versione 1 (hash del testo e del gold, ricalcolati qui con lo stesso generatore, non letti dal manifesto)
         foreach (var scenario in RetrievalGapCampaign.Sequence)
@@ -533,6 +536,85 @@ public sealed class RetrievalGapCampaignTests
         Assert.Equal(11440, (int)Math.Ceiling(measure.OwnedTokens * limits.OutputExpansion));
         Assert.True(limits.Fits(measure));
         Assert.False(new PlannerLimits(RetrievalGapCampaign.BudgetTokens, RetrievalGapCampaign.OutputTokens, 11.5).Fits(measure));   // gia a 11,5 (limite inferiore osservato) l unita sarebbe stata divisa
+    }
+
+    private static JsonNode ArchivedRun1Manifest()
+    {
+        var path = Path.Combine(Path.GetDirectoryName(ManifestFile())!, "T040-campaign-manifest-v2-run1.json");
+        Assert.True(File.Exists(path), $"manca la copia del manifesto usato dal Run 1: {path}");
+        return JsonNode.Parse(File.ReadAllText(path))!;
+    }
+
+    [Fact]
+    public void The_manifest_used_by_run1_is_preserved_unchanged_and_still_hashes_to_the_recorded_value()
+    {
+        var archived = ArchivedRun1Manifest();
+        Assert.Equal(RetrievalGapCampaign.Run1ManifestSha256, archived["frozenSha256"]!.GetValue<string>());
+        var recomputed = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(archived["manifest"]!.ToJsonString())));
+        Assert.Equal(RetrievalGapCampaign.Run1ManifestSha256, recomputed);   // il contenuto conservato e quello che ha dato l'hash del Run 1
+        Assert.Equal(2, archived["manifest"]!["freeze"]!["version"]!.GetValue<int>());
+        Assert.False(archived["manifest"]!["config"]!.AsObject().ContainsKey("extraction"));   // il Run 1 non registrava il fattore (8,0 nel codice)
+    }
+
+    [Fact]
+    public void Corpus_gold_questions_expectations_thresholds_and_the_rest_of_the_configuration_are_identical_to_the_manifest_of_run1()
+    {
+        var run1 = ArchivedRun1Manifest()["manifest"]!;
+        var now = JsonNode.Parse(RetrievalGapCampaign.BuildManifestJson())!;
+        foreach (var section in new[] { "campaign", "definition", "thresholds", "seed", "extension", "scenarios" })
+        {
+            Assert.Equal(run1[section]!.ToJsonString(), now[section]!.ToJsonString());
+        }
+
+        var configRun1 = run1["config"]!.AsObject();
+        var configNow = now["config"]!.AsObject();
+        foreach (var (key, value) in configRun1)
+        {
+            Assert.Equal(value!.ToJsonString(), configNow[key]!.ToJsonString());   // nessuna chiave preesistente di config e cambiata
+        }
+
+        Assert.Equal(["extraction"], configNow.Select(p => p.Key).Except(configRun1.Select(p => p.Key)).ToArray());   // l'unica aggiunta e il fattore di estrazione
+    }
+
+    [Fact]
+    public void The_manifest_registers_the_extraction_factor_16_and_its_calibration_label_as_the_only_difference_from_run1()
+    {
+        var extraction = JsonNode.Parse(RetrievalGapCampaign.BuildManifestJson())!["config"]!["extraction"]!;
+        Assert.Equal(16.0, extraction["outputExpansion"]!.GetValue<double>());
+        Assert.Equal(8.0, extraction["previousRun1Value"]!.GetValue<double>());
+        Assert.Equal(PlannerLimits.ExtractionCalibrationVersion, extraction["calibration"]!.GetValue<string>());
+        Assert.Equal(PlannerLimits.ExtractionCandidateOutputExpansion, RetrievalGapCampaign.ExtractionOutputExpansion);   // fattore congelato = candidato del prodotto
+        Assert.Contains("candidato", extraction["status"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_preflight_is_NO_GO_when_the_resolved_AiOptions_carry_another_factor_and_is_wired_in_the_campaign()
+    {
+        Assert.Null(RetrievalGapCampaign.RejectOptions(new AiOptions()));   // default di prodotto = 16
+        Assert.Null(RetrievalGapCampaign.RejectOptions(new AiOptions { ExtractionOutputExpansion = 16 }));
+        foreach (var other in new[] { 8.0, 12.0, 16.5, 24.0 })
+        {
+            Assert.Contains("ExtractionOutputExpansion", RetrievalGapCampaign.RejectOptions(new AiOptions { ExtractionOutputExpansion = other }));
+        }
+
+        string? Env(string? value) => RetrievalGapCampaign.ValidateEnvironment(name => name switch
+        {
+            var n when n == TestEnvironment.DgxModelVariable => RetrievalGapCampaign.LlmModelId,
+            RetrievalGapCampaign.ExtractionExpansionVariable => value,
+            _ => null,
+        }).SingleOrDefault();
+        Assert.Null(Env(null));
+        Assert.Null(Env("16"));
+        Assert.Null(Env("16.0"));
+        Assert.Contains(RetrievalGapCampaign.ExtractionExpansionVariable, Env("8"));
+        Assert.Contains(RetrievalGapCampaign.ExtractionExpansionVariable, Env("abc"));
+
+        // il controllo e collegato: la campagna reale sovrascrive il gancio che il flusso chiama PRIMA di upload e inferenza
+        var hook = typeof(RetrievalGapStageMafRealTests).GetMethod("RejectOptions", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(hook);
+        Assert.Equal(typeof(RetrievalGapStageMafRealTests), hook!.DeclaringType);
+        var hookSource = File.ReadAllText(Path.Combine(Path.GetDirectoryName(ManifestFile())!, "..", "..", "..", "backend", "tests", "bProjects.IntegrationTests", "LargeDocumentRealFlow.cs"));
+        Assert.True(hookSource.IndexOf("RejectOptions(App.Services", StringComparison.Ordinal) is var at and > 0 && at < hookSource.IndexOf("App.LoginAsync()", at, StringComparison.Ordinal), "RejectOptions deve precedere upload e inferenza");
     }
 
     [Fact]

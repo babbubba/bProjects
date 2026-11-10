@@ -131,15 +131,29 @@ internal static class RetrievalGapCampaign
     // ================================================================ manifesto congelato
 
     /// <summary>Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>). Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.</summary>
-    public const string FrozenManifestSha256 = "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb";
+    public const string FrozenManifestSha256 = "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181";
+
+    /// <summary>Hash della versione 2 del manifesto: quella USATA dal Run 1 (2026-11-10, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v2-run1.json`; i risultati del Run 1 si riferiscono a questa configurazione.</summary>
+    public const string Run1ManifestSha256 = "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb";
+
+    /// <summary>Fattore di stima dell'output dell'estrazione fissato per il Run 2 (CANDIDATO, non validato; il Run 1 usava 8,0). Deve coincidere con <see cref="AiOptions.ExtractionOutputExpansion"/> risolta dal runtime.</summary>
+    public const double ExtractionOutputExpansion = 16.0;
+
+    /// <summary>Etichetta di calibrazione attesa (`PlannerLimits.ExtractionCalibrationVersion`): un'etichetta diversa significa un altro codice di calibrazione rispetto a quello congelato.</summary>
+    public const string ExpectedExtractionCalibration = "extraction-output-expansion-2026-11-10";
 
     /// <summary>Hash della versione 1 del manifesto (d05e93f), mai usata da una campagna reale: sostituita PRIMA di ogni inferenza.</summary>
     public const string SupersededManifestSha256 = "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035";
 
     /// <summary>Motivo del ri-congelamento (versione 2). Corpus, gold, domande, attese e testi d'estensione NON cambiano: lo verificano gli hash per scenario nel manifesto e i test sul generatore.</summary>
-    public const string FreezeReason =
+    public const string FreezeReasonV2 =
         "Nessuna campagna DGX eseguita con la versione 1. Correzioni dell'harness decise prima dell'inferenza: identificativo del modello LLM fissato (Qwen3.6-35B-Smart); soglia dei conflitti persi riscritta secondo SC-003 "
         + "(riferimento del laboratorio 1-2 su 10 casi, tolleranza zero sotto i 10 casi, zero perdite per esclusione a monte); configurazione delle misure di latenza per Gap; ordine Single poi Multi in un solo test. Nessun adattamento delle attese ai risultati.";
+
+    /// <summary>Motivo del ri-congelamento (versione 3), dopo il Run 1 non superato (finish=length in estrazione). Nessun adattamento di corpus, gold, domande, attese o soglie.</summary>
+    public const string FreezeReason =
+        "Dopo il Run 1 (estrazione troncata a finish=length, diagnosi offline in M3-real.md) il fattore di stima dell'output dell'estrazione e stato reso esplicito e ricalibrato in via preventiva da 8,0 a 16,0 (candidato, non validato); "
+        + "il manifesto lo registra e il preflight rifiuta (NO-GO) ogni configurazione risolta diversa. Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema non cambiano.";
 
     /// <summary>Caratteristiche del modello che richiedono una verifica REALE (non verificabili offline) e che la campagna registra senza dichiararle verificate.</summary>
     public static readonly string[] LlmUnverifiedCharacteristics = ["pesi effettivamente caricati", "quantizzazione", "artefatto/file del modello", "finestra di contesto effettiva (misurata dal profilo di runtime)", "comportamento del ragionamento (thinking=0 richiesto)"];
@@ -180,6 +194,7 @@ internal static class RetrievalGapCampaign
                 embedding = new { id = EmbeddingModelId, artifact = EmbeddingArtifact, dimension = EmbeddingDimension },
                 reranker = new { id = RerankerModelId, artifact = RerankerArtifact },
                 indexTextVersion = RetrievalOptions.IndexTextVersion, fts = RetrievalOptions.FtsConfiguration,
+                extraction = new { outputExpansion = ExtractionOutputExpansion, calibration = ExpectedExtractionCalibration, option = "Ai:ExtractionOutputExpansion", previousRun1Value = PlannerLimits.DefaultOutputExpansion, status = "candidato, non validato da misura reale completa", preflight = "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza" },
                 llm = new { id = LlmModelId, source = "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline", unverified = LlmUnverifiedCharacteristics },
                 latency = new { perGap = LatencyReport.PerGapPhases, shared = LatencyReport.SharedPhases, attribution = "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap" },
             },
@@ -189,7 +204,18 @@ internal static class RetrievalGapCampaign
                 lostConflicts = new { labReference = $"{LabConflictLostMax} su {LabConflictReferenceCases} casi", scaledOnlyFromCases = LabConflictReferenceCases, belowThatTolerance = 0, upstream = MaxUpstreamLostConflicts },
                 falseAnsweredInSnapshot = 0,
             },
-            freeze = new { version = 2, supersedes = SupersededManifestSha256, reason = FreezeReason },
+            freeze = new
+            {
+                version = 3,
+                supersedes = Run1ManifestSha256,
+                history = new object[]
+                {
+                    new { version = 1, sha256 = SupersededManifestSha256, usedByRun = "nessuno (sostituita prima di ogni inferenza)" },
+                    new { version = 2, sha256 = Run1ManifestSha256, usedByRun = "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json" },
+                },
+                reason = FreezeReason,
+                configDifferenceFromRun1 = "unica differenza di configurazione: ExtractionOutputExpansion 8.0 -> 16.0 (planner di estrazione; calibrazione preventiva, valore candidato non validato). Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema invariati.",
+            },
             seed = LargeDocumentCorpus.Seed,
             extension = ExtensionDocuments.Select(d => new { d.Key, d.FileName, d.ExcludedByPm, textSha256 = Sha(d.Text) }).ToArray(),
             scenarios = new[] { Scenario(Single), Scenario(Multi) },
@@ -226,6 +252,11 @@ internal static class RetrievalGapCampaign
         Fixed("BPROJECTS_TEST_SAFETY_MARGIN", MarginTokens.ToString(CultureInfo.InvariantCulture));
         Fixed("BPROJECTS_TEST_ANALYSIS_THINKING", "0");
         Fixed("BPROJECTS_EVAL_RERANKER_MODEL_ID", RerankerModelId);
+        if (read(ExtractionExpansionVariable) is { Length: > 0 } expansion
+            && !(double.TryParse(expansion, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed == ExtractionOutputExpansion))
+        {
+            problems.Add($"{ExtractionExpansionVariable}={expansion} diverso dal valore fissato {ExtractionOutputExpansion.ToString(CultureInfo.InvariantCulture)}");
+        }
 
         var model = read(TestEnvironment.DgxModelVariable);
         if (string.IsNullOrWhiteSpace(model))
@@ -238,6 +269,27 @@ internal static class RetrievalGapCampaign
         }
 
         return problems;
+    }
+
+    public const string ExtractionExpansionVariable = "BPROJECTS_TEST_EXTRACTION_OUTPUT_EXPANSION";
+
+    /// <summary>
+    /// Verifica delle <see cref="AiOptions"/> RISOLTE dal runtime (quelle che il planner di estrazione legge davvero) contro il fattore e l'etichetta di calibrazione congelati. Null = compatibile; altrimenti NO-GO PRIMA di ogni upload e inferenza.
+    /// </summary>
+    public static string? RejectOptions(AiOptions options)
+    {
+        var problems = new List<string>();
+        if (options.ExtractionOutputExpansion != ExtractionOutputExpansion)
+        {
+            problems.Add($"ExtractionOutputExpansion risolta {options.ExtractionOutputExpansion.ToString(CultureInfo.InvariantCulture)} invece di {ExtractionOutputExpansion.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.Equals(PlannerLimits.ExtractionCalibrationVersion, ExpectedExtractionCalibration, StringComparison.Ordinal))
+        {
+            problems.Add($"etichetta di calibrazione {PlannerLimits.ExtractionCalibrationVersion} invece di {ExpectedExtractionCalibration}");
+        }
+
+        return problems.Count == 0 ? null : string.Join("; ", problems);
     }
 
     /// <summary>Verifica del profilo effettivo del runtime (misurato) contro la configurazione fissata, modello compreso (<see cref="LlmModelId"/>, mai un altro). Null = compatibile.</summary>

@@ -1,6 +1,6 @@
 {
   "campaign": "T040-retrieval-gap-1",
-  "frozenSha256": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
+  "frozenSha256": "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181",
   "note": "Manifesto congelato PRIMA di ogni inferenza: corpus (hash del testo), gold (hash), domande, attese, soglie e configurazione. Rigenerabile solo con BPROJECTS_T040_WRITE_MANIFEST=1 e ri-congelamento esplicito della costante FrozenManifestSha256.",
   "manifest": {
     "campaign": "T040-retrieval-gap-1",
@@ -24,6 +24,14 @@
       },
       "indexTextVersion": "index-text-1",
       "fts": "italian",
+      "extraction": {
+        "outputExpansion": 16,
+        "calibration": "extraction-output-expansion-2026-11-10",
+        "option": "Ai:ExtractionOutputExpansion",
+        "previousRun1Value": 8,
+        "status": "candidato, non validato da misura reale completa",
+        "preflight": "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza"
+      },
       "llm": {
         "id": "Qwen3.6-35B-Smart",
         "source": "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline",
@@ -61,9 +69,22 @@
       "falseAnsweredInSnapshot": 0
     },
     "freeze": {
-      "version": 2,
-      "supersedes": "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035",
-      "reason": "Nessuna campagna DGX eseguita con la versione 1. Correzioni dell'harness decise prima dell'inferenza: identificativo del modello LLM fissato (Qwen3.6-35B-Smart); soglia dei conflitti persi riscritta secondo SC-003 (riferimento del laboratorio 1-2 su 10 casi, tolleranza zero sotto i 10 casi, zero perdite per esclusione a monte); configurazione delle misure di latenza per Gap; ordine Single poi Multi in un solo test. Nessun adattamento delle attese ai risultati."
+      "version": 3,
+      "supersedes": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
+      "history": [
+        {
+          "version": 1,
+          "sha256": "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035",
+          "usedByRun": "nessuno (sostituita prima di ogni inferenza)"
+        },
+        {
+          "version": 2,
+          "sha256": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
+          "usedByRun": "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json"
+        }
+      ],
+      "reason": "Dopo il Run 1 (estrazione troncata a finish=length, diagnosi offline in M3-real.md) il fattore di stima dell'output dell'estrazione e stato reso esplicito e ricalibrato in via preventiva da 8,0 a 16,0 (candidato, non validato); il manifesto lo registra e il preflight rifiuta (NO-GO) ogni configurazione risolta diversa. Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema non cambiano.",
+      "configDifferenceFromRun1": "unica differenza di configurazione: ExtractionOutputExpansion 8.0 -> 16.0 (planner di estrazione; calibrazione preventiva, valore candidato non validato). Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema invariati."
     },
     "seed": 20261106,
     "extension": [

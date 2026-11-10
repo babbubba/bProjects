@@ -69,3 +69,15 @@ Fonti: `diag/20261110-203418-68a02077/{summary.json,calls.jsonl,texts/0001-…-f
 **Impatto atteso su batch e tempi (STIME, non misure)**: T040-single ≈ 5570 token posseduti in 4 unità da ~1430. A 8: 1 batch per unità (≈4 chiamate; comportamento del Run 1). A 16: ≥2 batch per unità (≥6 chiamate minimo teorico sul totale, ≈8 per le 4 unità), ogni chiamata ≲16384/16 ≈ 1000 token posseduti. Token generati totali invariati (stima 64–78k a 11,5–14 token/token posseduto), a ~58 token/s osservati nel Run 1 (16384 in 282 s) ≈ 19–22 min di sola generazione per documento in serie (parallel=1), contro un fallimento certo a 8; costo aggiuntivo: ~8 prefill ripetuti da ~3k token di istruzioni/schema (secondi ciascuno). Misure reali: nessuna oltre il Run 1.
 
 T040 resta **aperto**; la prossima esecuzione DGX richiede nuova autorizzazione.
+
+## Manifesto v3 e preflight per il Run 2 (2026-11-10; nessuna inferenza)
+
+**Versioni del manifesto**: v1 `66243134…` (mai usata), **v2 `fbc0ecb3…` = quella del Run 1** (risultati sopra invariati; copia conservata in `T040-campaign-manifest-v2-run1.json`, verificata da un test che ne ricalcola l'hash), **v3 `6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181`** = congelata per il Run 2 (`T040-campaign-manifest.json`, con `freeze.history` e `freeze.supersedes` = v2).
+
+**Differenza di configurazione Run 1 → Run 2 (unica)**: `ExtractionOutputExpansion` 8,0 → **16,0** (etichetta di calibrazione `extraction-output-expansion-2026-11-10`; valore candidato, non validato). Il manifesto la registra in `config.extraction`. I risultati del Run 1 si riferiscono alla configurazione con 8,0 e non sono confrontabili «a parità di configurazione» con il Run 2.
+
+**Invarianti verificati da test** (confronto con la v2 archiviata): campagna, definizione, soglie, seed, documenti d'estensione e scenari (corpus, gold, domande, attese) identici byte per byte; ogni chiave preesistente di `config` identica; l'unica chiave aggiunta è `extraction`. Prompt e schema non fanno parte del manifesto e non sono stati toccati.
+
+**Preflight**: `RetrievalGapCampaign.RejectOptions` controlla le `AiOptions` RISOLTE dall'applicazione in prova (`App.Services`, le stesse che legge `DocumentEvidenceAgent`) prima di profilo, upload e inferenza: fattore ≠ 16 o etichetta diversa ⇒ NO-GO (`[STRUTTURALE] … NO-GO: nessun upload, nessuna inferenza`). `ValidateEnvironment` rifiuta `BPROJECTS_TEST_EXTRACTION_OUTPUT_EXPANSION` diversa da 16 (confronto numerico: «16» e «16.0» ok). Verificato offline per 8, 12, 16,5, 24; non è stato possibile provare il percorso reale (richiede DGX).
+
+**GO/NO-GO per il Run 2**: configurazione e harness: **GO** (offline). Il lancio richiede comunque una nuova autorizzazione esplicita e `BPROJECTS_TEST_DGX_ALLOW=1`. T040 resta aperto.

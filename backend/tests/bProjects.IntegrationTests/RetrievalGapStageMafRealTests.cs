@@ -59,6 +59,8 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override string? RejectProfile(DocumentRuntimeProfile profile) => RetrievalGapCampaign.RejectProfile(profile);
 
+    protected override string? RejectOptions(AiOptions options) => RetrievalGapCampaign.RejectOptions(options);
+
     protected override string ClassifyFailure(string errorCode) => RetrievalGapCampaign.Classify(errorCode);
 
     protected override void ConfigureCampaignServices(IServiceCollection services)
