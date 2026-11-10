@@ -7,8 +7,9 @@ using bProjects.App.AI;
 namespace bProjects.IntegrationTests;
 
 /// <summary>
-/// T150 (DGX) — gate «SC-004-Gap»: lo stadio Gap v6 con tutto reale (API di produzione, parser Docling, PostgreSQL, MAF 1.26.0, modello interno) sui dataset T082 (documento singolo) e T083 (tre documenti),
-/// ciascuno con TRE domande del PM (un messaggio per domanda, quindi un Gap proprio). Gold dei fatti e dei conflitti invariati (<see cref="LargeDocumentCorpus"/>). Le ATTESE SONO ANNOTATE QUI, PRIMA
+/// T150-P (DGX) — gate «SC-004-Gap», caso positivo: lo stadio Gap v6 con tutto reale (API di produzione, parser Docling, PostgreSQL, MAF 1.26.0, modello interno) su due corpus T150 SEPARATI (uno documento,
+/// uno tre documenti) generati con lo stesso generatore e gli stessi gold di T082/T083 (<see cref="LargeDocumentCorpus"/>, gold NON modificati) ma NON equivalenti al loro scenario originale: senza riempitivo,
+/// con meno regole, a W=131072. Ciascuno con TRE domande del PM (un messaggio per domanda, quindi un Gap proprio). Le ATTESE SONO ANNOTATE QUI, PRIMA
 /// dell'esecuzione, e non si adattano alle risposte:
 /// Q1 (risposta presente e univoca) = AnsweredInSnapshot/Answered, supporto documentale con la citazione del fatto, nessun riferimento Open;
 /// Q2 (argomento assente dal corpus: nessun recapito telefonico esiste nei documenti) = Open/NoAnswer con absenceProven, searchBasis=ledger_exhaustive, retrievalComplete, riferimento Open valorizzato;
@@ -26,12 +27,21 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override bool GapStageExpected => true;
 
-    // Dimensionamento sul LEDGER, non sul testo grezzo (finding T150 del 2026-11-10): con testo > 2xB il ledger (~0,8x il testo, ~104 token per evidenza) supera il budget di input dello
-    // stadio e il run termina, come da contratto, con gap_ledger_exceeds_input (perimetro non coperto della 002). L'instradamento (b1) richiede invece solo che la chiamata singola non
-    // sia affidabile: la stima di output (single-call-output-estimate-1) supera O gia a ~100 evidenze (~10k token di ledger). Target 0,95xB di testo => ledger ~0,75xB, sotto B meno la maggiorazione.
-    protected override double TargetRatio => 0.95;
+    // T150-P (tasks.md, revisione del 2026-11-10): corpus SEPARATO da T082/T083, a W=131072, dimensionato sul LEDGER e non sul testo grezzo. Il numero di regole e fissato qui e la sua idoneita
+    // (gerarchia attivata dalla stima di output > O E ledger completo + maggiorazione <= B) e provata offline da DocumentGapStageCorpusSizingTests prima di ogni esecuzione reale.
+    // T150-N (ledger > B => gap_ledger_exceeds_input, zero invii) NON e un caso di questa classe: e coperto in modo deterministico da DocumentGapStageRoutingTests/InputTests e non da PASS a T150-P.
+    public const int SingleBulkRules = 130;
 
-    protected override double MinimumRatio => 0.5;
+    public const int MultiBulkRulesPerDocument = 43;
+
+    public const int WindowTokens = 131072;
+
+    protected override int? RequiredWindowTokens => WindowTokens;
+
+    // Nessun requisito di testo grezzo > 2xB (quello e di T082/T083): la gerarchia si attiva per la stima di output, non per il testo.
+    protected override double TargetRatio => 0;
+
+    protected override double MinimumRatio => 0;
 
     protected override int MinimumHierarchyBatches => 1;
 
@@ -213,7 +223,7 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
         {
             TestEnvironment.RequireDgx();
             await Require();
-            await RunScenarioAsync("T150-single", filler => LargeDocumentCorpus.Single(filler, 90));
+            await RunScenarioAsync("T150-single", _ => LargeDocumentCorpus.Single(0, SingleBulkRules));
         }
     }
 
@@ -233,7 +243,7 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
         {
             TestEnvironment.RequireDgx();
             await Require();
-            await RunScenarioAsync("T150-multi", filler => LargeDocumentCorpus.Multi(filler, 30));
+            await RunScenarioAsync("T150-multi", _ => LargeDocumentCorpus.Multi(0, MultiBulkRulesPerDocument));
         }
     }
 }

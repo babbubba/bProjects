@@ -36,6 +36,9 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     /// <summary>Batch minimi della gerarchia (stadio Gap escluso): 2 per T082/T083; T150 dimensiona il corpus sul ledger e ne richiede almeno 1.</summary>
     protected virtual int MinimumHierarchyBatches => 2;
 
+    /// <summary>Finestra del runtime richiesta dalla prova (T150-P: 131072). Se diversa, la prova si ferma PRIMA di ogni upload e inferenza: nessuna esecuzione a una configurazione non conforme.</summary>
+    protected virtual int? RequiredWindowTokens => null;
+
     protected static readonly TimeSpan DocumentsTimeout = TimeSpan.FromMinutes(120);
     protected static readonly TimeSpan ChatTimeout = TimeSpan.FromMinutes(8);
     protected static readonly TimeSpan RunTimeout = TimeSpan.FromHours(4);
@@ -239,7 +242,14 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         var v = new Verdicts(label);
         var (corpus, profile, generatedTokens) = await BuildSizedAsync(build);
         var budget = profile.InputBudgetTokens;
-        var directory = Path.Combine(Path.GetTempPath(), "bprojects-i5-real", label + "-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
+        if (RequiredWindowTokens is { } requiredWindow && profile.WindowTokens != requiredWindow)
+        {
+            v.Check($"[STRUTTURALE] finestra misurata {profile.WindowTokens} diversa da quella richiesta dalla prova ({requiredWindow}): nessun upload, nessuna inferenza", false);
+            v.Flush();
+            return;
+        }
+
+        var directory =Path.Combine(Path.GetTempPath(), "bprojects-i5-real", label + "-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
         var manifestPath = corpus.Materialize(directory);
         v.Note($"configurazione: finestra misurata W={profile.WindowTokens} output O={profile.OutputTokens} margine M={profile.MarginTokens} ragionamento={profile.Thinking} => budget di input Analysis B=W-O-M={budget} token; modello={profile.ModelId}");
         v.Note($"corpus generato (seed {LargeDocumentCorpus.Seed}) in {directory}: {corpus.Documents.Count} documenti, {corpus.PlainTextChars} caratteri, {generatedTokens} token misurati = {(double)generatedTokens / budget:F2}x B; hash in {manifestPath}");
