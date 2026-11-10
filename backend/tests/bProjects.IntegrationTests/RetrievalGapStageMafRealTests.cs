@@ -414,8 +414,9 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
         foreach (var g in latency.PerGap)
         {
-            v.Check($"{l} (6) latenza del recupero misurata per «{Short(statements[g.GapEvidenceId], 40)}»: fasi ricerca e riordino complete, almeno una chiamata di embedding e una di riordino osservate nelle proprie finestre",
-                !g.Incomplete && g.EmbeddingCalls > 0 && g.RerankCalls > 0 && g.EndToEndMs > 0, $"end-to-end {g.EndToEndMs:F0} ms, embedding {g.EmbeddingCalls}, riordino {g.RerankCalls}");
+            var candidateCount = registry.Gaps.Where(x => x.GapEvidenceId == g.GapEvidenceId).Sum(x => x.Candidates.Count);
+            v.Check($"{l} (6) latenza del recupero misurata per «{Short(statements[g.GapEvidenceId], 40)}»: fasi ricerca e riordino complete, una chiamata di embedding e, se il Gap ha candidati, almeno una di riordino (un Gap senza candidati non invia nulla al reranker)",
+                g.IsMeasuredCompletely(candidateCount), $"end-to-end {g.EndToEndMs:F0} ms, embedding {g.EmbeddingCalls}, riordino {g.RerankCalls}, candidati {candidateCount}");
         }
 
         v.Check($"{l} (6) tempo condiviso e totale riportati separatamente: il totale della pipeline copre la somma delle fasi per Gap", latency.TotalMs > 0 && latency.TotalMs + 1 >= latency.PerGap.Sum(g => g.EndToEndMs), $"totale {latency.TotalMs:F0} ms");

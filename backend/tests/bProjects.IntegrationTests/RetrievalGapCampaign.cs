@@ -412,6 +412,12 @@ internal sealed record GapLatency(
 
     /// <summary>Riordino meno chiamata HTTP al reranker: costo applicativo proprio del Gap (selezione dei candidati, composizione delle richieste, ordinamento).</summary>
     public double RerankApplicationMs => Math.Max(0, RerankMs - RerankHttpMs);
+
+    /// <summary>
+    /// Misura completa del Gap: fasi ricerca e riordino chiuse, una chiamata di embedding (la query si incorpora sempre) e, SOLO se la ricerca ha prodotto candidati, almeno una chiamata al reranker.
+    /// Un Gap senza candidati non invia nulla al reranker (<c>CandidateReranker</c>: nessuna fusione ⇒ nessuna richiesta): è un caso legittimo, non un fallimento del recupero.
+    /// </summary>
+    public bool IsMeasuredCompletely(int candidateCount) => !Incomplete && EmbeddingCalls > 0 && EndToEndMs > 0 && (candidateCount == 0 || RerankCalls > 0);
 }
 
 /// <summary>Rapporto di latenza del recupero: per Gap, le fasi condivise (una sola volta, MAI divise per Gap) e il totale.</summary>

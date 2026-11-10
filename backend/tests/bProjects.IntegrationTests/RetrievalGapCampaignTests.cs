@@ -398,6 +398,17 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
+    public void A_gap_without_candidates_may_skip_the_reranker_but_a_gap_with_candidates_may_not()
+    {
+        var withoutRerank = new GapLatency(Guid.NewGuid(), 100, 5, 50, 1, 0, 0, false);
+        Assert.True(withoutRerank.IsMeasuredCompletely(0));    // nessun candidato: nessuna richiesta al reranker, caso legittimo
+        Assert.False(withoutRerank.IsMeasuredCompletely(3));   // con candidati il riordino è obbligatorio
+        Assert.True(new GapLatency(Guid.NewGuid(), 100, 300, 50, 1, 250, 1, false).IsMeasuredCompletely(3));
+        Assert.False(new GapLatency(Guid.NewGuid(), 100, 5, 0, 0, 0, 0, false).IsMeasuredCompletely(0));   // l'embedding della query c'è sempre
+        Assert.False(new GapLatency(Guid.NewGuid(), 100, 5, 50, 1, 0, 0, true).IsMeasuredCompletely(0));   // misura incompleta resta tale
+    }
+
+    [Fact]
     public void A_gap_without_a_complete_search_and_rerank_measure_is_flagged_incomplete_not_silently_zero()
     {
         var gap = Guid.NewGuid();

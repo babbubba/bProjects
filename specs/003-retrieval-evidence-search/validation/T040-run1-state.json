@@ -1,0 +1,15 @@
+{
+  "campaign": "T040-retrieval-gap-1",
+  "steps": [
+    {
+      "Name": "T040-single",
+      "status": "Blocked",
+      "Detail": "TrueException: T040-single: 1 verifiche fallite: [COMPLETAMENTO] capitolato-aurora.txt: preparazione Ready (parser reale \u002B estrazione reale su tutte le porzioni) \u2014 Failed: {\u0022id\u0022:\u002238580053-9b33-48aa-8805-0a6f84adfd8a\u0022,\u0022documentVersionId\u0022:\u0022aa999f25-5302-4881-93e9-cc7b5a534967\u0022,\u0022documentId\u0022:\u002284cf017f-a78c-4e9b-9c65-3cb14ee43c0f\u0022,\u0022version\u0022:1,\u0022generation\u0022:1,\u0022processingStatus\u0022:\u0022Failed\u0022,\u0022isReady\u0022:false,\u0022contentState\u0022:\u0022Parsed\u0022,\u0022blockCount\u0022:117,\u0022retryOfId\u0022:null,\u0022requestedAt\u0022:\u00222026-11-10T20:35:04.693522\u002B00:00\u0022,\u0022issuesSummary\u0022:{\u0022code\u0022:\u0022work_output_invalid\u0022,\u0022message\u0022:\u0022La preparazione del documento non \u00E8 riuscita\u0022},\u0022issues\u0022:[],\u0022allowedActions\u0022:[\u0022download\u0022,\u0022retry\u0022],\u0022parseJobId\u0022\u2026 | job ExtractUnit/Failed work_output_invalid: Output del modello troncato dal limite di lunghezza: nessun output committato. ; job ExtractUnit/Failed parent_failed: Un\u0027altra unit\u00E0 della preparazione \u00E8 fallita: la preparazione non pu\u00F2 pi\u00F9 completarsi. ; job ExtractUnit/Failed parent_failed: Un\u0027altra unit\u00E0 della preparazione \u00E8 fallita: la preparazione non pu\u00F2 pi\u00F9 completarsi. ; job ExtractUnit/Failed parent_failed: Un\u0027altra unit\u00E0 della preparazione \u00E8 fallita: la preparazione non pu\u00F2 pi\u00F9 completarsi. ; call Extraction/Completed finish=length prompt=4388 completion=16384 maxOut=16384 ms=282055 ; call Extraction/Completed finish=stop prompt=2466 completion=257 maxOut=16384 ms=4905 ; call Chat/Completed finish=stop prompt=882 completion=31 maxOut=4096 ms=945 ; call Extraction/Completed finish=stop prompt=2367 completion=310 maxOut=16384 ms=5804 ; call Chat/Completed finish=stop prompt=820 completion=43 maxOut=4096 ms=1149 ; call Extraction/Completed finish=stop prompt=2286 completion=261 maxOut=16384 ms=5004"
+    },
+    {
+      "Name": "T040-multi",
+      "status": "NotRun",
+      "Detail": "non eseguito: T040-single ha incontrato un blocco, nessun rilancio automatico n\u00E9 altro corpus"
+    }
+  ]
+}
