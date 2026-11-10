@@ -6,6 +6,7 @@ using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
+using bProjects.App.Retrieval;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -429,6 +430,71 @@ public sealed class DocumentGapStageInputTests
         Assert.Equal(before, AnalysisAliasCatalog.Build(input, AnalysisAliasContracts.SchemaVersionV2).CatalogHash);
         Assert.Equal(before2, catalog.RunIndependentHash);   // i metadati vivono in una mappa laterale, non in AliasSourceEntry
         Assert.DoesNotContain("documento", catalog.Encode(), StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------- 003 T029: due sorgenti, stesso input tipizzato, stessa proiezione VOCE
+
+    private static RetrievalRegistry PackageRegistry(IReadOnlyList<Guid> package, bool complete) =>
+        new(CandidateRegistry.Contract, new string('a', 64), new string('b', 64), "retrieval-policy-1", new string('c', 64), CandidateRegistry.SearchBasis, CandidateRegistry.OutcomePackage,
+            complete, false, [], null, [], [], package, []);
+
+    [Theory]
+    [InlineData(12, 2, 3)]
+    [InlineData(30, 4, 7)]
+    [InlineData(9, 1, 2)]
+    public void The_exhaustive_and_the_retrieval_sources_yield_the_same_stage_input_type_and_the_same_voice_projection_with_different_candidates(int evidences, int gaps, int step)
+    {
+        var (input, catalog) = Ledger(evidences, gaps);
+        var meta = Meta(input);
+        var exhaustive = GapStageBuilder.Build(input, catalog, meta, null);
+        // Pacchetto: un sottoinsieme del ledger non Gap, in ordine diverso da quello di catalogo (ordine del registro).
+        var package = exhaustive.Candidates.Where((_, i) => i % step == 0).Reverse().Select(c => c.EvidenceId).ToList();
+        var registry = PackageRegistry(package, complete: false);
+
+        var retrieved = GapStageBuilder.BuildFromRegistry(input, catalog, meta, GapStageReferences.Empty, registry);
+
+        // Stesso tipo d'ingresso (un solo record, nessuna interfaccia con una sola implementazione), stessi Gap, candidati e dichiarazioni di sorgente diversi.
+        Assert.IsType<GapStageInput>(exhaustive);
+        Assert.IsType<GapStageInput>(retrieved);
+        Assert.Equal((GapStage.SearchBasisLedgerExhaustive, true), (exhaustive.SearchBasis, exhaustive.RetrievalComplete));
+        Assert.Equal((CandidateRegistry.SearchBasis, false), (retrieved.SearchBasis, retrieved.RetrievalComplete));
+        Assert.Equal(exhaustive.Gaps.Select(g => g.Alias), retrieved.Gaps.Select(g => g.Alias));
+        Assert.Equal(package, retrieved.Candidates.Select(c => c.EvidenceId));                       // ordine del registro, non del catalogo
+        Assert.True(retrieved.Candidates.Count < exhaustive.Candidates.Count);
+        Assert.All(retrieved.Candidates, c => Assert.Contains(exhaustive.Candidates, e => e.EvidenceId == c.EvidenceId));   // nessun candidato inventato
+        Assert.NotEqual(exhaustive.Candidates.Select(c => c.EvidenceId), retrieved.Candidates.Select(c => c.EvidenceId));
+
+        // Stessa proiezione VOCE: a parità di intestazione, lo stesso candidato produce lo stesso identico messaggio con entrambe le sorgenti.
+        var header = exhaustive with { Candidates = [], Gaps = [] };
+        foreach (var voice in retrieved.Candidates)
+        {
+            var fromExhaustive = exhaustive.Candidates.Single(c => c.EvidenceId == voice.EvidenceId);
+            Assert.Equal(
+                GapStageBuilder.Message(header with { Candidates = [fromExhaustive] }).Single().Text,
+                GapStageBuilder.Message(header with { Candidates = [voice] }).Single().Text);
+        }
+
+        // La differenza dichiarata è solo l'intestazione di sorgente: ogni messaggio dice quale sorgente è e mai UUID/hash.
+        var exhaustiveText = GapStageBuilder.Message(exhaustive).Single().Text;
+        var retrievedText = GapStageBuilder.Message(retrieved).Single().Text;
+        Assert.Contains("searchBasis: ledger_exhaustive", exhaustiveText, StringComparison.Ordinal);
+        Assert.Contains("searchBasis: retrieval", retrievedText, StringComparison.Ordinal);
+        Assert.Contains("retrievalComplete: false", retrievedText, StringComparison.Ordinal);
+        Assert.DoesNotMatch("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-", retrievedText);
+    }
+
+    [Fact]
+    public void A_registry_package_citing_evidence_outside_the_run_ledger_or_a_gap_is_a_checkpoint_incompatibility_never_ignored()
+    {
+        var (input, catalog) = Ledger(10, 2);
+        var meta = Meta(input);
+        var gap = GapStageBuilder.Build(input, catalog, meta, null).Gaps[0].EvidenceId;
+
+        foreach (var foreign in new[] { Guid.NewGuid(), gap })
+        {
+            var ex = Assert.Throws<DocumentWorkException>(() => GapStageBuilder.BuildFromRegistry(input, catalog, meta, GapStageReferences.Empty, PackageRegistry([foreign], complete: true)));
+            Assert.Equal(DocumentWorkException.CheckpointIncompatible, ex.Code);
+        }
     }
 }
 

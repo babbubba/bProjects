@@ -568,6 +568,118 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.DoesNotContain("searchBasis retrieval", limits, StringComparison.Ordinal);
     }
 
+    // ================================================================ invarianti di assenza e completezza su più configurazioni (T039)
+
+    private static string AllNoAnswer(DocumentChatWorkflowTests.ChatRequest request)
+    {
+        var records = new JsonArray([.. Voices(request.AllText).Where(v => v.Kind == "Gap").Select(g => (JsonNode)Assessment(g.Alias, "Open", "NoAnswer", [], g.Question))]);
+        return new JsonObject { ["contract"] = "gap-stage-1", ["gapAssessments"] = records }.ToJsonString();
+    }
+
+    /// <summary>
+    /// Proprietà (FR-018/FR-019, SC-008): per OGNI configurazione con sorgente `retrieval` — ledger piccolo/medio/grande, pacchetto completo o troncato dal budget, modello che risponde in modo misto o
+    /// «assente» ovunque — nessun Gap è mai «assenza provata» in nessuna rappresentazione (WorkOutput, coverage, API del registro); `retrievalComplete` non diventa mai «assente».
+    /// </summary>
+    [Theory]
+    [InlineData(12, 90, "mixed")]
+    [InlineData(12, 90, "noanswer")]
+    [InlineData(6, 200, "mixed")]
+    [InlineData(20, 60, "noanswer")]
+    [InlineData(5, 130, "mixed")]
+    public async Task For_every_configuration_with_the_retrieval_source_no_gap_is_ever_represented_as_proven_absent(int fillers, int fillerWords, string answers)
+    {
+        var s = await ArrangeAsync(fillers, fillerWords);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = r => answers == "noanswer" && DocumentGapStageWorkflowTests.IsStage(r) ? AllNoAnswer(r) : Respond(r) };
+        var result = await RunAsync(s.Claim, model);
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{fillers}/{fillerWords}/{answers}: {row.Code}: {row.Message}");
+        var registry = await RegistryOf(s.Run);
+        Assert.Equal(CandidateRegistry.SearchBasis, registry.SearchBasis);
+        using var client = await App.LoginAsync();
+
+        // 1. WorkOutput dello stadio: la sorgente dichiarata è retrieval e retrievalComplete è quello del registro (mai riscritto in «assente»).
+        var stage = JsonDocument.Parse(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1'", ("r", s.Run))).RootElement.GetProperty("stage");
+        Assert.Equal((CandidateRegistry.SearchBasis, registry.RetrievalComplete), (stage.GetProperty("searchBasis").GetString(), stage.GetProperty("retrievalComplete").GetBoolean()));
+
+        // 2. Coverage: nessuna assenza provata, né nel summary né per Gap; i NoAnswer restano «non provati».
+        var report = await Json(await client.PostAsJsonAsync($"/api/projects/{s.Project}/analyses/{s.Run}/coverage-reports", new { }, Ct));
+        Assert.Equal(0, report.GetProperty("summary").GetProperty("absenceProvenGaps").GetInt32());
+        var assessments = report.GetProperty("gapAssessments").EnumerateArray().ToList();
+        Assert.NotEmpty(assessments);
+        Assert.All(assessments, a =>
+        {
+            Assert.Equal(CandidateRegistry.SearchBasis, a.GetProperty("searchBasis").GetString());
+            Assert.Equal(registry.RetrievalComplete, a.GetProperty("retrievalComplete").GetBoolean());
+            Assert.False(a.GetProperty("absenceProven").GetBoolean());
+        });
+        if (answers == "noanswer")
+        {
+            Assert.All(assessments, a => Assert.Equal("NoAnswer", a.GetProperty("reason").GetString()));
+            Assert.Equal(assessments.Count, report.GetProperty("summary").GetProperty("absenceUnprovenGaps").GetInt32());
+        }
+
+        // 3. API del registro: dichiara la procedura eseguita, non l'assenza; nessun campo «absent/absenceProven».
+        var view = await Json(await client.GetAsync(RegistryUrl(s.Project, s.Run), Ct));
+        Assert.Equal(registry.RetrievalComplete, view.GetProperty("retrievalComplete").GetBoolean());
+        Assert.DoesNotContain("absen", view.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"absenceProven\":true", report.GetRawText(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Proprietà in modalità degradata (FR-035, SC-011): per OGNI causa di mancato completamento nessuno stadio Gap, nessun gapAssessments, nessuna revisione, nessun report di coverage creabile e
+    /// quindi nessun `AnsweredInSnapshot` definitivo né attestazione di completezza; il registro, quando c'è, non è mai completo.
+    /// </summary>
+    [Theory]
+    [InlineData("reranker")]
+    [InlineData("embedding")]
+    [InlineData("index")]
+    public async Task For_every_degraded_cause_no_definitive_result_or_completeness_claim_is_ever_produced(string cause)
+    {
+        var s = await ArrangeAsync();
+        switch (cause)
+        {
+            case "reranker":
+                _rerank.RerankOverride = _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                _rerank.Models = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                _rig.Readiness.InvalidateReranker();
+                break;
+            case "embedding":
+                _embedding.Models = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                _embedding.EmbeddingsOverride = _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                _rig.Readiness.Invalidate();
+                break;
+            default:
+                await Execute("UPDATE \"RetrievalIndexStates\" SET \"Status\" = 'Building' WHERE \"ProjectId\" = @p AND \"DocumentVersionId\" = @v", ("p", s.Project), ("v", s.Facts.Version));
+                break;
+        }
+
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.NotNull(result.ErrorCode);
+        Assert.DoesNotContain(model.Requests, DocumentGapStageWorkflowTests.IsStage);
+        Assert.Equal(0, await Outputs(s.Run, "gap-stage-alias-1"));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"EvidenceCoverageReports\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"PayloadJson\"::text LIKE '%AnsweredInSnapshot%'", ("r", s.Run)));
+
+        using var client = await App.LoginAsync();
+        var coverage = await client.PostAsJsonAsync($"/api/projects/{s.Project}/analyses/{s.Run}/coverage-reports", new { }, Ct);
+        Assert.NotEqual(HttpStatusCode.Created, coverage.StatusCode);                                  // nessuna attestazione di copertura o di conflitti per un run non completato
+
+        var registry = await RegistryOf(s.Run);
+        Assert.False(registry.RetrievalComplete);
+        Assert.NotEqual(CandidateRegistry.OutcomePackage, registry.Outcome);
+        Assert.Empty(registry.PackageEvidence);
+        var response = await client.GetAsync(RegistryUrl(s.Project, s.Run), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var view = await Json(response);
+        Assert.False(view.GetProperty("retrievalComplete").GetBoolean());
+        Assert.NotEqual(CandidateRegistry.OutcomePackage, view.GetProperty("outcome").GetString());
+        Assert.All(view.GetProperty("gaps").EnumerateArray().SelectMany(g => g.GetProperty("candidates").EnumerateArray()), c => Assert.False(c.GetProperty("inPackage").GetBoolean()));
+    }
+
     // ================================================================ alias e citazioni su candidati recuperati (T038)
 
     [Fact]
