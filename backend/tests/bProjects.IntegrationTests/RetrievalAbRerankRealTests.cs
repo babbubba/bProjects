@@ -157,6 +157,19 @@ public sealed class RetrievalAbRerankRealTests
         sb.AppendLine($"- Data: {measuredOn}. A: `{a.Version}` (hash `{a.Hash()}`, solo testo). B: `{b.Version}` (hash `{b.Hash()}`, `{b.RerankInputMode}`).");
         sb.AppendLine($"- Stessa configurazione di recupero: pool {b.Pool}, riordino dei primi {b.Rerank}, RRF k={b.RrfK}; una ricerca per query, stessi candidati per A e B. Embedding `{embedding.ModelId}`, riordino `{reranker.ModelId}`.");
         sb.AppendLine($"- Indicizzazione (s): {string.Join(", ", indexSeconds.Select(kv => $"{kv.Key} {kv.Value.ToString("F1", CultureInfo.InvariantCulture)}"))}.");
+        foreach (var set in results.Select(r => r.Set).Distinct())
+        {
+            if (EvaluationCorpus.Scenarios.Any(s => s.Name == set))
+            {
+                sb.AppendLine($"- Insieme `{set}`: gold storico M1/M2, solo controllo di regressione.");
+            }
+            else
+            {
+                var (author, independent) = AbEvaluation.Authorship(set);
+                sb.AppendLine($"- Insieme `{set}`: autore «{author}»; dichiarazione di indipendenza del revisore: {(independent ? "**presente**" : "assente (insieme di sviluppo)")}. La dichiarazione è un'attestazione dell'autore, non una verifica.");
+            }
+        }
+
         sb.AppendLine();
 
         void Table(string title, IEnumerable<AbGroup> groups)

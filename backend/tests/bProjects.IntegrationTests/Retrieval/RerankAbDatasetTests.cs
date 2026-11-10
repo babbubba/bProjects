@@ -46,6 +46,31 @@ public sealed class RerankAbDatasetTests
     }
 
     [Fact]
+    public void Every_set_delivered_by_a_reviewer_is_frozen_independent_well_formed_and_resolves_all_its_gold()
+    {
+        // Nessun insieme consegnato ⇒ nessuna verifica (il test non passa «per vuoto» su dati inesistenti: verifica solo ciò che esiste).
+        foreach (var set in AbEvaluation.SchemaSets())
+        {
+            Assert.Empty(AbEvaluation.VerifyFrozen(set));
+            Assert.True(AbEvaluation.Authorship(set).Independent, $"{set}: dichiarazione di indipendenza assente o incompleta");
+            var cases = AbEvaluation.LoadCases(set);
+            Assert.InRange(cases.Count, 50, 100);
+            Assert.Equal(cases.Count, cases.Select(c => c.Id).Distinct().Count());
+            var blocks = AbEvaluation.DocumentFiles(set).ToDictionary(
+                f => f, f => (IReadOnlyList<(Guid, string)>)[.. EvaluationCorpus.Parse(Path.Combine(AbEvaluation.SetRoot(set), f)).Select((b, i) => (EvaluationCorpus.BlockId(set, f, i), b.Text))]);
+            Assert.All(cases.SelectMany(c => c.Gold), g => Assert.NotEqual(Guid.Empty, RetrievalGold.Resolve(blocks[g.File], g.Contains)));
+            Assert.Contains(cases, c => c.MentionsDocument);
+            Assert.Contains(cases, c => !c.MentionsDocument);
+        }
+    }
+
+    [Fact]
+    public void The_development_set_is_not_declared_independent()
+    {
+        Assert.False(AbEvaluation.Authorship(AbEvaluation.DevSet).Independent);
+    }
+
+    [Fact]
     public void A_modified_added_or_missing_file_is_reported_by_the_frozen_check()
     {
         var copy = Path.Combine(Path.GetTempPath(), "bp-ab-" + Guid.NewGuid().ToString("N"));

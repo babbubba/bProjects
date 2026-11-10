@@ -1,0 +1,42 @@
+{
+  "schema": "ab-set-1",
+  "name": "template",
+  "author": "ESEMPIO (sostituire con il proprio nome)",
+  "independenceDeclaration": {
+    "notSeenPriorFailures": true,
+    "notSeenPriorResults": true,
+    "statement": "Dichiaro di non conoscere errori, esiti o misure di precedenti valutazioni di questo sistema."
+  },
+  "scenarios": {
+    "template": [
+      {
+        "id": "T01",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Entro quanto vanno consegnati i beni secondo l'allegato di esempio B?",
+        "gold": [ { "id": "T01-g1", "file": "esempio-b.md", "contains": "venti giorni solari dall'ordine" } ]
+      },
+      {
+        "id": "T02",
+        "category": "multi-doc",
+        "mentionsDocument": false,
+        "query": "Quali termini di consegna per il lotto pilota sono previsti?",
+        "gold": [
+          { "id": "T02-g1", "file": "esempio-a.txt", "contains": "quindici giorni lavorativi dalla firma" },
+          { "id": "T02-g2", "file": "esempio-b.md", "contains": "venti giorni solari dall'ordine" }
+        ]
+      },
+      {
+        "id": "T03",
+        "category": "ambiguous",
+        "mentionsDocument": false,
+        "query": "A chi vanno inviate le segnalazioni?",
+        "notes": "La domanda non indica il documento: due documenti indicano destinatari diversi, entrambi pertinenti.",
+        "gold": [
+          { "id": "T03-g1", "file": "esempio-a.txt", "contains": "referente tecnico indicato nell'allegato" },
+          { "id": "T03-g2", "file": "esempio-b.md", "contains": "numero verde dedicato" }
+        ]
+      }
+    ]
+  }
+}

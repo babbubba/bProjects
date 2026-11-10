@@ -37,6 +37,25 @@ internal static class AbEvaluation
             [.. c.GetProperty("gold").EnumerateArray().Select(g => new GoldFinding(g.GetProperty("id").GetString()!, g.GetProperty("file").GetString()!, g.GetProperty("contains").GetString()!))]))];
     }
 
+    /// <summary>Autore e dichiarazione di indipendenza letti dal <c>cases.json</c> (congelato dal manifest): <c>Independent</c> solo se la dichiarazione ha entrambe le conferme a true.</summary>
+    public static (string Author, bool Independent) Authorship(string set)
+    {
+        using var json = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(SetRoot(set), "cases.json")));
+        var root = json.RootElement;
+        var author = root.TryGetProperty("author", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString()! : "n/d";
+        var independent = root.TryGetProperty("independenceDeclaration", out var d) && d.ValueKind == JsonValueKind.Object
+            && d.TryGetProperty("notSeenPriorFailures", out var f) && f.ValueKind == JsonValueKind.True
+            && d.TryGetProperty("notSeenPriorResults", out var r) && r.ValueKind == JsonValueKind.True;
+        return (author, independent);
+    }
+
+    /// <summary>Insiemi consegnati da un revisore (schema <c>ab-set-1</c>): cartelle di <c>Retrieval/Evaluation</c> il cui <c>cases.json</c> dichiara lo schema.</summary>
+    public static IReadOnlyList<string> SchemaSets()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "Retrieval", "Evaluation");
+        return [.. Directory.GetDirectories(root).Where(d => File.Exists(Path.Combine(d, "cases.json")) && File.ReadAllText(Path.Combine(d, "cases.json")).Contains("\"ab-set-1\"", StringComparison.Ordinal)).Select(d => Path.GetFileName(d)!).Order(StringComparer.Ordinal)];
+    }
+
     /// <summary>SHA-256 esadecimale minuscolo del contenuto con a capo normalizzati a LF (il checkout Windows può convertire CRLF).</summary>
     public static string Sha256Lf(string path) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(path, Encoding.UTF8).Replace("\r\n", "\n", StringComparison.Ordinal))));
