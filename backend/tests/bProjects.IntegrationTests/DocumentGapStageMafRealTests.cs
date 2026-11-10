@@ -6,6 +6,22 @@ using bProjects.App.AI;
 
 namespace bProjects.IntegrationTests;
 
+/// <summary>SQL della prova reale T150, in costanti per poterle eseguire offline su uno schema migrato (<c>GapStageRealSqlTests</c>). La colonna del payload è <c>PayloadJson</c>.</summary>
+internal static class GapStageRealSql
+{
+    public const string StageBatches = "SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Stage\" = 'gap'";
+
+    public const string StageOutputs = "SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1' AND \"Status\" = 'Committed'";
+
+    public const string StagePayload = "SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1' AND \"Status\" = 'Committed' LIMIT 1";
+
+    public const string Calls = "SELECT count(*) FROM \"InferenceCalls\" WHERE \"ProcessingRunId\" = @r";
+
+    public const string LastCall = "SELECT \"PromptTokens\", \"CompletionTokens\", \"DurationMs\", \"FinishReason\" FROM \"InferenceCalls\" WHERE \"ProcessingRunId\" = @r ORDER BY \"StartedAt\" DESC LIMIT 1";
+
+    public static IEnumerable<string> All => [StageBatches, StageOutputs, StagePayload, Calls, LastCall];
+}
+
 /// <summary>
 /// T150-P (DGX) — gate «SC-004-Gap», caso positivo: lo stadio Gap v6 con tutto reale (API di produzione, parser Docling, PostgreSQL, MAF 1.26.0, modello interno) su due corpus T150 SEPARATI (uno documento,
 /// uno tre documenti) generati con lo stesso generatore e gli stessi gold di T082/T083 (<see cref="LargeDocumentCorpus"/>, gold NON modificati) ma NON equivalenti al loro scenario originale: senza riempitivo,
@@ -56,10 +72,10 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
         var args = ("r", (object)run);
 
         // (1) lo stadio: un solo batch `gap`, un solo WorkOutput committato; il payload porta l'intero ledger non-Gap.
-        var stageBatches = await Scalar<long>("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Stage\" = 'gap'", args);
-        var stageOutputs = await Scalar<long>("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1' AND \"Status\" = 'Committed'", args);
+        var stageBatches = await Scalar<long>(GapStageRealSql.StageBatches, args);
+        var stageOutputs = await Scalar<long>(GapStageRealSql.StageOutputs, args);
         v.Check($"{l} (1) esattamente un batch dello stadio Gap e un WorkOutput gap-stage-alias-1 committato", stageBatches == 1 && stageOutputs == 1, $"batch={stageBatches} output={stageOutputs}");
-        var payload = await Scalar<string>("SELECT \"Payload\"::text FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1' AND \"Status\" = 'Committed' LIMIT 1", args);
+        var payload = await Scalar<string>(GapStageRealSql.StagePayload, args);
         using var stage = JsonDocument.Parse(payload);
         var info = stage.RootElement.GetProperty("stage");
         var candidates = info.GetProperty("candidates").GetInt32();
@@ -72,7 +88,7 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
 
         // Una sola chiamata per lo stadio: le chiamate del run sono una per batch (gerarchia + stadio), nessun retry; la chiamata dello stadio e l'ultima.
         var batches = await Scalar<long>(RunSignalSql.Batches, args);
-        var calls = await Scalar<long>("SELECT count(*) FROM \"InferenceCalls\" WHERE \"ProcessingRunId\" = @r", args);
+        var calls = await Scalar<long>(GapStageRealSql.Calls, args);
         v.Check($"{l} (1) nessuna chiamata oltre una per batch: la chiamata dello stadio e unica", calls == batches, $"chiamate={calls} batch (gerarchia + stadio)={batches}");
 
         // evidenze Gap del progetto e record del coverage-3
@@ -162,8 +178,7 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
 
         // (6) nessuna valutazione parziale (unassessed = 0 sopra) ne troncamento; (7) token e latenza dell'ultima chiamata del run, cioe quella dello stadio.
         await using var connection = await OpenConnection();
-        await using var command = new Npgsql.NpgsqlCommand(
-            "SELECT \"PromptTokens\", \"CompletionTokens\", \"DurationMs\", \"FinishReason\" FROM \"InferenceCalls\" WHERE \"ProcessingRunId\" = @r ORDER BY \"StartedAt\" DESC LIMIT 1", connection);
+        await using var command = new Npgsql.NpgsqlCommand(GapStageRealSql.LastCall, connection);
         command.Parameters.AddWithValue("r", run);
         await using var reader = await command.ExecuteReaderAsync(Ct);
         if (await reader.ReadAsync(Ct))
