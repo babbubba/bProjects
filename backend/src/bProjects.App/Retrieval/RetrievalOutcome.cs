@@ -51,7 +51,7 @@ public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, Cand
         ArgumentNullException.ThrowIfNull(policy);
 
         // 1. Servizi e indice: nessuna ricerca se l'embedding o l'indice non sono pronti (tutte le cause sono registrate).
-        var embeddingSnapshot = await Timed(RetrievalTimingLog.PhaseReadiness, null, () => readiness.GetEmbeddingSnapshotAsync(ct));
+        var embeddingSnapshot = await Timed(RetrievalTimingLog.PhaseReadiness, null, () => readiness.GetEmbeddingSnapshotForUseAsync(ct));
         var causes = new List<string>();
         if (!embeddingSnapshot.IsReady)
         {

@@ -215,7 +215,12 @@ public sealed class CandidateRerankerTests
             var failure = await Assert.ThrowsAsync<RetrievalException>(() => rig.Reranking(db).OrderAsync("q", fused, RetrievalPolicy.V1, Ct));
 
             Assert.Equal(RetrievalException.RerankerUnavailable, failure.Code);
-            Assert.Equal(0, unloaded.RerankRequests);   // la sonda di readiness non è una richiesta di contenuto; nessun testo inviato
+            // Politica on-demand: UNA sola richiesta funzionale minima di attivazione («probe», 2 documenti), mai i testi dei candidati; il fake non carica il modello, quindi resta non pronto.
+            var activation = Assert.Single(unloaded.Bodies);
+            using var activationBody = JsonDocument.Parse(activation);
+            Assert.Equal("probe", activationBody.RootElement.GetProperty("query").GetString());
+            Assert.Equal(2, activationBody.RootElement.GetProperty("documents").GetArrayLength());
+            Assert.Contains("Attivazione on-demand tentata", failure.Message);
         }
 
         // La sonda di readiness (2 documenti) è valida; la richiesta di contenuto (3 documenti) ha un indice duplicato.

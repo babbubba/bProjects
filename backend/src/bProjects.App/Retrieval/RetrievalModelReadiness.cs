@@ -60,6 +60,12 @@ public sealed record RetrievalModelSnapshot(
     public bool IsReady => State == RetrievalModelState.Ready;
 }
 
+/// <summary>
+/// Esito dell'ultima attivazione on-demand di un modello scaricato: stato prima/dopo, esito della richiesta minima (<c>Attivato</c>, <c>RichiestaFallita</c>, <c>RichiestaScaduta</c>,
+/// <c>RichiestaCompletata</c> = completata ma il modello non risulta pronto), codice tipizzato dell'errore, istante e durata. Nessun testo di contenuto né chiave.
+/// </summary>
+public sealed record RetrievalActivationOutcome(RetrievalModelState StateBefore, RetrievalModelState StateAfter, string Result, string? ErrorCode, DateTimeOffset At, double Milliseconds);
+
 /// <summary>Esito dell'attesa di readiness: ultimo stato noto e se è scaduta la deadline del chiamante prima del tetto (come <see cref="ReadinessWait"/>).</summary>
 public sealed record RetrievalReadinessWait(RetrievalModelSnapshot Snapshot, bool DeadlineReached);
 
@@ -129,18 +135,138 @@ public sealed class RetrievalModelReadiness : IDisposable
     public Task<RetrievalReadinessWait> WaitUntilRerankerReadyAsync(TimeSpan remaining, CancellationToken cancellationToken = default) =>
         WaitUntilReadyAsync(_rerankerSlot, remaining, cancellationToken);
 
-    /// <summary>Lancia l'errore tipizzato del recupero se l'embedding non è pronto; in caso contrario restituisce lo snapshot (da registrare nel registro e nei rapporti).</summary>
+    /// <summary>Ultimo tentativo di attivazione on-demand dell'embedding (null se mai tentato): solo diagnostica, senza I/O.</summary>
+    public RetrievalActivationOutcome? LastEmbeddingActivation => ReadActivation(_embeddingSlot);
+
+    /// <summary>Ultimo tentativo di attivazione on-demand del riordino (null se mai tentato).</summary>
+    public RetrievalActivationOutcome? LastRerankerActivation => ReadActivation(_rerankerSlot);
+
+    /// <summary>
+    /// Stato dell'embedding per l'USO (percorso che ha davvero bisogno del modello): come <see cref="GetEmbeddingSnapshotAsync"/> ma, SOLO se il modello configurato è
+    /// <see cref="RetrievalModelState.ModelUnloaded"/>, effettua UNA richiesta funzionale minima (single-flight per modello) che il router usa per attivarlo on-demand, invalida la cache e
+    /// riverifica identità, artefatto e dimensione. Non lancia per lo stato del modello: il chiamante decide (<see cref="ToException"/>).
+    /// </summary>
+    public Task<RetrievalModelSnapshot> GetEmbeddingSnapshotForUseAsync(CancellationToken cancellationToken = default) => GetSnapshotForUseAsync(_embeddingSlot, cancellationToken);
+
+    /// <summary>Come <see cref="GetEmbeddingSnapshotForUseAsync"/>, per il riordino (stessa politica, slot indipendente).</summary>
+    public Task<RetrievalModelSnapshot> GetRerankerSnapshotForUseAsync(CancellationToken cancellationToken = default) => GetSnapshotForUseAsync(_rerankerSlot, cancellationToken);
+
+    /// <summary>
+    /// Lancia l'errore tipizzato del recupero se l'embedding non è pronto; in caso contrario restituisce lo snapshot (da registrare nel registro e nei rapporti).
+    /// Un modello scaricato è prima attivato on-demand (<see cref="GetEmbeddingSnapshotForUseAsync"/>).
+    /// </summary>
     public async Task<RetrievalModelSnapshot> EnsureEmbeddingReadyAsync(CancellationToken cancellationToken = default)
     {
-        var snapshot = await GetEmbeddingSnapshotAsync(cancellationToken);
-        return snapshot.IsReady ? snapshot : throw ToException(snapshot);
+        var snapshot = await GetEmbeddingSnapshotForUseAsync(cancellationToken);
+        return snapshot.IsReady ? snapshot : throw WithActivation(ToException(snapshot), LastEmbeddingActivation, snapshot.State);
     }
 
     /// <summary>Come <see cref="EnsureEmbeddingReadyAsync"/>, per il riordino: non pronto ⇒ <c>reranker_unavailable</c> (modalità degradata, mai un cambio di modello).</summary>
     public async Task<RetrievalModelSnapshot> EnsureRerankerReadyAsync(CancellationToken cancellationToken = default)
     {
-        var snapshot = await GetRerankerSnapshotAsync(cancellationToken);
-        return snapshot.IsReady ? snapshot : throw ToRerankerException(snapshot);
+        var snapshot = await GetRerankerSnapshotForUseAsync(cancellationToken);
+        return snapshot.IsReady ? snapshot : throw WithActivation(ToRerankerException(snapshot), LastRerankerActivation, snapshot.State);
+    }
+
+    /// <summary>Aggiunge al messaggio tipizzato l'esito dell'attivazione tentata (stesso codice): la causa resta diagnosticabile.</summary>
+    private static RetrievalException WithActivation(RetrievalException failure, RetrievalActivationOutcome? activation, RetrievalModelState reported) =>
+        activation is null || activation.StateBefore != RetrievalModelState.ModelUnloaded || activation.StateAfter != reported
+            ? failure   // nota solo se l'esito riguarda lo stato che si sta riportando (mai un'attivazione vecchia e non pertinente)
+            : new(failure.Code, $"{failure.Message} Attivazione on-demand tentata: {activation.Result}{(activation.ErrorCode is null ? string.Empty : $" ({activation.ErrorCode})")}, stato dopo: {activation.StateAfter}.");
+
+    private static RetrievalActivationOutcome? ReadActivation(Slot slot)
+    {
+        lock (slot.Gate)
+        {
+            return slot.LastActivation;
+        }
+    }
+
+    private async Task<RetrievalModelSnapshot> GetSnapshotForUseAsync(Slot slot, CancellationToken cancellationToken)
+    {
+        var snapshot = await GetSnapshotAsync(slot, cancellationToken);
+        if (snapshot.State != RetrievalModelState.ModelUnloaded || !slot.Configured)
+        {
+            return snapshot;   // Ready, o uno stato per cui NON si attiva nulla (assente, artefatto/dimensione diversi, non dimostrabile, irraggiungibile, in caricamento)
+        }
+
+        Task<RetrievalModelSnapshot> activation;
+        lock (slot.Gate)
+        {
+            if (slot.Activation is null)
+            {
+                var now = _time.GetUtcNow();
+                if (slot.Snapshot.State != RetrievalModelState.ModelUnloaded && now < slot.ValidUntil)
+                {
+                    return slot.Snapshot;   // un'attivazione conclusa nel frattempo ha già aggiornato lo stato: nessuna seconda richiesta
+                }
+
+                if (now < slot.NoActivationUntil)
+                {
+                    return snapshot;   // un tentativo recente non ha reso pronto il modello: nessuna nuova richiesta fino alla scadenza della cache
+                }
+            }
+
+            activation = slot.Activation ??= Task.Run(() => ActivateAsync(slot), CancellationToken.None);
+        }
+
+        return await activation.WaitAsync(cancellationToken);
+    }
+
+    /// <summary>UNA richiesta funzionale minima al modello configurato (nessun endpoint di caricamento), poi sonda nuova: esito sempre registrato, mai un'eccezione.</summary>
+    private async Task<RetrievalModelSnapshot> ActivateAsync(Slot slot)
+    {
+        var started = _time.GetTimestamp();
+        var at = _time.GetUtcNow();
+        var result = "RichiestaFallita";
+        string? errorCode = null;
+        RetrievalModelSnapshot? fresh = null;
+        try
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(1, _options.TimeoutSeconds)));
+                await slot.FunctionalProbe(timeout.Token);
+                result = "RichiestaCompletata";
+            }
+            catch (RetrievalException failure)
+            {
+                errorCode = failure.Code;
+            }
+            catch (OperationCanceledException)
+            {
+                result = "RichiestaScaduta";
+            }
+            catch (Exception e) when (e is HttpRequestException or IOException)
+            {
+                errorCode = "rete";
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                errorCode = "imprevisto";   // mai un'eccezione grezza dal task condiviso: lo stato resta tipizzato
+            }
+
+            Invalidate(slot);
+            fresh = await GetSnapshotAsync(slot, CancellationToken.None);
+            return fresh;
+        }
+        finally
+        {
+            // Esito, finestra di non-ripetizione e rilascio dello slot in un unico passo: nessun chiamante vede lo slot libero prima del divieto di ripetere.
+            lock (slot.Gate)
+            {
+                var state = fresh?.State ?? RetrievalModelState.Unverified;
+                var ready = fresh?.IsReady == true;
+                slot.LastActivation = new RetrievalActivationOutcome(
+                    RetrievalModelState.ModelUnloaded, state, ready ? "Attivato" : result, errorCode, at, _time.GetElapsedTime(started).TotalMilliseconds);
+                if (!ready)
+                {
+                    slot.NoActivationUntil = _time.GetUtcNow().AddSeconds(Math.Max(1, _options.RuntimeCheckSeconds));
+                }
+
+                slot.Activation = null;
+            }
+        }
     }
 
     /// <summary>Mappatura verso gli errori tipizzati dell'embedding (contracts/model-readiness.md §2).</summary>
@@ -455,5 +581,13 @@ public sealed class RetrievalModelReadiness : IDisposable
         public Task<RetrievalModelSnapshot>? Probe { get; set; }
 
         public Task<RetrievalModelSnapshot>? Wait { get; set; }
+
+        /// <summary>Attivazione on-demand in corso (una sola per modello).</summary>
+        public Task<RetrievalModelSnapshot>? Activation { get; set; }
+
+        /// <summary>Dopo un'attivazione fallita: nessun nuovo tentativo fino a questo istante (niente martellamento, niente retry illimitati).</summary>
+        public DateTimeOffset NoActivationUntil { get; set; } = DateTimeOffset.MinValue;
+
+        public RetrievalActivationOutcome? LastActivation { get; set; }
     }
 }

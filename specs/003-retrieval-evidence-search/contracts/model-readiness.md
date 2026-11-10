@@ -24,6 +24,22 @@ Mappatura verso gli errori tipizzati del recupero: embedding `Ready` richiesto p
 ## 3. Comportamento
 
 - Sonda a richiesta con cache a TTL e una sola sonda in volo; deadline del chiamante rispettata; **nessun caricamento forzato/unload** dei modelli e nessun cambio di modello per aggirare un errore (D-3).
-- Tentativi di richiesta ai modelli solo dopo la readiness (zero invii in caso contrario).
+- Tentativi di richiesta ai modelli solo dopo la readiness (zero invii in caso contrario), **con l'unica eccezione di §3.1**.
 - Il risultato della readiness (modello, artefatto, dimensione, `sha256Status`, versione servizio) è scritto nel registro e nel rapporto di valutazione.
+### 3.1 Eccezione: attivazione on-demand con una sola sonda funzionale minima (2026-11-11)
+
+**Evidenza** (smoke test reale `RetrievalEmbeddingSmokeRealTests`, DGX, una esecuzione): in router mode `bge-m3-Q5` risultava `sleeping` (⇒ `ModelUnloaded`); UNA richiesta ordinaria di embedding (`POST /v1/embeddings`, 1 input, 200, ~1,1 s) lo ha caricato e la readiness lo ha poi riconosciuto `Ready` (artefatto atteso, dimensione 1024). Senza alcuna richiesta, un modello `sleeping` non diventa mai pronto da solo (causa più probabile del fallimento d'indice del Run 2 di T040).
+
+**Regola.** Nel solo percorso che richiede effettivamente il modello (`EnsureEmbeddingReadyAsync`, `EnsureRerankerReadyAsync`, `GetEmbeddingSnapshotForUseAsync` della pipeline, quindi costruzione dell'indice, ricerca e riordino), se il modello configurato e identificato è `ModelUnloaded`:
+
+1. UNA richiesta funzionale minima al modello configurato (embedding: il testo «probe»; riordino: query «probe» e due candidati) — la stessa sonda funzionale della readiness, mai testo di contenuto;
+2. invalidazione della cache e **nuova sonda completa**: identità, artefatto e, per l'embedding, dimensione 1024; si prosegue con dati reali **solo** se lo stato è `Ready`;
+3. **single-flight per modello** (embedding e riordino hanno slot indipendenti, stessa politica); la cancellazione di un chiamante non interrompe l'attivazione condivisa; durata massima = `Retrieval:TimeoutSeconds`;
+4. **nessun retry**: dopo un'attivazione non riuscita non se ne tenta un'altra finché non scade la cache (`RuntimeCheckSeconds`), poi al più una per chiamata;
+5. esito sempre diagnosticabile: `LastEmbeddingActivation`/`LastRerankerActivation` (stato prima/dopo, esito, codice tipizzato, durata) e nota nel messaggio dell'errore tipizzato (`embedding_unavailable`, `reranker_unavailable`, …); nessuna chiave né testo di contenuto.
+
+**Limiti (invariati).** Stati `ModelMissing`, `ArtifactMismatch`, `DimensionMismatch`, `Unverified`, `ModelLoading` e `Unreachable`: **nessuna attivazione**. Le interrogazioni passive (`GetEmbeddingSnapshotAsync`, `GetRerankerSnapshotAsync`, `WaitUntil*ReadyAsync`, `Current*`) restano passive: non inviano mai la sonda di attivazione. Nessun endpoint amministrativo di caricamento/scaricamento, nessun download, nessun fallback verso altri modelli. `ModelUnloaded` non è mai equivalente a `Ready`.
+
+**Compatibilità con D-3.** D-3 vieta *caricamento forzato/unload* e *cambio di modello per aggirare un errore*. La sonda minima è una richiesta ordinaria al modello configurato: il caricamento resta una scelta del router (preset, tempo di inattività), il prodotto non lo comanda né lo scarica, non cambia modello e non aumenta budget. È quindi un'eccezione esplicita e limitata alla *prima richiesta* di un modello già configurato, non un'altra politica di degradazione. Resta DGX-provata solo per la parte osservata dallo smoke test; riordino e ritorno a `sleeping` sono provati DET (router finto).
+
 - Prova funzionale «scaricato → disponibile», `loading`, `unreachable`, modello assente: **DGX**, collegata a `002:T126` e ai gate T019/T026; fino ad allora la readiness 003 è DET (server finto) e **non** va dichiarata «provata» su infrastruttura reale.

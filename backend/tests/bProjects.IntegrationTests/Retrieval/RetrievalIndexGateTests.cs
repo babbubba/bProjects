@@ -99,7 +99,10 @@ public sealed class RetrievalIndexGateTests
             Assert.Equal(RetrievalException.EmbeddingUnavailable, r.ErrorCode);
             Assert.Contains("ModelUnloaded", r.ErrorMessage, StringComparison.Ordinal);   // lo stato del modello è nel messaggio tipizzato
         });
-        Assert.Equal(0, rig.Server.EmbeddingRequests);
+        // Politica on-demand: UNA sola richiesta funzionale minima di attivazione per tutte le preparazioni (nessuna ripetizione); il fake non carica il modello, quindi resta non pronto.
+        Assert.Equal(1, rig.Server.EmbeddingRequests);
+        Assert.Equal(["probe"], Assert.Single(rig.Server.EmbeddingInputs));
+        Assert.All(summary.Results!, r => Assert.Contains("Attivazione on-demand tentata", r.ErrorMessage, StringComparison.Ordinal));
         Assert.False(RetrievalIndexGate.IsComplete(summary, 2));
         var report = JsonNode.Parse(await File.ReadAllTextAsync(path, Ct))!;
         Assert.Equal(2, report["rebuild"]!["results"]!.AsArray().Count);
