@@ -37,6 +37,19 @@ const preflightFailure: Record<string, string> = {
     'Il lavoro supera i limiti consentiti per i documenti: nessuna richiesta è stata inviata al modello.',
   coverage_incomplete:
     'La copertura dei documenti non è completa: nessuna richiesta è stata inviata al modello.',
+  // Recupero dei passaggi (slice 003): mancato completamento tipizzato. Mai un risultato parziale presentato come valido; zero invii al modello.
+  embedding_unavailable:
+    "Il servizio di embedding non è disponibile: l'analisi non è stata completata e nessuna valutazione dei Gap è stata presentata. Ripristina il servizio e rilancia l'analisi.",
+  embedding_model_mismatch:
+    "Il modello di embedding non corrisponde alla configurazione: l'analisi non è stata completata e nessuna valutazione dei Gap è stata presentata.",
+  embedding_dimension_mismatch:
+    "La dimensione dell'embedding non corrisponde alla configurazione: l'analisi non è stata completata e nessuna valutazione dei Gap è stata presentata.",
+  retrieval_index_not_ready:
+    "L'indice di ricerca delle fonti non è pronto: attendi l'indicizzazione e rilancia l'analisi. Nessuna valutazione dei Gap è stata presentata.",
+  reranker_unavailable:
+    "Il servizio di riordino dei candidati non è disponibile: il registro diagnostico è consultabile, ma l'analisi non è completata e nessuna valutazione dei Gap è stata presentata. Ripristina il servizio e rilancia l'analisi.",
+  reranker_malformed_response:
+    "Il servizio di riordino ha risposto in modo non valido: l'analisi non è completata e nessuna valutazione dei Gap è stata presentata.",
 };
 
 const overflowHint: Record<FailureScope, string> = {

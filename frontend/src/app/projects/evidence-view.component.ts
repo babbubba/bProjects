@@ -24,6 +24,8 @@ import {
   EvidenceEnvelope,
   FindingCategory,
   GapAssessmentView,
+  RetrievalCandidateView,
+  RetrievalRegistryView,
   MessageVersionsView,
   VersionDiffView,
 } from './evidence-api.service';
@@ -274,6 +276,9 @@ export class EvidenceViewComponent {
   // Copertura.
   protected readonly reports = signal<CoverageReportSummary[]>([]);
   protected readonly report = signal<CoverageReportView | null>(null);
+  /** Registro del recupero (solo report v7). Mancante o non leggibile ⇒ «non disponibile», mai «nessun candidato». */
+  protected readonly registry = signal<RetrievalRegistryView | null>(null);
+  protected readonly registryError = signal(false);
   protected readonly coverageBusy = signal(false);
   protected readonly coverageError = signal('');
   protected readonly selectionInfo = signal('');
@@ -937,6 +942,8 @@ export class EvidenceViewComponent {
   ): Promise<void> {
     this.reports.set([]);
     this.report.set(null);
+    this.registry.set(null);
+    this.registryError.set(false);
     this.coverageError.set('');
     this.selectionInfo.set('');
     if (!analysisId) return;
@@ -984,12 +991,47 @@ export class EvidenceViewComponent {
       }
       const report = await this.api.createCoverageReport(projectId, analysisId, request);
       if (gen !== this.generation) return;
-      this.report.set(report);
+      this.showReport(report, gen);
       this.reports.set(await this.api.listCoverageReports(projectId, analysisId));
     } catch (e) {
       if (gen === this.generation) this.coverageError.set(this.coverageMessage(e));
     } finally {
       if (gen === this.generation) this.coverageBusy.set(false);
+    }
+  }
+
+  /** Mostra il report; per le revisioni v7 (sorgente `retrieval`) legge anche il registro dei candidati, in sola lettura. Un errore di lettura è dichiarato, mai «nessun candidato». */
+  private showReport(report: CoverageReportView, gen: number): void {
+    this.report.set(report);
+    this.registry.set(null);
+    this.registryError.set(false);
+    if (!report.retrieval) return;
+    const projectId = this.projectId();
+    void this.api
+      .getRetrievalRegistry(projectId, report.analysisId)
+      .then((registry) => {
+        if (gen === this.generation && this.report() === report) this.registry.set(registry);
+      })
+      .catch(() => {
+        if (gen === this.generation && this.report() === report) this.registryError.set(true);
+      });
+  }
+
+  /** Candidati recuperati per un Gap, nell'ordine finale del registro; vuoto se il registro non è (ancora) disponibile. */
+  protected candidatesOf(gapEvidenceId: string): RetrievalCandidateView[] {
+    return this.registry()?.gaps.find((g) => g.gapEvidenceId === gapEvidenceId)?.candidates ?? [];
+  }
+
+  protected excludedLabel(reason: string | null): string {
+    switch (reason) {
+      case 'budget':
+        return 'escluso per budget di contesto';
+      case 'no_evidence_for_block':
+        return 'nessuna evidenza estratta da questo passaggio';
+      case 'degraded':
+        return 'non consegnato: recupero non completato';
+      default:
+        return reason ? `escluso: ${reason}` : 'escluso';
     }
   }
 
@@ -1000,7 +1042,7 @@ export class EvidenceViewComponent {
     this.coverageError.set('');
     try {
       const report = await this.api.getCoverageReport(this.projectId(), analysisId, reportId);
-      if (gen === this.generation) this.report.set(report);
+      if (gen === this.generation) this.showReport(report, gen);
     } catch {
       if (gen === this.generation) this.coverageError.set('Impossibile aprire il report.');
     }

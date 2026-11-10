@@ -112,6 +112,19 @@ describe('failure-text: regime e scadenze (T065)', () => {
     }
   });
 
+  it.each([
+    'embedding_unavailable',
+    'embedding_model_mismatch',
+    'embedding_dimension_mismatch',
+    'retrieval_index_not_ready',
+    'reranker_unavailable',
+    'reranker_malformed_response',
+  ])('recupero (003) %s: mancato completamento esplicito, mai un risultato parziale', (code) => {
+    const text = describeFailure({ code, message: 'x' }, {}, 'fallback', 'analysis');
+    expect(text).not.toBe('fallback');
+    expect(text.toLowerCase()).toContain('nessuna valutazione dei gap è stata presentata');
+  });
+
   it("l'etichetta fornita dal chiamante prevale sul testo predefinito", () => {
     expect(
       describeFailure(

@@ -1125,6 +1125,154 @@ describe('EvidenceViewComponent', () => {
         expect(text('gap-item')).toContain('<b id="inj">x</b>');
       });
 
+      describe('retrieval source (003 T034)', () => {
+        const retrievalSummary = (over: Record<string, unknown> = {}) => ({
+          searchBasis: 'retrieval',
+          retrievalComplete: true,
+          degraded: false,
+          policyVersion: 'retrieval-policy-1',
+          gaps: 1,
+          candidates: 3,
+          inPackage: 2,
+          excludedForBudget: 1,
+          noEvidenceForBlock: 0,
+          alwaysIncluded: 0,
+          alwaysIncludedInPackage: 0,
+          ...over,
+        });
+        const retrievalGap = () =>
+          gap({
+            gapEvidenceId: 'g-1',
+            reason: 'NoAnswer',
+            searchBasis: 'retrieval',
+            retrievalComplete: true,
+            absenceProven: false,
+          });
+        const v7 = (over: Record<string, unknown> = {}) =>
+          v3({
+            summary: gapSummary({
+              expectedGaps: 1,
+              assessedGaps: 1,
+              answeredGaps: 0,
+              openGaps: 1,
+              absenceProvenGaps: 0,
+              absenceUnprovenGaps: 1,
+              answeredWithOpenConflictGaps: 0,
+            }),
+            gapAssessments: [retrievalGap()],
+            retrieval: retrievalSummary(),
+            ...over,
+          });
+        const registry = (over: Record<string, unknown> = {}) => ({
+          analysisId: 'a-1',
+          searchBasis: 'retrieval',
+          outcome: 'Package',
+          retrievalComplete: true,
+          degraded: false,
+          causes: [],
+          policyVersion: 'retrieval-policy-1',
+          gaps: [
+            {
+              gapEvidenceId: 'g-1',
+              query: 'Quanti giorni di preavviso?',
+              candidates: [
+                {
+                  rank: 1,
+                  documentName: 'contratto.pdf',
+                  documentVersion: 2,
+                  section: 'Recesso',
+                  rangeStart: 10,
+                  rangeEnd: 90,
+                  lexicalRank: 1,
+                  denseRank: 2,
+                  rrfRank: 1,
+                  origin: 'ranked',
+                  inPackage: true,
+                  excludedReason: null,
+                },
+                {
+                  rank: 2,
+                  documentName: 'allegato.docx',
+                  documentVersion: 1,
+                  section: '',
+                  rangeStart: 0,
+                  rangeEnd: 40,
+                  lexicalRank: null,
+                  denseRank: 3,
+                  rrfRank: 2,
+                  origin: 'ranked',
+                  inPackage: false,
+                  excludedReason: 'budget',
+                },
+              ],
+            },
+          ],
+          ...over,
+        });
+        const flushRegistry = async (body: object, status = 200) => {
+          http
+            .expectOne(`${BASE}/analyses/a-1/retrieval-registry`)
+            .flush(body, { status, statusText: status === 200 ? 'OK' : 'Error' });
+          await settle();
+        };
+
+        it('lists the candidates per Gap in order with document, version, section, position and context entry', async () => {
+          await open(v7());
+          await flushRegistry(registry());
+          const items = qa('gap-candidate');
+          expect(items).toHaveLength(2);
+          expect(items[0].textContent).toContain('contratto.pdf');
+          expect(items[0].textContent).toContain('versione 2');
+          expect(items[0].textContent).toContain('sezione «Recesso»');
+          expect(items[0].textContent).toContain('caratteri 10–90');
+          expect(items[0].textContent).toContain('nel contesto del modello');
+          expect(items[1].textContent).toContain('escluso per budget di contesto');
+          expect(items[1].textContent).not.toContain('sezione');
+        });
+
+        it('declares the retrieval source, the unproven absence and never a complete result', async () => {
+          await open(v7());
+          await flushRegistry(registry());
+          expect(text('retrieval-summary')).toContain("non sull'intero ledger");
+          expect(text('retrieval-summary')).toContain('3 candidati');
+          expect(text('retrieval-complete')).toContain('non è una prova di completezza');
+          expect(text('gap-absence')).toContain('Assenza non provata');
+          expect(text('gap-search-basis')).toContain('base «retrieval»');
+          expect(q('gap-derived-counters')?.textContent).toContain('Assenza provata 0');
+        });
+
+        it('says retrieval is not complete when the server says so', async () => {
+          await open(v7({ retrieval: retrievalSummary({ retrievalComplete: false }) }));
+          await flushRegistry(registry({ retrievalComplete: false }));
+          expect(text('retrieval-complete')).toContain('Recupero non completo');
+          expect(text('retrieval-complete')).toContain('nessun esito di assenza è provato');
+        });
+
+        it('shows an unreadable registry as unavailable, never as no candidates', async () => {
+          await open(v7());
+          await flushRegistry({ code: 'retrieval_registry_not_available' }, 404);
+          expect(q('gap-candidates-unavailable')).not.toBeNull();
+          expect(text('gap-candidates')).toContain('non significa che non ci siano candidati');
+          expect(qa('gap-candidate')).toHaveLength(0);
+        });
+
+        it('does not request the registry nor show retrieval parts for v5/v6 reports', async () => {
+          await open(v3());
+          expect(q('retrieval-summary')).toBeNull();
+          expect(q('gap-candidates')).toBeNull();
+          http.expectNone(`${BASE}/analyses/a-1/retrieval-registry`);
+        });
+
+        it('never renders registry text as HTML', async () => {
+          const hostile = registry();
+          hostile.gaps[0].candidates[0].documentName = '<b id="inj">x</b>';
+          await open(v7());
+          await flushRegistry(hostile);
+          expect(el.querySelector('#inj')).toBeNull();
+          expect(text('gap-candidate')).toContain('<b id="inj">x</b>');
+        });
+      });
+
       describe('derived fields of the Gap stage (T149)', () => {
         const derived = (over: Record<string, unknown> = {}) =>
           gap({

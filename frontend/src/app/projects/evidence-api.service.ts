@@ -452,6 +452,55 @@ export interface ReconciliationCoverage {
   openPoints: ReconciliationOpenPoint[];
 }
 
+/** Solo revisioni v7 (sorgente `retrieval`): sintesi del registro dei candidati nel report di copertura. Mai dedotta dall'assenza del campo. */
+export interface RetrievalCoverageSummary {
+  searchBasis: string;
+  retrievalComplete: boolean;
+  degraded: boolean;
+  policyVersion: string;
+  gaps: number;
+  candidates: number;
+  inPackage: number;
+  excludedForBudget: number;
+  noEvidenceForBlock: number;
+  alwaysIncluded: number;
+  alwaysIncludedInPackage: number;
+}
+
+/** Un candidato recuperato per un Gap, nell'ordine finale. Nessun UUID/hash/offset tecnico: documento, versione, sezione e posizione (intervallo di caratteri). */
+export interface RetrievalCandidateView {
+  rank: number;
+  documentName: string;
+  documentVersion: number;
+  section: string;
+  rangeStart: number;
+  rangeEnd: number;
+  lexicalRank: number | null;
+  denseRank: number | null;
+  rrfRank: number;
+  origin: 'ranked' | 'always_included';
+  inPackage: boolean;
+  excludedReason: string | null;
+}
+
+export interface RetrievalGapRegistry {
+  gapEvidenceId: string;
+  query: string;
+  candidates: RetrievalCandidateView[];
+}
+
+/** Registro del recupero di un run (sola lettura). `outcome` diverso da Package = mancato completamento con le cause tipizzate: mai un risultato valido. */
+export interface RetrievalRegistryView {
+  analysisId: string;
+  searchBasis: string;
+  outcome: 'Package' | 'Diagnostic' | 'Failed';
+  retrievalComplete: boolean;
+  degraded: boolean;
+  causes: string[];
+  policyVersion: string;
+  gaps: RetrievalGapRegistry[];
+}
+
 export interface CoverageReportView extends CoverageReportSummary {
   inputHash: string;
   createdBy: string | null;
@@ -464,6 +513,8 @@ export interface CoverageReportView extends CoverageReportSummary {
   /** Solo coverage-3. Mai letti per altre versioni: un campo assente o ostile non è «zero Gap». */
   gapAssessmentsHash?: string;
   gapAssessments?: GapAssessmentView[];
+  /** Solo revisioni v7 (sorgente `retrieval`): sintesi del registro dei candidati; assente per v5/v6. */
+  retrieval?: RetrievalCoverageSummary;
 }
 
 const enc = encodeURIComponent;
@@ -643,6 +694,18 @@ export class EvidenceApiService {
     return firstValueFrom(
       this.http.get<CoverageReportView>(
         `${this.base(projectId)}/analyses/${enc(analysisId)}/coverage-reports/${enc(reportId)}`,
+      ),
+    );
+  }
+
+  /**
+   * Registro del recupero del run (sola lettura, stessi permessi di progetto della copertura). 404 retrieval_registry_not_available: il run non usa la sorgente `retrieval`
+   * (v5/v6, o ledger entro il budget). Un esito diverso da `Package` è un mancato completamento, mai un risultato valido.
+   */
+  getRetrievalRegistry(projectId: string, analysisId: string): Promise<RetrievalRegistryView> {
+    return firstValueFrom(
+      this.http.get<RetrievalRegistryView>(
+        `${this.base(projectId)}/analyses/${enc(analysisId)}/retrieval-registry`,
       ),
     );
   }
