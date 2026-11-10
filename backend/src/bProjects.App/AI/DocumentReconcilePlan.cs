@@ -518,7 +518,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         {
             return batch.Ordinal == RetrievalOrdinal
                 ? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il batch del recupero non ha una risposta del modello da validare.")
-                : await ValidateGapAsync(batch, responseText, stageReplay, ct);
+                : await ValidateGapAsync(batch, responseText, stageReplay, prior, ct);
         }
 
         var (request, _) = await PendingAsync(batch.Ordinal, prior, ct);
@@ -875,7 +875,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     }
 
     /// <summary>Valida PRIMA del WorkOutput: record strict e riferimenti offerti (<c>work_output_invalid</c> terminale, nessuna riparazione né retry); record mancanti ⇒ output riutilizzabile ma <c>ValidIncomplete</c>.</summary>
-    private async ValueTask<ValidatedBatch> ValidateGapAsync(BatchRef batch, string responseText, Replay replay, CancellationToken ct)
+    private async ValueTask<ValidatedBatch> ValidateGapAsync(BatchRef batch, string responseText, Replay replay, IBatchOutputs prior, CancellationToken ct)
     {
         var state = GapState(replay) ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Lo stadio Gap richiede una gerarchia completa.");
         var validation = GapStageContracts.Validate(responseText, _alias!.RunCatalog, state.References);
@@ -887,7 +887,10 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         }
 
         var gaps = _alias.RunCatalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).ToList();
-        var payload = GapStagePayload.Build(validation, _alias.RunCatalog, state.References, _alias.RunCatalog.Data.Evidence.Count - gaps.Count, gaps.Count);
+        var registry = _gap!.Retrieval is null ? null : await CommittedRegistryAsync(prior, ct);
+        var payload = registry is null
+            ? GapStagePayload.Build(validation, _alias.RunCatalog, state.References, _alias.RunCatalog.Data.Evidence.Count - gaps.Count, gaps.Count)
+            : GapStagePayload.Build(validation, _alias.RunCatalog, state.References, registry.PackageEvidence.Count, gaps.Count, CandidateRegistry.SearchBasis, registry.RetrievalComplete);
         var covered = JsonSerializer.Serialize(gaps.Select(g => g.EvidenceId.ToString("D")));
         return new ValidatedBatch(new WorkOutputInput(
             batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, null, null, GapStage.AiSchema, GapStage.ValidationVersion, null));

@@ -131,7 +131,9 @@ public sealed record GapStageRecords(
 /// </summary>
 public static class GapStagePayload
 {
-    public static string Build(GapStageValidation validation, AnalysisAliasCatalog catalog, GapStageReferences references, int candidates, int gaps)
+    public static string Build(
+        GapStageValidation validation, AnalysisAliasCatalog catalog, GapStageReferences references, int candidates, int gaps,
+        string searchBasis = GapStage.SearchBasisLedgerExhaustive, bool retrievalComplete = true)
     {
         ArgumentNullException.ThrowIfNull(validation);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -151,7 +153,7 @@ public static class GapStagePayload
             ["gapAssessments"] = JsonNode.Parse(GapAssessmentRules.Canonical(output.GapAssessments)),
             ["stage"] = new JsonObject
             {
-                ["algorithm"] = GapStage.Algorithm, ["searchBasis"] = GapStage.SearchBasisLedgerExhaustive, ["retrievalComplete"] = true, ["candidates"] = candidates, ["gaps"] = gaps,
+                ["algorithm"] = GapStage.Algorithm, ["searchBasis"] = searchBasis, ["retrievalComplete"] = retrievalComplete, ["candidates"] = candidates, ["gaps"] = gaps,
                 ["refsHash"] = references.Hash(),
                 ["keys"] = new JsonObject(GapStage.FreezeKeys.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => KeyValuePair.Create<string, JsonNode?>(kv.Key, JsonValue.Create(kv.Value)))),
             },
