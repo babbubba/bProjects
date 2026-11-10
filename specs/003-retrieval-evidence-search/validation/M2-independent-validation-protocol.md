@@ -1,6 +1,6 @@
 # Protocollo — validazione indipendente dell'input del riordino (003 T027)
 
-**Stato: PREPARATO, in attesa dell'indicazione dell'autore.** Nessun nuovo benchmark DGX eseguito. T027 resta APERTO e `retrieval-policy-2` NON è adottata. Questo documento è per il manutentore; il revisore riceve solo `independent-set-kit/` (e, se coinvolto, `neg-45-review-sheet.md`).
+**Stato: PREPARAZIONE TECNICA CONCLUSA, in attesa del revisore.** Il committente (2026-11-10) conferma che il dataset sarà assegnato a un revisore umano non coinvolto nelle valutazioni precedenti; nominativo e data definitiva da comunicare, **data indicativa 2026-11-17**. Nessun nuovo benchmark DGX eseguito. T027 resta APERTO e `retrieval-policy-2` NON è adottata; gold, baseline e soglie invariati. Questo documento è per il manutentore; il revisore riceve solo i pacchetti isolati descritti sotto.
 
 ## Obiettivo
 
@@ -11,7 +11,7 @@ Sapere se documento + sezione nell'input del riordino (B) migliora il ranking su
 | Ruolo | Chi | Cosa vede | Cosa NON vede |
 |---|---|---|---|
 | Revisore-autore | persona indicata dal committente, non coinvolta in T027 | solo `independent-set-kit/` | `M2-diagnostic*`, `T027-ab-*`, proposta e protocolli, codice del riordino, gold e query storici |
-| Revisore di neg-45 | persona non coinvolta (può coincidere col revisore-autore solo dopo la consegna dell'insieme) | solo `neg-45-review-sheet.md` | risultati di qualsiasi misura |
+| Revisore semantico (caso neg-45) | persona non coinvolta; può coincidere col revisore-autore **solo dopo** che questi ha consegnato l'insieme indipendente (la scheda non gli si dà prima) | solo la scheda cieca (`neg-45-review-sheet.md`, distribuita come `scheda-revisione-semantica`) | l'annotazione originale, i risultati di qualsiasi misura, il nome del caso |
 | Manutentore | assistente + committente | tutto | — |
 
 Regole: il kit si consegna come **copia isolata** della sola cartella (non l'intero repository, né un accesso al branch). Il revisore non riceve risultati prima del termine della valutazione. Il manutentore non modifica documenti, query o gold del revisore: se qualcosa non va, lo segnala al revisore, che produce una nuova versione (nuova cartella, nuovo manifest).
@@ -50,11 +50,29 @@ Il rapporto non contiene un giudizio di gate: la chiusura di T027 e l'adozione d
 
 ## Caso neg-45
 
-La scheda `neg-45-review-sheet.md` è cieca ai risultati e non propone un esito. Gold, query e baseline originali restano intatti. Se la revisione raccomanda una correzione, si crea una **nuova versione del dataset** (nuovi file e manifest, es. `N4-fixtures-v2`) con le metriche originali ancora confrontabili, e solo allora si rieseguono le misure interessate, con nuova autorizzazione.
+La scheda `neg-45-review-sheet.md` è **cieca**: non rivela l'annotazione originale (né che esista), non mostra risultati, non usa il nome del caso né i nomi dei file del corpus, e chiede al revisore di **scegliere autonomamente** i blocchi riscontro sull'intero corpus dello scenario (S1–S15, compreso il messaggio del PM). Gold, query e baseline originali restano intatti.
+
+Procedura (manutentore), in questo ordine:
+1. Consegnare la scheda **solo dopo** la consegna dell'insieme indipendente se il revisore è lo stesso; riceverne la risposta compilata e **archiviarla senza modifiche** (commit della risposta prima di ogni confronto).
+2. Solo dopo, confrontare la selezione del revisore con il gold originale (blocco S6 documentale; S15 è un riscontro Message, fuori dalle metriche a livello di blocco) e riportare le differenze in una nota separata, senza giudizio di gate.
+3. Se le differenze motivano una correzione, creare una **nuova versione del dataset** (nuovi file e manifest, es. `N4-fixtures-v2`) con le metriche originali ancora confrontabili; le misure interessate si rieseguono solo con nuova autorizzazione DGX.
+
+## Distribuzione isolata (cosa si consegna)
+
+Due pacchetti distinti, ciascuno una lista chiusa di file, controllata contro termini che rivelerebbero diagnosi, risultati, nomi di casi o dei corpus (lo script si ferma se ne trova, o se il kit contiene file non previsti). Nulla del repository, dei rapporti o dei dataset di sviluppo è incluso.
+
+```bash
+node specs/003-retrieval-evidence-search/validation/make-reviewer-distribution.mjs --package kit   --out <cartella-di-uscita>
+node specs/003-retrieval-evidence-search/validation/make-reviewer-distribution.mjs --package sheet --out <cartella-di-uscita>
+```
+
+- `independent-set-kit.zip` (README, `validate.mjs`, template inventato): al revisore-autore.
+- `scheda-revisione-semantica.zip` (la sola scheda cieca): al revisore semantico, secondo la regola sopra.
+- Lo script scrive anche `<pacchetto>.zip.sha256`; lo SHA-256 consegnato si registra per riconoscere il pacchetto restituito. Lo zip si consegna fuori dal repository (non committarlo).
 
 ## Decisioni ancora aperte
 
-1. Nome del revisore-autore e data di consegna.
-2. Nome del revisore di neg-45.
+1. Nome del revisore-autore e data di consegna definitiva (indicativa: 2026-11-17), a cura del committente.
+2. Nome del revisore semantico (può essere lo stesso, solo dopo la consegna dell'insieme).
 3. Nuova autorizzazione DGX per la misura sull'insieme indipendente (dopo il congelamento e il commit dell'insieme).
 4. Adozione di `retrieval-policy-2`: solo dopo la valutazione indipendente.
