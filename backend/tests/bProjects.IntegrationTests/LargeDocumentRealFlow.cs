@@ -171,6 +171,15 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
 
     // ================================================================ scenario
 
+    /// <summary>T150: domande del PM (ciascuna un messaggio distinto, quindi un Gap proprio) inviate dopo la dichiarazione del corpus e prima di Analizza. Vuoto per T082/T083.</summary>
+    protected virtual IReadOnlyList<string> PmQuestions => [];
+
+    /// <summary>T150: l'analisi attraversa lo stadio Gap v6 (un batch in piu, con output proprio) oltre alla gerarchia.</summary>
+    protected virtual bool GapStageExpected => false;
+
+    /// <summary>T150: verifiche aggiuntive sul run completato, prima della telemetria.</summary>
+    protected virtual Task VerifyExtraAsync(HttpClient client, Guid project, Guid run, Guid revision, Corpus corpus, Content content, Verdicts v) => Task.CompletedTask;
+
     protected async Task RunScenarioAsync(string label, Func<int, Corpus> build)
     {
         try
@@ -240,6 +249,11 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         {
             // Dichiarazione del PM (messaggio di chat) PRIMA dei documenti: il turno di chat resta ordinario e non scansiona documenti oltre contesto (la chat ampia e I6, T084+).
             await PmMessageAsync(client, project, corpus.PmStatement, v);
+        }
+
+        foreach (var question in PmQuestions)
+        {
+            await PmMessageAsync(client, project, question, v);
         }
 
         var uploaded = new List<(CorpusDocument Doc, Guid Id)>();
@@ -318,6 +332,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         await VerifyCoverageAsync(client, project, v, analysis.Run, content, extracted);
         VerifySemantics(v, corpus, content);
         await VerifyProvenanceAsync(client, project, v, corpus, content, extracted, uploaded);
+        await VerifyExtraAsync(client, project, analysis.Run, analysis.Revision, corpus, content, v);
         await TelemetryAsync(project, v);
         v.Flush();
     }
@@ -335,8 +350,9 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         var singleOutputs = await Count(RunSignalSql.SingleOutputs, args);
         var calls = await Scalar<int>(RunSignalSql.Calls, args);
         v.Note($"gerarchia: batch={batches} nodi di catalogo={nodes} output reconcile-alias-1={aliasOutputs} output a chiamata singola={singleOutputs} chiamate del run={calls}");
+        var stageBatches = GapStageExpected ? 1 : 0;
         v.Check("[STRUTTURALE] l'analisi e passata dalla riconciliazione gerarchica (batch di riconciliazione e nodi di catalogo presenti, nessun output a chiamata singola)",
-            batches > 1 && nodes > 0 && aliasOutputs == batches && singleOutputs == 0, $"batch={batches} nodi={nodes} alias={aliasOutputs} singola={singleOutputs}");
+            batches - stageBatches > 1 && nodes > 0 && aliasOutputs == batches - stageBatches && singleOutputs == 0, $"batch={batches} (stadio Gap atteso={stageBatches}) nodi={nodes} alias={aliasOutputs} singola={singleOutputs}");
         v.Check("[STRUTTURALE] il run ha usato piu di una chiamata al modello (CallCount maggiore di 1)", calls > 1, $"CallCount={calls}");
         var openWork = await Count(RunSignalSql.OpenCandidates, args);
         var badPatches = await Count(RunSignalSql.BadPatches, args);
@@ -662,11 +678,11 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         return map;
     }
 
-    private sealed record EvSource(Guid SourceId, Guid DocumentId, Guid PreparationId, Guid BlockId, int Start, int End, string Quote, int Version);
+    protected sealed record EvSource(Guid SourceId, Guid DocumentId, Guid PreparationId, Guid BlockId, int Start, int End, string Quote, int Version);
 
-    private sealed record Ev(Guid Id, List<EvSource> Sources);
+    protected sealed record Ev(Guid Id, List<EvSource> Sources);
 
-    private static async Task<List<Ev>> DocumentEvidences(HttpClient client, Guid project)
+    protected static async Task<List<Ev>> DocumentEvidences(HttpClient client, Guid project)
     {
         var page = await Json(await client.GetAsync($"/api/projects/{project}/evidence?originKind=Document&viewVersion=1.1.0&limit=100", Ct));
         return [.. page.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("evidence")).Select(e => new Ev(
@@ -676,7 +692,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
                 s.GetProperty("start").GetInt32(), s.GetProperty("end").GetInt32(), s.GetProperty("quote").GetString()!, s.TryGetProperty("version", out var ver) && ver.ValueKind == JsonValueKind.Number ? ver.GetInt32() : 1))]))];
     }
 
-    private static async Task<string?> PassageText(HttpClient client, Guid project, EvSource source)
+    protected static async Task<string?> PassageText(HttpClient client, Guid project, EvSource source)
     {
         var response = await client.GetAsync(
             $"/api/projects/{project}/documents/{source.DocumentId}/versions/{source.Version}/preparations/{source.PreparationId}/passages/{source.BlockId}?start={source.Start}&end={source.End}", Ct);
