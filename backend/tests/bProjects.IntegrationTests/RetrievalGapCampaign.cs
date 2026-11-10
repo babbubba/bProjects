@@ -56,12 +56,31 @@ internal static class RetrievalGapCampaign
     public const string RerankerArtifact = "bge-reranker-v2-m3-Q5_K_M.gguf";
     public const int EmbeddingDimension = 1024;
 
-    // ---- soglie (tasks.md T040, spec SC-003/SC-004: riferimento del laboratorio «≤ 2 su 10 casi», applicato in proporzione al numero di casi misurati)
-    public const int MaxInvalidCitationsPer10 = 2;
-    public const int MaxLostConflictsPer10 = 2;
+    // ---- modello LLM: FISSATO prima dell'inferenza (non registrato dopo). È l'identificativo attualmente configurato, letto senza inferenze da BPROJECTS_TEST_DGX_MODEL dell'ambiente di lavoro e da
+    // infra/.env.example (AI_MODEL_ID), concordi. È un id di configurazione del runtime: pesi e quantizzazione non sono verificabili offline; il profilo misurato a runtime deve riportare QUESTO id (RejectProfile).
+    public const string LlmModelId = "Qwen3.6-35B-Smart";
 
-    /// <summary>Un conteggio rispetta «≤ 2 su 10»: bad/total ≤ 2/10, in interi.</summary>
+    // ---- soglie (tasks.md T040; spec SC-003/SC-004)
+    /// <summary>Citazioni invalide: «≤ 2 su 10», applicato in modo CONSERVATIVO in proporzione al numero di citazioni misurate (<see cref="WithinPer10"/>).</summary>
+    public const int MaxInvalidCitationsPer10 = 2;
+
+    /// <summary>
+    /// Conflitti persi (SC-003): il RIFERIMENTO del laboratorio è «1–2 su 10 casi» (<see cref="LabConflictLostMax"/> su <see cref="LabConflictReferenceCases"/>), una misura su un campione di 10 casi, non una soglia
+    /// universale. Si applica solo a un campione osservato almeno altrettanto ampio; con meno casi di quelli del laboratorio il riferimento non è trasferibile e la tolleranza è ZERO (<see cref="AllowedLostConflicts"/>).
+    /// </summary>
+    public const int LabConflictLostMax = 2;
+
+    public const int LabConflictReferenceCases = 10;
+
+    /// <summary>Conflitti persi per esclusione a monte del recupero (un lato del conflitto fuori dal pacchetto o solo del documento escluso): sempre zero, mai scalata.</summary>
+    public const int MaxUpstreamLostConflicts = 0;
+
+    /// <summary>Un conteggio rispetta «≤ 2 su 10»: bad/total ≤ 2/10, in interi (solo per le citazioni).</summary>
     public static bool WithinPer10(int bad, int total, int maxPer10) => bad * 10 <= maxPer10 * Math.Max(total, 1);
+
+    /// <summary>Conflitti persi ammessi dato il numero di casi OSSERVATI: il riferimento del laboratorio si scala solo da un campione ≥ a quello del laboratorio (arrotondando per difetto); sotto, zero.</summary>
+    public static int AllowedLostConflicts(int observedCases) =>
+        observedCases >= LabConflictReferenceCases ? LabConflictLostMax * observedCases / LabConflictReferenceCases : 0;
 
     private const string AbsentQuestion = "Qual è il numero di telefono dell'assistenza clienti?";
 
@@ -103,13 +122,27 @@ internal static class RetrievalGapCampaign
         Excluded,
     ]);
 
+    /// <summary>Ordine UNICO e fisso della campagna: Single poi Multi. L'esecuzione lo segue in un solo test (<see cref="CampaignSequencer"/>), mai per ordine implicito del framework di test.</summary>
+    public static IReadOnlyList<CampaignScenario> Sequence { get; } = [Single, Multi];
+
     public static Corpus BuildCorpus(CampaignScenario scenario) =>
         scenario == Single ? LargeDocumentCorpus.Single(FillerChars, SingleBulkRules) : LargeDocumentCorpus.Multi(FillerChars, MultiBulkRulesPerDocument);
 
     // ================================================================ manifesto congelato
 
     /// <summary>Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>). Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.</summary>
-    public const string FrozenManifestSha256 = "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035";
+    public const string FrozenManifestSha256 = "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb";
+
+    /// <summary>Hash della versione 1 del manifesto (d05e93f), mai usata da una campagna reale: sostituita PRIMA di ogni inferenza.</summary>
+    public const string SupersededManifestSha256 = "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035";
+
+    /// <summary>Motivo del ri-congelamento (versione 2). Corpus, gold, domande, attese e testi d'estensione NON cambiano: lo verificano gli hash per scenario nel manifesto e i test sul generatore.</summary>
+    public const string FreezeReason =
+        "Nessuna campagna DGX eseguita con la versione 1. Correzioni dell'harness decise prima dell'inferenza: identificativo del modello LLM fissato (Qwen3.6-35B-Smart); soglia dei conflitti persi riscritta secondo SC-003 "
+        + "(riferimento del laboratorio 1-2 su 10 casi, tolleranza zero sotto i 10 casi, zero perdite per esclusione a monte); configurazione delle misure di latenza per Gap; ordine Single poi Multi in un solo test. Nessun adattamento delle attese ai risultati.";
+
+    /// <summary>Caratteristiche del modello che richiedono una verifica REALE (non verificabili offline) e che la campagna registra senza dichiararle verificate.</summary>
+    public static readonly string[] LlmUnverifiedCharacteristics = ["pesi effettivamente caricati", "quantizzazione", "artefatto/file del modello", "finestra di contesto effettiva (misurata dal profilo di runtime)", "comportamento del ragionamento (thinking=0 richiesto)"];
 
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false };
 
@@ -147,9 +180,16 @@ internal static class RetrievalGapCampaign
                 embedding = new { id = EmbeddingModelId, artifact = EmbeddingArtifact, dimension = EmbeddingDimension },
                 reranker = new { id = RerankerModelId, artifact = RerankerArtifact },
                 indexTextVersion = RetrievalOptions.IndexTextVersion, fts = RetrievalOptions.FtsConfiguration,
-                llm = "da ambiente: BPROJECTS_TEST_DGX_MODEL (registrato nel rapporto, non modificabile a campagna avviata)",
+                llm = new { id = LlmModelId, source = "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline", unverified = LlmUnverifiedCharacteristics },
+                latency = new { perGap = LatencyReport.PerGapPhases, shared = LatencyReport.SharedPhases, attribution = "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap" },
             },
-            thresholds = new { maxInvalidCitationsPer10 = MaxInvalidCitationsPer10, maxLostConflictsPer10 = MaxLostConflictsPer10, falseAnsweredInSnapshot = 0 },
+            thresholds = new
+            {
+                maxInvalidCitationsPer10 = MaxInvalidCitationsPer10,
+                lostConflicts = new { labReference = $"{LabConflictLostMax} su {LabConflictReferenceCases} casi", scaledOnlyFromCases = LabConflictReferenceCases, belowThatTolerance = 0, upstream = MaxUpstreamLostConflicts },
+                falseAnsweredInSnapshot = 0,
+            },
+            freeze = new { version = 2, supersedes = SupersededManifestSha256, reason = FreezeReason },
             seed = LargeDocumentCorpus.Seed,
             extension = ExtensionDocuments.Select(d => new { d.Key, d.FileName, d.ExcludedByPm, textSha256 = Sha(d.Text) }).ToArray(),
             scenarios = new[] { Scenario(Single), Scenario(Multi) },
@@ -187,16 +227,21 @@ internal static class RetrievalGapCampaign
         Fixed("BPROJECTS_TEST_ANALYSIS_THINKING", "0");
         Fixed("BPROJECTS_EVAL_RERANKER_MODEL_ID", RerankerModelId);
 
-        if (string.IsNullOrWhiteSpace(read(TestEnvironment.DgxModelVariable)))
+        var model = read(TestEnvironment.DgxModelVariable);
+        if (string.IsNullOrWhiteSpace(model))
         {
-            problems.Add($"{TestEnvironment.DgxModelVariable} non impostata: il modello LLM della campagna deve essere dichiarato");
+            problems.Add($"{TestEnvironment.DgxModelVariable} non impostata: il modello LLM della campagna è {LlmModelId} e deve essere dichiarato");
+        }
+        else if (!string.Equals(model, LlmModelId, StringComparison.Ordinal))
+        {
+            problems.Add($"{TestEnvironment.DgxModelVariable}={model} diverso dal modello fissato {LlmModelId}");
         }
 
         return problems;
     }
 
-    /// <summary>Verifica del profilo effettivo del runtime (misurato) contro la configurazione fissata. Null = compatibile.</summary>
-    public static string? RejectProfile(DocumentRuntimeProfile profile, string? expectedModel)
+    /// <summary>Verifica del profilo effettivo del runtime (misurato) contro la configurazione fissata, modello compreso (<see cref="LlmModelId"/>, mai un altro). Null = compatibile.</summary>
+    public static string? RejectProfile(DocumentRuntimeProfile profile)
     {
         var problems = new List<string>();
         if (profile.WindowTokens != WindowTokens)
@@ -219,9 +264,9 @@ internal static class RetrievalGapCampaign
             problems.Add($"ragionamento {profile.Thinking} invece di {Thinking}");
         }
 
-        if (!string.IsNullOrWhiteSpace(expectedModel) && !string.Equals(profile.ModelId, expectedModel, StringComparison.Ordinal))
+        if (!string.Equals(profile.ModelId, LlmModelId, StringComparison.Ordinal))
         {
-            problems.Add($"modello {profile.ModelId} diverso da quello dichiarato {expectedModel}");
+            problems.Add($"modello {profile.ModelId} diverso da quello fissato {LlmModelId}");
         }
 
         return problems.Count == 0 ? null : string.Join("; ", problems);
@@ -251,8 +296,13 @@ internal static class RetrievalGapCampaign
     }
 
     /// <summary>Registra opzioni e client del recupero con l'osservatore delle chiamate HTTP (solo durata/esito). I client sostituiscono quelli di prodotto SOLO nell'host di test.</summary>
-    internal static void AddRetrieval(IServiceCollection services, string endpoint, string apiKey, RetrievalCallRecorder recorder)
+    internal static void AddRetrieval(IServiceCollection services, string endpoint, string apiKey, RetrievalCallRecorder recorder, RetrievalTimingLog? timing = null)
     {
+        if (timing is not null)
+        {
+            services.AddSingleton(timing);   // misura opzionale dei tempi per fase: solo osservazione, la pipeline di prodotto la usa se presente
+        }
+
         services.PostConfigure<RetrievalOptions>(o => ApplyRetrievalOptions(o, endpoint, apiKey));
         services.AddSingleton(sp => new EmbeddingClient(sp.GetRequiredService<IOptions<RetrievalOptions>>().Value, recorder.NewHandler()));
         services.AddSingleton(sp => new RerankClient(sp.GetRequiredService<IOptions<RetrievalOptions>>().Value, recorder.NewHandler()));
@@ -322,25 +372,6 @@ internal sealed class RetrievalCallRecorder
         return (kind, inputs);
     }
 
-    /// <summary>Latenza attribuita a un Gap nella fase indicata: durata delle chiamate di embedding/riordino la cui interrogazione è l'enunciato del Gap (le richieste multi-input si ripartiscono in parti uguali).</summary>
-    public (int Calls, double Milliseconds) LatencyOf(string statement, string phase, Func<string, string> fold)
-    {
-        var key = fold(statement);
-        double total = 0;
-        var count = 0;
-        foreach (var call in _calls.Where(c => c.Phase == phase && (c.Kind is "embedding" or "rerank")))
-        {
-            var matches = call.Inputs.Count(i => fold(i) == key);
-            if (matches > 0)
-            {
-                count++;
-                total += call.Milliseconds * matches / call.Inputs.Count;
-            }
-        }
-
-        return (count, total);
-    }
-
     private sealed class Tap(RetrievalCallRecorder recorder) : DelegatingHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -366,6 +397,68 @@ internal sealed class RetrievalCallRecorder
                 recorder.Add(new Call(kind, recorder.Phase, inputs, clock.Elapsed.TotalMilliseconds, status, DateTimeOffset.UtcNow));
             }
         }
+    }
+}
+
+/// <summary>Latenza di UN Gap (ms): fasi proprie <c>search</c> e <c>rerank</c> della pipeline, con le componenti HTTP osservate nella finestra temporale di ciascuna.</summary>
+internal sealed record GapLatency(
+    Guid GapEvidenceId, double SearchMs, double RerankMs, double EmbeddingHttpMs, int EmbeddingCalls, double RerankHttpMs, int RerankCalls, bool Incomplete)
+{
+    /// <summary>Latenza end-to-end attribuibile al Gap: ricerca + riordino.</summary>
+    public double EndToEndMs => SearchMs + RerankMs;
+
+    /// <summary>Ricerca meno embedding della query: ricerca PostgreSQL (lessicale + vettoriale) e fusione RRF; non separabili senza alterare la pipeline, quindi riportate insieme.</summary>
+    public double PostgresAndFusionMs => Math.Max(0, SearchMs - EmbeddingHttpMs);
+
+    /// <summary>Riordino meno chiamata HTTP al reranker: costo applicativo proprio del Gap (selezione dei candidati, composizione delle richieste, ordinamento).</summary>
+    public double RerankApplicationMs => Math.Max(0, RerankMs - RerankHttpMs);
+}
+
+/// <summary>Rapporto di latenza del recupero: per Gap, le fasi condivise (una sola volta, MAI divise per Gap) e il totale.</summary>
+internal sealed record LatencyReport(IReadOnlyList<GapLatency> PerGap, IReadOnlyDictionary<string, double> SharedMs, double TotalMs)
+{
+    public static readonly string[] PerGapPhases = [RetrievalTimingLog.PhaseSearch, RetrievalTimingLog.PhaseRerank];
+
+    public static readonly string[] SharedPhases =
+        [RetrievalTimingLog.PhaseReadiness, RetrievalTimingLog.PhaseIndexReady, RetrievalTimingLog.PhaseRerankerReady, RetrievalTimingLog.PhaseProvenance, RetrievalTimingLog.PhaseRegistry];
+
+    /// <summary>Composizione condivisa del pacchetto (unione fra i Gap, per rango, fino al budget): lavoro di tutti i Gap insieme, non di uno.</summary>
+    public double SharedPackageCompositionMs => SharedMs.GetValueOrDefault(RetrievalTimingLog.PhaseRegistry);
+
+    /// <summary>
+    /// Funzione pura: nessun effetto, nessuna rete. Le chiamate HTTP del recupero (fase «run») si attribuiscono a un Gap solo se terminano DENTRO la finestra [inizio, fine] della sua fase di ricerca (embedding)
+    /// o di riordino (reranker); le sonde e le chiamate delle fasi condivise non sono attribuite. I Gap sono eseguiti in sequenza dalla pipeline: le finestre non si sovrappongono.
+    /// </summary>
+    public static LatencyReport Build(IReadOnlyList<RetrievalTimingLog.Entry> entries, IReadOnlyList<RetrievalCallRecorder.Call> calls, IReadOnlyList<Guid> gapIds)
+    {
+        var runCalls = calls.Where(c => c.Phase == "run").ToList();
+        var perGap = new List<GapLatency>();
+        foreach (var gap in gapIds)
+        {
+            var search = entries.Where(e => e.Phase == RetrievalTimingLog.PhaseSearch && e.GapEvidenceId == gap).ToList();
+            var rerank = entries.Where(e => e.Phase == RetrievalTimingLog.PhaseRerank && e.GapEvidenceId == gap).ToList();
+            var embedding = runCalls.Where(c => c.Kind == "embedding" && search.Any(w => Inside(c, w))).ToList();
+            var rerankCalls = runCalls.Where(c => c.Kind == "rerank" && rerank.Any(w => Inside(c, w))).ToList();
+            perGap.Add(new GapLatency(gap, search.Sum(e => e.Milliseconds), rerank.Sum(e => e.Milliseconds), embedding.Sum(c => c.Milliseconds), embedding.Count,
+                rerankCalls.Sum(c => c.Milliseconds), rerankCalls.Count, search.Concat(rerank).Any(e => e.Faulted) || search.Count == 0 || rerank.Count == 0));
+        }
+
+        var shared = SharedPhases.ToDictionary(p => p, p => entries.Where(e => e.Phase == p && e.GapEvidenceId is null).Sum(e => e.Milliseconds));
+        return new LatencyReport(perGap, shared, entries.Where(e => e.Phase == RetrievalTimingLog.PhaseTotal).Sum(e => e.Milliseconds));
+    }
+
+    private static bool Inside(RetrievalCallRecorder.Call call, RetrievalTimingLog.Entry window) => call.At >= window.StartedAt && call.At <= window.EndedAt;
+
+    /// <summary>Righe di rapporto: una per Gap (componenti distinte) e una per le fasi condivise con il totale; la composizione condivisa non è mai attribuita ai Gap.</summary>
+    public IEnumerable<string> Describe(Func<Guid, string> label)
+    {
+        foreach (var g in PerGap)
+        {
+            yield return $"Gap «{label(g.GapEvidenceId)}»: end-to-end {g.EndToEndMs:F0} ms = ricerca {g.SearchMs:F0} (embedding query {g.EmbeddingHttpMs:F0} in {g.EmbeddingCalls} chiamate + PostgreSQL/fusione RRF {g.PostgresAndFusionMs:F0}) "
+                + $"+ riordino {g.RerankMs:F0} (reranker {g.RerankHttpMs:F0} in {g.RerankCalls} chiamate + applicativo {g.RerankApplicationMs:F0})";
+        }
+
+        yield return "fasi CONDIVISE (non attribuite ai Gap): " + string.Join(", ", SharedMs.Select(kv => $"{kv.Key} {kv.Value:F0} ms")) + $"; composizione del pacchetto {SharedPackageCompositionMs:F0} ms; totale pipeline {TotalMs:F0} ms";
     }
 }
 

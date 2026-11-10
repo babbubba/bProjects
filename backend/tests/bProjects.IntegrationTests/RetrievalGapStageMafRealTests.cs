@@ -28,10 +28,8 @@ namespace bProjects.IntegrationTests;
 [Collection(RealParser.CollectionName)]
 public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 {
-    /// <summary>Blocco strutturale già emerso nella campagna (primo corpus): il secondo corpus non parte. Statico per costruzione: la campagna è una sola.</summary>
-    private static volatile string? _halted;
-
     private readonly RetrievalCallRecorder _recorder = new();
+    private readonly RetrievalTimingLog _timing = new();
     private readonly HashSet<Guid> _excluded = [];
     private double _indexSeconds;
 
@@ -59,32 +57,55 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override IReadOnlySet<Guid> ExcludedDocumentIds => _excluded;
 
-    protected override string? RejectProfile(DocumentRuntimeProfile profile) => RetrievalGapCampaign.RejectProfile(profile, TestEnvironment.DgxModel);
+    protected override string? RejectProfile(DocumentRuntimeProfile profile) => RetrievalGapCampaign.RejectProfile(profile);
 
     protected override string ClassifyFailure(string errorCode) => RetrievalGapCampaign.Classify(errorCode);
 
     protected override void ConfigureCampaignServices(IServiceCollection services)
     {
-        RetrievalGapCampaign.AddRetrieval(services, TestEnvironment.DgxEndpoint!, TestEnvironment.DgxApiKey!, _recorder);
+        RetrievalGapCampaign.AddRetrieval(services, TestEnvironment.DgxEndpoint!, TestEnvironment.DgxApiKey!, _recorder, _timing);
     }
 
-    /// <summary>Punto d'ingresso unico della campagna: guardia di configurazione PRIMA di ogni inferenza, arresto su blocco strutturale già emerso, poi lo scenario.</summary>
-    protected async Task RunCampaignAsync()
+    /// <summary>Guardia di configurazione PRIMA di ogni inferenza (una volta per la campagna): salto esplicito senza opt-in, ambiente compatibile, modello caricato dal router.</summary>
+    internal static async Task PreflightAsync()
     {
         TestEnvironment.RequireDgx();   // Skipped (mai PASS) senza opt-in
         var problems = RetrievalGapCampaign.ValidateEnvironment(Environment.GetEnvironmentVariable);
         Assert.True(problems.Count == 0, "T040: configurazione incompatibile, nessun upload né inferenza: " + string.Join(" | ", problems));
-        Assert.True(_halted is null, $"T040: campagna interrotta, nessun rilancio automatico né altro corpus: {_halted}");
         await Require();
+    }
+
+    /// <summary>Un solo scenario, una sola volta: stato, registratore, tempi, database e applicazione sono propri di questa istanza.</summary>
+    internal Task RunScenarioOnceAsync() => RunScenarioAsync(Scenario.Label, _ => RetrievalGapCampaign.BuildCorpus(Scenario));
+
+    /// <summary>Ciclo di vita manuale di uno scenario non gestito da xUnit (il secondo): inizializza, esegue, elimina sempre.</summary>
+    internal async Task RunOwnedAsync()
+    {
         try
         {
-            await RunScenarioAsync(Scenario.Label, _ => RetrievalGapCampaign.BuildCorpus(Scenario));
+            await InitializeAsync();   // dentro il try: se l avvio fallisce a meta, DisposeAsync libera comunque database e sandbox
+            await RunScenarioOnceAsync();
         }
-        catch (Exception e) when (e.Message.Contains("[STRUTTURALE]", StringComparison.Ordinal) || e.Message.Contains("[COMPLETAMENTO]", StringComparison.Ordinal) || e.Message.Contains("[COPERTURA]", StringComparison.Ordinal))
+        finally
         {
-            _halted = $"{Scenario.Label} ha incontrato un blocco strutturale (vedere il rapporto di {Scenario.Label}).";
-            throw;
+            await DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// Punto d'ingresso UNICO della campagna: Single poi Multi nell'ordine di <see cref="RetrievalGapCampaign.Sequence"/>, in un solo test. Multi parte solo se Single non ha incontrato un blocco
+    /// (STRUTTURALE/COMPLETAMENTO/COPERTURA); nessun retry; il fallimento di Single resta tale e il suo stato è persistito.
+    /// </summary>
+    protected async Task RunCampaignAsync()
+    {
+        await PreflightAsync();
+        var path = Path.Combine(Path.GetTempPath(), "bprojects-t040-campaign", "state.json");
+        await CampaignSequencer.RunAsync(
+            [
+                new(RetrievalGapCampaign.Single.Label, RunScenarioOnceAsync),
+                new(RetrievalGapCampaign.Multi.Label, () => new MultiScenario().RunOwnedAsync()),
+            ],
+            results => CampaignSequencer.WriteState(path, RetrievalGapCampaign.Id, results));
     }
 
     // ================================================================ passi fra la preparazione del corpus e Analizza
@@ -371,15 +392,33 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
             var open = content.Conflicts.Where(x => x.Status == "Open" && !x.HasResolution).ToList();
             return !c.Sides.All(side => open.Any(x => x.Alternatives.Any(a => side.All(a.QuotesHave))));
         });
-        v.Check($"{l} (5) conflitti persi ≤ riferimento del laboratorio (≤ 2 su 10): {lost} su {corpus.Conflicts.Count} conflitti gold", RetrievalGapCampaign.WithinPer10(lost, corpus.Conflicts.Count, RetrievalGapCampaign.MaxLostConflictsPer10));
+        var allowedLost = RetrievalGapCampaign.AllowedLostConflicts(corpus.Conflicts.Count);
+        v.Check($"{l} (5) conflitti persi ≤ riferimento del laboratorio (SC-003: {RetrievalGapCampaign.LabConflictLostMax} su {RetrievalGapCampaign.LabConflictReferenceCases} casi; sotto {RetrievalGapCampaign.LabConflictReferenceCases} casi tolleranza zero): "
+            + $"{lost} persi su {corpus.Conflicts.Count} conflitti gold, ammessi {allowedLost}", lost <= allowedLost);
 
-        // (6) latenza del recupero per Gap (embedding e riordino reali, durata delle chiamate HTTP) e tempi per fase.
-        foreach (var gap in gaps)
+        // nessun conflitto perso per esclusione a monte: ogni lato di ogni conflitto gold ha almeno un'evidenza nel pacchetto recuperato che non sia del solo documento escluso.
+        var upstreamLost = corpus.Conflicts.Count(c => c.Sides.Any(side =>
         {
-            var (callCount, millis) = _recorder.LatencyOf(gap.Statement, "run", Fold);
-            v.Note($"{l} (6) latenza del recupero per «{Short(gap.Statement, 60)}»: {millis / 1000:F2} s in {callCount} chiamate di embedding/riordino");
-            v.Check($"{l} (6) latenza del recupero registrata per «{Short(gap.Statement, 40)}» (almeno una chiamata di riordino/embedding osservata)", callCount > 0 && millis > 0);
+            var sideEvidence = evidences.Where(e => e.Kind != EvidenceKind.Gap && side.All(q => e.Sources.Any(s => Fold(s.Quote).Contains(Fold(q), StringComparison.Ordinal)))).Select(e => e.Id).ToList();
+            return !sideEvidence.Any(id => packageIds.Contains(id) && !excludedEvidence.Contains(id));
+        }));
+        v.Check($"{l} (5) conflitti persi per esclusione a monte del recupero = {RetrievalGapCampaign.MaxUpstreamLostConflicts} (mai scalato): {upstreamLost} su {corpus.Conflicts.Count} conflitti gold", upstreamLost <= RetrievalGapCampaign.MaxUpstreamLostConflicts);
+
+        // (6) latenza del recupero PER GAP (fasi proprie del Gap con componenti HTTP) e fasi CONDIVISE riportate a parte, mai divise per Gap.
+        var latency = LatencyReport.Build(_timing.Entries, _recorder.Calls, [.. gaps.Select(g => g.Id)]);
+        var statements = gaps.ToDictionary(g => g.Id, g => g.Statement);
+        foreach (var line in latency.Describe(id => Short(statements.GetValueOrDefault(id, id.ToString()), 50)))
+        {
+            v.Note($"{l} (6) {line}");
         }
+
+        foreach (var g in latency.PerGap)
+        {
+            v.Check($"{l} (6) latenza del recupero misurata per «{Short(statements[g.GapEvidenceId], 40)}»: fasi ricerca e riordino complete, almeno una chiamata di embedding e una di riordino osservate nelle proprie finestre",
+                !g.Incomplete && g.EmbeddingCalls > 0 && g.RerankCalls > 0 && g.EndToEndMs > 0, $"end-to-end {g.EndToEndMs:F0} ms, embedding {g.EmbeddingCalls}, riordino {g.RerankCalls}");
+        }
+
+        v.Check($"{l} (6) tempo condiviso e totale riportati separatamente: il totale della pipeline copre la somma delle fasi per Gap", latency.TotalMs > 0 && latency.TotalMs + 1 >= latency.PerGap.Sum(g => g.EndToEndMs), $"totale {latency.TotalMs:F0} ms");
 
         var rerankCalls = _recorder.Calls.Count(c => c.Phase == "run" && c.Kind == "rerank");
         var failedCalls = _recorder.Calls.Count(c => c.Phase is "run" or "index" && c.Kind != "other" && c.Status is < 200 or >= 300);
@@ -409,19 +448,18 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
     // ================================================================ scenari
 
-    public sealed class Single : RetrievalGapStageMafRealTests
+    /// <summary>L'UNICO test della campagna: xUnit lo istanzia con lo scenario Single; Multi è eseguito da <see cref="CampaignSequencer"/> subito dopo, con istanza e risorse proprie.</summary>
+    public sealed class Campaign : RetrievalGapStageMafRealTests
     {
         internal override CampaignScenario Scenario => RetrievalGapCampaign.Single;
 
         [Fact]
-        public async Task T040_retrieval_feeds_the_gap_stage_over_the_large_single_document_ledger() => await RunCampaignAsync();
+        public async Task T040_retrieval_feeds_the_gap_stage_over_the_single_then_the_multi_document_ledger() => await RunCampaignAsync();
     }
 
-    public sealed class Multi : RetrievalGapStageMafRealTests
+    /// <summary>Scenario Multi: nessun test proprio (non scoperto da xUnit); ciclo di vita manuale dal punto d'ingresso unico.</summary>
+    public sealed class MultiScenario : RetrievalGapStageMafRealTests
     {
         internal override CampaignScenario Scenario => RetrievalGapCampaign.Multi;
-
-        [Fact]
-        public async Task T040_retrieval_feeds_the_gap_stage_over_the_large_multi_document_ledger() => await RunCampaignAsync();
     }
 }

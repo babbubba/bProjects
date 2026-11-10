@@ -1,6 +1,6 @@
 {
   "campaign": "T040-retrieval-gap-1",
-  "frozenSha256": "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035",
+  "frozenSha256": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
   "note": "Manifesto congelato PRIMA di ogni inferenza: corpus (hash del testo), gold (hash), domande, attese, soglie e configurazione. Rigenerabile solo con BPROJECTS_T040_WRITE_MANIFEST=1 e ri-congelamento esplicito della costante FrozenManifestSha256.",
   "manifest": {
     "campaign": "T040-retrieval-gap-1",
@@ -24,12 +24,46 @@
       },
       "indexTextVersion": "index-text-1",
       "fts": "italian",
-      "llm": "da ambiente: BPROJECTS_TEST_DGX_MODEL (registrato nel rapporto, non modificabile a campagna avviata)"
+      "llm": {
+        "id": "Qwen3.6-35B-Smart",
+        "source": "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline",
+        "unverified": [
+          "pesi effettivamente caricati",
+          "quantizzazione",
+          "artefatto/file del modello",
+          "finestra di contesto effettiva (misurata dal profilo di runtime)",
+          "comportamento del ragionamento (thinking=0 richiesto)"
+        ]
+      },
+      "latency": {
+        "perGap": [
+          "search",
+          "rerank"
+        ],
+        "shared": [
+          "readiness",
+          "index_ready",
+          "reranker_ready",
+          "provenance",
+          "registry"
+        ],
+        "attribution": "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap"
+      }
     },
     "thresholds": {
       "maxInvalidCitationsPer10": 2,
-      "maxLostConflictsPer10": 2,
+      "lostConflicts": {
+        "labReference": "2 su 10 casi",
+        "scaledOnlyFromCases": 10,
+        "belowThatTolerance": 0,
+        "upstream": 0
+      },
       "falseAnsweredInSnapshot": 0
+    },
+    "freeze": {
+      "version": 2,
+      "supersedes": "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035",
+      "reason": "Nessuna campagna DGX eseguita con la versione 1. Correzioni dell'harness decise prima dell'inferenza: identificativo del modello LLM fissato (Qwen3.6-35B-Smart); soglia dei conflitti persi riscritta secondo SC-003 (riferimento del laboratorio 1-2 su 10 casi, tolleranza zero sotto i 10 casi, zero perdite per esclusione a monte); configurazione delle misure di latenza per Gap; ordine Single poi Multi in un solo test. Nessun adattamento delle attese ai risultati."
     },
     "seed": 20261106,
     "extension": [
