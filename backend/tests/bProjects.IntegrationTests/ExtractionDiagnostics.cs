@@ -80,8 +80,21 @@ internal sealed class CapturedCall
 /// <summary>Registratore diagnostico di un run: wrapper del client, scrittura progressiva dei file e correlazione finale col database di test.</summary>
 internal sealed partial class ExtractionDiagnosticsRecorder
 {
-    /// <summary>Moltiplicatore con cui il planner stima l'output (<c>OwnedTokens x OutputExpansion</c>): il default di produzione, congelato nel manifesto.</summary>
-    public const double PlannerOutputExpansion = PlannerLimits.ExtractionCandidateOutputExpansion;
+    /// <summary>
+    /// Moltiplicatore con cui il planner stima l'output (<c>OwnedTokens x OutputExpansion</c>). NON è una costante: va letto dalle <see cref="AiOptions"/> RISOLTE dal runtime con
+    /// <see cref="UseResolvedOptions"/>, altrimenti la diagnostica descriverebbe una configurazione diversa da quella eseguita. Finché non è impostato vale il default di produzione, e
+    /// <see cref="OutputExpansionSource"/> lo dichiara.
+    /// </summary>
+    public double OutputExpansion { get; private set; } = PlannerLimits.ExtractionCandidateOutputExpansion;
+
+    public string OutputExpansionSource { get; private set; } = "default di produzione (non letto dalle AiOptions risolte)";
+
+    public void UseResolvedOptions(AiOptions resolved)
+    {
+        ArgumentNullException.ThrowIfNull(resolved);
+        OutputExpansion = resolved.ExtractionOutputExpansion;
+        OutputExpansionSource = "AiOptions.ExtractionOutputExpansion risolta dal runtime";
+    }
 
     private static readonly JsonSerializerOptions Pretty = new() { WriteIndented = true };
     private static readonly Regex Range = RangeRegex();
@@ -317,7 +330,7 @@ internal sealed partial class ExtractionDiagnosticsRecorder
             root["criterion"] = "chiamata->batch: sequenza (rangeKey, Primary|Context) del prompt == InputIdsJson.ranges di un DerivedBatch stage 'extract' del DocumentJob; "
                 + "se piu batch hanno la stessa sequenza (rangeKey ripetute fra unita), si tiene il batch il cui job ha una riga InferenceCalls con stessi token/finish e StartedAt entro 60 s; "
                 + "altrimenti la chiamata e riportata 'ambiguous'. La riga InferenceCalls della chiamata (DocumentJobId, Attempt) e scelta per token/finish/vicinanza di StartedAt.";
-            root["plannerExpectedOutput"] = $"ceil(OwnedTokens x {PlannerOutputExpansion.ToString(CultureInfo.InvariantCulture)}), OwnedTokens = token del testo dei soli range Primary uniti con \\n (payload senza istruzioni), come DocumentEvidenceAgent.MeasureAsync; "
+            root["plannerExpectedOutput"] = $"ceil(OwnedTokens x {OutputExpansion.ToString(CultureInfo.InvariantCulture)} [{OutputExpansionSource}]), OwnedTokens = token del testo dei soli range Primary uniti con \\n (payload senza istruzioni), come DocumentEvidenceAgent.MeasureAsync; "
                 + "OwnedTokens non e persistito: e ricostruito dal testo del prompt catturato con il tokenizer del runtime.";
 
             foreach (var call in Calls.OrderBy(c => c.Seq))
@@ -439,9 +452,10 @@ internal sealed partial class ExtractionDiagnosticsRecorder
         correlation["ownedTokens"] = owned;
         if (owned is { } o)
         {
-            var expected = (int)Math.Ceiling(o * PlannerOutputExpansion);
+            var expected = (int)Math.Ceiling(o * OutputExpansion);
             correlation["plannerExpectedOutputTokens"] = expected;
-            correlation["plannerOutputExpansion"] = PlannerOutputExpansion;
+            correlation["plannerOutputExpansion"] = OutputExpansion;
+            correlation["plannerOutputExpansionSource"] = OutputExpansionSource;
             if (call.CompletionTokens is { } generated && expected > 0)
             {
                 correlation["generatedOverExpected"] = Math.Round((double)generated / expected, 3);

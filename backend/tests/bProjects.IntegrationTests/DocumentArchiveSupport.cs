@@ -155,6 +155,14 @@ public abstract class ArchiveTestBase : IAsyncLifetime
         return connection;
     }
 
+    /// <summary>Come <see cref="OpenConnection"/> ma con un token PROPRIO: serve alla diagnostica di fine test, quando il token del test può essere già annullato.</summary>
+    protected async Task<NpgsqlConnection> OpenConnectionWithToken(CancellationToken cancellationToken)
+    {
+        var connection = new NpgsqlConnection(_database.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        return connection;
+    }
+
     /// <summary>Chiave dell'advisory lock di progetto (stessa derivazione di ProjectLock).</summary>
     protected static string ProjectLockKey(Guid projectId) => "bprojects:project-sources:" + projectId.ToString("N");
 

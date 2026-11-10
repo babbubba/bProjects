@@ -7,7 +7,8 @@ namespace bProjects.App.Retrieval;
 /// <summary>Un passaggio indicizzato: identità e hash del testo del blocco al momento dell'indicizzazione (SC-006: l'insieme prima/dopo la ricostruzione è identico).</summary>
 public sealed record IndexedPassage(Guid BlockId, string TextHash);
 
-public sealed record RetrievalRebuildSummary(int Preparations, int Ready, int Failed, int EntriesRemoved);
+/// <summary>Esito di una ricostruzione. <paramref name="Results"/> conserva l'esito di OGNI preparazione (stato, conteggi, <c>ErrorCode</c> tipizzato): il solo conteggio dei falliti perdeva la causa.</summary>
+public sealed record RetrievalRebuildSummary(int Preparations, int Ready, int Failed, int EntriesRemoved, IReadOnlyList<RetrievalIndexBuildResult>? Results = null);
 
 /// <summary>
 /// Manutenzione dell'indice derivato (003 T011, FR-007, SC-006). L'indice è una proiezione dei soli <c>DocumentBlock</c>: cancellarlo non perde nulla e la ricostruzione
@@ -47,9 +48,11 @@ public sealed class RetrievalIndexMaintenance(AppDbContext db, RetrievalIndexBui
                                   orderby p.RequestedAt, p.Id
                                   select p.Id).ToListAsync(ct);
         int ready = 0, failed = 0;
+        var results = new List<RetrievalIndexBuildResult>(preparations.Count);
         foreach (var id in preparations)
         {
             var result = await builder.BuildAsync(id, ct);
+            results.Add(result);
             if (result.Status == RetrievalIndexStatus.Ready)
             {
                 ready++;
@@ -60,7 +63,7 @@ public sealed class RetrievalIndexMaintenance(AppDbContext db, RetrievalIndexBui
             }
         }
 
-        return new(preparations.Count, ready, failed, removed);
+        return new(preparations.Count, ready, failed, removed, results);
     }
 
     /// <summary>Insieme dei passaggi indicizzati per una configurazione, ordinato (per confronti prima/dopo).</summary>

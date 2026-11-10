@@ -702,4 +702,37 @@ public sealed class ReconcileAliasComposerTests
     private const string PinnedReconcileDtoHash = "a8bd564c4802da685adcd2a5db15e46edf2e1139656aefd47d25819bd1fabde2";
     private const string PinnedReconcileCatalogHash = "8b58bab0ae1c662d3aff58ac13a90989ddee989843b5a38d622808077808a9c3";
     private const string PinnedReconcileSchemaHash = "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54";
+    /// <summary>
+    /// Riproduzione OFFLINE del rifiuto osservato nel Run 2 di T040 (chiamata 026: foglia, vista B, 139 items) con l'output grezzo ARCHIVIATO in locale (<c>%TEMP%projects-diag</c>): nessuna inferenza.
+    /// Senza archivio il test è saltato esplicitamente (mai superato). Il controllo sulla foglia A dimostra che la violazione dipende dallo stadio/vista e non dal contenuto.
+    /// </summary>
+    [Fact]
+    public void The_archived_run2_output_of_a_leaf_B_batch_with_items_is_rejected_by_the_validator_and_would_not_be_by_the_stage_rule_in_leaf_A()
+    {
+        var root = Environment.GetEnvironmentVariable("BPROJECTS_DIAG_DIR") is { Length: > 0 } custom ? custom : Path.Combine(Path.GetTempPath(), "bprojects-diag");
+        string? assistant = null;
+        if (Directory.Exists(root))
+        {
+            foreach (var dir in Directory.GetDirectories(root, "*RetrievalGapStageMafRealTests*").OrderByDescending(d => d, StringComparer.Ordinal))
+            {
+                var hit = AnalysisCallReport.Build(dir).FirstOrDefault(c => c!["itemsOutsideLeafA"]?.GetValue<bool>() == true && c["batchStage"]?.ToString() == "leaf" && c["batchView"]?.ToString() == "B");
+                if (hit is not null)
+                {
+                    assistant = File.ReadAllText(Path.Combine(dir, hit["rawAssistantFile"]!.ToString()));
+                    break;
+                }
+            }
+        }
+
+        Assert.SkipWhen(assistant is null, "Archivio delle chiamate del Run 2 non presente su questa macchina: riproduzione non eseguibile.");
+
+        var rejected = Compose(assistant!, Request("leaf", ReconcileView.B, [1, 2]));
+
+        Assert.False(rejected.IsValid);
+        Assert.Equal(DocumentWorkException.WorkOutputInvalid, rejected.ErrorCode);
+        Assert.Contains("items: ammessi solo nelle foglie della vista A (stadio leaf, vista B); le altre viste e gli altri stadi non propongono item.", rejected.Violations);   // la violazione osservata nel run
+
+        var asLeafA = Compose(assistant!, LeafA(1, 2));
+        Assert.DoesNotContain(asLeafA.Violations, v => v.StartsWith("items: ammessi solo", StringComparison.Ordinal));   // in A la regola di stadio non scatta (restano alias fuori catalogo)
+    }
 }

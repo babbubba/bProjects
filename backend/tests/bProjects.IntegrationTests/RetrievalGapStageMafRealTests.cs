@@ -32,6 +32,18 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
     private readonly RetrievalTimingLog _timing = new();
     private readonly HashSet<Guid> _excluded = [];
     private double _indexSeconds;
+    /// <summary>Etichetta del check d'indicizzazione: il tag [COMPLETAMENTO] la rende bloccante per il sequencer (verificato da un test).</summary>
+    internal const string IndexCheckLabel = "[COMPLETAMENTO] [T040/PREPARAZIONE] indice costruito per ogni preparazione Ready del progetto, nessun fallimento (nessuna analisi LLM se fallisce)";
+
+    private readonly IndexDiagnostics _indexDiagnostics;
+
+    protected RetrievalGapStageMafRealTests() => _indexDiagnostics = new IndexDiagnostics(() => Scenario.Label);
+
+    private readonly string _stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+    private int _callsBefore;
+
+    /// <summary>Un file per scenario E per esecuzione (marca temporale): un run successivo non sovrascrive mai le evidenze di uno precedente.</summary>
+    private string DiagnosticsPath => Path.Combine(Path.GetTempPath(), "bprojects-t040-campaign", $"diagnostic-report-{_stamp}-{Scenario.Label}.json");
 
     internal abstract CampaignScenario Scenario { get; }
 
@@ -77,8 +89,87 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
         await Require();
     }
 
+    /// <summary>
+    /// Fine scenario (anche con eccezione o blocco), PRIMA dell'eliminazione del database di test: righe di stato d'indice, run, job e batch derivati, rapporto delle chiamate al modello (anche Analysis:
+    /// stadio, vista, hash, token, finish, conteggi) e chiamate HTTP del recupero, tutto su file. Solo osservazione: ogni segmento è protetto da solo e il file viene sempre scritto; mai alterare l'esito.
+    /// </summary>
+    protected override async Task OnFinalizingAsync()
+    {
+        Guarded(() => _indexDiagnostics.Http = RetrievalIndexGate.HttpSummary(_recorder.Calls));
+        Guarded(() => _indexDiagnostics.AnalysisCalls = AnalysisCallReport.Build(MafDiagnostics.Current().Dir, _callsBefore));   // solo le chiamate di QUESTO scenario (Single e Multi condividono la sessione)
+        var database = new System.Text.Json.Nodes.JsonObject();
+        try
+        {
+            // Connessione NUOVA con token proprio: il token del test è già annullato se il test è stato interrotto, ed è proprio il caso da documentare.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await using var connection = await OpenConnectionWithToken(timeout.Token);
+            foreach (var (name, sql) in new[]
+            {
+                ("retrievalIndexStates", "SELECT \"ProjectId\", \"DocumentVersionId\", \"IndexConfigHash\", \"Status\"::text AS \"Status\", \"ErrorCode\", \"BlockCount\", \"EntryCount\", \"UpdatedAt\" FROM \"RetrievalIndexStates\" ORDER BY \"UpdatedAt\""),
+                ("processingRuns", "SELECT \"Id\", \"Status\"::text AS \"Status\", \"ErrorCode\", left(\"ErrorMessage\", 4000) AS \"ErrorMessage\", \"AttemptCount\" FROM \"ProcessingRuns\" ORDER BY \"RequestedAt\""),
+                ("documentJobsByStatus", "SELECT \"Kind\"::text AS \"Kind\", \"Status\"::text AS \"Status\", \"ErrorCode\", count(*) AS \"Count\" FROM \"DocumentJobs\" GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"),
+                ("failedDocumentJobs", "SELECT \"Kind\"::text AS \"Kind\", \"Status\"::text AS \"Status\", \"ErrorCode\", left(\"ErrorMessage\", 2000) AS \"ErrorMessage\" FROM \"DocumentJobs\" WHERE \"ErrorCode\" IS NOT NULL OR \"Status\"::text = 'Failed'"),
+                ("derivedBatches", "SELECT \"BatchId\", \"Stage\", \"View\", \"Level\", \"Ordinal\", \"MeasuredTokens\", \"InputHash\", \"SchemaVersion\", \"PromptVersion\" FROM \"DerivedBatches\" ORDER BY \"CreatedAt\""),
+            })
+            {
+                try
+                {
+                    database[name] = await Rows(connection, sql, timeout.Token);
+                }
+                catch (Exception e)
+                {
+                    // una query sbagliata non cancella le altre; solo codice SQL e messaggio del server (nessun parametro né dato)
+                    database[name] = new System.Text.Json.Nodes.JsonObject { ["error"] = e.GetType().Name, ["sqlState"] = (e as Npgsql.PostgresException)?.SqlState, ["message"] = (e as Npgsql.PostgresException)?.MessageText };
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            database["connectionError"] = e.GetType().Name;
+        }
+
+        _indexDiagnostics.Database = database;
+        _indexDiagnostics.Persist(DiagnosticsPath);
+    }
+
+    private static void Guarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception e)
+        {
+            TestContext.Current.SendDiagnosticMessage($"diag T040: segmento non riuscito ({e.GetType().Name})");
+        }
+    }
+
+    private static async Task<System.Text.Json.Nodes.JsonArray> Rows(Npgsql.NpgsqlConnection connection, string sql, CancellationToken ct)
+    {
+        var rows = new System.Text.Json.Nodes.JsonArray();
+        await using var command = new Npgsql.NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var row = new System.Text.Json.Nodes.JsonObject();
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                row[reader.GetName(i)] = reader.IsDBNull(i) ? null : System.Text.Json.Nodes.JsonValue.Create(Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture));
+            }
+
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
     /// <summary>Un solo scenario, una sola volta: stato, registratore, tempi, database e applicazione sono propri di questa istanza.</summary>
-    internal Task RunScenarioOnceAsync() => RunScenarioAsync(Scenario.Label, _ => RetrievalGapCampaign.BuildCorpus(Scenario));
+    internal Task RunScenarioOnceAsync()
+    {
+        var directory = MafDiagnostics.Current().Dir;
+        _callsBefore = Directory.Exists(directory) ? Directory.GetFiles(directory, "*-request.json").Length : 0;
+        return RunScenarioAsync(Scenario.Label, _ => RetrievalGapCampaign.BuildCorpus(Scenario));
+    }
 
     /// <summary>Ciclo di vita manuale di uno scenario non gestito da xUnit (il secondo): inizializza, esegue, elimina sempre.</summary>
     internal async Task RunOwnedAsync()
@@ -150,23 +241,55 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
         }
 
         // Indice di recupero: ricostruzione ESPLICITA come in produzione (mai all'avvio), con embedding reali, misurata. Tutti i documenti, esclusi compresi: l'esclusione è dello snapshot, non dell'indice.
+        // Solo osservazione: nessun warm-up né richiesta di risveglio. Readiness prima dell'indicizzazione (sonda del prodotto), esito per preparazione con ErrorCode/messaggio, chiamate HTTP del recupero e righe
+        // del database vengono scritti su file PRIMA dell'eliminazione del database, anche in caso di eccezione o blocco (vedi OnFinalizingAsync).
         _recorder.Phase = "index";
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        RetrievalRebuildSummary summary;
-        using (var scope = App.Services.CreateScope())
+        var options = App.Services.GetRequiredService<IOptions<RetrievalOptions>>().Value;
+        var readiness = App.Services.GetRequiredService<RetrievalModelReadiness>();
+        _indexDiagnostics.Readiness.AddRange(await RetrievalIndexGate.CaptureAsync(readiness, options, "prima-dell-indicizzazione", probe: true, Ct));
+        _indexDiagnostics.Persist(DiagnosticsPath);
+        foreach (var record in _indexDiagnostics.Readiness)
         {
-            var sp = scope.ServiceProvider;
-            var db = sp.GetRequiredService<AppDbContext>();
-            var builder = new RetrievalIndexBuilder(db, App.Services.GetRequiredService<EmbeddingClient>(), App.Services.GetRequiredService<RetrievalModelReadiness>(), sp.GetRequiredService<IOptions<RetrievalOptions>>().Value);
-            summary = await new RetrievalIndexMaintenance(db, builder).RebuildAsync(false, Ct);
+            v.Note($"{l} readiness {RetrievalIndexGate.Describe(record)}");
         }
 
-        _indexSeconds = clock.Elapsed.TotalSeconds;
-        _recorder.Phase = "run";
+        RetrievalRebuildSummary summary;
+        try
+        {
+            summary = await RetrievalIndexGate.RebuildAsync(async () =>
+            {
+                using var scope = App.Services.CreateScope();
+                var sp = scope.ServiceProvider;
+                var db = sp.GetRequiredService<AppDbContext>();
+                var builder = new RetrievalIndexBuilder(db, App.Services.GetRequiredService<EmbeddingClient>(), readiness, sp.GetRequiredService<IOptions<RetrievalOptions>>().Value);
+                return await new RetrievalIndexMaintenance(db, builder).RebuildAsync(false, Ct);
+            }, _indexDiagnostics, DiagnosticsPath);
+        }
+        finally
+        {
+            _recorder.Phase = "run";
+            _indexDiagnostics.Http = RetrievalIndexGate.HttpSummary(_recorder.Calls);
+            _indexDiagnostics.Readiness.AddRange(await RetrievalIndexGate.CaptureAsync(readiness, options, "dopo-l-indicizzazione-ultimo-stato-noto", probe: false, Ct));
+            _indexDiagnostics.Persist(DiagnosticsPath);
+        }
+
+        _indexSeconds = _indexDiagnostics.Seconds ?? 0;
         var documents = await Count(CampaignSql.PreparationsReady, ("p", project));
         var ready = await Count(CampaignSql.IndexReady, ("p", project));
-        v.Note($"{l} indice di recupero: preparazioni={summary.Preparations} Ready={summary.Ready} Failed={summary.Failed} in {_indexSeconds:F1} s (embedding reali); stati Ready del progetto={ready}");
-        v.Check($"{l} indice costruito per ogni preparazione Ready del progetto, nessun fallimento", summary.Failed == 0 && documents > 0 && ready == documents, $"preparazioni Ready={documents} indici Ready={ready} falliti={summary.Failed}");
+        v.Note($"{l} indice di recupero: preparazioni={summary.Preparations} Ready={summary.Ready} Failed={summary.Failed} in {_indexSeconds:F1} s (embedding reali); stati Ready del progetto={ready}; diagnostica in {DiagnosticsPath}");
+        foreach (var result in summary.Results ?? [])
+        {
+            v.Note($"{l} indice, {RetrievalIndexGate.Describe(result)}{(result.ErrorMessage is null ? string.Empty : "; messaggio: " + result.ErrorMessage)}");
+        }
+
+        // BLOCCO: un'indicizzazione non completa ferma subito la campagna (tag [COMPLETAMENTO]): nessuna analisi LLM, nessun secondo corpus.
+        var indexed = RetrievalIndexGate.IsComplete(summary, (int)documents) && ready == documents;
+        v.Check(IndexCheckLabel, indexed,
+            $"preparazioni Ready={documents} indici Ready={ready} falliti={summary.Failed} codici={string.Join(',', (summary.Results ?? []).Select(r => r.ErrorCode ?? "-"))}");
+        if (!indexed)
+        {
+            return false;
+        }
 
         // Esclusione del PM del documento d'estensione (If-Match = ETag corrente della selezione).
         var current = await client.GetAsync($"/api/projects/{project}/source-selection", Ct);

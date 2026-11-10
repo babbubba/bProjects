@@ -256,6 +256,9 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     /// <summary>T150: verifiche aggiuntive sul run completato, prima della telemetria.</summary>
     protected virtual Task VerifyExtraAsync(HttpClient client, Guid project, Guid run, Guid revision, Corpus corpus, Content content, Verdicts v) => Task.CompletedTask;
 
+    /// <summary>Gancio di sola osservazione chiamato a fine scenario (anche con eccezione), prima dell'eliminazione del database di test. Non altera l'esito.</summary>
+    protected virtual Task OnFinalizingAsync() => Task.CompletedTask;
+
     protected async Task RunScenarioAsync(string label, Func<int, Corpus> build)
     {
         try
@@ -265,6 +268,15 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         finally
         {
             // Anche a run fallito e PRIMA che il database di test venga eliminato (DisposeAsync del fixture): correlazione chiamata -> batch e file diagnostici.
+            try
+            {
+                await OnFinalizingAsync();
+            }
+            catch (Exception e)
+            {
+                TestContext.Current.SendDiagnosticMessage($"diag: finalizzazione della sottoclasse non riuscita ({e.GetType().Name})");
+            }
+
             await FinalizeDiagnosticsAsync();
         }
     }
@@ -294,6 +306,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
                 // tokenizer non raggiungibile: i token proprietari restano null nel riepilogo
             }
 
+            _diag.UseResolvedOptions(App.Services.GetRequiredService<IOptions<AiOptions>>().Value);   // il fattore del planner è quello effettivamente risolto, non una costante
             var lines = await _diag.FinalizeAsync(connection, measure);
             TestContext.Current.SendDiagnosticMessage(string.Join('\n', lines));
         }

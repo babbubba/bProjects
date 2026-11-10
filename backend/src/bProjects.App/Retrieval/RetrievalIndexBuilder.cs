@@ -8,7 +8,7 @@ namespace bProjects.App.Retrieval;
 
 /// <summary>Esito di una costruzione: stato finale dell'indice della versione per la configurazione, conteggi e causa tipizzata se <see cref="RetrievalIndexStatus.Failed"/>.</summary>
 public sealed record RetrievalIndexBuildResult(
-    Guid DocumentVersionId, string IndexConfigHash, RetrievalIndexStatus Status, int BlockCount, int EntryCount, string? ErrorCode, int EmbeddedNow);
+    Guid DocumentVersionId, string IndexConfigHash, RetrievalIndexStatus Status, int BlockCount, int EntryCount, string? ErrorCode, int EmbeddedNow, string? ErrorMessage = null);
 
 /// <summary>
 /// Costruzione dell'indice derivato (003 T010, FR-004, FR-007, FR-020, R-5). Dai <c>DocumentBlock</c> di una preparazione <c>Ready</c> calcola il testo
@@ -89,7 +89,7 @@ public sealed class RetrievalIndexBuilder(
         catch (RetrievalException ex)
         {
             await SetStateAsync(version, hash, RetrievalIndexStatus.Failed, blocks.Count, already + written, ex.Code, ct);
-            return new(version.Id, hash, RetrievalIndexStatus.Failed, blocks.Count, already + written, ex.Code, written);
+            return new(version.Id, hash, RetrievalIndexStatus.Failed, blocks.Count, already + written, ex.Code, written, ex.Message);   // il messaggio tipizzato (stato del modello incluso) non contiene testi dei documenti né segreti
         }
 
         await SetStateAsync(version, hash, RetrievalIndexStatus.Ready, blocks.Count, blocks.Count, null, ct);

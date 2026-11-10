@@ -42,16 +42,34 @@ public sealed class ExtractionDiagnosticsCaptureTests
         }
     }
 
+    [Fact]
+    public void Without_the_resolved_options_the_recorder_declares_that_the_factor_is_only_the_production_default()
+    {
+        var recorder = new ExtractionDiagnosticsRecorder(TempRoot(), []);
+
+        Assert.Equal(16.0, recorder.OutputExpansion);   // default di produzione attuale (candidato)
+        Assert.Contains("non letto", recorder.OutputExpansionSource, StringComparison.Ordinal);
+        recorder.UseResolvedOptions(new AiOptions { ExtractionOutputExpansion = 8 });
+        Assert.Equal(8.0, recorder.OutputExpansion);
+        Assert.DoesNotContain("non letto", recorder.OutputExpansionSource, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------------ (1) + (3)
 
-    [Fact]
-    public async Task A_truncated_response_is_captured_with_its_full_text_correlated_to_its_batch_and_is_still_rejected_without_any_commit()
+    // Attese scritte a mano (30 token posseduti x fattore, arrotondato per eccesso), NON ricalcolate con la formula dell'implementazione: 30x8=240, 30x16=480, 30x12,5=375, 30x1=30.
+    [Theory]
+    [InlineData(8.0, 240)]
+    [InlineData(16.0, 480)]
+    [InlineData(12.5, 375)]
+    [InlineData(1.0, 30)]
+    public async Task A_truncated_response_is_captured_with_its_full_text_correlated_to_its_batch_and_is_still_rejected_without_any_commit(double resolvedFactor, int expectedOutputTokens)
     {
         TestEnvironment.RequirePostgres();
         var root = TempRoot();
         try
         {
             var recorder = new ExtractionDiagnosticsRecorder(root, ["test-key"]);
+            recorder.UseResolvedOptions(new AiOptions { ExtractionOutputExpansion = resolvedFactor });   // stesso percorso dell'harness reale: AiOptions risolte
             await using var rig = await UnitRig.CreateAsync([Words(30, "t")]);
             var model = new FakeUnitModel { Responder = _ => TruncatedJson, FinishReason = _ => "length" };
 
@@ -86,8 +104,10 @@ public sealed class ExtractionDiagnosticsCaptureTests
             Assert.Equal(await rig.Db.ScalarAsync<string>("""SELECT "InputHash" FROM "DerivedBatches" """), node.GetProperty("inputHash").GetString());
             Assert.False(node.GetProperty("outputCommitted").GetBoolean());
             Assert.Equal(30, node.GetProperty("ownedTokens").GetInt32());
-            Assert.Equal((int)Math.Ceiling(30 * 8.0), node.GetProperty("plannerExpectedOutputTokens").GetInt32());
-            Assert.Contains(lines, l => l.Contains("finish=length", StringComparison.Ordinal) && l.Contains("atteso=240", StringComparison.Ordinal));
+            Assert.Equal(expectedOutputTokens, node.GetProperty("plannerExpectedOutputTokens").GetInt32());
+            Assert.Equal(resolvedFactor, node.GetProperty("plannerOutputExpansion").GetDouble());
+            Assert.Equal("AiOptions.ExtractionOutputExpansion risolta dal runtime", node.GetProperty("plannerOutputExpansionSource").GetString());
+            Assert.Contains(lines, l => l.Contains("finish=length", StringComparison.Ordinal) && l.Contains($"atteso={expectedOutputTokens}", StringComparison.Ordinal));
             Assert.DoesNotContain(lines, l => l.Contains("evidence-1.1.0", StringComparison.Ordinal));   // nessun testo grezzo nel riepilogo di log
         }
         finally

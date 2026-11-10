@@ -128,3 +128,44 @@ Run 1: estrazione bloccata (`finish=length`, 16384 token, 282 s, 4 unità, 3 `pa
 
 ### Verdetto del gate
 **T040: FAIL/BLOCKED (non PASS).** Estrazione PASS; indicizzazione FAIL; analisi FAIL; Multi NotRun; nessun criterio di retrieval/Gap misurato. T040 resta `[ ]`. Nessuna seconda campagna avviata.
+
+
+## Diagnosi offline del Run 2 e strumentazione diagnostica (2026-11-10/11; nessuna inferenza DGX, nessuna ripetizione, T040 resta aperto)
+
+Fonti: codice (`RetrievalIndexBuilder`, `RetrievalIndexMaintenance`, `RetrievalModelReadiness`, `EmbeddingClient`, `ReconcileAliasComposer`, prompt `document-reconcile-v3`), archivio grezzo locale delle chiamate del Run 2 (`%TEMP%\bprojects-diag\20261110-214153-…-6e615ff2\`, 26 chiamate), `diag/20261110-214153-91da530f`, `M2-real.md`, `reranker-not-ready.txt`, `GET /models` del router (non generativo). Le evidenze originali del Run 2 sono invariate.
+
+### 1. Indicizzazione 3/3 `Failed` in 0,3 s — cosa è dimostrato e quali sono i limiti delle evidenze
+**Dimostrato**
+- Il builder cattura solo `RetrievalException`, scrive `Failed` con `ex.Code` e prosegue; il messaggio tipizzato (che contiene lo stato del modello) non veniva salvato; `RebuildAsync` scartava i `RetrievalIndexBuildResult` e riportava solo i conteggi.
+- Router (prima e dopo il run): `bge-m3-Q5` e `bge-reranker-v2-m3` `sleeping` (`--sleep-idle-seconds 900`), `Qwen3.6-35B-Smart` `loaded`.
+- `RetrievalModelReadiness.ProbeAsync` mappa ogni stato diverso da `loaded` su `ModelUnloaded`; `EnsureEmbeddingReadyAsync` (usato da builder, `HybridSearch`, `CandidateReranker`) non attende e non invia richieste, quindi lancia `embedding_unavailable`.
+- Riproduzione offline con server finto `sleeping` (PostgreSQL locale): tutte le preparazioni `Failed`, `ErrorCode = embedding_unavailable`, messaggio con `ModelUnloaded`, 0 richieste di embedding, esito immediato.
+- Il gate non fermava la campagna: il check d'indice aveva il tag `[T040/PREPARAZIONE]` (non bloccante per `CampaignSequencer`) e `PrepareBeforeAnalyzeAsync` proseguiva; l'analisi LLM è partita a indice vuoto (circa 16 min di DGX) e Multi sarebbe partito se fosse fallito solo l'indice.
+
+**`sleeping` non è un errore del router**: il router carica il modello alla prima richiesta ordinaria (M2: riordino scaricato caricato dalla prima richiesta minima; precedente T019). Il contratto (D-3) vieta caricamenti forzati e cambi di modello e classifica `ModelUnloaded` come transitorio, ma la readiness *sonda soltanto*: nel percorso del recupero nessuno invia mai la prima richiesta. Se sia un difetto di prodotto o una scelta voluta è una **decisione di contratto aperta**, non un bug dimostrato.
+
+**Non recuperabile**: il codice effettivamente scritto in `RetrievalIndexStates` nel Run 2 (database eliminato), il registratore HTTP (solo memoria), il log del router. Più stati danno lo stesso codice (`ModelUnloaded`, `ModelLoading`, `Unreachable`, `Unverified`, per esempio con 401): `ModelUnloaded` è l'ipotesi più probabile e coerente, **non provata sul run**.
+
+### 2. `work_output_invalid` (items) — dimostrato dall'archivio delle chiamate
+Batch `250fab41…` = chiamata 026: stadio `leaf`, vista B, 139 voci; `finish=stop`, 10587 token, JSON valido, **139 `items`** (133 `requirements`, 4 `openQuestions`, 2 `constraints`), 0 candidati. Il prompt dice «`items`: SOLO nelle foglie della vista A» e il system prompt è identico byte per byte alle chiamate 023 (foglia A) e 025 (foglia B, conforme: 0 item, 3 candidati). Non dipende dall'indice: le foglie operano sul solo ledger e precedono recupero e stadio Gap. Classe: semantica (modello non conforme) con un fattore applicativo (schema unico, regola solo a posteriori, nessun retry guidato nel percorso di riconciliazione). **Riprodotta offline** con l'output archiviato (`ReconcileAliasComposerTests`, saltato esplicitamente se l'archivio manca): rifiuto con la violazione «items: ammessi solo nelle foglie della vista A (stadio leaf, vista B)…»; la stessa risposta come foglia A non incontra la regola di stadio. Proposte non applicate (cambiano contratto o schema): retry guidato, vincolo di schema per stadio e vista, scarto dei soli item indebiti.
+
+### 3. Strumentazione introdotta (solo osservazione; nessun warm-up, retry, cambio di prompt, schema o policy)
+- Produzione, additivo: `RetrievalRebuildSummary.Results` e `RetrievalIndexBuildResult.ErrorMessage` (messaggio tipizzato del recupero, senza testi né segreti).
+- Gate bloccante: check `[COMPLETAMENTO]` (`RetrievalGapStageMafRealTests.IndexCheckLabel`) e ritorno immediato di `PrepareBeforeAnalyzeAsync`: indice incompleto, nessuna analisi LLM e nessun secondo corpus. `IsComplete` rifiuta indicizzazioni vuote, parziali o senza dettaglio.
+- `RetrievalIndexGate` e `IndexDiagnostics`: snapshot di readiness (stato, endpoint logico host:porta/percorso, artefatto atteso e osservato, dimensione) prima dell'indicizzazione (sonda del prodotto) e ultimo stato noto dopo; esito per preparazione (stato, `ErrorCode`, messaggio, conteggi, id); chiamate HTTP del recupero (percorso, fase, codice HTTP, durata, tipo di eccezione; dei testi solo numero e lunghezza); eccezioni (solo il tipo per quelle non tipizzate); righe del database (stati d'indice, run, job per stato e falliti, batch derivati) lette con connessione e token propri prima dell'eliminazione, una query per volta.
+- `AnalysisCallReport`: per ogni chiamata al modello, anche di Analysis, stadio, vista, hash di system prompt e schema, token, finish, durata, parsabilità, conteggi, regola «items fuori dalla foglia A» e nomi dei file grezzi; limitato alle chiamate dello scenario.
+- Scrittura atomica e best-effort (non altera mai l'esito), un file per scenario e per esecuzione: `%TEMP%\bprojects-t040-campaign\diagnostic-report-<UTC>-<scenario>.json`. Gli output grezzi restano nell'archivio locale `%TEMP%\bprojects-diag`; nulla di tutto ciò è versionato.
+- `ExtractionDiagnosticsRecorder`: il fattore di stima non è più una costante globale; è letto dalle `AiOptions` risolte dal runtime (`UseResolvedOptions`, chiamato a fine scenario) e dichiara la fonte (`plannerOutputExpansionSource`); senza lettura dichiara che è il default di produzione. Il test usa aspettative scritte a mano (30 token × 8/16/12,5/1 = 240/480/375/30), non la formula.
+- Review `ecc:csharp-reviewer`: nessun problema critico né fuga di segreti. Corretti: Persist non atomico e non protetto, DB letto con token annullato, query in un unico `try`, file sovrascritto fra run, segmenti non protetti, chiamate di Single incluse nel report di Multi, campi liberi (vista in whitelist, messaggi solo per eccezioni tipizzate), test fragili (etichetta reale del check, tempo, root dell'archivio). Non applicati: pulizia dei file temporanei dei test e copertura del caso «sonda funzionale con modello caricato».
+
+### 4. Test
+`RetrievalIndexGateTests` (readiness sleeping, modello assente, 401 e irraggiungibile con codici HTTP e nessun segreto nel file; fallimenti di embedding 400, 500 e risposta malformata con `ErrorCode` e messaggio per preparazione; eccezione durante la ricostruzione; gate; rapporto delle chiamate con violazione degli items e output troncato), replay dell'output 026, `ExtractionDiagnosticsCaptureTests`. Regressione mirata: 262 superati, 1 ignorato (lo smoke test reale, senza opt-in), 0 falliti. Suite completa non eseguita. Il test rimasto rosso dopo `6acb8db` (`atteso=240`, fattore 8 fisso) è corretto.
+
+### 5. Verifica reale minima e isolata dell'embedding (proposta, NON eseguita: richiede autorizzazione separata)
+`RetrievalEmbeddingSmokeRealTests`: nessun database, LLM, documento o campagna. Sequenza: (1) snapshot di readiness del prodotto (`GET /v1/models`, `/props` se serve e, solo se già caricato, la richiesta funzionale minima del prodotto); (2) solo se `ModelUnloaded`, UNA richiesta di embedding ordinaria di un testo («probe»); (3) nuovo snapshot. PASS solo se alla fine l'embedding è `Ready`. Evidenze: stato iniziale e finale con endpoint logico e artefatto, codici HTTP e durate (il tempo del primo `POST /v1/embeddings` misura il caricamento on-demand), eventuale `ErrorCode`, in `%TEMP%\bprojects-t040-campaign\embedding-smoke-report.json`. Costo atteso: al più 4 richieste HTTP leggere e un caricamento di bge-m3 (alcuni secondi; nessuna generazione, nessun LLM). Senza `BPROJECTS_TEST_DGX_ALLOW=1` il test risulta Skipped.
+
+### 6. GO/NO-GO per un eventuale Run 3
+- Strumentazione: **GO** (il prossimo fallimento sarà ricostruibile senza database).
+- Indicizzazione: **NO-GO** finché non è deciso il contratto sul risveglio dei modelli `sleeping` e non è eseguito lo smoke test isolato; senza, il Run 3 si fermerebbe di nuovo subito (a basso costo, grazie al gate).
+- Riconciliazione: **NO-GO** finché non si decide su retry guidato, vincolo di schema o scarto per la violazione `items` (1 foglia B su 2 nel Run 2).
+- T040 resta aperto; M4 posticipata.

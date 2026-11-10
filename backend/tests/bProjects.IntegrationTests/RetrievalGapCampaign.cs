@@ -379,7 +379,7 @@ internal static class RetrievalGapCampaign
 /// </summary>
 internal sealed class RetrievalCallRecorder
 {
-    public sealed record Call(string Kind, string Phase, IReadOnlyList<string> Inputs, double Milliseconds, int Status, DateTimeOffset At);
+    public sealed record Call(string Kind, string Phase, IReadOnlyList<string> Inputs, double Milliseconds, int Status, DateTimeOffset At, string Path = "", string? Exception = null);
 
     private readonly ConcurrentQueue<Call> _calls = new();
 
@@ -388,7 +388,7 @@ internal sealed class RetrievalCallRecorder
 
     public IReadOnlyList<Call> Calls => [.. _calls];
 
-    public DelegatingHandler NewHandler() => new Tap(this) { InnerHandler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false } };   // stesse impostazioni del client di prodotto
+    public DelegatingHandler NewHandler(HttpMessageHandler? inner = null) => new Tap(this) { InnerHandler = inner ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false } };   // stesse impostazioni del client di prodotto
 
     private void Add(Call call) => _calls.Enqueue(call);
 
@@ -438,15 +438,21 @@ internal sealed class RetrievalCallRecorder
             var (kind, inputs) = Describe(request.RequestUri?.AbsolutePath ?? string.Empty, body);
             var clock = Stopwatch.StartNew();
             var status = 0;
+            string? exception = null;
             try
             {
                 var response = await base.SendAsync(request, cancellationToken);
                 status = (int)response.StatusCode;
                 return response;
             }
+            catch (Exception e)
+            {
+                exception = e.GetType().Name;   // solo il tipo: nessun messaggio (potrebbe contenere URL con credenziali)
+                throw;
+            }
             finally
             {
-                recorder.Add(new Call(kind, recorder.Phase, inputs, clock.Elapsed.TotalMilliseconds, status, DateTimeOffset.UtcNow));
+                recorder.Add(new Call(kind, recorder.Phase, inputs, clock.Elapsed.TotalMilliseconds, status, DateTimeOffset.UtcNow, request.RequestUri?.AbsolutePath ?? string.Empty, exception));
             }
         }
     }
