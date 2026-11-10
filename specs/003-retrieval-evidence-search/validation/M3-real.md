@@ -81,3 +81,50 @@ T040 resta **aperto**; la prossima esecuzione DGX richiede nuova autorizzazione.
 **Preflight**: `RetrievalGapCampaign.RejectOptions` controlla le `AiOptions` RISOLTE dall'applicazione in prova (`App.Services`, le stesse che legge `DocumentEvidenceAgent`) prima di profilo, upload e inferenza: fattore ≠ 16 o etichetta diversa ⇒ NO-GO (`[STRUTTURALE] … NO-GO: nessun upload, nessuna inferenza`). `ValidateEnvironment` rifiuta `BPROJECTS_TEST_EXTRACTION_OUTPUT_EXPANSION` diversa da 16 (confronto numerico: «16» e «16.0» ok). Verificato offline per 8, 12, 16,5, 24; non è stato possibile provare il percorso reale (richiede DGX).
 
 **GO/NO-GO per il Run 2**: configurazione e harness: **GO** (offline). Il lancio richiede comunque una nuova autorizzazione esplicita e `BPROJECTS_TEST_DGX_ALLOW=1`. T040 resta aperto.
+
+## Run 2 — ExtractionOutputExpansion 16
+
+- Data: 2026-11-10, 22:41:50 → 23:24:13 (42 min 18 s), una sola esecuzione autorizzata, `BPROJECTS_TEST_DGX_ALLOW=1` solo per il processo. Nessun retry, nessuna modifica a configurazione, gold, soglie, attese, prompt, schema o planner.
+- Commit di partenza `ccb61a3`; manifesto v3, hash congelato `6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181` (calcolato da `BuildManifestJson()`, non dal file; verificato dai test offline). Copia v2 del Run 1 preservata (`T040-campaign-manifest-v2-run1.json`).
+- Comando: `dotnet test --solution bProjects.sln --no-build -- --filter-class "*RetrievalGapStageMafRealTests*"`; `--list-tests` con lo stesso filtro: 1 solo test (`Campaign.T040_…`).
+
+### Preflight (senza inferenza) — GO
+Build 0 errori/0 avvisi; 55 test offline verdi (`RetrievalGapCampaignTests`, `ExtractionOutputExpansionTests`; includono hash manifesto, confronto con v2, `RejectOptions`); router: `Qwen3.6-35B-Smart`, `bge-m3-Q5`, `bge-reranker-v2-m3` presenti (sonde `GET /models`, nessuna generazione); PostgreSQL di test (porta 15432) e parser reale (health 200) pronti; nessun altro processo T040. Le `AiOptions` risolte (fattore 16, etichetta `extraction-output-expansion-2026-11-10`) sono verificate dal preflight interno prima di profilo/upload: superato (il run è proseguito); profilo misurato W=32768, O=16384, M=1024, B=15360, thinking off (`RejectProfile` superato).
+
+### Risultati
+| Scenario | Esito | Dettaglio |
+|---|---|---|
+| Single | **Blocked** (39 PASS / 2 FAIL) | estrazione completata; indicizzazione fallita; run di analisi `Failed work_output_invalid` |
+| Multi | **NotRun** | per regola del sequencer (blocco in Single) |
+
+**Estrazione (obiettivo primario del Run 2): PASS.** `capitolato-aurora.txt` (117 blocchi, 5570 token = 0,36×B) → preparazione `Ready`, 8/8 porzioni `Completed`, copertura testo 21506/21505 car., 16/16 fatti gold presenti nel testo estratto, **0 chiamate `finish=length`**. Chiamate sul documento principale (8, tutte `finish=stop`, JSON parsabile; fonte `diag/20261110-214153-91da530f/summary.json`):
+
+| # | prompt tok | completion tok | durata s | evidenze |
+|---|---|---|---|---|
+| 1 | 3669 | 13439 | 227,8 | 46 |
+| 2 | 2488 | 3792 | 62,6 | 13 |
+| 3 | 3477 | 12757 | 216,7 | 45 |
+| 4 | 3081 | 8631 | 145,2 | 29 |
+| 5 | 3612 | 13993 | 239,8 | 48 |
+| 6 | 2853 | 7116 | 118,0 | 25 |
+| 7 | 3614 | 12466 | 209,5 | 44 |
+| 8 | 2915 | 7625 | 129,6 | 26 |
+| tot | 25709 | 79819 | 1349 | 276 |
+
+Massimo completamento 13993/16384 (85,4% di O): margine ridotto, il valore 16 basta in questa misura ma non con ampio margine (campione: 1 documento). Due documenti d'estensione: 1 chiamata ciascuna (356 e 306 token, 1 evidenza), `Ready`. Totale chiamate: Extraction 15 (1388 s, includono 5 estrazioni delle dichiarazioni del PM), Chat 5 (5 s), Analysis 5 (521 s); nessuna troncata. Il planner non persiste la stima per batch (`OwnedTokens` non persistito): la stima di output per batch è **NOT VERIFIED** (non ricostruita).
+
+**Indicizzazione: FAIL.** `RetrievalIndexMaintenance.RebuildAsync`: preparazioni=3, Ready=0, **Failed=3** in 0,3 s. Causa **non dimostrata**: il codice di errore tipizzato (`RetrievalException.Code`) è nello stato `RetrievalIndexStates` del database di test, eliminato a fine run, e i parametri EF non sono nel log; la durata di 0,3 s per tre preparazioni esclude un'embedding di 117+ blocchi completata. Classe: applicativa o infrastrutturale (readiness/embedding del router `sleeping`) — da accertare, non attribuita al modello. Nota: la verifica `[T040/PREPARAZIONE]` non ha interrotto il run, che è proseguito con indice vuoto.
+
+**Run di analisi: FAIL.** `Failed work_output_invalid`: «Output del batch `250fab41…` non valido (1 violazioni): items: ammessi solo nelle foglie della vista A (stadio leaf, vista B); le altre viste e gli altri stadi non propongono item». 5 chiamate Analysis, 521 s, nessuna `finish=length`. Non si sa se lo stadio fosse recupero, Gap o riconciliazione né se l'indice vuoto abbia determinato l'instradamento: le chiamate Analysis non sono nel recorder diagnostico del Run 2 (copre solo l'estrazione). Classe: output del modello non conforme al contratto (semantico) **oppure** conseguenza dell'indice fallito (applicativo): non distinguibile con le evidenze conservate.
+
+### NOT VERIFIED
+Routing verso retrieval, candidati per Gap, fasi di embedding/ricerca/fusione/reranking, Package Evidence e budget, esclusioni, latenze per Gap e condivise, esito dei cinque tipi di Gap, citazioni, conflitti preservati/persi, falsi `AnsweredInSnapshot`, Gap non valutati, token dello stadio, `coverage-3`, tutto lo scenario Multi.
+
+### Confronto con il Run 1 (unica differenza: fattore 8 → 16)
+Run 1: estrazione bloccata (`finish=length`, 16384 token, 282 s, 4 unità, 3 `parent_failed`). Run 2: 8 chiamate di estrazione, tutte `stop`, 1349 s, 79,8k token generati (stima pre-run 64–78k: leggermente sopra), preparazione `Ready`. La ricalibrazione a 16 ha rimosso il blocco di estrazione. Il Run 2 è però il primo a raggiungere indicizzazione e analisi, quindi i due blocchi successivi sono nuovi e non attribuibili al fattore.
+
+### Artefatti
+`T040-run2-summary.txt`, `T040-run2-state.json` (versionati, senza segreti); locali: log completo (49,7k righe EF SQL) in `%TEMP%\claude\…\scratchpad\t040-run2.log`, diagnostica `%TEMP%\bprojects-i5-real\diag\20261110-214153-91da530f\`, corpus `%TEMP%\bprojects-i5-real\T040-single-20261110214202\`.
+
+### Verdetto del gate
+**T040: FAIL/BLOCKED (non PASS).** Estrazione PASS; indicizzazione FAIL; analisi FAIL; Multi NotRun; nessun criterio di retrieval/Gap misurato. T040 resta `[ ]`. Nessuna seconda campagna avviata.

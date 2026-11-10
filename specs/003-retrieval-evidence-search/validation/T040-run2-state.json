@@ -1,0 +1,15 @@
+{
+  "campaign": "T040-retrieval-gap-1",
+  "steps": [
+    {
+      "Name": "T040-single",
+      "status": "Blocked",
+      "Detail": "TrueException: T040-single: 2 verifiche fallite: [T040/PREPARAZIONE] indice costruito per ogni preparazione Ready del progetto, nessun fallimento \u2014 preparazioni Ready=3 indici Ready=0 falliti=3 || [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) \u2014 Failed work_output_invalid: Output del batch 250fab41578578d322927dfc04cbcb4ddaf9598afa0b2544a33e9ff0842f4306 non valido (1 violazioni): items: ammessi solo nelle foglie della vista A (stadio leaf, vista B); le altre viste e gli altri stadi non propongono item."
+    },
+    {
+      "Name": "T040-multi",
+      "status": "NotRun",
+      "Detail": "non eseguito: T040-single ha incontrato un blocco, nessun rilancio automatico n\u00E9 altro corpus"
+    }
+  ]
+}
