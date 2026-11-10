@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using bProjects.App.AI;
 using bProjects.App.Documents;
 using bProjects.App.Evidence;
+using bProjects.App.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -28,8 +29,12 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         && DocumentTestEnvironment.ParserEndpoint is not null && Environment.GetEnvironmentVariable(RealParser.SecretVariable) is { Length: > 0 };
 
     /// <summary>Margine voluto sopra il minimo di 2x, perche il conteggio dei token dopo il parsing puo differire di poco da quello prima dell'invio.</summary>
-    private const double TargetRatio = 2.5;
-    private const double MinimumRatio = 2.0;
+    protected virtual double TargetRatio => 2.5;
+
+    protected virtual double MinimumRatio => 2.0;
+
+    /// <summary>Batch minimi della gerarchia (stadio Gap escluso): 2 per T082/T083; T150 dimensiona il corpus sul ledger e ne richiede almeno 1.</summary>
+    protected virtual int MinimumHierarchyBatches => 2;
 
     protected static readonly TimeSpan DocumentsTimeout = TimeSpan.FromMinutes(120);
     protected static readonly TimeSpan ChatTimeout = TimeSpan.FromMinutes(8);
@@ -72,6 +77,8 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         var parser = RealParser.Options();
         var diag = _diag = new ExtractionDiagnosticsRecorder(secrets: ExtractionDiagnosticsRecorder.EnvironmentSecrets(ai.ApiKey));
         services.PostConfigure<AiOptions>(o => CopyOptions(ai, o));
+        // Le prove DGX durano ore: il token di accesso di 10 minuti scadrebbe a meta preparazione (401 sul polling). Solo harness: nessun cambio al prodotto.
+        services.PostConfigure<AuthOptions>(o => o.AccessTokenMinutes = 12 * 60);
         services.Configure<ExecutionOptions>(o => o.AnalysisRunDeadlineSeconds = TestEnvironment.ProductionAnalysisRunDeadlineSeconds);
         services.Configure<ParserOptions>(o =>
         {
@@ -274,8 +281,13 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
 
         foreach (var (doc, id) in uploaded)
         {
-            var status = await Poll(async () => (await Json(await client.GetAsync($"/api/projects/{project}/documents/{id}", Ct))).GetProperty("versions")[0].GetProperty("processingStatus").GetString()!,
-                s => s is "Ready" or "Failed" or "Incomplete" or "Rejected", DocumentsTimeout);
+            var status = await Poll(async () =>
+                {
+                    var reply = await client.GetAsync($"/api/projects/{project}/documents/{id}", Ct);
+                    var body = await Json(reply);
+                    return body.TryGetProperty("versions", out var versions) ? versions[0].GetProperty("processingStatus").GetString()! : $"HTTP{(int)reply.StatusCode}:{Short(body.GetRawText(), 300)}";
+                },
+                s => s is "Ready" or "Failed" or "Incomplete" or "Rejected" || s.StartsWith("HTTP", StringComparison.Ordinal), DocumentsTimeout);
             var detail = status;
             if (status != "Ready")
             {
@@ -352,7 +364,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         v.Note($"gerarchia: batch={batches} nodi di catalogo={nodes} output reconcile-alias-1={aliasOutputs} output a chiamata singola={singleOutputs} chiamate del run={calls}");
         var stageBatches = GapStageExpected ? 1 : 0;
         v.Check("[STRUTTURALE] l'analisi e passata dalla riconciliazione gerarchica (batch di riconciliazione e nodi di catalogo presenti, nessun output a chiamata singola)",
-            batches - stageBatches > 1 && nodes > 0 && aliasOutputs == batches - stageBatches && singleOutputs == 0, $"batch={batches} (stadio Gap atteso={stageBatches}) nodi={nodes} alias={aliasOutputs} singola={singleOutputs}");
+            batches - stageBatches >= MinimumHierarchyBatches && nodes > 0 && aliasOutputs == batches - stageBatches && singleOutputs == 0, $"batch={batches} (stadio Gap atteso={stageBatches}) nodi={nodes} alias={aliasOutputs} singola={singleOutputs}");
         v.Check("[STRUTTURALE] il run ha usato piu di una chiamata al modello (CallCount maggiore di 1)", calls > 1, $"CallCount={calls}");
         var openWork = await Count(RunSignalSql.OpenCandidates, args);
         var badPatches = await Count(RunSignalSql.BadPatches, args);

@@ -26,6 +26,15 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override bool GapStageExpected => true;
 
+    // Dimensionamento sul LEDGER, non sul testo grezzo (finding T150 del 2026-11-10): con testo > 2xB il ledger (~0,8x il testo, ~104 token per evidenza) supera il budget di input dello
+    // stadio e il run termina, come da contratto, con gap_ledger_exceeds_input (perimetro non coperto della 002). L'instradamento (b1) richiede invece solo che la chiamata singola non
+    // sia affidabile: la stima di output (single-call-output-estimate-1) supera O gia a ~100 evidenze (~10k token di ledger). Target 0,95xB di testo => ledger ~0,75xB, sotto B meno la maggiorazione.
+    protected override double TargetRatio => 0.95;
+
+    protected override double MinimumRatio => 0.5;
+
+    protected override int MinimumHierarchyBatches => 1;
+
     /// <summary>Attesa annotata per una domanda: parola chiave nell'enunciato del Gap, esito, motivi ammessi e citazioni dei supporti.</summary>
     protected sealed record Expectation(string Id, string QuestionToken, string Outcome, string[] Reasons, string[][] SupportQuotes, bool ExpectOpenConflict, bool ExpectProvenAbsence);
 
@@ -204,7 +213,7 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
         {
             TestEnvironment.RequireDgx();
             await Require();
-            await RunScenarioAsync("T150-single", filler => LargeDocumentCorpus.Single(filler, 260));
+            await RunScenarioAsync("T150-single", filler => LargeDocumentCorpus.Single(filler, 90));
         }
     }
 
@@ -224,7 +233,7 @@ public abstract class DocumentGapStageMafRealTests : LargeDocumentRealFlow
         {
             TestEnvironment.RequireDgx();
             await Require();
-            await RunScenarioAsync("T150-multi", filler => LargeDocumentCorpus.Multi(filler, 90));
+            await RunScenarioAsync("T150-multi", filler => LargeDocumentCorpus.Multi(filler, 30));
         }
     }
 }
