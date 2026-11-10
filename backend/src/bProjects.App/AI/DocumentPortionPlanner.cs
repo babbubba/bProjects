@@ -33,6 +33,16 @@ public sealed record PlannerLimits(int InputBudgetTokens, int OutputTokens, doub
 {
     public const double DefaultOutputExpansion = 8.0;
 
+    /// <summary>
+    /// Fattore CANDIDATO per l'estrazione dei documenti (003 T040, 2026-11-10): il Run 1 ha osservato almeno 11,46 token generati per token posseduto con testo denso di regole
+    /// (una evidenza ~282 token per frase), contro 8,0. Valore preventivo non ancora validato da una misura reale completa; è l'unico punto di verità del default e si imposta con
+    /// <c>Ai:ExtractionOutputExpansion</c>. Non cambia <see cref="DefaultOutputExpansion"/> (usato da chiamanti con fattore proprio e dai test del planner).
+    /// </summary>
+    public const double ExtractionCandidateOutputExpansion = 16.0;
+
+    /// <summary>Etichetta della calibrazione: entra nell'hash di configurazione del manifesto (il fattore è registrato anche in <c>limits</c> del piano dove già previsto), così un valore/regola diversa non riusa un piano pubblicato.</summary>
+    public const string ExtractionCalibrationVersion = "extraction-output-expansion-2026-11-10";
+
     public bool Fits(UnitMeasure m) =>
         m.Quality != TokenCountQuality.Unavailable && m.Tokens <= InputBudgetTokens
         && Math.Ceiling(m.OwnedTokens * OutputExpansion) <= OutputTokens;

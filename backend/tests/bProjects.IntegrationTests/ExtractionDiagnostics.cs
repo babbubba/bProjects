@@ -81,7 +81,7 @@ internal sealed class CapturedCall
 internal sealed partial class ExtractionDiagnosticsRecorder
 {
     /// <summary>Moltiplicatore con cui il planner stima l'output (<c>OwnedTokens x OutputExpansion</c>): il default di produzione, congelato nel manifesto.</summary>
-    public const double PlannerOutputExpansion = PlannerLimits.DefaultOutputExpansion;
+    public const double PlannerOutputExpansion = PlannerLimits.ExtractionCandidateOutputExpansion;
 
     private static readonly JsonSerializerOptions Pretty = new() { WriteIndented = true };
     private static readonly Regex Range = RangeRegex();

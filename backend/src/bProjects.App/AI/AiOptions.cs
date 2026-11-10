@@ -97,6 +97,12 @@ public sealed class AiOptions
 
     public int MaxOutputTokens { get; set; } = 4096;
 
+    /// <summary>
+    /// Moltiplicatore con cui il planner stima l'output dell'estrazione dei documenti (<c>token posseduti × fattore</c> ≤ output di fase, altrimenti l'unità si divide).
+    /// Candidato 16 (vedi <see cref="PlannerLimits.ExtractionCandidateOutputExpansion"/>); entra nell'hash di configurazione del manifesto: un valore diverso non riusa un piano già pubblicato.
+    /// </summary>
+    public double ExtractionOutputExpansion { get; set; } = PlannerLimits.ExtractionCandidateOutputExpansion;
+
     public int SafetyMarginTokens { get; set; } = 1024;
 
     /// <summary>Soglia di attivazione della compattazione; 0 = uguale al budget di input.</summary>
@@ -177,6 +183,11 @@ public sealed class AiOptionsValidator : Microsoft.Extensions.Options.IValidateO
         if (string.IsNullOrWhiteSpace(o.ApiKey))
         {
             errors.Add("Ai:ApiKey è obbligatoria e va fornita fuori dal repository.");
+        }
+
+        if (!double.IsFinite(o.ExtractionOutputExpansion) || o.ExtractionOutputExpansion < 1 || o.ExtractionOutputExpansion > 64)
+        {
+            errors.Add("Ai:ExtractionOutputExpansion deve essere un numero fra 1 e 64.");
         }
 
         if (o.ContextWindowTokens <= 0 || o.MaxOutputTokens <= 0 || o.SafetyMarginTokens <= 0)

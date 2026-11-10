@@ -59,6 +59,7 @@ services:
       Ai__Phases__Compaction__RequestTimeoutSeconds: ${AI_COMPACTION_REQUEST_TIMEOUT_SECONDS:-}
       # Estrazione delle evidenze (registro atomico): una chiamata con schema per messaggio PM, senza ragionamento di default; un messaggio
       # ricco di fatti produce molte evidenze, da qui il tetto di output più ampio di quello globale.
+      Ai__ExtractionOutputExpansion: ${AI_EXTRACTION_OUTPUT_EXPANSION:-16}
       Ai__Phases__Extraction__ModelId: ${AI_EXTRACTION_MODEL_ID:-}
       Ai__Phases__Extraction__MaxOutputTokens: ${AI_EXTRACTION_MAX_OUTPUT_TOKENS:-16384}
       Ai__Phases__Extraction__EnableThinking: ${AI_EXTRACTION_ENABLE_THINKING:-false}

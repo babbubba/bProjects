@@ -473,6 +473,7 @@ public sealed partial class DocumentEvidenceAgentTests
             {
                 Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = FakeUnitModel.Window,
                 MaxOutputTokens = 1500, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60,
+                ExtractionOutputExpansion = PlannerLimits.DefaultOutputExpansion,   // fixture dimensionata sul fattore 8: questi test verificano meccaniche (tetti, retry), non la calibrazione (ExtractionOutputExpansionTests)
             };
             using var client = new InternalModelClient(options, model);
             var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
@@ -488,6 +489,7 @@ public sealed partial class DocumentEvidenceAgentTests
             {
                 Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = FakeUnitModel.Window,
                 MaxOutputTokens = 1500, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60,
+                ExtractionOutputExpansion = PlannerLimits.DefaultOutputExpansion,   // fixture dimensionata sul fattore 8: questi test verificano meccaniche (tetti, retry), non la calibrazione (ExtractionOutputExpansionTests)
             };
             using var client = new InternalModelClient(options, model);
             var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);

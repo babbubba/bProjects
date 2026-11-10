@@ -135,7 +135,7 @@ public sealed class DocumentEvidenceAgent(
         {
             profile = await factory.Preflight.ResolveProfileAsync(AiPhase.Extraction, ct);
         }
-        var limits = new PlannerLimits(profile.InputBudgetTokens, profile.OutputTokens);
+        var limits = new PlannerLimits(profile.InputBudgetTokens, profile.OutputTokens, factory.Options.ExtractionOutputExpansion);
         var structured = factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema;
         var promptVersion = EffectivePromptVersion(claim.ConfigJson);
         var partitionSpan = DocumentTiming.Span("agent.partition");
@@ -387,7 +387,7 @@ internal sealed class DocumentExtractionPlan : IDocumentBatchPlan, IGuidedRetryP
             prompt = promptVersion, instructions = DocumentEvidenceAgent.Sha(DocumentEvidenceAgent.InstructionsFor(promptVersion)),
             schema = DocumentEvidenceContent.SchemaVersionValue, schemaName = DocumentEvidenceSchema.Name, structured,
             model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking,
-            inputBudget = limits.InputBudgetTokens, outputTokens = limits.OutputTokens, outputExpansion = limits.OutputExpansion,
+            inputBudget = limits.InputBudgetTokens, outputTokens = limits.OutputTokens, outputExpansion = limits.OutputExpansion, expansionCalibration = PlannerLimits.ExtractionCalibrationVersion,
         }));
         var graph = new JsonArray(DocumentBatchWorkflow.Stages.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray());
         var batches = new JsonArray(partition.Batches.Select(b => JsonNode.Parse(DocumentPortionPlanner.DescribeInputs(b))!).ToArray());
