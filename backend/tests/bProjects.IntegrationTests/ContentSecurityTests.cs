@@ -317,12 +317,14 @@ public sealed class ContentSecurityTests : IAsyncLifetime
             // Limiti dei documenti (slice 002, contracts/http-api.md): unico endpoint di amministrazione, ruolo Admin (T005).
             "GET /api/admin/document-limits",
             "PUT /api/admin/document-limits",
+            // Registro del recupero in sola lettura (slice 003, contracts/index-and-registry.md §API; T033).
+            $"GET {p}/analyses/{{analysisId:guid}}/retrieval-registry",
         ];
         var actual = routes.Select(r => $"{r.Method} {r.Pattern}{(r.Anonymous ? " (anonimo)" : "")}").ToList();
         Assert.Equal(contract.Order(StringComparer.Ordinal), actual.Order(StringComparer.Ordinal));
 
         var protectedRoutes = routes.Where(r => !r.Anonymous).ToList();
-        Assert.Equal(52, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, rielaborazione e promozione del bundle, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin)
+        Assert.Equal(53, protectedRoutes.Count); // 16 della slice + 17 del registro delle evidenze + 14 archivio, preparazione, passaggi, retry, versioni Evidence documentali, rielaborazione e promozione del bundle, coverage di preparazione e preferenze documenti + 2 limiti documenti (Admin) + 1 registro del recupero (003)
         var valid = Token();
         var tokens = new (string Name, string Token, HttpStatusCode Expected)[]
         {

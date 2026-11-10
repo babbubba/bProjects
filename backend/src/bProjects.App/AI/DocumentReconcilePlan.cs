@@ -888,6 +888,21 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
         var gaps = _alias.RunCatalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).ToList();
         var registry = _gap!.Retrieval is null ? null : await CommittedRegistryAsync(prior, ct);
+        if (registry is not null)
+        {
+            // Sorgente `retrieval` (003 T038): il modello ha visto SOLO i candidati del pacchetto; un supporto che non è fra essi (anche se esiste nel ledger) non è un riscontro fornito.
+            // Nessuna correzione silenziosa: output non valido, terminale come ogni altra violazione (le regole condivise della 002 restano invariate).
+            var packageIds = registry.PackageEvidence.ToHashSet();
+            var offered = _alias.RunCatalog.Data.Evidence.Where(e => packageIds.Contains(e.EvidenceId)).Select(e => e.Alias).ToHashSet(StringComparer.Ordinal);
+            var notOffered = validation.Output!.GapAssessments.SelectMany(a => a.SupportingEvidence).Where(alias => !offered.Contains(alias)).Distinct(StringComparer.Ordinal).ToList();
+            if (notOffered.Count > 0)
+            {
+                throw new DocumentWorkException(
+                    DocumentWorkException.WorkOutputInvalid,
+                    $"Output dello stadio Gap non valido (1 violazione): supporti non presenti fra i candidati recuperati forniti: {string.Join(", ", notOffered.Take(8))}.");
+            }
+        }
+
         var payload = registry is null
             ? GapStagePayload.Build(validation, _alias.RunCatalog, state.References, _alias.RunCatalog.Data.Evidence.Count - gaps.Count, gaps.Count)
             : GapStagePayload.Build(validation, _alias.RunCatalog, state.References, registry.PackageEvidence.Count, gaps.Count, CandidateRegistry.SearchBasis, registry.RetrievalComplete);
