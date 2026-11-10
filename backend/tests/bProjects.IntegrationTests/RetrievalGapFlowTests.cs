@@ -1,0 +1,509 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using bProjects.App.AI;
+using bProjects.App.Analysis;
+using bProjects.App.Documents;
+using bProjects.App.Evidence;
+using bProjects.App.Persistence;
+using bProjects.App.Retrieval;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+
+namespace bProjects.IntegrationTests;
+
+/// <summary>
+/// 003 T036 (MAF-PG) — percorso completo OFFLINE: documenti con blocchi e evidenze → indice (embedding finto) → run Analizza v7 dal vero POST → gerarchia → batch deterministico `retrieval`
+/// (ricerca ibrida PostgreSQL + riordino finto) → UNA chiamata dello stadio Gap sul pacchetto recuperato → assemble e commit. PostgreSQL e MAF 1.26.0 reali; embedding, riordino e LLM FINTI
+/// (il modello finto legge SOLO il messaggio inviato). Dimostrano il protocollo e l'integrazione, non la qualità dei modelli reali.
+/// </summary>
+[Trait("Category", TestCategories.Integration)]
+public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
+{
+    private const string GapPresent = "Serve una fideiussione bancaria per la fornitura?";
+    private const string GapPartial = "Quali sono i termini e le penali del collaudo finale?";
+    private const string GapConflict = "In quanti giorni viene pagata la fattura del cliente?";
+    private const string GapExcluded = "Quale garanzia vale sui ricambi della sede di Torino?";
+
+    private const string FactPresent = "La fideiussione bancaria è richiesta per importi sopra cinquantamila euro.";
+    private const string FactPartial = "Il collaudo finale prevede un termine massimo di quindici giorni lavorativi.";
+    private const string FactSideA = "Il contratto prevede il pagamento a trenta giorni dalla fattura.";
+    private const string FactSideB = "Il cliente ha dichiarato il pagamento a quarantacinque giorni dalla fattura.";
+    private const string FactExcluded = "La garanzia sui ricambi della sede di Torino dura ventiquattro mesi.";
+
+    private readonly FakeEmbeddingServer _embedding = new();
+    private readonly FakeRerankServer _rerank = new() { Scores = Overlap };
+    private readonly RetrievalRig _rig;
+
+    public RetrievalGapFlowTests()
+    {
+        _rig = new RetrievalRig(_embedding, _rerank);
+    }
+
+    public void Dispose() => _rig.Dispose();
+
+    protected override void ConfigureServices(IServiceCollection services)
+    {
+        services.Configure<RetrievalOptions>(o =>
+        {
+            o.Enabled = true;
+            o.AllowedHosts = ["dgx.internal"];
+            o.PolicyVersion = RetrievalPolicy.Version1;
+            o.Embedding.Endpoint = _rig.Options.Embedding.Endpoint;
+            o.Embedding.ApiKey = _rig.Options.Embedding.ApiKey;
+            o.Reranker.Endpoint = _rig.Options.Reranker.Endpoint;
+            o.Reranker.ApiKey = _rig.Options.Reranker.ApiKey;
+        });
+        services.AddSingleton(_rig.Embedding);
+        services.AddSingleton(_rig.Reranker!);
+        services.AddSingleton(_rig.Readiness);
+    }
+
+    /// <summary>Riordino finto deterministico: numero di parole (≥ 5 lettere) dell'interrogazione contenute nel passaggio. Il modello reale non è in gioco.</summary>
+    private static double[] Overlap(string query, string[] docs)
+    {
+        static HashSet<string> Words(string text) => [.. Regex.Matches(text.ToLowerInvariant(), @"[\p{L}\d]{5,}").Select(m => m.Value)];
+        var q = Words(query);
+        return [.. docs.Select(d => (double)Words(d).Count(q.Contains))];
+    }
+
+    // ================================================================ modello finto: gerarchia + stadio che legge SOLO i candidati ricevuti
+
+    private sealed record Voice(string Alias, string Kind, string? Question, string Statement);
+
+    private static List<Voice> Voices(string text) =>
+        [.. Regex.Matches(text, @"<<<VOCE \[(E\d+)\] origine=\w+ tipo=(\w+)[^>\n]*?(?: domandaCanonica=(i\d+))?>>>\n([^\n]*)\n")
+            .Select(m => new Voice(m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Success ? m.Groups[3].Value : null, m.Groups[4].Value))];
+
+    private static JsonObject Assessment(string gap, string outcome, string reason, string[] support, string? openItem) => new()
+    {
+        ["gap"] = gap, ["outcome"] = outcome, ["reason"] = reason, ["rationale"] = "Valutazione sui soli candidati ricevuti.", ["supportingEvidence"] = new JsonArray([.. support.Select(s => (JsonNode)JsonValue.Create(s)!)]),
+        ["openItem"] = openItem, ["openConflict"] = null,
+    };
+
+    internal static string Stage(DocumentChatWorkflowTests.ChatRequest request)
+    {
+        var voices = Voices(request.AllText);
+        var candidates = voices.Where(v => v.Kind != "Gap").ToList();
+        string[] Having(string needle) => [.. candidates.Where(c => c.Statement.Contains(needle, StringComparison.Ordinal)).Select(c => c.Alias)];
+        var records = new JsonArray();
+        foreach (var gap in voices.Where(v => v.Kind == "Gap"))
+        {
+            records.Add(gap.Statement switch
+            {
+                GapPresent => Assessment(gap.Alias, "AnsweredInSnapshot", "Answered", Having("fideiussione"), null),
+                GapPartial => Assessment(gap.Alias, "Open", "Partial", Having("collaudo"), gap.Question),
+                // Conflitto: entrambi i lati sono riscontri e l'esito resta Open (nessun arbitrato).
+                GapConflict => Assessment(gap.Alias, "Open", "Ambiguous", Having("giorni dalla fattura"), gap.Question),
+                _ => Assessment(gap.Alias, "Open", "NoAnswer", [], gap.Question),
+            });
+        }
+
+        return new JsonObject { ["contract"] = "gap-stage-1", ["gapAssessments"] = records }.ToJsonString();
+    }
+
+    /// <summary>Gerarchia v4-equivalente del modello finto (enunciati liberi: gli helper della 002 numerano «Requisito N»): una voce per evidenza nella foglia A, i Gap come domande aperte.</summary>
+    internal static string Hierarchy(DocumentChatWorkflowTests.ChatRequest request)
+    {
+        var p = DocumentReconcileAliasWorkflowTests.ParseAlias(request.AllText);
+        var gaps = Voices(request.AllText).Where(v => v.Kind == "Gap").Select(v => v.Alias).ToHashSet(StringComparer.Ordinal);
+        var items = new JsonArray();
+        if (p is { Stage: "leaf", View: "A" })
+        {
+            var n = 0;
+            foreach (var (alias, statement) in p.Voci)
+            {
+                n++;
+                items.Add(JsonNode.Parse(JsonSerializer.Serialize(new { key = $"i{n}", section = gaps.Contains(alias) ? "openQuestions" : "requirements", text = statement, classification = "Documented", evidence = new[] { alias } })));
+            }
+        }
+
+        return new JsonObject
+        {
+            ["contract"] = "reconcile-alias-1",
+            ["descriptor"] = p.Stage is "leaf" or "reduce" ? $"gruppo {p.Stage} {p.View} {string.Join('-', p.Voci.Select(v => v.Alias).Concat(p.Nodes))}" : null,
+            ["noFindings"] = items.Count > 0 ? null : "nessun collegamento emerso",
+            ["items"] = items,
+            ["candidates"] = new JsonArray(),
+            ["focus"] = p.Stage == "compare" ? JsonNode.Parse("""{"outcome":"Compared","reason":null}""") : null,
+            ["patches"] = new JsonArray(),
+        }.ToJsonString();
+    }
+
+    private static string Respond(DocumentChatWorkflowTests.ChatRequest request) =>
+        DocumentGapStageWorkflowTests.IsStage(request) ? Stage(request) : Hierarchy(request);
+
+    // ================================================================ corpus sintetico con blocchi, preparazioni, evidenze e indice
+
+    private sealed record Seeded(Guid Document, Guid Version, Guid Preparation, IReadOnlyList<Guid> Blocks, IReadOnlyList<Guid> Evidence);
+
+    private async Task<Seeded> NewRetrievalDocument(HttpClient client, Guid project, string name, params (EvidenceKind Kind, string Text)[] items)
+    {
+        var created = await Json(await Upload(client, project, Text(name), name + ".txt", displayName: name));
+        var (documentId, versionId) = (created.GetProperty("documentId").GetGuid(), created.GetProperty("id").GetGuid());
+        using var scope = App.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var preparation = await db.DocumentPreparations.SingleAsync(p => p.DocumentVersionId == versionId, Ct);
+        var (artifact, job, version) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var blocks = items.Select(_ => Guid.NewGuid()).ToList();
+        var now = DateTimeOffset.UtcNow;
+
+        // Blocchi e artefatto: la seminagione salta le FK del solo parsing (session_replication_role), come nel kit del recupero.
+        await using (var connection = new NpgsqlConnection(db.Database.GetConnectionString()))
+        {
+            await connection.OpenAsync(Ct);
+            await new NpgsqlCommand("SET session_replication_role = replica", connection).ExecuteNonQueryAsync(Ct);
+            await using var seed = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+            seed.ParsedArtifacts.Add(new ParsedArtifact
+            {
+                Id = artifact, ProjectId = preparation.ProjectId, PreparationId = preparation.Id, JobId = Guid.NewGuid(), FencingToken = 1, SchemaVersion = "parsed-1.0.0",
+                StorageKey = "k/" + Guid.NewGuid().ToString("N"), Sha256 = new string('a', 64), ByteLength = 10, ParserConfigHash = new string('b', 64), BlockCount = items.Length,
+            });
+            for (var i = 0; i < items.Length; i++)
+            {
+                seed.DocumentBlocks.Add(new DocumentBlock
+                {
+                    Id = blocks[i], ProjectId = preparation.ProjectId, ArtifactId = artifact, Ordinal = i, Ref = $"b{i}", Type = BlockType.Paragraph, CanonicalText = items[i].Text,
+                    TextHash = DocumentTestFixtures.Sha256(items[i].Text), HeadingPathJson = JsonSerializer.Serialize(new[] { name }),
+                });
+            }
+
+            await seed.SaveChangesAsync(Ct);
+        }
+
+        db.EvidenceExtractionJobs.Add(new EvidenceExtractionJob
+        {
+            Id = job, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Reason = ExtractionJobReason.Initial,
+            Status = ExtractionJobStatus.Queued, RequestedAt = now, DeadlineAt = now.AddHours(1), MaxAttempts = 3, ExtractorConfig = "{}",
+        });
+        db.EvidenceExtractionVersions.Add(new EvidenceExtractionVersion
+        {
+            Id = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, ManifestHash = new string('1', 64),
+            Version = 1, JobId = job, SchemaVersion = "evidence-1.1.0", PromptVersion = "document-extraction-v2", ModelId = "m", Parameters = "{}", EvidenceCount = items.Length, CreatedAt = now,
+        });
+        await db.SaveChangesAsync(Ct);
+        var evidence = new List<Guid>();
+        for (var i = 0; i < items.Length; i++)
+        {
+            var content = new DocumentEvidenceContent
+            {
+                SchemaVersion = DocumentEvidenceContent.SchemaVersionValue,
+                KindRationale = null,
+                Structure = new DocumentEvidenceStructure { Subject = null, Action = null, Object = null, Scope = null, Purpose = null, Instrument = null, Channel = null, Recipient = null },
+                Qualifiers = [],
+                Sources =
+                [
+                    new PersistedSource
+                    {
+                        SourceId = Guid.NewGuid(), Kind = EvidenceSourceKind.DocumentPassage, Role = EvidenceSourceRole.Primary, CitationGroupId = Guid.NewGuid(), Part = 0,
+                        MessageId = null, Sequence = null, DocumentId = documentId, DocumentVersionId = versionId, PreparationId = preparation.Id,
+                        ArtifactId = artifact, BlockId = blocks[i], Start = 0, End = items[i].Text.Length, Quote = items[i].Text,
+                    },
+                ],
+            };
+            var id = Guid.NewGuid();
+            evidence.Add(id);
+            db.Evidences.Add(new EvidenceItem
+            {
+                Id = id, VersionId = version, ProjectId = preparation.ProjectId, OriginKind = EvidenceOriginKind.Document, PreparationId = preparation.Id, Ordinal = i + 1,
+                Key = "e" + (i + 1), Kind = items[i].Kind, Polarity = EvidencePolarity.Affirmed, Certainty = EvidenceCertainty.Declared, Statement = items[i].Text,
+                Content = DocumentEvidenceCodec.EncodeContent(content),
+            });
+        }
+
+        db.EvidenceDocumentStates.Add(new EvidenceDocumentState
+        {
+            DocumentVersionId = versionId, ProjectId = preparation.ProjectId, CurrentPreparationId = preparation.Id, CurrentEvidenceVersionId = version, Revision = 1, UpdatedAt = now,
+        });
+        await db.SaveChangesAsync(Ct);
+        preparation.Status = PreparationStatus.Ready;
+        preparation.ParserVersion = "parser-1";
+        preparation.CurrentEvidenceVersionId = version;
+        await db.SaveChangesAsync(Ct);
+        await db.ProjectDocuments.Where(d => d.Id == documentId).ExecuteUpdateAsync(x => x.SetProperty(d => d.LatestReadyVersionId, versionId), Ct);
+
+        var built = await _rig.Builder(db).BuildAsync(preparation.Id, Ct);
+        Assert.Equal(RetrievalIndexStatus.Ready, built.Status);
+        return new(documentId, versionId, preparation.Id, blocks, evidence);
+    }
+
+    private static string Filler(int n, int words) => $"Voce {n}: " + string.Join(' ', Enumerable.Range(0, words).Select(i => $"q{n}z{i}"));
+
+    private sealed record Scenario(Guid Project, Guid Run, AnalysisRunClaim Claim, Seeded Excluded, Seeded Conflict, Seeded Facts);
+
+    /// <summary>Progetto con i quattro Gap annotati, i fatti (uno solo lato di un conflitto per documento), un documento ESCLUSO dal PM e <paramref name="fillers"/> documenti di riempimento.</summary>
+    private async Task<Scenario> ArrangeAsync(int fillers = 12, int fillerWords = 90)
+    {
+        using var client = await App.LoginAsync();
+        var project = await NewProject(client);
+        var gaps = await NewRetrievalDocument(client, project, "domande", (EvidenceKind.Gap, GapPresent), (EvidenceKind.Gap, GapPartial), (EvidenceKind.Gap, GapConflict), (EvidenceKind.Gap, GapExcluded));
+        var facts = await NewRetrievalDocument(client, project, "contratto", (EvidenceKind.Requirement, FactPresent), (EvidenceKind.Requirement, FactPartial), (EvidenceKind.Requirement, FactSideA));
+        var conflict = await NewRetrievalDocument(client, project, "email-cliente", (EvidenceKind.Requirement, FactSideB));
+        var excluded = await NewRetrievalDocument(client, project, "garanzie-torino", (EvidenceKind.Requirement, FactExcluded));
+        for (var n = 1; n <= fillers; n++)
+        {
+            await NewRetrievalDocument(client, project, $"allegato{n}", (EvidenceKind.Requirement, Filler(n, fillerWords)));
+        }
+
+        // Esclusione del PM: If-Match sulla revisione corrente della selezione (0).
+        var put = new HttpRequestMessage(HttpMethod.Put, $"/api/projects/{project}/source-selection")
+        {
+            Content = JsonContent.Create(new { items = new[] { new { documentId = excluded.Document, included = false, mode = "LatestReady", versionId = (Guid?)null } } }),
+        };
+        put.Headers.TryAddWithoutValidation("If-Match", "\"0\"");
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(put, Ct)).StatusCode);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/projects/{project}/analyses");
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var response = await client.SendAsync(request, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var run = (await Json(response)).GetProperty("id").GetGuid();
+        return new(project, run, await ClaimAsync(run), excluded, conflict, facts);
+    }
+
+    private async Task<(string Status, string Code, string Message, int Calls)> RunRow(Guid run) => (
+        await Scalar<string>("SELECT \"Status\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)),
+        await Scalar<string>("SELECT coalesce(\"ErrorCode\",'') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)),
+        await Scalar<string>("SELECT coalesce(\"ErrorMessage\",'') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)),
+        await Scalar<int>("SELECT coalesce(\"CallCount\",0) FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));
+
+    private Task<long> Outputs(Guid run, string schema) => Count(
+        "SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Status\" = 'Committed' AND \"SchemaVersion\" = @s", ("r", run), ("s", schema));
+
+    private async Task<RetrievalRegistry> RegistryOf(Guid run) =>
+        RetrievalOutput.Read(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'retrieval-output-1'", ("r", run)));
+
+    // ================================================================ freeze e percorso felice
+
+    [Fact]
+    public async Task The_real_analyze_endpoint_freezes_v7_when_retrieval_is_enabled()
+    {
+        var s = await ArrangeAsync(fillers: 1, fillerWords: 5);
+
+        Assert.Equal("project-analysis-documents-v7", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
+        using var scope = App.Services.CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().ProcessingRuns.FindAsync([s.Run], Ct);
+        Assert.Equal(7, DocumentAnalysisWorkflow.ContractOf(row!));
+        Assert.Equal(RetrievalPolicy.Version1, JsonDocument.Parse(row!.PromptVersions!).RootElement.GetProperty("retrievalPolicy").GetString());
+    }
+
+    [Fact]
+    public async Task A_ledger_beyond_the_stage_budget_completes_with_one_stage_call_on_the_retrieved_package_and_no_llm_call_for_the_retrieval()
+    {
+        var s = await ArrangeAsync();
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        Assert.DoesNotContain("gap_ledger_exceeds_input", row.Message, StringComparison.Ordinal);
+
+        // Esattamente UNA chiamata dello stadio, dopo la gerarchia; il recupero non consuma chiamate LLM: CallCount = invii reali al modello.
+        var stage = Assert.Single(model.Requests, DocumentGapStageWorkflowTests.IsStage);
+        Assert.True(DocumentGapStageWorkflowTests.IsStage(model.Requests[^1]));
+        Assert.Equal(model.Requests.Count, row.Calls);
+        Assert.Equal(1, await Outputs(s.Run, "gap-stage-alias-1"));
+        Assert.Equal(1, await Outputs(s.Run, "retrieval-output-1"));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'retrieval'", ("r", s.Run)));
+        var hierarchy = model.Requests.Count - 1;
+        Assert.Equal(hierarchy, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'retrieval'", ("r", s.Run)));
+        Assert.Equal(hierarchy + 1, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'gap'", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v7", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+
+        // Registro congelato nel WorkOutput: pacchetto consegnabile, ordine, politica e hash.
+        var registry = await RegistryOf(s.Run);
+        Assert.Equal((CandidateRegistry.OutcomePackage, CandidateRegistry.SearchBasis, RetrievalPolicy.Version1), (registry.Outcome, registry.SearchBasis, registry.PolicyVersion));
+        Assert.Equal(RetrievalPolicy.V1.Hash(), registry.PolicyHash);
+        Assert.Equal(4, registry.Gaps.Count);
+        Assert.NotEmpty(registry.PackageEvidence);
+        Assert.Equal(registry.PackageEvidence.Count, await RegistryPackageCandidates(stage.AllText));
+
+        // Il messaggio dichiara la sorgente: non è il ledger completo.
+        Assert.Contains("searchBasis: retrieval", stage.AllText, StringComparison.Ordinal);
+        Assert.Contains($"retrievalComplete: {(registry.RetrievalComplete ? "true" : "false")}", stage.AllText, StringComparison.Ordinal);
+        Assert.Contains("NON il ledger completo", stage.AllText, StringComparison.Ordinal);
+        Assert.DoesNotContain("tutte, senza ranking", stage.AllText, StringComparison.Ordinal);
+
+        // Candidati: i fatti pertinenti ci sono, entrambi i lati del conflitto, MAI il documento escluso.
+        foreach (var fact in new[] { FactPresent, FactPartial, FactSideA, FactSideB })
+        {
+            Assert.Contains(fact + "\n<<<FONTE", stage.AllText, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain(FactExcluded, stage.AllText, StringComparison.Ordinal);
+        Assert.DoesNotContain("garanzie-torino", stage.AllText, StringComparison.Ordinal);
+        Assert.All(registry.Gaps.SelectMany(g => g.Candidates), c => Assert.NotEqual(s.Excluded.Document, c.DocumentId));
+        Assert.DoesNotContain(s.Excluded.Evidence[0], registry.PackageEvidence);
+        // Il recupero non è un invio: nessun UUID, hash o offset nel testo per il modello.
+        Assert.DoesNotMatch("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-", stage.AllText);
+
+        // Ogni Gap ha un esito e i supporti sono passaggi originali recuperati (alias dei candidati forniti).
+        var payload = JsonDocument.Parse(await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1'", ("r", s.Run)));
+        var records = payload.RootElement.GetProperty("gapAssessments").EnumerateArray().ToList();
+        Assert.Equal(4, records.Count);
+        Assert.Equal("Complete", payload.RootElement.GetProperty("outcome").GetString());
+        var stageInfo = payload.RootElement.GetProperty("stage");
+        Assert.Equal(("retrieval", registry.RetrievalComplete, registry.PackageEvidence.Count), (stageInfo.GetProperty("searchBasis").GetString(), stageInfo.GetProperty("retrievalComplete").GetBoolean(), stageInfo.GetProperty("candidates").GetInt32()));
+        Assert.Equal(["Answered", "Partial", "Ambiguous", "NoAnswer"], records.Select(r => r.GetProperty("reason").GetString()).OrderBy(x => x == "Answered" ? 0 : x == "Partial" ? 1 : x == "Ambiguous" ? 2 : 3));
+        var ambiguous = Assert.Single(records, r => r.GetProperty("reason").GetString() == "Ambiguous");
+        Assert.Equal("Open", ambiguous.GetProperty("outcome").GetString());          // un conflitto resta aperto: nessun arbitrato
+        Assert.Equal(2, ambiguous.GetProperty("supportingEvidence").GetArrayLength());   // entrambi i lati sono riscontri
+        Assert.Single(records, r => r.GetProperty("outcome").GetString() == "AnsweredInSnapshot");
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
+
+        // Nessuna richiesta di embedding di contenuto oltre all'indice e alle quattro interrogazioni.
+        Assert.True(_embedding.EmbeddingRequests > 0);
+        Assert.True(_rerank.RerankRequests >= 4);
+    }
+
+    private static Task<int> RegistryPackageCandidates(string stageText) =>
+        Task.FromResult(Voices(stageText).Count(v => v.Kind != "Gap"));
+
+    // ================================================================ ledger entro budget: sorgente esaustiva come in 002
+
+    [Fact]
+    public async Task A_v7_run_whose_ledger_fits_the_stage_budget_keeps_the_exhaustive_source_and_never_retrieves()
+    {
+        // Contesto largo: lo stadio entra con l'intero ledger, ma il single-call non entra (gerarchia). Il recupero non interviene (FR-002).
+        var s = await ArrangeAsync(fillers: 14, fillerWords: 8);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond, ContextWindow = 8000 };
+        var searchesBefore = _embedding.EmbeddingRequests;
+
+        var result = await RunAsync(s.Claim, model, contextWindow: 8000);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        var stages = model.Requests.Where(DocumentGapStageWorkflowTests.IsStage).ToList();
+        var stage = Assert.Single(stages);   // il single-call non entra, lo stadio sì: (b1-ledger)
+        Assert.True(stage.AllText.Contains("searchBasis: ledger_exhaustive", StringComparison.Ordinal), stage.AllText[..300]);
+        Assert.Contains("retrievalComplete: true", stage.AllText, StringComparison.Ordinal);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'retrieval'", ("r", s.Run)));
+
+        Assert.Equal(0, await Outputs(s.Run, "retrieval-output-1"));
+        Assert.Equal(searchesBefore, _embedding.EmbeddingRequests);   // nessuna interrogazione ai servizi di recupero
+    }
+
+    // ================================================================ servizi non disponibili: errori tipizzati a zero invii LLM
+
+    [Fact]
+    public async Task An_unavailable_embedding_service_fails_the_run_with_a_typed_code_and_zero_stage_calls()
+    {
+        var s = await ArrangeAsync();
+        _embedding.Models = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        _embedding.EmbeddingsOverride = _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        _rig.Readiness.Invalidate();
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal(RetrievalException.EmbeddingUnavailable, result.ErrorCode);
+        Assert.DoesNotContain(model.Requests, DocumentGapStageWorkflowTests.IsStage);   // zero invii dello stadio
+        var row = await RunRow(s.Run);
+        Assert.Equal(model.Requests.Count, row.Calls);                                    // nessuna riserva per il recupero
+        Assert.StartsWith(RetrievalException.EmbeddingUnavailable + ":", row.Message, StringComparison.Ordinal);
+        Assert.Equal(0, await Outputs(s.Run, "gap-stage-alias-1"));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
+        var registry = await RegistryOf(s.Run);                                           // registro d'errore conservato e consultabile
+        Assert.Equal(CandidateRegistry.OutcomeFailed, registry.Outcome);
+        Assert.Empty(registry.PackageEvidence);
+        Assert.False(registry.RetrievalComplete);
+    }
+
+    [Fact]
+    public async Task An_index_that_is_not_ready_fails_the_run_with_a_typed_code_and_zero_stage_calls()
+    {
+        var s = await ArrangeAsync();
+        await Execute("UPDATE \"RetrievalIndexStates\" SET \"Status\" = 'Building' WHERE \"ProjectId\" = @p AND \"DocumentVersionId\" = @v", ("p", s.Project), ("v", s.Facts.Version));
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, RetrievalException.IndexNotReady), (result.Status, result.ErrorCode));
+        Assert.DoesNotContain(model.Requests, DocumentGapStageWorkflowTests.IsStage);
+        Assert.Equal(0, await Outputs(s.Run, "gap-stage-alias-1"));
+        Assert.Equal(CandidateRegistry.OutcomeFailed, (await RegistryOf(s.Run)).Outcome);
+    }
+
+    [Fact]
+    public async Task An_unavailable_reranker_ends_the_run_with_a_typed_cause_keeps_the_diagnostic_registry_and_never_invokes_the_stage()
+    {
+        var s = await ArrangeAsync();
+        _rerank.RerankOverride = _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        _rerank.Models = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        _rig.Readiness.InvalidateReranker();
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, RetrievalException.RerankerUnavailable), (result.Status, result.ErrorCode));
+        Assert.DoesNotContain(model.Requests, DocumentGapStageWorkflowTests.IsStage);   // stadio Gap mai invocato
+        Assert.NotEqual(ProcessingRunStatus.Completed, result.Status);
+        Assert.Equal(0, await Outputs(s.Run, "gap-stage-alias-1"));                      // nessun gapAssessments
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
+        var registry = await RegistryOf(s.Run);
+        Assert.Equal(CandidateRegistry.OutcomeDiagnostic, registry.Outcome);
+        Assert.True(registry.Degraded);
+        Assert.False(registry.RetrievalComplete);
+        Assert.Contains(RetrievalException.RerankerUnavailable, registry.Causes);
+        Assert.Empty(registry.PackageEvidence);
+        Assert.NotEmpty(registry.Gaps.SelectMany(g => g.Candidates));                     // ordine RRF diagnostico consultabile
+    }
+
+    // ================================================================ replay, takeover, crash
+
+    [Fact]
+    public async Task Replay_and_takeover_after_the_retrieval_output_never_call_the_retrieval_services_again_and_keep_the_same_registry()
+    {
+        var s = await ArrangeAsync();
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+        Assert.Equal(ProcessingRunStatus.Completed, (await RunAsync(s.Claim, model)).Status);
+        var registry = await RegistryOf(s.Run);
+        var (embeddings, reranks) = (_embedding.EmbeddingRequests, _rerank.RerankRequests);
+        var calls = model.Requests.Count;
+
+        // Takeover: nuovo owner e fence sul run già Completed (terminale: nessuna rielaborazione).
+        await Execute("UPDATE \"ProcessingRuns\" SET \"LeaseOwner\" = 'owner-2', \"FencingToken\" = 2, \"AttemptCount\" = 2 WHERE \"Id\" = @r", ("r", s.Run));
+        var replay = await RunAsync(new AnalysisRunClaim(s.Run, "owner-2", 2, 2), model);
+
+        Assert.Equal(ProcessingRunStatus.Completed, replay.Status);
+        Assert.Equal((embeddings, reranks, calls), (_embedding.EmbeddingRequests, _rerank.RerankRequests, model.Requests.Count));
+        Assert.Equal(registry.Hash(), (await RegistryOf(s.Run)).Hash());
+        Assert.Equal(1, await Outputs(s.Run, "retrieval-output-1"));
+    }
+
+    [Fact]
+    public async Task A_crash_between_the_retrieval_and_the_stage_resumes_without_repeating_the_retrieval_and_completes_with_the_same_registry()
+    {
+        var s = await ArrangeAsync();
+        var crash = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            // Il processo muore alla chiamata dello stadio: recupero già congelato, nessun output dello stadio.
+            Responder = r => DocumentGapStageWorkflowTests.IsStage(r) ? throw new InvalidOperationException("crash simulato") : Hierarchy(r),
+        };
+        var first = await Record.ExceptionAsync(() => RunAsync(s.Claim, crash));
+        Assert.True(first is not null || (await RunRow(s.Run)).Status != "Completed");
+        Assert.Equal(1, await Outputs(s.Run, "retrieval-output-1"));
+        Assert.Equal(0, await Outputs(s.Run, "gap-stage-alias-1"));
+        var registry = await RegistryOf(s.Run);
+        var (embeddings, reranks) = (_embedding.EmbeddingRequests, _rerank.RerankRequests);
+
+        // Ripresa: il run torna in esecuzione con un nuovo owner (takeover) e completa sul registro congelato.
+        await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = 'Running', \"ErrorCode\" = NULL, \"ErrorMessage\" = NULL, \"LeaseOwner\" = 'owner-2', \"FencingToken\" = 2, \"AttemptCount\" = 2, \"LeaseUntil\" = now() + interval '10 minutes' WHERE \"Id\" = @r", ("r", s.Run));
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+        var resumed = await RunAsync(new AnalysisRunClaim(s.Run, "owner-2", 2, 2), model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(resumed.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        Assert.Single(model.Requests);                                                     // solo lo stadio: la gerarchia e il recupero sono Committed
+        Assert.True(DocumentGapStageWorkflowTests.IsStage(model.Requests[0]));
+        Assert.Equal((embeddings, reranks), (_embedding.EmbeddingRequests, _rerank.RerankRequests));   // nessuna nuova richiesta ai servizi di recupero
+        Assert.Equal(registry.Hash(), (await RegistryOf(s.Run)).Hash());
+        Assert.Equal(1, await Outputs(s.Run, "retrieval-output-1"));
+        Assert.Equal(1, await Outputs(s.Run, "gap-stage-alias-1"));
+    }
+}
