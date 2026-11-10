@@ -19,6 +19,9 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     /// <summary>Definizione congelata dalle NUOVE richieste di Analizza (D1, AI §13.7): v6, con lo stadio Gap dedicato oltre una chiamata. Le costanti `AnalysisDefinition` e `AnalysisPromptVersions()` della v5 restano come storico (T141) e come fixture dei test.</summary>
     public const string AnalysisDefinitionV6 = DocumentAnalysisWorkflow.DefinitionVersionV6;
 
+    /// <summary>Definizione congelata dalle NUOVE richieste di Analizza con il recupero abilitato (003 T028): v7 = v6 più le chiavi `retrieval*`. Senza `Retrieval:Enabled` le richieste restano v6.</summary>
+    public const string AnalysisDefinitionV7 = DocumentAnalysisWorkflow.DefinitionVersionV7;
+
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV6;
@@ -210,6 +213,22 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             ["gapStage"] = GapStage.FreezeKeys["gapStage"], ["gapPrompt"] = GapStage.FreezeKeys["gapPrompt"], ["gapAiSchema"] = GapStage.FreezeKeys["gapAiSchema"],
             ["gapMessageFormat"] = GapStage.FreezeKeys["gapMessageFormat"], ["gapPolicy"] = GapStage.FreezeKeys["gapPolicy"], ["gapEstimate"] = GapStage.FreezeKeys["gapEstimate"],
         });
+
+    /// <summary>
+    /// Versioni congelate di una nuova richiesta di Analizza v7 (003 T028): TUTTE le chiavi della v6 (invariate, <see cref="AnalysisPromptVersionsV6"/>) più le cinque chiavi `retrieval*`
+    /// (<see cref="bProjects.App.Retrieval.RetrievalStage.FreezeValues"/>): indice, politica scelta, contratto del registro, WorkOutput del registro e modelli.
+    /// </summary>
+    public static string AnalysisPromptVersionsV7(bProjects.App.Retrieval.RetrievalOptions retrieval)
+    {
+        ArgumentNullException.ThrowIfNull(retrieval);
+        var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(AnalysisPromptVersionsV6())!;
+        foreach (var (key, value) in bProjects.App.Retrieval.RetrievalStage.FreezeValues(retrieval))
+        {
+            keys[key] = value;
+        }
+
+        return JsonSerializer.Serialize(keys);
+    }
 
     /// <summary>Versioni congelate di una nuova richiesta di Genera v3 (T127): prompt, schema del canonico 1.1.0, schema AI della bozza, catalogo, algoritmo e validazione.</summary>
     public static string DocumentPromptVersions() =>

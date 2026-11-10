@@ -3,6 +3,7 @@ using System.Text.Json;
 using bProjects.App.Analysis;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
+using bProjects.App.Retrieval;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 
@@ -186,6 +187,17 @@ public static class GapStageBudget
                 + $"con {gapCount} evidenze di tipo Gap: la valutazione dei Gap oltre il contesto di una sola chiamata non è supportata e nessuna valutazione è stata presentata. Riduci la selezione delle fonti e riprova.");
         }
 
+        return EvaluateOutput(measure, gapCount, detail);
+    }
+
+    /// <summary>
+    /// Solo il controllo sull'OUTPUT (<c>gap_assessment_exceeds_output</c>): nella definizione v7 il recupero sostituisce il fail-fast sull'input ma non quello sull'output, che resta invariato (003 FR-024).
+    /// </summary>
+    public static GapStageVerdict EvaluateOutput(PayloadPreflight measure, int gapCount) =>
+        EvaluateOutput(measure, gapCount, $"{measure.Tokens} token, qualità della misura: {measure.Quality}");
+
+    private static GapStageVerdict EvaluateOutput(PayloadPreflight measure, int gapCount, string detail)
+    {
         if (GapStageEstimate.Exceeds(gapCount, measure.Profile.OutputTokens))
         {
             return new(false, DocumentWorkException.GapAssessmentExceedsOutput,
@@ -249,16 +261,41 @@ public static class GapStageBuilder
         var gaps = new List<GapStageVoice>();
         foreach (var entry in catalog.Data.Evidence)
         {
-            var evidence = byId[entry.EvidenceId];
-            var voice = new GapStageVoice(
-                entry.Alias, entry.EvidenceId, entry.Origin, entry.Kind, entry.Polarity, entry.Certainty, evidence.Statement,
-                meta.GetValueOrDefault(entry.EvidenceId) ?? new(null, null, null),
-                [.. entry.Sources.Select(l => (l.SourceAlias, l.Role, catalog.Source(l.SourceAlias)!.Quote))]);
-            (entry.Kind == EvidenceKind.Gap ? gaps : candidates).Add(voice);
+            (entry.Kind == EvidenceKind.Gap ? gaps : candidates).Add(VoiceOf(entry, byId, catalog, meta));
         }
 
         return new(candidates, GapStage.SearchBasisLedgerExhaustive, true, gaps, references ?? GapStageReferences.Empty);
     }
+
+    /// <summary>
+    /// Sorgente <c>retrieval</c> (003 T029): STESSO record d'ingresso, STESSA proiezione VOCE, ma i candidati sono le evidenze del pacchetto del registro congelato, nell'ordine del registro
+    /// (always_included, poi rango finale), e <c>RetrievalComplete</c> è quello calcolato dal registro. Nessun DTO, prompt, validatore o assembly nuovo. Un'evidenza del pacchetto che il catalogo
+    /// non conosce è un registro non appartenente a questo run (<c>checkpoint_incompatible</c>), mai ignorata.
+    /// </summary>
+    public static GapStageInput BuildFromRegistry(
+        DocumentAnalysisInput input, AnalysisAliasCatalog catalog, IReadOnlyDictionary<Guid, GapStageEvidenceMeta> meta, GapStageReferences references, RetrievalRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(meta);
+        ArgumentNullException.ThrowIfNull(references);
+        ArgumentNullException.ThrowIfNull(registry);
+        var byId = input.Evidence.ToDictionary(e => e.EvidenceId);
+        var entries = catalog.Data.Evidence.ToDictionary(e => e.EvidenceId);
+        var candidates = registry.PackageEvidence
+            .Select(id => entries.TryGetValue(id, out var entry) && entry.Kind != EvidenceKind.Gap
+                ? VoiceOf(entry, byId, catalog, meta)
+                : throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il registro del recupero cita un'evidenza che non appartiene al ledger del run."))
+            .ToList();
+        var gaps = catalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).Select(e => VoiceOf(e, byId, catalog, meta)).ToList();
+        return new(candidates, CandidateRegistry.SearchBasis, registry.RetrievalComplete, gaps, references);
+    }
+
+    private static GapStageVoice VoiceOf(
+        AliasEvidenceEntry entry, IReadOnlyDictionary<Guid, DocumentAnalysisEvidence> byId, AnalysisAliasCatalog catalog, IReadOnlyDictionary<Guid, GapStageEvidenceMeta> meta) =>
+        new(entry.Alias, entry.EvidenceId, entry.Origin, entry.Kind, entry.Polarity, entry.Certainty, byId[entry.EvidenceId].Statement,
+            meta.GetValueOrDefault(entry.EvidenceId) ?? new(null, null, null),
+            [.. entry.Sources.Select(l => (l.SourceAlias, l.Role, catalog.Source(l.SourceAlias)!.Quote))]);
 
     /// <summary>Testo-dato: i delimitatori del formato (<c>&lt;&lt;&lt;</c> e <c>&gt;&gt;&gt;</c>) nel contenuto sono resi con virgolette angolari singole, mai interpretabili come struttura.</summary>
     internal static string Data(string text) => text.Replace("<<<", "‹‹‹", StringComparison.Ordinal).Replace(">>>", "›››", StringComparison.Ordinal);
@@ -283,7 +320,15 @@ public static class GapStageBuilder
             Voice(text, spans, gap, input.References.GapQuestion.GetValueOrDefault(gap.Alias));
         }
 
-        text.Append("\nEvidenze del ledger completo (").Append(input.Candidates.Count).Append(", tutte, senza ranking né selezione):\n");
+        if (input.SearchBasis == CandidateRegistry.SearchBasis)
+        {
+            // Sorgente `retrieval` (003): NON il ledger completo. L'intestazione lo dichiara, così l'assenza di un'evidenza fra i candidati non è mai letta come assenza nelle fonti.
+            text.Append("\nEvidenze candidate recuperate (").Append(input.Candidates.Count).Append(", selezionate per pertinenza ai Gap entro il budget: NON il ledger completo; retrievalComplete non è prova di completezza):\n");
+        }
+        else
+        {
+            text.Append("\nEvidenze del ledger completo (").Append(input.Candidates.Count).Append(", tutte, senza ranking né selezione):\n");
+        }
         foreach (var candidate in input.Candidates)
         {
             Voice(text, spans, candidate, null);

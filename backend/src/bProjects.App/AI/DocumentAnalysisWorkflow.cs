@@ -7,6 +7,7 @@ using bProjects.App.Conversations;
 using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
+using bProjects.App.Retrieval;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI.Workflows.Checkpointing;
 using Microsoft.EntityFrameworkCore;
@@ -348,6 +349,10 @@ public sealed class DocumentAnalysisWorkflow(
     // Le chiavi `gap*` sostituiscono `reconcileGapPolicy`; nessuna combinazione mista e riconosciuta.
     public const string DefinitionVersionV6 = "project-analysis-documents-v6";
 
+    // v7 (003 T028, candidate-source.md §4): come la v6 ma con le cinque chiavi `retrieval*` e, oltre una chiamata con almeno un Gap il cui ledger NON entra nel budget dello stadio, il recupero al posto del fail-fast
+    // `gap_ledger_exceeds_input` (che resta per la v6). Se il ledger entra, la sorgente resta l'intero ledger come in v6 (FR-002).
+    public const string DefinitionVersionV7 = "project-analysis-documents-v7";
+
     /// <summary>
     /// Chiave di freeze <c>reconcileGapPolicy</c> (T143, AI §13.6): marcatore di identità del run che dichiara che la v5 non supporta la valutazione Gap gerarchica.
     /// Vive solo in <c>ProcessingRun.PromptVersions</c> e in <see cref="ContractOf"/>: nessun effetto sul calcolo, né sul manifest né sul <c>configHash</c> del piano.
@@ -427,7 +432,13 @@ public sealed class DocumentAnalysisWorkflow(
 
         // D2 (AI §13.8): la chiave `analysisMessageFormat` esiste solo nella definizione v6 e solo con un valore supportato; in v2-v5 (o con valore ignoto) la combinazione è mista ⇒ workflow_incompatible,
         // mai reinterpretata. L'ASSENZA della chiave in una v6 è il formato 1 storico (richieste v6 congelate prima di D2): resta valida e invariata.
-        return HasKey(run, AnalysisMessageFormatKey) && (contract != 6 || MessageFormatOf(run) == MessageFormatState.Unsupported) ? null : contract;
+        // 003 T028: le chiavi `retrieval*` esistono solo nella definizione v7; in ogni altra definizione la combinazione è mista ⇒ workflow_incompatible, mai reinterpretata.
+        if (contract is not 7 && RetrievalStage.Inspect(run.PromptVersions).AnyKey)
+        {
+            return null;
+        }
+
+        return HasKey(run, AnalysisMessageFormatKey) && (contract is not (6 or 7) || MessageFormatOf(run) == MessageFormatState.Unsupported) ? null : contract;
     }
 
     /// <summary>Formato del messaggio single-call congelato nel run (D2): assente = 1 (storico), <c>message-format-2</c> = 2, altro valore = non supportato.</summary>
@@ -493,14 +504,15 @@ public sealed class DocumentAnalysisWorkflow(
 
         // v6 (D1, AI §13.7): le chiavi del single-call v6 (prompt document-analysis-v6, schema AI alias-2, policy di stima dell'output congelata) e della gerarchia v4, tutte le chiavi `gap*` dello stadio e NESSUNA
         // `reconcileGapPolicy` (sostituita). Chiavi mancanti, diverse o miste con quelle del v5 ⇒ workflow_incompatible, mai reinterpretate. Una v6 senza versioni congelate non e confrontabile.
-        if (run.WorkflowDefinitionVersion == DefinitionVersionV6 && run.PromptVersions is not null && run.PromptVersionMatches("analysis", PromptVersionV6)
-            && run.PromptVersionMatches("analysisSchema", DocumentAnalysisContent.SchemaVersionValue)
-            && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
-            && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
-            && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run) && OutputPolicyOf(run) == OutputPolicyState.Current
-            && GapStage.FreezeKeys.All(kv => HasKey(run, kv.Key) && run.PromptVersionMatches(kv.Key, kv.Value)) && !HasKey(run, "reconcileGapPolicy"))
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV6 && StagedKeysMatch(run))
         {
             return 6;
+        }
+
+        // v7 (003 T028): le stesse chiavi della v6 più TUTTE le chiavi `retrieval*` con valori supportati (insieme chiuso). Una chiave `retrieval*` mancante o ignota ⇒ workflow_incompatible.
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV7 && StagedKeysMatch(run) && RetrievalStage.Inspect(run.PromptVersions).AllSupported)
+        {
+            return 7;
         }
 
         // v4: le versioni del percorso alias più quelle della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch).
@@ -508,6 +520,15 @@ public sealed class DocumentAnalysisWorkflow(
     }
 
     private static readonly string[] GapKeys = [.. GapStage.FreezeKeys.Keys];
+
+    /// <summary>Chiavi comuni a v6 e v7: single-call v6, gerarchia v4, politica di stima dell'output, tutte le chiavi `gap*` e NESSUNA `reconcileGapPolicy`. Una definizione senza versioni congelate non è confrontabile.</summary>
+    private static bool StagedKeysMatch(ProcessingRun run) =>
+        run.PromptVersions is not null && run.PromptVersionMatches("analysis", PromptVersionV6)
+        && run.PromptVersionMatches("analysisSchema", DocumentAnalysisContent.SchemaVersionValue)
+        && run.PromptVersionMatches("analysisAiSchema", SchemaVersionV5) && run.PromptVersionMatches("aliasCatalog", AnalysisAliasCatalog.Version)
+        && run.PromptVersionMatches("canonIds", AnalysisAliasCatalog.CanonIdsVersion) && run.PromptVersionMatches("algorithm", AlgorithmVersionV5)
+        && run.PromptVersionMatches("validation", ValidationVersionV5) && HierarchyMatches(run) && OutputPolicyOf(run) == OutputPolicyState.Current
+        && GapStage.FreezeKeys.All(kv => HasKey(run, kv.Key) && run.PromptVersionMatches(kv.Key, kv.Value)) && !HasKey(run, "reconcileGapPolicy");
 
     /// <summary>La chiave e presente fra le versioni congelate del run (qualunque valore): serve a riconoscere le combinazioni miste fra v5 e v6.</summary>
     private static bool HasKey(ProcessingRun run, string key)
@@ -578,7 +599,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, contract == 6 && MessageFormatOf(run) == MessageFormatState.V2 ? 2 : 1, ct) : RunGraphAsync(db, claim, limits, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, contract is 6 or 7 && MessageFormatOf(run) == MessageFormatState.V2 ? 2 : 1, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -607,7 +628,7 @@ public sealed class DocumentAnalysisWorkflow(
         definitionVersion switch
         {
             DefinitionVersionV3 or DefinitionVersionV4 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight),
-            DefinitionVersionV5 or DefinitionVersionV6 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136) e v6: schema del DTO alias-2
+            DefinitionVersionV5 or DefinitionVersionV6 or DefinitionVersionV7 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136) e v6: schema del DTO alias-2
             _ => BuildRegimePayload(),
         };
 
@@ -732,9 +753,9 @@ public sealed class DocumentAnalysisWorkflow(
                 return;
             }
 
-            if (contract == 6)
+            if (contract is 6 or 7)
             {
-                await RunStagedAsync(db, claim, input, catalog, limits, structured, ct);
+                await RunStagedAsync(db, claim, input, catalog, limits, structured, retrieval: contract == 7, ct);
                 return;
             }
 
@@ -769,7 +790,7 @@ public sealed class DocumentAnalysisWorkflow(
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisAliasPlan(
             claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes,
-            contract switch { 6 => DefinitionVersionV6, 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
+            contract switch { 7 => DefinitionVersionV7, 6 => DefinitionVersionV6, 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
         var maxCalls = contract >= 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
@@ -792,13 +813,14 @@ public sealed class DocumentAnalysisWorkflow(
     /// (controllo 1, ledger intero + maggiorazione prudente dei riferimenti) PRIMA di piano, port e riserva: oltre budget di input o di output ⇒ fail-fast tipizzato a zero invii in tutto il run (<c>document_limit_exceeded</c>,
     /// <c>gap_ledger_exceeds_input</c> / <c>gap_assessment_exceeds_output</c>). Altrimenti gerarchia v4-equivalente più UN batch dello stadio Gap (nuovo valore di Stage, stesso grafo e stesso port).
     /// </summary>
-    private async Task RunStagedAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, AnalysisAliasCatalog catalog, DocumentLimits limits, bool structured, CancellationToken ct)
+    private async Task RunStagedAsync(AppDbContext db, AnalysisRunClaim claim, DocumentAnalysisInput input, AnalysisAliasCatalog catalog, DocumentLimits limits, bool structured, bool retrieval, CancellationToken ct)
     {
         var gapCount = catalog.Data.Evidence.Count(e => e.Kind == EvidenceKind.Gap);
         var hierarchyCatalog = AnalysisAliasCatalog.Build(input, SchemaVersionV3);   // identità alias-1 come in v4: il DTO del batch è reconcile-alias-1
+        var definition = retrieval ? DefinitionVersionV7 : DefinitionVersionV6;
         if (gapCount == 0)
         {
-            await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, DefinitionVersionV6);
+            await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, definition);
             return;
         }
 
@@ -811,12 +833,35 @@ public sealed class DocumentAnalysisWorkflow(
             throw new RuntimeUnverifiedException("conteggio del payload dello stadio Gap non disponibile (nessun tokenizer o calibrazione identificata)");
         }
 
+        RetrievalMode? retrievalMode = null;
         if (GapStageBudget.Evaluate(measure, gapCount, routing: true) is { Fits: false } verdict)
         {
-            throw verdict.ToException();
+            // v6: fail-fast invariato. v7 (b1-retrieval, 003 T028): SOLO il ledger oltre il budget di input passa al recupero; `gap_assessment_exceeds_output` resta un fail-fast (FR-002, FR-024) e il
+            // ledger che entra nel budget resta sulla sorgente esaustiva come in v6.
+            if (!retrieval || verdict.Reason != DocumentWorkException.GapLedgerExceedsInput)
+            {
+                throw verdict.ToException();
+            }
+
+            if (GapStageBudget.EvaluateOutput(measure, gapCount) is { Fits: false } outputVerdict)
+            {
+                throw outputVerdict.ToException();
+            }
+
+            retrievalMode = new RetrievalMode(await FrozenRetrievalPolicyAsync(db, claim.RunId, ct));
         }
 
-        await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, DefinitionVersionV6, new GapStageMode(meta));
+        await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, definition, new GapStageMode(meta, retrievalMode));
+    }
+
+    /// <summary>Politica di recupero congelata nel run v7 (<c>retrievalPolicy</c>): insieme chiuso già verificato da <see cref="ContractOf"/>; una versione ignota qui è un'incompatibilità, mai un valore di ripiego.</summary>
+    private static async Task<RetrievalPolicy> FrozenRetrievalPolicyAsync(AppDbContext db, Guid runId, CancellationToken ct)
+    {
+        var frozen = await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == runId).Select(r => r.PromptVersions).SingleAsync(ct);
+        using var document = JsonDocument.Parse(frozen ?? "{}");
+        var version = document.RootElement.TryGetProperty(RetrievalStage.PolicyKey, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        return RetrievalPolicy.ByVersion(version)
+            ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "La politica di recupero congelata nel run non è supportata.");
     }
 
     /// <summary>Messaggio unico del batch: dati del server, dialogo come contesto e tutte le evidenze integrali con le loro fonti. A capo sempre «\n».</summary>

@@ -32,6 +32,14 @@ public sealed record RetrievalPolicy
     /// </summary>
     public static RetrievalPolicy V2 { get; } = new(Version2, pool: 50, rerank: 50, rrfK: Rrf.K, parentCharBudget: 0, StageInputBudget, RerankInput.Provenance1);
 
+    /// <summary>Politica per versione dichiarata (solo le versioni congelate; null per ogni altro valore): scelta esplicita, mai una promozione implicita.</summary>
+    public static RetrievalPolicy? ByVersion(string? version) => version switch
+    {
+        Version1 => V1,
+        Version2 => V2,
+        _ => null,
+    };
+
     public string Version { get; }
 
     /// <summary>Candidati per segnale (lessicale e denso) richiesti all'indice.</summary>

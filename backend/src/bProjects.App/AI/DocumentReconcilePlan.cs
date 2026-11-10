@@ -5,8 +5,10 @@ using bProjects.App.Analysis;
 using bProjects.App.Documents;
 using bProjects.App.Evidence;
 using bProjects.App.Persistence;
+using bProjects.App.Retrieval;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 namespace bProjects.App.AI;
 
@@ -20,7 +22,13 @@ internal sealed record ReconcileAliasMode(AnalysisAliasCatalog RunCatalog, bool 
 /// Stadio Gap dedicato della definizione v6 (D1, AI §13.7): metadati documentali dello snapshot (mappa laterale) per il formato <c>gap-stage-message-1</c>. Presente solo se l'analisi ha almeno un Gap
 /// e il preflight al routing ha ammesso lo stadio; implica un <see cref="ReconcileAliasMode"/>. Non entra nel <c>configHash</c> del piano gerarchico.
 /// </summary>
-internal sealed record GapStageMode(IReadOnlyDictionary<Guid, GapStageEvidenceMeta> Meta);
+internal sealed record GapStageMode(IReadOnlyDictionary<Guid, GapStageEvidenceMeta> Meta, RetrievalMode? Retrieval = null);
+
+/// <summary>
+/// Sorgente <c>retrieval</c> dello stadio Gap (003 T028–T030, definizione v7): presente solo se il ledger NON entra nel budget dello stadio. Aggiunge UN batch deterministico <c>retrieval</c>
+/// (nessun LLM, nessuna riserva) prima del batch <c>gap</c>; la politica è quella congelata nel run.
+/// </summary>
+internal sealed record RetrievalMode(RetrievalPolicy Policy);
 
 /// <summary>
 /// Riconciliazione gerarchica globale dell'analisi documentale oltre la capacità di una chiamata (002 T078, contracts/ai-workflow.md §4–§5). Stesso grafo fisso
@@ -170,13 +178,21 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     /// <summary>Il batch dello stadio Gap (v6) ha schema e validazione propri; i batch della gerarchia conservano quelli del piano.</summary>
     public async ValueTask<WorkLookupExpectation> ExpectationForAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) =>
-        _gap is not null && await StageReplayAsync(batch.Ordinal, prior, ct) is not null ? new(GapStage.AiSchema, GapStage.ValidationVersion) : Expectation;
+        _gap is null || await StageReplayAsync(batch.Ordinal, prior, ct) is null
+            ? Expectation
+            : batch.Ordinal == RetrievalOrdinal ? new(RetrievalStage.OutputSchema, RetrievalStage.ValidationVersion) : new(GapStage.AiSchema, GapStage.ValidationVersion);
 
     public BatchAgentSpec Agent { get; }
 
     public BatchAgentSpec AgentFor(BatchRef batch) => IsGapBatch(batch) ? _gapAgent! : Agent;
 
-    private bool IsGapBatch(BatchRef batch) => _gap is not null && _finishedBatches >= 0 && batch.Ordinal == _finishedBatches;
+    private bool IsGapBatch(BatchRef batch) => _gap is not null && _finishedBatches >= 0 && batch.Ordinal == GapOrdinal;
+
+    /// <summary>Ordinale del batch deterministico del recupero (v7, ledger oltre budget): subito dopo l'ultimo della gerarchia. -1 se la sorgente è l'intero ledger.</summary>
+    private int RetrievalOrdinal => _gap?.Retrieval is not null && _finishedBatches >= 0 ? _finishedBatches : -1;
+
+    /// <summary>Ordinale del batch dello stadio Gap: subito dopo la gerarchia (sorgente esaustiva, come in v6) oppure dopo il batch del recupero.</summary>
+    private int GapOrdinal => _finishedBatches + (_gap?.Retrieval is not null ? 1 : 0);
 
     public bool HasBatch(int ordinal) => throw new NotSupportedException("Il numero di batch dipende dagli output Committed: usare HasBatchAsync.");
 
@@ -414,14 +430,14 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
         // Stadio Gap (v6): UN batch dopo l'ultimo della gerarchia, solo a gerarchia Complete. Con la gerarchia incompleta non c'è alcuno stadio e nessuna chiamata in più:
         // l'Assemble riporta l'incompletezza come per ogni gerarchia v4.
-        return _gap is not null && replay.Finished is not null && ordinal == _finishedBatches && GapState(replay) is not null;
+        return _gap is not null && replay.Finished is not null && (ordinal == GapOrdinal || ordinal == RetrievalOrdinal) && GapState(replay) is not null;
     }
 
     public async ValueTask<DerivedBatchInput> PrepareAsync(int ordinal, IBatchOutputs prior, CancellationToken ct)
     {
         if (_gap is not null && await StageReplayAsync(ordinal, prior, ct) is { } stageReplay)
         {
-            return await PrepareGapAsync(ordinal, stageReplay, prior, ct);
+            return ordinal == RetrievalOrdinal ? await PrepareRetrievalAsync(ordinal, stageReplay, prior, ct) : await PrepareGapAsync(ordinal, stageReplay, prior, ct);
         }
 
         var (request, state) = await PendingAsync(ordinal, prior, ct);
@@ -477,8 +493,12 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     {
         if (_gap is not null && await StageReplayAsync(batch.Ordinal, prior, ct) is { } stageReplay)
         {
-            var gapState = GapState(stageReplay) ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Lo stadio Gap non è disponibile.");
-            return gapState.Messages;
+            if (batch.Ordinal == RetrievalOrdinal)
+            {
+                throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il batch del recupero è deterministico: nessun messaggio da inviare al modello.");
+            }
+
+            return await GapMessagesAsync(GapState(stageReplay) ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Lo stadio Gap non è disponibile."), prior, ct);
         }
 
         var (request, state) = await PendingAsync(batch.Ordinal, prior, ct);
@@ -496,7 +516,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     {
         if (_gap is not null && await StageReplayAsync(batch.Ordinal, prior, ct) is { } stageReplay)
         {
-            return await ValidateGapAsync(batch, responseText, stageReplay, ct);
+            return batch.Ordinal == RetrievalOrdinal
+                ? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il batch del recupero non ha una risposta del modello da validare.")
+                : await ValidateGapAsync(batch, responseText, stageReplay, ct);
         }
 
         var (request, _) = await PendingAsync(batch.Ordinal, prior, ct);
@@ -604,13 +626,50 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     // ------------------------------------------------------------------ stadio Gap dedicato (v6, D1, AI §13.7)
 
     /// <summary>Stato dello stadio: analisi assemblata dalla gerarchia Complete, riferimenti Open canonici e messaggio (ledger intero + riferimenti). Funzione pura degli output Committed.</summary>
-    private sealed record GapStagePlanState(ReconcileAssembly Assembled, GapStageReferences References, IReadOnlyList<ChatMessage> Messages);
+    private sealed record GapStagePlanState(ReconcileAssembly Assembled, GapStageReferences References);
 
-    /// <summary>Il replay della gerarchia se l'ordinale è quello dello stadio (subito dopo l'ultimo batch della gerarchia), altrimenti null.</summary>
+    private IReadOnlyList<ChatMessage>? _gapMessages;
+
+    /// <summary>Il replay della gerarchia se l'ordinale è uno di quelli dello stadio (recupero e/o Gap, subito dopo l'ultimo batch della gerarchia), altrimenti null.</summary>
     private async ValueTask<Replay?> StageReplayAsync(int ordinal, IBatchOutputs prior, CancellationToken ct)
     {
         var replay = await ReplayAsync(prior, null, ct);
-        return replay.Finished is not null && ordinal == _finishedBatches ? replay : null;
+        return replay.Finished is not null && (ordinal == GapOrdinal || ordinal == RetrievalOrdinal) ? replay : null;
+    }
+
+    /// <summary>
+    /// Messaggio dello stadio: ledger intero (sorgente esaustiva, come in v6) oppure pacchetto del registro del recupero Committed (v7). Stessa funzione per la misura, il controllo e l'invio; una sola volta per
+    /// piano (funzione pura degli output Committed).
+    /// </summary>
+    private async ValueTask<IReadOnlyList<ChatMessage>> GapMessagesAsync(GapStagePlanState state, IBatchOutputs prior, CancellationToken ct)
+    {
+        if (_gapMessages is not null)
+        {
+            return _gapMessages;
+        }
+
+        var stageInput = _gap!.Retrieval is null
+            ? GapStageBuilder.Build(_input, _alias!.RunCatalog, _gap.Meta, state.References)
+            : GapStageBuilder.BuildFromRegistry(_input, _alias!.RunCatalog, _gap.Meta, state.References, await CommittedRegistryAsync(prior, ct));
+        return _gapMessages = GapStageBuilder.Message(stageInput);
+    }
+
+    /// <summary>Registro del recupero dal WorkOutput Committed del batch <c>retrieval</c>: consegnabile (<c>Package</c>) o errore tipizzato; mai ricalcolato, mai un risultato parziale.</summary>
+    private async ValueTask<RetrievalRegistry> CommittedRegistryAsync(IBatchOutputs prior, CancellationToken ct)
+    {
+        var output = await prior.GetByOrdinalAsync(RetrievalOrdinal, ct);
+        if (output is null || output.Status != WorkOutputStatus.Committed)
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Lo stadio Gap in sorgente retrieval richiede il WorkOutput Committed del recupero.");
+        }
+
+        if (output.SchemaVersion != RetrievalStage.OutputSchema || output.ValidationVersion != RetrievalStage.ValidationVersion)
+        {
+            throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il WorkOutput del recupero non è delle versioni congelate.");
+        }
+
+        var registry = RetrievalOutput.Read(output.PayloadJson);
+        return RetrievalOutput.ToFailure(registry) is { } failure ? throw failure : registry;
     }
 
     /// <summary>
@@ -642,8 +701,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 + $": {missing.Count} Gap senza una domanda aperta canonica nell'analisi assemblata dalla gerarchia; il server non la crea e lo stadio Gap non è stato eseguito (nessuna chiamata dello stadio).");
         }
 
-        var stageInput = GapStageBuilder.Build(_input, _alias.RunCatalog, _gap!.Meta, references);
-        return _gapState = new(assembled, references, GapStageBuilder.Message(stageInput));
+        return _gapState = new(assembled, references);
     }
 
     private int GapCount => _alias!.RunCatalog.Data.Evidence.Count(e => e.Kind == EvidenceKind.Gap);
@@ -655,7 +713,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private async ValueTask<DerivedBatchInput> PrepareGapAsync(int ordinal, Replay replay, IBatchOutputs prior, CancellationToken ct)
     {
         var state = GapState(replay) ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Lo stadio Gap richiede una gerarchia completa.");
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, state.Messages, _gapSchemaJson), ct, _profile.Fingerprint);
+        var registry = _gap!.Retrieval is null ? null : await CommittedRegistryAsync(prior, ct);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, await GapMessagesAsync(state, prior, ct), _gapSchemaJson), ct, _profile.Fingerprint);
         if (measured.Quality == TokenCountQuality.Unavailable)
         {
             throw new RuntimeUnverifiedException("conteggio del payload dello stadio Gap non disponibile (nessun tokenizer o calibrazione identificata)");
@@ -663,11 +722,18 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
         if (await prior.GetByOrdinalAsync(ordinal, ct) is null && GapStageBudget.Evaluate(measured, GapCount, routing: false) is { Fits: false } verdict)
         {
-            throw verdict.ToException();
+            // Sorgente retrieval: il pacchetto è stato dimensionato dal recupero; se il messaggio reale lo supera non si invia e non si taglia (nessun salto al ledger intero).
+            throw registry is not null && verdict.Reason == DocumentWorkException.GapLedgerExceedsInput
+                ? new DocumentWorkException(
+                    DocumentWorkException.CallLimitExceeded,
+                    $"retrieval_package_exceeds_input: il pacchetto dei candidati recuperati ({measured.Tokens} token, qualità della misura: {measured.Quality}) supera il budget di input dello stadio Gap ({measured.InputBudgetTokens} token): "
+                    + "nessun invio, nessun taglio e nessun aumento di budget. Riduci la selezione delle fonti o i Gap e riprova.")
+                : verdict.ToException();
         }
 
         var keys = string.Join(',', GapStage.FreezeKeys.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + kv.Value));
-        var inputHash = DocumentAnalysisWorkflow.Sha($"gap-stage-input|{_input.Snapshot.SourceHash}|{keys}|{_alias!.RunCatalog.RunIndependentHash}|{state.References.Hash()}|{measured.PayloadHash}");
+        var inputHash = DocumentAnalysisWorkflow.Sha($"gap-stage-input|{_input.Snapshot.SourceHash}|{keys}|{_alias!.RunCatalog.RunIndependentHash}|{state.References.Hash()}|{measured.PayloadHash}"
+            + (registry is null ? string.Empty : $"|{CandidateRegistry.SearchBasis}|{registry.Hash()}"));
         var definition = _alias.Definition;
         var batchId = DocumentAnalysisWorkflow.Sha($"batch|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{definition}|{GapStage.BatchStage}|{ordinal}|{inputHash}");
         var gaps = _alias.RunCatalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).ToList();
@@ -675,8 +741,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             batchId, GapStage.BatchStage, null, null, null, ordinal, [],
             JsonSerializer.Serialize(new
             {
-                stage = GapStage.BatchStage, searchBasis = GapStage.SearchBasisLedgerExhaustive, retrievalComplete = true, gaps = gaps.Select(g => g.EvidenceId.ToString("D")).ToArray(),
-                candidates = _alias.RunCatalog.Data.Evidence.Count - gaps.Count, references = state.References.Hash(),
+                stage = GapStage.BatchStage, searchBasis = registry is null ? GapStage.SearchBasisLedgerExhaustive : CandidateRegistry.SearchBasis, retrievalComplete = registry?.RetrievalComplete ?? true,
+                gaps = gaps.Select(g => g.EvidenceId.ToString("D")).ToArray(),
+                candidates = registry?.PackageEvidence.Count ?? _alias.RunCatalog.Data.Evidence.Count - gaps.Count, references = state.References.Hash(),
             }),
             measured.Tokens, measured.Quality == TokenCountQuality.Measured ? "measured" : "calibrated_upper_bound", inputHash, GapStage.AiSchema, GapStage.Prompt);
         if (ordinal >= 1)
@@ -685,6 +752,126 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         }
 
         return batch;
+    }
+
+    /// <summary>
+    /// Batch deterministico del recupero (003 T030, v7): identità = hash di snapshot, chiavi `gap*` e `retrieval*`, catalogo, riferimenti Open, <c>IndexConfigHash</c>, politica e modelli (tutto noto PRIMA di
+    /// interrogare i servizi, quindi stabile al replay). Con il WorkOutput <c>retrieval-output-1</c> già Committed non si richiama alcun servizio (replay/ripresa/takeover: stesso registro). Altrimenti si pubblica il
+    /// batch, si esegue il recupero (embedding, ricerca, riordino: nessun LLM, nessuna riserva, il tetto <c>MaxAiCallsPerRun</c> non è toccato), si congela il registro nel WorkOutput e si ritorna: il port trova l'output
+    /// (lookup Hit) e salta riserva e invio. Un esito non consegnabile (<c>Failed</c>/<c>Diagnostic</c>) è conservato e termina il run con la causa tipizzata, prima di ogni invio dello stadio Gap.
+    /// </summary>
+    private async ValueTask<DerivedBatchInput> PrepareRetrievalAsync(int ordinal, Replay replay, IBatchOutputs prior, CancellationToken ct)
+    {
+        var state = GapState(replay) ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il recupero richiede una gerarchia completa.");
+        var policy = _gap!.Retrieval!.Policy;
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var options = scope.ServiceProvider.GetService<IOptions<RetrievalOptions>>()?.Value
+            ?? throw new DocumentWorkException(RetrievalException.EmbeddingUnavailable, $"{RetrievalException.EmbeddingUnavailable}: il recupero non è configurato. Nessuna chiamata al modello è stata eseguita.");
+        var snapshotId = await db.ProcessingRuns.AsNoTracking().Where(r => r.Id == _claim.RunId).Select(r => r.SourceSnapshotId).SingleAsync(ct)
+            ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Il run non ha uno snapshot di fonti.");
+
+        string indexConfigHash;
+        try
+        {
+            indexConfigHash = await RetrievalSnapshot.IndexConfigHashAsync(db, snapshotId, options, ct);
+        }
+        catch (RetrievalException failure)
+        {
+            throw new DocumentWorkException(failure.Code, failure.ToString());
+        }
+
+        var catalog = _alias!.RunCatalog;
+        var gaps = catalog.Data.Evidence.Where(e => e.Kind == EvidenceKind.Gap).ToList();
+        var retrievalKeys = string.Join(',', RetrievalStage.FreezeValues(options).OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + kv.Value));
+        var gapKeys = string.Join(',', GapStage.FreezeKeys.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + kv.Value));
+        var inputHash = DocumentAnalysisWorkflow.Sha(
+            $"retrieval-input|{_input.Snapshot.SourceHash}|{gapKeys}|{retrievalKeys}|{catalog.RunIndependentHash}|{state.References.Hash()}|{indexConfigHash}|{policy.Hash()}");
+        var batchId = DocumentAnalysisWorkflow.Sha($"batch|ProcessingRun|{_claim.RunId:N}|{_manifestIdentity}|{_alias.Definition}|{RetrievalStage.BatchStage}|{ordinal}|{inputHash}");
+        var batch = new DerivedBatchInput(
+            batchId, RetrievalStage.BatchStage, null, null, null, ordinal, [],
+            JsonSerializer.Serialize(new
+            {
+                stage = RetrievalStage.BatchStage, searchBasis = CandidateRegistry.SearchBasis, gaps = gaps.Select(g => g.EvidenceId.ToString("D")).ToArray(), indexConfigHash,
+                policy = policy.Version, policyHash = policy.Hash(), references = state.References.Hash(),
+            }),
+            null, "unavailable", inputHash, RetrievalStage.OutputSchema, RetrievalStage.Algorithm);
+
+        var committed = await prior.GetByOrdinalAsync(ordinal, ct);
+        if (committed is { Status: WorkOutputStatus.Committed })
+        {
+            if (committed.BatchId != batchId)
+            {
+                throw Incompatible(ordinal);   // il recupero non riproduce lo stesso piano: nessuna reinterpretazione
+            }
+
+            if (RetrievalOutput.ToFailure(RetrievalOutput.Read(committed.PayloadJson)) is { } stored)
+            {
+                throw stored;
+            }
+
+            return batch;
+        }
+
+        var writer = new CheckpointWriter(_claim.RunId, _claim.LeaseOwner, _claim.FencingToken);
+        var store = new DocumentWorkStore(db, writer);
+        await store.PublishBatchesAsync([batch], ct);
+
+        var registry = await ExecuteRetrievalAsync(scope.ServiceProvider, db, snapshotId, indexConfigHash, policy, gaps, state.References, ct);
+        var payload = RetrievalOutput.Build(registry);
+        await store.CommitOutputAsync(
+            new WorkOutputInput(
+                batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null,
+                JsonSerializer.Serialize(gaps.Select(g => g.EvidenceId.ToString("D"))), null, null, RetrievalStage.OutputSchema, RetrievalStage.ValidationVersion, null),
+            null, ct);
+
+        return RetrievalOutput.ToFailure(registry) is { } failureOutcome ? throw failureOutcome : batch;
+    }
+
+    /// <summary>
+    /// Esecuzione del recupero per i Gap del run: ledger congelato → <see cref="RegistryEvidence"/> in ordine di catalogo, interrogazione = enunciato del Gap, budget del pacchetto dal profilo dello stadio con
+    /// costi MISURATI per evidenza (mai stimati) e una riserva prudente per lo scarto fra costo isolato e messaggio reale. Un errore di servizio è già un esito tipizzato del registro, non un'eccezione.
+    /// </summary>
+    private async ValueTask<RetrievalRegistry> ExecuteRetrievalAsync(
+        IServiceProvider services, AppDbContext db, Guid snapshotId, string indexConfigHash, RetrievalPolicy policy, IReadOnlyList<AliasEvidenceEntry> gaps, GapStageReferences references, CancellationToken ct)
+    {
+        var pipeline = services.GetService<RetrievalPipeline>()
+            ?? throw new DocumentWorkException(RetrievalException.EmbeddingUnavailable, $"{RetrievalException.EmbeddingUnavailable}: il recupero non è configurato. Nessuna chiamata al modello è stata eseguita.");
+        var snapshot = await db.SourceSnapshots.AsNoTracking().SingleAsync(s => s.Id == snapshotId, ct);
+        var scope = await RetrievalScope.FromSnapshotAsync(db, snapshotId, indexConfigHash, ct);
+        var entries = _alias!.RunCatalog.Data.Evidence;
+        var evidences = entries.Select(e => BlockEvidenceMapper.From(_evidence[e.EvidenceId])).ToList();
+        var queries = gaps.Select(g => new RetrievalQuery(g.EvidenceId, _evidence[g.EvidenceId].Statement)).ToList();
+
+        // Costi misurati: messaggio con una sola evidenza meno il messaggio senza candidati (stessa funzione di proiezione dell'invio).
+        var empty = GapStageBuilder.Build(_input, _alias.RunCatalog, _gap!.Meta, references) with { Candidates = [], SearchBasis = CandidateRegistry.SearchBasis, RetrievalComplete = false };
+        var fixedMeasure = await MeasureStageAsync(GapStageBuilder.Message(empty), ct);
+        var cost = new Dictionary<Guid, long>();
+        var full = GapStageBuilder.Build(_input, _alias.RunCatalog, _gap.Meta, references);
+        foreach (var voice in full.Candidates)
+        {
+            var single = await MeasureStageAsync(GapStageBuilder.Message(empty with { Candidates = [voice] }), ct);
+            cost[voice.EvidenceId] = Math.Max(1, single.Tokens - fixedMeasure.Tokens);
+        }
+
+        var slack = (long)Math.Ceiling(fixedMeasure.InputBudgetTokens * 0.05) + 256;
+        var budget = RegistryBudget.For(new ContextBudget(fixedMeasure.InputBudgetTokens, fixedMeasure.InputBudgetTokens), fixedMeasure.Tokens + slack, cost);
+        try
+        {
+            return (await pipeline.ExecuteAsync(scope, snapshot.Hash, queries, evidences, policy, budget, ct)).Registry;
+        }
+        catch (RetrievalException failure)
+        {
+            throw new DocumentWorkException(failure.Code, failure.ToString());
+        }
+    }
+
+    private async ValueTask<PayloadPreflight> MeasureStageAsync(IReadOnlyList<ChatMessage> messages, CancellationToken ct)
+    {
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, messages, _gapSchemaJson), ct, _profile.Fingerprint);
+        return measured.Quality == TokenCountQuality.Unavailable
+            ? throw new RuntimeUnverifiedException("conteggio del payload dello stadio Gap non disponibile (nessun tokenizer o calibrazione identificata)")
+            : measured;
     }
 
     /// <summary>Valida PRIMA del WorkOutput: record strict e riferimenti offerti (<c>work_output_invalid</c> terminale, nessuna riparazione né retry); record mancanti ⇒ output riutilizzabile ma <c>ValidIncomplete</c>.</summary>
@@ -710,7 +897,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private async ValueTask VerifyGapStageAsync(Replay replay, IBatchOutputs outputs, CancellationToken ct)
     {
         var state = GapState(replay) ?? throw new DocumentWorkException(DocumentWorkException.CoverageIncomplete, "Stadio Gap non eseguibile: gerarchia incompleta.");
-        var output = await outputs.GetByOrdinalAsync(_finishedBatches, ct);
+        var output = await outputs.GetByOrdinalAsync(GapOrdinal, ct);
         if (output is null || output.Status != WorkOutputStatus.Committed)
         {
             throw new DocumentWorkException(DocumentWorkException.CoverageIncomplete, "Assemble senza l'output dello stadio Gap: nessuna valutazione dei Gap, nessun Completed.");

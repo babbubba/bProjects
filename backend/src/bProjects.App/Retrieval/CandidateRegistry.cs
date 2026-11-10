@@ -62,6 +62,10 @@ public sealed record RetrievalRegistry(
     public string ToCanonicalJson() => CanonicalJson.Canonicalize(JsonSerializer.Serialize(this, Json));
 
     public string Hash() => CanonicalJson.HashText(ToCanonicalJson());
+
+    /// <summary>Registro dal suo JSON (WorkOutput <c>retrieval-output-1</c>): stesse opzioni della serializzazione, così hash e ricostruzione coincidono.</summary>
+    public static RetrievalRegistry FromJson(string json) =>
+        JsonSerializer.Deserialize<RetrievalRegistry>(json, Json) ?? throw new JsonException("Registro del recupero vuoto.");
 }
 
 /// <summary>

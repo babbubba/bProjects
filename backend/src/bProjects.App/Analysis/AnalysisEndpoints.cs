@@ -104,6 +104,7 @@ public static class AnalysisEndpoints
         AppDbContext db,
         IOptions<ExecutionOptions> execution,
         IOptions<AiOptions> ai,
+        IOptions<bProjects.App.Retrieval.RetrievalOptions> retrieval,
         ProcessingRunEvents events,
         SourceSelectionService selection,
         SourceSnapshotStore snapshots,
@@ -173,6 +174,7 @@ public static class AnalysisEndpoints
             }
 
             var documentary = SourceSnapshotStore.HasReadySource(sources);
+            var useRetrieval = documentary && retrieval.Value.Enabled;   // 003 T028: v7 solo con il recupero abilitato esplicitamente; altrimenti v6 invariata
             if (cutoff is null)
             {
                 // Nessun messaggio PM: con almeno una fonte pronta il ramo documentale parte con cutoff 0 (nessun input di dialogo);
@@ -210,10 +212,10 @@ public static class AnalysisEndpoints
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.AnalysisRunDeadline,
                 // Definizione/prompt/schema documentali v2 persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
-                WorkflowDefinitionVersion = documentary ? SourceSnapshotStore.AnalysisDefinitionV6 : ProcessingRun.AnalysisWorkflowVersion,
+                WorkflowDefinitionVersion = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisDefinitionV7 : SourceSnapshotStore.AnalysisDefinitionV6) : ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
-                PromptVersions = documentary ? SourceSnapshotStore.AnalysisPromptVersionsV6() : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
+                PromptVersions = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisPromptVersionsV7(retrieval.Value) : SourceSnapshotStore.AnalysisPromptVersionsV6()) : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };

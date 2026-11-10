@@ -36,6 +36,13 @@ builder.Services.AddOptions<AiOptions>().Bind(builder.Configuration.GetSection(A
 // Recupero (003): configurazione validata all'avvio ma INERTE per default (Retrieval:Enabled=false): nessun servizio contattato, nessuna sonda.
 builder.Services.AddSingleton<IValidateOptions<RetrievalOptions>, RetrievalOptionsValidator>();
 builder.Services.AddOptions<RetrievalOptions>().Bind(builder.Configuration.GetSection(RetrievalOptions.SectionName)).ValidateOnStart();
+// Servizi del recupero (003 T030): costruiti al primo uso (un run v7 con il ledger oltre budget), mai all'avvio; nessuna rete in costruzione. I test sostituiscono i client con server finti.
+builder.Services.AddSingleton(sp => new EmbeddingClient(sp.GetRequiredService<IOptions<RetrievalOptions>>().Value));
+builder.Services.AddSingleton(sp => new RerankClient(sp.GetRequiredService<IOptions<RetrievalOptions>>().Value));
+builder.Services.AddSingleton(sp => new RetrievalModelReadiness(sp.GetRequiredService<IOptions<RetrievalOptions>>().Value, sp.GetRequiredService<EmbeddingClient>(), reranker: sp.GetRequiredService<RerankClient>()));
+builder.Services.AddScoped<HybridSearch>();
+builder.Services.AddScoped<CandidateReranker>();
+builder.Services.AddScoped<RetrievalPipeline>();
 builder.Services.AddSingleton<IValidateOptions<DocumentOptions>, DocumentOptionsValidator>();
 builder.Services.AddOptions<DocumentOptions>().Bind(builder.Configuration.GetSection(DocumentOptions.SectionName)).ValidateOnStart();
 builder.Services.AddScoped<DocumentPolicyService>();

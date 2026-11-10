@@ -24,6 +24,12 @@ public sealed class RetrievalOptions
     /// <summary>Interruttore esplicito: false (default) = il recupero non parte mai da solo.</summary>
     public bool Enabled { get; set; }
 
+    /// <summary>
+    /// Versione della politica di recupero SELEZIONATA esplicitamente per le nuove richieste di Analizza (M3): <c>retrieval-policy-1</c> (default, baseline) o
+    /// <c>retrieval-policy-2</c> (candidata, non accettata). Cambiarla non promuove nulla: il run congela la versione scelta.
+    /// </summary>
+    public string PolicyVersion { get; set; } = RetrievalPolicy.Version1;
+
     /// <summary>Host aggiuntivi ammessi oltre a loopback/reti private (nomi interni risolti da DNS aziendale).</summary>
     public string[] AllowedHosts { get; set; } = [];
 
@@ -89,6 +95,11 @@ public sealed class RetrievalOptionsValidator : IValidateOptions<RetrievalOption
     public ValidateOptionsResult Validate(string? name, RetrievalOptions o)
     {
         var errors = new List<string>();
+
+        if (RetrievalPolicy.ByVersion(o.PolicyVersion) is null)
+        {
+            errors.Add($"Retrieval:PolicyVersion deve essere {RetrievalPolicy.Version1} o {RetrievalPolicy.Version2}.");
+        }
 
         if (o.TimeoutSeconds <= 0)
         {
