@@ -39,6 +39,32 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     /// <summary>Finestra del runtime richiesta dalla prova (T150-P: 131072). Se diversa, la prova si ferma PRIMA di ogni upload e inferenza: nessuna esecuzione a una configurazione non conforme.</summary>
     protected virtual int? RequiredWindowTokens => null;
 
+    /// <summary>Definizione di workflow attesa per il run (T040: v7). Default v6, come T082/T083/T150.</summary>
+    protected virtual string ExpectedDefinition => DocumentAnalysisWorkflow.DefinitionVersionV6;
+
+    /// <summary>Batch dello stadio (fuori dalla gerarchia): 1 con lo stadio Gap v6; T040 ne attende 2 (recupero deterministico + stadio Gap).</summary>
+    protected virtual int StageBatchesExpected => GapStageExpected ? 1 : 0;
+
+    /// <summary>Servizi aggiuntivi della prova (T040: configurazione del recupero). Chiamato solo con l'ambiente DGX configurato.</summary>
+    protected virtual void ConfigureCampaignServices(IServiceCollection services)
+    {
+    }
+
+    /// <summary>Rifiuto di una configurazione incompatibile con la prova PRIMA di ogni upload e inferenza di contenuto (motivo non nullo = FAIL strutturale).</summary>
+    protected virtual string? RejectProfile(DocumentRuntimeProfile profile) => null;
+
+    /// <summary>Documenti del progetto esclusi dal PM prima di Analizza: le loro evidenze non fanno parte dello snapshot e non vanno attese nella copertura.</summary>
+    /// <summary>Testi di documenti inclusi nello snapshot ma non nel corpus generato (T040: documento d'estensione): le loro citazioni valgono nel controllo di provenienza.</summary>
+    protected virtual IEnumerable<string> ExtraSourceTexts => [];
+
+    protected virtual IReadOnlySet<Guid> ExcludedDocumentIds => new HashSet<Guid>();
+
+    /// <summary>Strato a cui attribuire un run fallito, dal codice tipizzato di errore (solo etichetta diagnostica; default non classificato).</summary>
+    protected virtual string ClassifyFailure(string errorCode) => $"non classificata ({(errorCode.Length == 0 ? "codice assente" : errorCode)})";
+
+    /// <summary>Passi della prova fra la preparazione dei documenti del corpus e Analizza (T040: documenti d'estensione, esclusione, indice). False = si ferma, nessuna analisi.</summary>
+    protected virtual Task<bool> PrepareBeforeAnalyzeAsync(HttpClient client, Guid project, Verdicts v) => Task.FromResult(true);
+
     protected static readonly TimeSpan DocumentsTimeout = TimeSpan.FromMinutes(120);
     protected static readonly TimeSpan ChatTimeout = TimeSpan.FromMinutes(8);
     protected static readonly TimeSpan RunTimeout = TimeSpan.FromHours(4);
@@ -108,6 +134,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
                 diag.CreateFactory(sp.GetRequiredService<IOptions<AiOptions>>().Value, model, sp.GetRequiredService<ModelRuntimeMonitor>(), documents.Value.Calibration.ToCalibration()),
                 model, documents);
         });
+        ConfigureCampaignServices(services);
     }
 
     private static void CopyOptions(AiOptions from, AiOptions to)
@@ -249,6 +276,13 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
             return;
         }
 
+        if (RejectProfile(profile) is { } rejection)
+        {
+            v.Check($"[STRUTTURALE] configurazione incompatibile con la prova: {rejection}. Nessun upload, nessuna inferenza", false);
+            v.Flush();
+            return;
+        }
+
         var directory =Path.Combine(Path.GetTempPath(), "bprojects-i5-real", label + "-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
         var manifestPath = corpus.Materialize(directory);
         v.Note($"configurazione: finestra misurata W={profile.WindowTokens} output O={profile.OutputTokens} margine M={profile.MarginTokens} ragionamento={profile.Thinking} => budget di input Analysis B=W-O-M={budget} token; modello={profile.ModelId}");
@@ -334,6 +368,13 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
             v.Check($"[PROVENIENZA] {fact.Id}: il fatto gold e nel testo estratto dal documento {fact.DocKey} (il parser non lo ha alterato)", Fold(extracted[fact.DocKey].Text).Contains(Fold(fact.Sentence), StringComparison.Ordinal));
         }
 
+        if (!await PrepareBeforeAnalyzeAsync(client, project, v))
+        {
+            await TelemetryAsync(project, v);
+            v.Flush();
+            return;
+        }
+
         // --- Analizza (endpoint di produzione): v4, gerarchia, completamento.
         var analysis = await AnalyzeAsync(client, project, v);
         if (analysis is null)
@@ -365,14 +406,14 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     private async Task VerifyStructureAsync(Verdicts v, Guid run, Guid project)
     {
         var args = ("r", (object)run);
-        v.Check("[STRUTTURALE] la definizione del run e project-analysis-documents-v6 (T141, D1/T148)", await Scalar<string>(RunSignalSql.Definition, args) == DocumentAnalysisWorkflow.DefinitionVersionV6);
+        v.Check("[STRUTTURALE] la definizione del run e quella attesa dalla prova (v6 per T082/T083/T150, v7 per T040)", await Scalar<string>(RunSignalSql.Definition, args) == ExpectedDefinition);
         var batches = await Count(RunSignalSql.Batches, args);
         var nodes = await Count(RunSignalSql.Nodes, args);
         var aliasOutputs = await Count(RunSignalSql.AliasOutputs, args);
         var singleOutputs = await Count(RunSignalSql.SingleOutputs, args);
         var calls = await Scalar<int>(RunSignalSql.Calls, args);
         v.Note($"gerarchia: batch={batches} nodi di catalogo={nodes} output reconcile-alias-1={aliasOutputs} output a chiamata singola={singleOutputs} chiamate del run={calls}");
-        var stageBatches = GapStageExpected ? 1 : 0;
+        var stageBatches = StageBatchesExpected;
         v.Check("[STRUTTURALE] l'analisi e passata dalla riconciliazione gerarchica (batch di riconciliazione e nodi di catalogo presenti, nessun output a chiamata singola)",
             batches - stageBatches >= MinimumHierarchyBatches && nodes > 0 && aliasOutputs == batches - stageBatches && singleOutputs == 0, $"batch={batches} (stadio Gap atteso={stageBatches}) nodi={nodes} alias={aliasOutputs} singola={singleOutputs}");
         v.Check("[STRUTTURALE] il run ha usato piu di una chiamata al modello (CallCount maggiore di 1)", calls > 1, $"CallCount={calls}");
@@ -390,12 +431,12 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         v.Check("[COPERTURA] ogni evidenza selezionata dallo snapshot e collegata a una voce della revisione", selected > 0 && linked == selected, $"selezionate={selected} collegate={linked}");
         v.Check("[COPERTURA] ogni voce ha almeno una fonte dichiarata", content.Items.All(i => i.Refs.Count > 0 && i.Refs.All(content.Sources.ContainsKey)));
 
-        var evidences = await DocumentEvidences(client, project);
+        var evidences = (await DocumentEvidences(client, project)).Where(e => !e.Sources.Any(s => ExcludedDocumentIds.Contains(s.DocumentId))).ToList();
         var bySource = evidences.SelectMany(e => e.Sources).GroupBy(s => s.SourceId).ToDictionary(g => g.Key, g => g.First());
         var referenced = content.Items.SelectMany(i => i.Refs).ToHashSet();
         var missing = evidences.Count(e => e.Sources.Any(s => !referenced.Contains(s.SourceId)));
         v.Check($"[COPERTURA] ogni evidenza documentale ({evidences.Count}) ha tutte le sue fonti riferite da una voce", missing == 0, $"{missing} evidenze con fonti non riferite");
-        var allText = extracted.Values.Select(e => Fold(e.Text)).ToList();
+        var allText = extracted.Values.Select(e => Fold(e.Text)).Concat(ExtraSourceTexts.Select(Fold)).ToList();
         var wrong = new List<string>();
         var checkedCount = 0;
         foreach (var source in content.Sources.Values.Where(s => s.Kind == "DocumentPassage"))
@@ -537,6 +578,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         v.Check("[COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS)", status == "Completed", $"{status} {await Failure(run)}");
         if (status != "Completed")
         {
+            v.Note("[CAUSA] " + ClassifyFailure(await Scalar<string>("SELECT coalesce(\"ErrorCode\", '') FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run))));
             return null;
         }
 
@@ -597,7 +639,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         return await reader.ReadAsync(Ct) ? $"{(reader.IsDBNull(0) ? "-" : reader.GetString(0))}: {(reader.IsDBNull(1) ? "-" : Short(reader.GetString(1), 400))}" : "(riga assente)";
     }
 
-    private static async Task<string> Poll(Func<Task<string>> probe, Func<string, bool> terminal, TimeSpan timeout)
+    protected static async Task<string> Poll(Func<Task<string>> probe, Func<string, bool> terminal, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
         var last = "";
