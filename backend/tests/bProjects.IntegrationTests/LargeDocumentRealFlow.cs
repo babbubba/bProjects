@@ -33,6 +33,37 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
 
     protected virtual double MinimumRatio => 2.0;
 
+    /// <summary>
+    /// Requisito sul testo grezzo. Con <see cref="MinimumRatio"/> &gt; 0 e una verifica (testo &gt; MinimumRatio × B). Con 0 (T040, T150-P) NON c e alcun requisito: registrare un PASS «supera 2x»
+    /// sarebbe un falso significato (il controllo `x &gt; 0` e sempre vero), quindi si emette solo una nota di misura; l overflow che T040 richiede e quello del LEDGER dello stadio Gap, verificato altrove.
+    /// </summary>
+    private void StructuralTextRatio(Verdicts v, string subject, string qualifier, long tokens, int budget)
+    {
+        var r = EvaluateTextRatio(MinimumRatio, subject, qualifier, tokens, budget);
+        if (r.IsRequirement)
+        {
+            v.Check(r.Text, r.Ok, r.Detail);
+        }
+        else
+        {
+            v.Note(r.Text);
+        }
+    }
+
+    internal sealed record TextRatioOutcome(bool IsRequirement, bool Ok, string Text, string Detail);
+
+    /// <summary>Parte pura (testabile offline) di <see cref="StructuralTextRatio"/>: requisito solo se <paramref name="minimumRatio"/> &gt; 0, altrimenti nota di misura senza esito.</summary>
+    internal static TextRatioOutcome EvaluateTextRatio(double minimumRatio, string subject, string qualifier, long tokens, int budget)
+    {
+        if (minimumRatio > 0)
+        {
+            var m = minimumRatio.ToString("0.##", CultureInfo.InvariantCulture);
+            return new(true, tokens > minimumRatio * budget, $"[STRUTTURALE] {subject} supera {m}x il budget di input Analysis {qualifier}", $"{tokens} token contro {m}xB={minimumRatio * budget:0}");
+        }
+
+        return new(false, true, $"[MISURA] {subject} {qualifier}: {tokens} token = {(double)tokens / budget:F2}x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap", string.Empty);
+    }
+
     /// <summary>Batch minimi della gerarchia (stadio Gap escluso): 2 per T082/T083; T150 dimensiona il corpus sul ledger e ne richiede almeno 1.</summary>
     protected virtual int MinimumHierarchyBatches => 2;
 
@@ -292,7 +323,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
             v.Note($"  {d.FileName} sha256={d.Sha256} testo-sha256={d.PlainTextSha256} byte={d.Bytes.Length} regole-secondarie={d.BulkRules.Count}");
         }
 
-        v.Check("[STRUTTURALE] il testo generato supera 2x il budget di input Analysis (tokenizer reale, prima dell'upload)", generatedTokens > MinimumRatio * budget, $"{generatedTokens} token contro 2xB={2 * budget}");
+        StructuralTextRatio(v, "il testo generato", "(tokenizer reale, prima dell'upload)", generatedTokens, budget);
 
         using var client = await App.LoginAsync();
         var project = await NewProject(client);
@@ -362,7 +393,7 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         }
 
         v.Note($"testo estratto dal parser: {extractedTokens} token = {(double)extractedTokens / budget:F2}x B");
-        v.Check("[STRUTTURALE] il testo REALMENTE estratto dal parser supera 2x il budget di input Analysis (nessuna riduzione, finestra non aumentata)", extractedTokens > MinimumRatio * budget, $"{extractedTokens} token contro 2xB={2 * budget}");
+        StructuralTextRatio(v, "il testo REALMENTE estratto dal parser", "(nessuna riduzione, finestra non aumentata)", extractedTokens, budget);
         foreach (var fact in corpus.Gold.Where(g => g.DocKey != "pm"))
         {
             v.Check($"[PROVENIENZA] {fact.Id}: il fatto gold e nel testo estratto dal documento {fact.DocKey} (il parser non lo ha alterato)", Fold(extracted[fact.DocKey].Text).Contains(Fold(fact.Sentence), StringComparison.Ordinal));

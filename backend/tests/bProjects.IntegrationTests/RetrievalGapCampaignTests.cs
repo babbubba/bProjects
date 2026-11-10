@@ -490,6 +490,52 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
+    public void A_zero_minimum_ratio_yields_a_measurement_note_never_a_pass_while_a_positive_one_stays_a_real_check()
+    {
+        var none = LargeDocumentRealFlow.EvaluateTextRatio(0, "il testo generato", "(tokenizer reale)", 5570, 15360);
+        Assert.False(none.IsRequirement);   // niente Check: il vecchio controllo `x > 0 * B` era sempre vero e dichiarava PASS «supera 2x»
+        Assert.DoesNotContain("supera", none.Text, StringComparison.Ordinal);
+        Assert.Contains("non e un PASS", none.Text, StringComparison.Ordinal);
+        Assert.Contains("0,36x B", none.Text.Replace(".", ",", StringComparison.Ordinal), StringComparison.Ordinal);
+
+        var below = LargeDocumentRealFlow.EvaluateTextRatio(2.0, "il testo generato", "(tokenizer reale)", 5570, 15360);   // T082/T083: il requisito 2x resta reale e FALLISCE sotto soglia
+        Assert.True(below.IsRequirement);
+        Assert.False(below.Ok);
+        Assert.Contains("supera 2x", below.Text, StringComparison.Ordinal);
+        Assert.True(LargeDocumentRealFlow.EvaluateTextRatio(2.0, "t", "q", 30_721, 15360).Ok);
+    }
+
+    [Fact]
+    public void T040_requires_the_LEDGER_not_the_raw_text_to_overflow_the_stage_budget_the_text_itself_stays_below_2xB()
+    {
+        // Proprieta offline di T040 (non del testo grezzo): per entrambi i corpus il testo (stima prudente per ECCESSO di token, 2,5 car/token) sta sotto 2xB, quindi MinimumRatio=2 sarebbe
+        // irrealizzabile senza alterare corpus/gold; il ledger invece (stima prudente per DIFETTO, come nel test precedente) supera B. Offline NON si dimostra: numero e dimensione reali delle evidenze
+        // estratte, ne che l estrazione reale completi (Run 1: non completa a W=32768/O=16384) — da misurare con l estrazione reale.
+        foreach (var scenario in new[] { RetrievalGapCampaign.Single, RetrievalGapCampaign.Multi })
+        {
+            var corpus = RetrievalGapCampaign.BuildCorpus(scenario);
+            var textTokensUpper = corpus.PlainTextChars / 2.5;
+            Assert.True(textTokensUpper < 2 * RetrievalGapCampaign.BudgetTokens, $"{scenario.Label}: testo stimato {textTokensUpper:F0} token >= 2xB");
+            var ledgerLower = (corpus.Documents.SelectMany(d => d.BulkRules).Sum(r => (2 * r.Length + 150) / 4.0)
+                + corpus.Gold.Where(g => g.DocKey != "pm").Sum(g => (2 * g.Sentence.Length + 150) / 4.0)) * 0.75 + 4000;
+            Assert.True(ledgerLower > RetrievalGapCampaign.BudgetTokens, $"{scenario.Label}: ledger {ledgerLower:F0} <= B");
+        }
+    }
+
+    [Fact]
+    public void Characterization_run1_the_planner_estimate_accepted_a_unit_that_the_model_could_not_finish_within_O()
+    {
+        // Fatti osservati nel Run 1 (T040-run1, summary.json): OwnedTokens=1430, prompt 4388, completion=16384=O con finish=length, troncato a c2:9 di c2:13. Il planner (8.0) stima 11440 <= O e non divide.
+        // Non e una correzione: fissa il comportamento corrente come evidenza. Cambiare il fattore o la regola richiede una decisione (vedi M3-real.md).
+        var limits = new PlannerLimits(RetrievalGapCampaign.BudgetTokens, RetrievalGapCampaign.OutputTokens);
+        var measure = new UnitMeasure(4388, TokenCountQuality.Measured, "h", 1430);
+        Assert.Equal(8.0, limits.OutputExpansion);
+        Assert.Equal(11440, (int)Math.Ceiling(measure.OwnedTokens * limits.OutputExpansion));
+        Assert.True(limits.Fits(measure));
+        Assert.False(new PlannerLimits(RetrievalGapCampaign.BudgetTokens, RetrievalGapCampaign.OutputTokens, 11.5).Fits(measure));   // gia a 11,5 (limite inferiore osservato) l unita sarebbe stata divisa
+    }
+
+    [Fact]
     public void Without_the_dgx_opt_in_the_campaign_is_skipped_never_passed_and_both_scenarios_share_one_serial_collection()
     {
         Assert.False(TestEnvironment.DgxAllowedFrom(_ => null));
