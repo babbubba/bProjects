@@ -1,0 +1,12 @@
+{
+  "frozenAt": "2026-11-10",
+  "set": "T027-dev",
+  "files": {
+    "addendum-2027-orione.txt": "0f1385a2fc012c374b3eab8da079186994133118e7f78df6d5aa471ad5f81011",
+    "allegato-tecnico-orione.md": "1fc40201cb941238f14b53812a8a983d5e5286795c1f7aa12363ea1333a75f9a",
+    "cases.json": "c64c8a42e53f8ea9cee067039f13119b495a7f8f40b83fb9d17bed4623274230",
+    "contratto-quadro-orione.txt": "7022fb64036b5c221062d5db2f7aef841c3e93a6f9e1e47a1ce09fe646bbe3bb",
+    "offerta-commerciale-orione.md": "d5eab476283ec4cff4cc2eea410eee5d1e82afaa289662bca43d98c984927ecc",
+    "verbale-collaudo-orione.md": "49763b105b5611f73e09412563ee97a178e32ef919f48d4405d5d9872b030f1a"
+  }
+}

@@ -1,0 +1,480 @@
+{
+  "name": "T027-dev",
+  "note": "Insieme di SVILUPPO scritto dall'assistente dopo aver osservato i fallimenti di M2: NON è una validazione indipendente. Documenti sintetici, query e gold congelati prima della misura A/B (vedi frozen-manifest.json).",
+  "author": "assistente (sviluppo)",
+  "scenarios": {
+    "T027-dev": [
+      {
+        "id": "E01",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Quale termine di pagamento prevede il contratto quadro?",
+        "gold": [
+          {
+            "id": "cPay",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "termine di pagamento delle fatture è di 45 giorni"
+          }
+        ]
+      },
+      {
+        "id": "E02",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Quanto dura la garanzia secondo l'offerta commerciale?",
+        "gold": [
+          {
+            "id": "oWar",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "garanzia sulle apparecchiature ha durata di 12 mesi"
+          }
+        ]
+      },
+      {
+        "id": "E03",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Entro quando vengono consegnate le apparecchiature secondo l'allegato tecnico?",
+        "gold": [
+          {
+            "id": "aDel",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "spedite in non più di due settimane"
+          }
+        ]
+      },
+      {
+        "id": "E04",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Che penale per ritardata consegna prevede l'offerta commerciale?",
+        "gold": [
+          {
+            "id": "oPen",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "penali per ritardata consegna sono dell'1 per cento"
+          }
+        ]
+      },
+      {
+        "id": "E05",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Qual è il termine di pagamento delle fatture nell'addendum 2027?",
+        "gold": [
+          {
+            "id": "dPay",
+            "file": "addendum-2027-orione.txt",
+            "contains": "termine di pagamento delle fatture è di 60 giorni"
+          }
+        ]
+      },
+      {
+        "id": "E06",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Quanto dura la garanzia sulle apparecchiature secondo l'addendum 2027?",
+        "gold": [
+          {
+            "id": "dWar",
+            "file": "addendum-2027-orione.txt",
+            "contains": "garanzia sulle apparecchiature è estesa a 36 mesi"
+          }
+        ]
+      },
+      {
+        "id": "E07",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Qual è il tempo di intervento per i guasti bloccanti secondo l'allegato tecnico?",
+        "gold": [
+          {
+            "id": "aAss",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "guasti bloccanti è di 4 ore lavorative"
+          }
+        ]
+      },
+      {
+        "id": "E08",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Qual è il preavviso di recesso nel contratto quadro?",
+        "gold": [
+          {
+            "id": "cRec",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "preavviso di recesso è di 90 giorni"
+          }
+        ]
+      },
+      {
+        "id": "E09",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Quali penali per ritardata consegna prevede l'allegato tecnico?",
+        "gold": [
+          {
+            "id": "aPen",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "penali per ritardata consegna sono dello 0,5 per cento"
+          }
+        ]
+      },
+      {
+        "id": "E10",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Per quanti anni vale la riservatezza secondo il contratto quadro?",
+        "gold": [
+          {
+            "id": "cRis",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "riservatezza durano 5 anni"
+          }
+        ]
+      },
+      {
+        "id": "E11",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Qual è il tempo di intervento per i guasti bloccanti nell'offerta commerciale?",
+        "gold": [
+          {
+            "id": "oAss",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "guasti bloccanti è di 8 ore lavorative"
+          }
+        ]
+      },
+      {
+        "id": "E12",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Entro quanti giorni va pagata la prima rata secondo il verbale di collaudo?",
+        "gold": [
+          {
+            "id": "vPay",
+            "file": "verbale-collaudo-orione.md",
+            "contains": "termine di pagamento della prima rata è di 15 giorni"
+          }
+        ]
+      },
+      {
+        "id": "E13",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Quanto dura il contratto quadro Orione?",
+        "gold": [
+          {
+            "id": "cDur",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "ha durata di 36 mesi dalla data di firma"
+          }
+        ]
+      },
+      {
+        "id": "E14",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Da quando ha efficacia l'addendum 2027?",
+        "gold": [
+          {
+            "id": "dEff",
+            "file": "addendum-2027-orione.txt",
+            "contains": "ha efficacia dal 1 gennaio 2027"
+          }
+        ]
+      },
+      {
+        "id": "E15",
+        "category": "explicit-doc",
+        "mentionsDocument": true,
+        "query": "Per quanto tempo è valida l'offerta commerciale?",
+        "gold": [
+          {
+            "id": "oVal",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "è valida per 60 giorni dalla data di emissione"
+          }
+        ]
+      },
+      {
+        "id": "S01",
+        "category": "section-ref",
+        "mentionsDocument": true,
+        "query": "Cosa prevede la sezione Assistenza dell'allegato tecnico per i guasti bloccanti?",
+        "gold": [
+          {
+            "id": "aAss",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "guasti bloccanti è di 4 ore lavorative"
+          }
+        ]
+      },
+      {
+        "id": "S02",
+        "category": "section-ref",
+        "mentionsDocument": true,
+        "query": "Cosa indica la sezione Garanzia dell'offerta commerciale sulla durata?",
+        "gold": [
+          {
+            "id": "oWar",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "garanzia sulle apparecchiature ha durata di 12 mesi"
+          }
+        ]
+      },
+      {
+        "id": "S03",
+        "category": "section-ref",
+        "mentionsDocument": true,
+        "query": "Nella sezione Pagamenti dell'offerta commerciale quale termine è indicato per le fatture?",
+        "gold": [
+          {
+            "id": "oPay",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "termine di pagamento delle fatture è di 30 giorni data fattura fine mese"
+          }
+        ]
+      },
+      {
+        "id": "S04",
+        "category": "section-ref",
+        "mentionsDocument": true,
+        "query": "Cosa stabilisce la sezione Penali dell'offerta commerciale per i ritardi di consegna?",
+        "gold": [
+          {
+            "id": "oPen",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "penali per ritardata consegna sono dell'1 per cento"
+          }
+        ]
+      },
+      {
+        "id": "I01",
+        "category": "implicit-unique",
+        "mentionsDocument": false,
+        "query": "Qual è il foro competente in caso di controversia?",
+        "gold": [
+          {
+            "id": "cFor",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "foro competente è quello di Bologna"
+          }
+        ]
+      },
+      {
+        "id": "I02",
+        "category": "implicit-unique",
+        "mentionsDocument": false,
+        "query": "Ogni quanti mesi si esegue la manutenzione preventiva?",
+        "gold": [
+          {
+            "id": "aMan",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "manutenzione preventiva è eseguita ogni 6 mesi"
+          }
+        ]
+      },
+      {
+        "id": "I03",
+        "category": "implicit-unique",
+        "mentionsDocument": false,
+        "query": "Quale sconto si applica per volumi superiori a 500 unità?",
+        "gold": [
+          {
+            "id": "oSco",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "sconto per volumi superiori a 500 unità è del 7 per cento"
+          }
+        ]
+      },
+      {
+        "id": "I04",
+        "category": "implicit-unique",
+        "mentionsDocument": false,
+        "query": "Quanto costa il canone annuale di assistenza?",
+        "gold": [
+          {
+            "id": "dCan",
+            "file": "addendum-2027-orione.txt",
+            "contains": "canone di assistenza annuale è di 4.800 euro"
+          }
+        ]
+      },
+      {
+        "id": "I05",
+        "category": "implicit-unique",
+        "mentionsDocument": false,
+        "query": "Dove e quando è stato eseguito il collaudo?",
+        "gold": [
+          {
+            "id": "vEsi",
+            "file": "verbale-collaudo-orione.md",
+            "contains": "collaudo è stato eseguito il 3 febbraio 2027 presso la sede di Modena"
+          }
+        ]
+      },
+      {
+        "id": "I06",
+        "category": "implicit-unique",
+        "mentionsDocument": false,
+        "query": "Qual è il limite giornaliero di ordini per ciascuna sede?",
+        "gold": [
+          {
+            "id": "aLim",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "limite di ordini per ciascuna sede è di 60 al giorno"
+          }
+        ]
+      },
+      {
+        "id": "M01",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Quali termini di pagamento delle fatture risultano dai documenti?",
+        "gold": [
+          {
+            "id": "cPay",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "termine di pagamento delle fatture è di 45 giorni"
+          },
+          {
+            "id": "oPay",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "termine di pagamento delle fatture è di 30 giorni data fattura fine mese"
+          },
+          {
+            "id": "dPay",
+            "file": "addendum-2027-orione.txt",
+            "contains": "termine di pagamento delle fatture è di 60 giorni"
+          }
+        ]
+      },
+      {
+        "id": "M02",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Quali durate della garanzia sulle apparecchiature sono previste?",
+        "gold": [
+          {
+            "id": "cWar",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "garanzia sulle apparecchiature ha durata di 24 mesi"
+          },
+          {
+            "id": "oWar",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "garanzia sulle apparecchiature ha durata di 12 mesi"
+          },
+          {
+            "id": "dWar",
+            "file": "addendum-2027-orione.txt",
+            "contains": "garanzia sulle apparecchiature è estesa a 36 mesi"
+          }
+        ]
+      },
+      {
+        "id": "M03",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Qual è il preavviso di recesso?",
+        "gold": [
+          {
+            "id": "cRec",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "preavviso di recesso è di 90 giorni"
+          },
+          {
+            "id": "oRec",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "preavviso di recesso è di 30 giorni"
+          }
+        ]
+      },
+      {
+        "id": "M04",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Quali tempi di intervento per i guasti bloccanti sono previsti?",
+        "gold": [
+          {
+            "id": "aAss",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "guasti bloccanti è di 4 ore lavorative"
+          },
+          {
+            "id": "oAss",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "guasti bloccanti è di 8 ore lavorative"
+          }
+        ]
+      },
+      {
+        "id": "M05",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Quali sono le penali per ritardata consegna?",
+        "gold": [
+          {
+            "id": "cPen",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "penali per ritardata consegna sono dello 0,5 per cento"
+          },
+          {
+            "id": "aPen",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "penali per ritardata consegna sono dello 0,5 per cento"
+          },
+          {
+            "id": "oPen",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "penali per ritardata consegna sono dell'1 per cento"
+          }
+        ]
+      },
+      {
+        "id": "M06",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Entro quanto tempo vengono consegnate le apparecchiature?",
+        "gold": [
+          {
+            "id": "cDel",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "consegnate entro 10 giorni lavorativi"
+          },
+          {
+            "id": "aDel",
+            "file": "allegato-tecnico-orione.md",
+            "contains": "spedite in non più di due settimane"
+          },
+          {
+            "id": "oDel",
+            "file": "offerta-commerciale-orione.md",
+            "contains": "consegna standard è prevista entro 20 giorni solari"
+          }
+        ]
+      },
+      {
+        "id": "M07",
+        "category": "similar-multi",
+        "mentionsDocument": false,
+        "query": "Per quanti anni valgono gli obblighi di riservatezza?",
+        "gold": [
+          {
+            "id": "cRis",
+            "file": "contratto-quadro-orione.txt",
+            "contains": "riservatezza durano 5 anni"
+          },
+          {
+            "id": "dRis",
+            "file": "addendum-2027-orione.txt",
+            "contains": "riservatezza sono estesi a 7 anni"
+          }
+        ]
+      }
+    ]
+  }
+}
