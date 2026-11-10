@@ -1,0 +1,2501 @@
+{
+  "kind": "CONFRONTO A/B T027: separato dalla baseline ufficiale (baseline-m2.json non toccato). Nessun giudizio di gate.",
+  "measuredOn": "2026-11-10",
+  "variantA": {
+    "version": "retrieval-policy-1",
+    "hash": "0c7049270c3960b8ca981a51fa6ab2ea0ceb24fccb4b978fa365d7d84d4f2245",
+    "rerankInput": "text-only"
+  },
+  "variantB": {
+    "version": "retrieval-policy-2",
+    "hash": "84f3fb4aeb291dfe27bda03996f152bf9a3356b39fee21a9021180ba5cc60981",
+    "rerankInput": "rerank-input-1"
+  },
+  "retrieval": {
+    "pool": 50,
+    "rerank": 50,
+    "rrfK": 60
+  },
+  "embedding": {
+    "modelId": "bge-m3-Q5",
+    "artifact": "bge-m3-Q5_K_M.gguf",
+    "dimension": 1024
+  },
+  "reranker": {
+    "modelId": "bge-reranker-v2-m3",
+    "artifact": "bge-reranker-v2-m3-Q5_K_M.gguf"
+  },
+  "indexSeconds": {
+    "T027-dev": 17.2,
+    "N4-fixtures": 0.7,
+    "T082-single": 120,
+    "T083-multi": 121.6
+  },
+  "queries": [
+    {
+      "set": "T027-dev",
+      "id": "E01",
+      "query": "Quale termine di pagamento prevede il contratto quadro?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          5
+        ],
+        "a": [
+          3
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 402,
+        "b": 436.3
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E02",
+      "query": "Quanto dura la garanzia secondo l'offerta commerciale?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          3
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 280.7,
+        "b": 323.6
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E03",
+      "query": "Entro quando vengono consegnate le apparecchiature secondo l'allegato tecnico?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 295,
+        "b": 381.9
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E04",
+      "query": "Che penale per ritardata consegna prevede l'offerta commerciale?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          3
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 289.5,
+        "b": 333.1
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E05",
+      "query": "Qual è il termine di pagamento delle fatture nell'addendum 2027?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 298.8,
+        "b": 345.1
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E06",
+      "query": "Quanto dura la garanzia sulle apparecchiature secondo l'addendum 2027?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 300.2,
+        "b": 336
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E07",
+      "query": "Qual è il tempo di intervento per i guasti bloccanti secondo l'allegato tecnico?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 297.3,
+        "b": 363.2
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E08",
+      "query": "Qual è il preavviso di recesso nel contratto quadro?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 292.5,
+        "b": 336.8
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E09",
+      "query": "Quali penali per ritardata consegna prevede l'allegato tecnico?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 308.5,
+        "b": 326.4
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E10",
+      "query": "Per quanti anni vale la riservatezza secondo il contratto quadro?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 316.2,
+        "b": 366.6
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E11",
+      "query": "Qual è il tempo di intervento per i guasti bloccanti nell'offerta commerciale?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 299.6,
+        "b": 340.7
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E12",
+      "query": "Entro quanti giorni va pagata la prima rata secondo il verbale di collaudo?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 309.2,
+        "b": 499.3
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E13",
+      "query": "Quanto dura il contratto quadro Orione?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 290.7,
+        "b": 323.6
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E14",
+      "query": "Da quando ha efficacia l'addendum 2027?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 301.3,
+        "b": 322.9
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "E15",
+      "query": "Per quanto tempo è valida l'offerta commerciale?",
+      "category": "explicit-doc",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 285.6,
+        "b": 330.2
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "S01",
+      "query": "Cosa prevede la sezione Assistenza dell'allegato tecnico per i guasti bloccanti?",
+      "category": "section-ref",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 296.1,
+        "b": 343.3
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "S02",
+      "query": "Cosa indica la sezione Garanzia dell'offerta commerciale sulla durata?",
+      "category": "section-ref",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          4
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 298.4,
+        "b": 325.7
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "S03",
+      "query": "Nella sezione Pagamenti dell'offerta commerciale quale termine è indicato per le fatture?",
+      "category": "section-ref",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 302.4,
+        "b": 336.8
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "S04",
+      "query": "Cosa stabilisce la sezione Penali dell'offerta commerciale per i ritardi di consegna?",
+      "category": "section-ref",
+      "mentionsDocument": true,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          3
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 310.1,
+        "b": 346
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "I01",
+      "query": "Qual è il foro competente in caso di controversia?",
+      "category": "implicit-unique",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 279.7,
+        "b": 332.9
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "I02",
+      "query": "Ogni quanti mesi si esegue la manutenzione preventiva?",
+      "category": "implicit-unique",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 320.6,
+        "b": 343.7
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "I03",
+      "query": "Quale sconto si applica per volumi superiori a 500 unità?",
+      "category": "implicit-unique",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 294.2,
+        "b": 327.5
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "I04",
+      "query": "Quanto costa il canone annuale di assistenza?",
+      "category": "implicit-unique",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 297.7,
+        "b": 340.1
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "I05",
+      "query": "Dove e quando è stato eseguito il collaudo?",
+      "category": "implicit-unique",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 319.2,
+        "b": 356.6
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "I06",
+      "query": "Qual è il limite giornaliero di ordini per ciascuna sede?",
+      "category": "implicit-unique",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 295.8,
+        "b": 352.3
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M01",
+      "query": "Quali termini di pagamento delle fatture risultano dai documenti?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          3,
+          1,
+          2
+        ],
+        "a": [
+          2,
+          3,
+          1
+        ],
+        "b": [
+          2,
+          3,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 307,
+        "b": 368
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M02",
+      "query": "Quali durate della garanzia sulle apparecchiature sono previste?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1,
+          2,
+          3
+        ],
+        "a": [
+          1,
+          2,
+          3
+        ],
+        "b": [
+          1,
+          3,
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 331.8,
+        "b": 346.4
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M03",
+      "query": "Qual è il preavviso di recesso?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          2,
+          1
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          2,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 302.2,
+        "b": 344.5
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M04",
+      "query": "Quali tempi di intervento per i guasti bloccanti sono previsti?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1,
+          2
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 296.7,
+        "b": 333.4
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M05",
+      "query": "Quali sono le penali per ritardata consegna?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          3,
+          1,
+          2
+        ],
+        "a": [
+          2,
+          1,
+          3
+        ],
+        "b": [
+          2,
+          1,
+          3
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 301.1,
+        "b": 343.8
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M06",
+      "query": "Entro quanto tempo vengono consegnate le apparecchiature?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1,
+          3,
+          5
+        ],
+        "a": [
+          1,
+          2,
+          5
+        ],
+        "b": [
+          1,
+          2,
+          6
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 321.7,
+        "b": 379.1
+      }
+    },
+    {
+      "set": "T027-dev",
+      "id": "M07",
+      "query": "Per quanti anni valgono gli obblighi di riservatezza?",
+      "category": "similar-multi",
+      "mentionsDocument": false,
+      "mentionDeclared": true,
+      "positions": {
+        "rrf": [
+          1,
+          2
+        ],
+        "a": [
+          1,
+          2
+        ],
+        "b": [
+          2,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 312.9,
+        "b": 353.9
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "N4-doc-title",
+      "query": "Cosa dice la Scheda A sul termine di pagamento?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 159,
+        "b": 151.2
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "N4-doc-30",
+      "query": "In quale scheda il termine di pagamento è 30 giorni?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 151.7,
+        "b": 156.3
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "N4-doc-B",
+      "query": "Cosa riporta la Scheda B sul termine di pagamento?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          3
+        ],
+        "a": [
+          3
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 159.3,
+        "b": 149.7
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "N4-doc-B-60",
+      "query": "Quale documento stabilisce pagamento a 60 giorni?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 149.2,
+        "b": 157.6
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "neg-consent",
+      "query": "È consentito inviare email senza consenso?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 161.5,
+        "b": 171.2
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "neg-returns",
+      "query": "Il progetto richiede la gestione dei resi?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 146.3,
+        "b": 163.1
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "neg-card",
+      "query": "Possiamo memorizzare il numero della carta?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 145,
+        "b": 155.4
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "neg-export",
+      "query": "Quali esportazioni di dati sono vietate?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 136.9,
+        "b": 151.9
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "neg-45",
+      "query": "Il termine dei pagamenti è 45 oppure 30 giorni?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": false
+      },
+      "rerankMs": {
+        "a": 149,
+        "b": 154.5
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "md-release",
+      "query": "Che cosa include il rilascio 1?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 147.9,
+        "b": 161.2
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "md-excluded",
+      "query": "Sono comprese le modifiche agli ordini?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 144.8,
+        "b": 151.5
+      }
+    },
+    {
+      "set": "N4-fixtures",
+      "id": "md-collaudo",
+      "query": "Qual è la scadenza del collaudo?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 143.7,
+        "b": 152
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S01",
+      "query": "Per quanto tempo si conservano i documenti di trasporto?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 878.9,
+        "b": 689.3
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S02",
+      "query": "Chi può accedere al portale Aurora?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 445.4,
+        "b": 459
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S03",
+      "query": "Quando si emette la fattura elettronica nei mesi ordinari?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 458.2,
+        "b": 508.5
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S04",
+      "query": "Quali eccezioni stagionali si applicano alla scadenza di fatturazione?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 409.1,
+        "b": 415.2
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S05",
+      "query": "Quali tempi e quali esclusioni valgono per la presa in carico dei guasti urgenti?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 380,
+        "b": 512.3
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S06",
+      "query": "Quali autorizzazioni servono per acquistare con procedura urgente?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 394.2,
+        "b": 412.4
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S07",
+      "query": "Quali resi rifiuta il magazzino di Verona?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 424.6,
+        "b": 469.2
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S08",
+      "query": "Quando si effettuano i backup e per quanto tempo vengono mantenuti?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 415.2,
+        "b": 447.5
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S09",
+      "query": "Come si calcola la penale per consegne tardive e qual è il suo tetto?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 474,
+        "b": 487.6
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S10",
+      "query": "In quali condizioni il fornitore è esonerato per uno sciopero dei trasportatori?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 415.5,
+        "b": 504.2
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S11",
+      "query": "Quale sede dispone di assistenza durante la notte?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          3
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 472.3,
+        "b": 489.4
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S12",
+      "query": "Quale canale deve essere usato per le comunicazioni contrattuali?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 398.1,
+        "b": 480.7
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S13",
+      "query": "Quale termine di pagamento decorre dal ricevimento delle fatture?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 426.6,
+        "b": 436.8
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S14",
+      "query": "Quale termine di pagamento decorre dalla data fattura?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": false
+      },
+      "rerankMs": {
+        "a": 383.6,
+        "b": 402.3
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S15",
+      "query": "Qual è la finestra di manutenzione prevista al sabato?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 462.8,
+        "b": 473.7
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "S16",
+      "query": "Qual è la finestra di manutenzione prevista alla domenica?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 427.2,
+        "b": 448.2
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "all-payments",
+      "query": "Quali termini di pagamento sono presenti nel capitolato?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2,
+          1
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          2,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 430.4,
+        "b": 414.7
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "all-maintenance",
+      "query": "Quali finestre di manutenzione sono indicate?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          9,
+          1
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 423.5,
+        "b": 441.1
+      }
+    },
+    {
+      "set": "T082-single",
+      "id": "invoice-exceptions",
+      "query": "Quando si emette la fattura, incluse le eccezioni?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2,
+          1
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          2,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 429.6,
+        "b": 444.8
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M01",
+      "query": "Quanto dura il contratto quadro Zefiro?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 346.8,
+        "b": 401.6
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M02",
+      "query": "Il contratto si rinnova automaticamente?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 420.4,
+        "b": 434.3
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M06",
+      "query": "Dove sono definite le penali previste dal contratto quadro?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          3
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 330.4,
+        "b": 363
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M07",
+      "query": "Che cosa comprende il pacchetto Ambra?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 369.7,
+        "b": 421
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M03",
+      "query": "Quale termine di pagamento prevede il contratto quadro?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 362.2,
+        "b": 410.6
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M04",
+      "query": "Quanto dura la garanzia nel contratto quadro?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          4
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 358.5,
+        "b": 409.7
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M05",
+      "query": "Quanto si attende per ricevere i ricambi ordinari secondo il contratto quadro?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 403.8,
+        "b": 483.3
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M08",
+      "query": "Quanti ordini al giorno sono consentiti per sede secondo l’allegato tecnico?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 414.7,
+        "b": 510
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M12",
+      "query": "Quali eccezioni all’orario limite esistono per gli ordini urgenti?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 395.5,
+        "b": 428.4
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M09",
+      "query": "Entro quando arrivano i ricambi secondo l’allegato tecnico?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 406.4,
+        "b": 442.3
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M10",
+      "query": "Con quale frequenza viene aggiornato il monitoraggio nel pacchetto Ambra?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 425,
+        "b": 448.5
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M11",
+      "query": "Come si calcolano le penali di ritardo dell’Allegato C?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 351.9,
+        "b": 401.1
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M13",
+      "query": "Quanto dura la garanzia secondo il verbale di collaudo?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2
+        ],
+        "a": [
+          2
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 401.4,
+        "b": 430.1
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M14",
+      "query": "Quale termine di pagamento prevede il verbale di collaudo?",
+      "category": "legacy",
+      "mentionsDocument": true,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          4
+        ],
+        "a": [
+          3
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": false,
+        "a": false,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 352,
+        "b": 389.7
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M15",
+      "query": "Quando e dove si svolgerà il collaudo finale?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 418,
+        "b": 423.2
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M16",
+      "query": "Si possono modificare i listini durante il collaudo?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 393.8,
+        "b": 420.8
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "M17",
+      "query": "Che cosa succede alla seconda rata se il collaudo fallisce?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 383.3,
+        "b": 400.4
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "all-payments",
+      "query": "Quali termini di pagamento risultano dai documenti e dal PM?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1,
+          2
+        ],
+        "a": [
+          1,
+          2
+        ],
+        "b": [
+          2,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 361.7,
+        "b": 417.3
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "all-warranty",
+      "query": "Quali durate della garanzia risultano dai documenti?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2,
+          1
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          2,
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 374,
+        "b": 406.5
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "all-limits",
+      "query": "Quali limiti giornalieri di ordini per sede risultano da documenti e PM?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1
+        ],
+        "a": [
+          1
+        ],
+        "b": [
+          1
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 392.3,
+        "b": 408.6
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "equivalent-delivery",
+      "query": "Quali tempi di consegna sono previsti per i ricambi ordinari?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1,
+          3
+        ],
+        "a": [
+          2,
+          1
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 366.3,
+        "b": 406.7
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "penalty-reference",
+      "query": "Dove sono definite e come si calcolano le penali di consegna?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          1,
+          2
+        ],
+        "a": [
+          1,
+          2
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 397.9,
+        "b": 402.4
+      }
+    },
+    {
+      "set": "T083-multi",
+      "id": "ambra-complements",
+      "query": "Quali funzioni comprende Ambra e con quale frequenza sono aggiornate?",
+      "category": "legacy",
+      "mentionsDocument": false,
+      "mentionDeclared": false,
+      "positions": {
+        "rrf": [
+          2,
+          1
+        ],
+        "a": [
+          1,
+          2
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "hit1": {
+        "rrf": true,
+        "a": true,
+        "b": true
+      },
+      "rerankMs": {
+        "a": 429,
+        "b": 473
+      }
+    }
+  ]
+}
