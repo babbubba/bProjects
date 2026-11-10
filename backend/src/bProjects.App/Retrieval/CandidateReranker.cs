@@ -60,7 +60,21 @@ public sealed class CandidateReranker(AppDbContext db, RerankClient rerank, Retr
         var window = RerankOrder.Window(fused, policy.Rerank);
         var ids = window.Select(w => w.BlockId).ToList();
         var texts = await db.DocumentBlocks.AsNoTracking().Where(b => ids.Contains(b.Id)).Select(b => new { b.Id, b.CanonicalText }).ToDictionaryAsync(b => b.Id, b => b.CanonicalText, ct);
-        var documents = ids.Select(id => IndexText.Of(texts.TryGetValue(id, out var text) ? text : throw new InvalidOperationException($"Blocco {id} inesistente: indice incoerente."))).ToList();
+        // Provenienza (documento, sezione) letta dai dati già persistiti, solo se la politica la richiede (rerank-input-1); con la versione 1 la query non cambia.
+        IReadOnlyDictionary<Guid, BlockProvenance> provenance = policy.RerankInputMode == RerankInput.TextOnly
+            ? new Dictionary<Guid, BlockProvenance>()
+            : await BlockEvidenceMapper.LoadProvenanceAsync(db, ids, ct);
+        var documents = ids.Select(id =>
+        {
+            var indexText = IndexText.Of(texts.TryGetValue(id, out var text) ? text : throw new InvalidOperationException($"Blocco {id} inesistente: indice incoerente."));
+            if (policy.RerankInputMode == RerankInput.TextOnly)
+            {
+                return indexText;
+            }
+
+            var source = provenance.TryGetValue(id, out var found) ? found : throw new InvalidOperationException($"Provenienza del blocco {id} inesistente: indice incoerente.");
+            return RerankInput.Compose(policy.RerankInputMode, source.DocumentName, source.Section, indexText);
+        }).ToList();
 
         var scores = await rerank.RerankAsync(IndexText.Of(query), documents, ct);
         return RerankOrder.Apply(fused, policy.Rerank, scores);

@@ -22,7 +22,15 @@ public sealed record RetrievalPolicy
     public const string StageInputBudget = "stage-input-budget";
 
     /// <summary>Politica corrente della slice: <c>retrieval-policy-1</c>.</summary>
-    public static RetrievalPolicy V1 { get; } = new(Version1, pool: 50, rerank: 50, rrfK: Rrf.K, parentCharBudget: 0, StageInputBudget);
+    public static RetrievalPolicy V1 { get; } = new(Version1, pool: 50, rerank: 50, rrfK: Rrf.K, parentCharBudget: 0, StageInputBudget, RerankInput.TextOnly);
+
+    public const string Version2 = "retrieval-policy-2";
+
+    /// <summary>
+    /// <c>retrieval-policy-2</c>: gli STESSI valori della versione 1 (pool, finestra, k RRF) più <c>rerank-input-1</c> (documento + sezione + testo nell'input del riordino).
+    /// Candidata al confronto A/B di T027; NON è la politica corrente finché la misura non è autorizzata ed esaminata. La versione 1, la sua impronta e i run storici non cambiano.
+    /// </summary>
+    public static RetrievalPolicy V2 { get; } = new(Version2, pool: 50, rerank: 50, rrfK: Rrf.K, parentCharBudget: 0, StageInputBudget, RerankInput.Provenance1);
 
     public string Version { get; }
 
@@ -40,7 +48,10 @@ public sealed record RetrievalPolicy
 
     public string PackageBudgetBasis { get; }
 
-    private RetrievalPolicy(string version, int pool, int rerank, int rrfK, int parentCharBudget, string packageBudgetBasis)
+    /// <summary>Forma dell'input del riordino (<see cref="RerankInput"/>). <see cref="RerankInput.TextOnly"/> (versione 1) è il predefinito e NON entra nel JSON canonico: l'impronta della versione 1 resta quella fissata.</summary>
+    public string RerankInputMode { get; }
+
+    private RetrievalPolicy(string version, int pool, int rerank, int rrfK, int parentCharBudget, string packageBudgetBasis, string rerankInputMode)
     {
         Version = version;
         Pool = pool;
@@ -48,31 +59,50 @@ public sealed record RetrievalPolicy
         RrfK = rrfK;
         ParentCharBudget = parentCharBudget;
         PackageBudgetBasis = packageBudgetBasis;
+        RerankInputMode = rerankInputMode;
     }
 
     /// <summary>Politica con valori espliciti: fuori range ⇒ <see cref="ArgumentOutOfRangeException"/> (nessun valore corretto in silenzio).</summary>
-    public static RetrievalPolicy Create(string version, int pool, int rerank, int rrfK, int parentCharBudget)
+    public static RetrievalPolicy Create(string version, int pool, int rerank, int rrfK, int parentCharBudget, string rerankInputMode = RerankInput.TextOnly)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentNullException.ThrowIfNull(rerankInputMode);
+        if (!RerankInput.IsKnown(rerankInputMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(rerankInputMode), rerankInputMode, "Modalità di input del riordino sconosciuta.");
+        }
+
         ArgumentOutOfRangeException.ThrowIfLessThan(pool, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(rerank, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(rrfK, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(parentCharBudget);
         // La fusione di due classifiche da `pool` contiene al massimo 2·pool blocchi: riordinarne di più non ha senso e nasconderebbe un errore di configurazione.
         ArgumentOutOfRangeException.ThrowIfGreaterThan(rerank, 2 * pool);
-        return new(version, pool, rerank, rrfK, parentCharBudget, StageInputBudget);
+        return new(version, pool, rerank, rrfK, parentCharBudget, StageInputBudget, rerankInputMode);
     }
 
-    /// <summary>JSON canonico (chiavi ordinate, nessuno spazio) dei soli valori che determinano il recupero.</summary>
-    public string ToCanonicalJson() => CanonicalJson.Canonicalize(JsonSerializer.Serialize(new
+    /// <summary>
+    /// JSON canonico (chiavi ordinate, nessuno spazio) dei soli valori che determinano il recupero. <c>rerankInput</c> compare SOLO se diverso da <see cref="RerankInput.TextOnly"/>:
+    /// così la forma canonica e l'impronta di <c>retrieval-policy-1</c> restano byte per byte quelle già usate da M1/M2.
+    /// </summary>
+    public string ToCanonicalJson()
     {
-        version = Version,
-        pool = Pool,
-        rerank = Rerank,
-        rrfK = RrfK,
-        parentCharBudget = ParentCharBudget,
-        packageBudgetBasis = PackageBudgetBasis,
-    }));
+        var values = new Dictionary<string, object>
+        {
+            ["version"] = Version,
+            ["pool"] = Pool,
+            ["rerank"] = Rerank,
+            ["rrfK"] = RrfK,
+            ["parentCharBudget"] = ParentCharBudget,
+            ["packageBudgetBasis"] = PackageBudgetBasis,
+        };
+        if (RerankInputMode != RerankInput.TextOnly)
+        {
+            values["rerankInput"] = RerankInputMode;
+        }
+
+        return CanonicalJson.Canonicalize(JsonSerializer.Serialize(values));
+    }
 
     /// <summary>Impronta SHA-256 (64 esadecimali minuscoli) del JSON canonico.</summary>
     public string Hash() => CanonicalJson.HashText(ToCanonicalJson());

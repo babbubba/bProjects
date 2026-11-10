@@ -20,6 +20,34 @@ public sealed class RetrievalPolicyTests
         Assert.Equal(PinnedHash, policy.Hash());
     }
 
+    // Versione 2 (T027): stessi valori della 1 + rerank-input-1. L'impronta della 1 resta quella fissata sopra.
+    private const string PinnedJsonV2 = """{"packageBudgetBasis":"stage-input-budget","parentCharBudget":0,"pool":50,"rerank":50,"rerankInput":"rerank-input-1","rrfK":60,"version":"retrieval-policy-2"}""";
+    private const string PinnedHashV2 = "84f3fb4aeb291dfe27bda03996f152bf9a3356b39fee21a9021180ba5cc60981";
+
+    [Fact]
+    public void Version_2_adds_only_the_rerank_input_and_leaves_version_1_and_its_pinned_hash_untouched()
+    {
+        var v1 = RetrievalPolicy.V1;
+        var v2 = RetrievalPolicy.V2;
+
+        Assert.Equal((RerankInput.TextOnly, PinnedJson, PinnedHash), (v1.RerankInputMode, v1.ToCanonicalJson(), v1.Hash()));   // la 1 non cambia di un byte
+        Assert.Equal(("retrieval-policy-2", RerankInput.Provenance1, PinnedJsonV2, PinnedHashV2), (v2.Version, v2.RerankInputMode, v2.ToCanonicalJson(), v2.Hash()));
+        Assert.Equal((v1.Pool, v1.Rerank, v1.RrfK, v1.ParentCharBudget, v1.PackageBudgetBasis), (v2.Pool, v2.Rerank, v2.RrfK, v2.ParentCharBudget, v2.PackageBudgetBasis));   // A/B: stessa configurazione di recupero
+        Assert.NotEqual(v1.Hash(), v2.Hash());
+    }
+
+    [Fact]
+    public void The_rerank_input_alone_changes_the_hash_and_the_default_mode_is_the_version_1_form()
+    {
+        var textOnly = RetrievalPolicy.Create("retrieval-policy-x", 50, 50, 60, 0);
+        var provenance = RetrievalPolicy.Create("retrieval-policy-x", 50, 50, 60, 0, RerankInput.Provenance1);
+
+        Assert.Equal(RerankInput.TextOnly, textOnly.RerankInputMode);
+        Assert.NotEqual(textOnly.Hash(), provenance.Hash());
+        Assert.Equal(RetrievalPolicy.Create("retrieval-policy-1", 50, 50, 60, 0).Hash(), RetrievalPolicy.V1.Hash());
+        Assert.ThrowsAny<ArgumentException>(() => RetrievalPolicy.Create("retrieval-policy-x", 50, 50, 60, 0, "rerank-input-9"));
+    }
+
     [Fact]
     public void The_hash_is_stable_across_instances_and_calls()
     {

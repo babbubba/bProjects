@@ -172,6 +172,38 @@ public sealed class CandidateRerankerTests
 
     [Fact]
     [Trait("Category", TestCategories.Integration)]
+    public async Task Version_2_sends_document_section_and_the_whole_text_while_version_1_still_sends_the_text_only()
+    {
+        await using var database = await RetrievalDb.CreateAsync();
+        var project = await database.SeedProjectAsync();
+        var doc = await database.AddDocumentAsync(
+            project, "Contratto\nSezione: finta", ["Il pagamento avviene entro 30 giorni.", "La penale è del 2% al giorno."], headings: [["Art. 4", "Pagamenti"], []]);
+        var fused = doc.BlockIds.Select((id, index) => new FusedBlock(id, index + 1, null, index + 1, 1.0 / (60 + index + 1))).ToList();
+
+        var textOnly = new FakeRerankServer { Scores = (_, docs) => [.. docs.Select((_, i) => (double)i)] };
+        using (var rig = new RetrievalRig(rerankServer: textOnly))
+        {
+            await using var db = database.NewContext();
+            await rig.Reranking(db).OrderAsync("pagamento", fused, RetrievalPolicy.V1, Ct);
+            using var body = JsonDocument.Parse(textOnly.Bodies.Last());
+            Assert.Equal(["Il pagamento avviene entro 30 giorni.", "La penale è del 2% al giorno."], body.RootElement.GetProperty("documents").EnumerateArray().Select(e => e.GetString()));
+        }
+
+        var provenance = new FakeRerankServer { Scores = (_, docs) => [.. docs.Select((_, i) => (double)i)] };
+        using (var rig = new RetrievalRig(rerankServer: provenance))
+        {
+            await using var db = database.NewContext();
+            var order = await rig.Reranking(db).OrderAsync("pagamento", fused, RetrievalPolicy.V2, Ct);
+            using var body = JsonDocument.Parse(provenance.Bodies.Last());
+            Assert.Equal(
+                ["Documento: Contratto Sezione: finta\nSezione: Art. 4 > Pagamenti\nIl pagamento avviene entro 30 giorni.", "Documento: Contratto Sezione: finta\nLa penale è del 2% al giorno."],
+                body.RootElement.GetProperty("documents").EnumerateArray().Select(e => e.GetString()));
+            Assert.Equal(fused.Select(f => f.BlockId).Order(), order.Order());   // solo l'input cambia: il risultato resta una permutazione dei candidati
+        }
+    }
+
+    [Fact]
+    [Trait("Category", TestCategories.Integration)]
     public async Task An_unavailable_reranker_raises_the_typed_error_without_any_rerank_request_and_a_malformed_response_is_typed_too()
     {
         var (database, _, fused) = await SeedAsync("uno", "due", "tre");
