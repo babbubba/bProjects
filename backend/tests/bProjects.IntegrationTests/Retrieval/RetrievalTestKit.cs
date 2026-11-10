@@ -51,7 +51,7 @@ internal sealed class RetrievalRig : IRetrievalRig, IDisposable
 
     public CandidateReranker Reranking(AppDbContext db) => new(db, Reranker ?? throw new InvalidOperationException("Riordino non configurato nel rig."), Readiness);
 
-    public RetrievalPipeline Pipeline(AppDbContext db) => new(db, Search(db), Reranking(db), Readiness);
+    public RetrievalPipeline Pipeline(AppDbContext db, RetrievalTimingLog? timing = null) => new(db, Search(db), Reranking(db), Readiness, timing);
 
     public RetrievalOptions Options { get; }
 

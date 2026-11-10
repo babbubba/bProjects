@@ -31,11 +31,19 @@ public sealed record RetrievalOutcome(RetrievalRegistry Registry)
 /// </list>
 /// L'annullamento del chiamante propaga <see cref="OperationCanceledException"/>; errori non tipizzati (guasti dell'applicazione) non sono cause di servizio e propagano.
 /// </summary>
-public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, CandidateReranker reranker, RetrievalModelReadiness readiness)
+public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, CandidateReranker reranker, RetrievalModelReadiness readiness, RetrievalTimingLog? timing = null)
 {
-    public async Task<RetrievalOutcome> ExecuteAsync(
+    public Task<RetrievalOutcome> ExecuteAsync(
         RetrievalScope scope, string snapshotHash, IReadOnlyList<RetrievalQuery> gaps, IReadOnlyList<RegistryEvidence> evidences,
-        RetrievalPolicy policy, RegistryBudget? budget = null, CancellationToken ct = default)
+        RetrievalPolicy policy, RegistryBudget? budget = null, CancellationToken ct = default) =>
+        Timed(RetrievalTimingLog.PhaseTotal, null, () => ExecuteCoreAsync(scope, snapshotHash, gaps, evidences, policy, budget, ct));
+
+    /// <summary>Misura opzionale (solo se nel contenitore c'è un <see cref="RetrievalTimingLog"/>): senza, esegue il lavoro così com'è. Nessun effetto sul risultato.</summary>
+    private Task<T> Timed<T>(string phase, Guid? gap, Func<Task<T>> work) => timing is null ? work() : timing.MeasureAsync(phase, gap, work);
+
+    private async Task<RetrievalOutcome> ExecuteCoreAsync(
+        RetrievalScope scope, string snapshotHash, IReadOnlyList<RetrievalQuery> gaps, IReadOnlyList<RegistryEvidence> evidences,
+        RetrievalPolicy policy, RegistryBudget? budget, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(gaps);
@@ -43,14 +51,14 @@ public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, Cand
         ArgumentNullException.ThrowIfNull(policy);
 
         // 1. Servizi e indice: nessuna ricerca se l'embedding o l'indice non sono pronti (tutte le cause sono registrate).
-        var embeddingSnapshot = await readiness.GetEmbeddingSnapshotAsync(ct);
+        var embeddingSnapshot = await Timed(RetrievalTimingLog.PhaseReadiness, null, () => readiness.GetEmbeddingSnapshotAsync(ct));
         var causes = new List<string>();
         if (!embeddingSnapshot.IsReady)
         {
             causes.Add(RetrievalModelReadiness.ToException(embeddingSnapshot).Code);
         }
 
-        if (!await search.IndexReadyAsync(scope, ct))
+        if (!await Timed(RetrievalTimingLog.PhaseIndexReady, null, () => search.IndexReadyAsync(scope, ct)))
         {
             causes.Add(RetrievalException.IndexNotReady);
         }
@@ -66,7 +74,7 @@ public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, Cand
         {
             foreach (var gap in gaps)
             {
-                var result = await search.SearchAsync(scope, gap.Query, policy, ct);
+                var result = await Timed(RetrievalTimingLog.PhaseSearch, gap.GapEvidenceId, () => search.SearchAsync(scope, gap.Query, policy, ct));
                 searched.Add((gap, result.Fused));
             }
         }
@@ -80,10 +88,10 @@ public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, Cand
         RetrievalModelSnapshot? rerankerSnapshot = null;
         try
         {
-            rerankerSnapshot = await readiness.EnsureRerankerReadyAsync(ct);
+            rerankerSnapshot = await Timed(RetrievalTimingLog.PhaseRerankerReady, null, () => readiness.EnsureRerankerReadyAsync(ct));
             foreach (var (gap, fused) in searched)
             {
-                finalOrders.Add(await reranker.OrderAsync(gap.Query, fused, policy, ct));
+                finalOrders.Add(await Timed(RetrievalTimingLog.PhaseRerank, gap.GapEvidenceId, () => reranker.OrderAsync(gap.Query, fused, policy, ct)));
             }
         }
         catch (RetrievalException failure) when (failure.Code is RetrievalException.RerankerUnavailable or RetrievalException.RerankerMalformedResponse)
@@ -93,11 +101,13 @@ public sealed class RetrievalPipeline(AppDbContext db, HybridSearch search, Cand
             rerankerSnapshot ??= await readiness.GetRerankerSnapshotAsync(ct);
         }
 
-        var provenance = await BlockEvidenceMapper.LoadProvenanceAsync(db, [.. searched.SelectMany(s => s.Fused).Select(f => f.BlockId).Distinct()], ct);
-        var registry = CandidateRegistry.Build(
+        var provenance = await Timed(RetrievalTimingLog.PhaseProvenance, null, () => BlockEvidenceMapper.LoadProvenanceAsync(db, [.. searched.SelectMany(s => s.Fused).Select(f => f.BlockId).Distinct()], ct));
+        // Il registro (unione fra Gap, pacchetto per rango fino al budget) è un lavoro CONDIVISO dei Gap: si misura una volta sola, mai per Gap.
+        RetrievalRegistry Build() => CandidateRegistry.Build(
             snapshotHash, scope.IndexConfigHash, policy.Version, policy.Hash(),
             [.. searched.Select((s, index) => new RegistryGapInput(s.Gap.GapEvidenceId, s.Gap.Query, s.Fused, finalOrders[index]))],
             provenance, evidences, causes, budget, ReadinessOf(embeddingSnapshot, rerankerSnapshot), rerankWindow: policy.Rerank);
+        var registry = timing is null ? Build() : timing.Measure(RetrievalTimingLog.PhaseRegistry, null, Build);
         return new(registry);
     }
 

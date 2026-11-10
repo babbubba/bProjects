@@ -81,10 +81,12 @@ public sealed class RetrievalPipelineTests
             Rig.Readiness.InvalidateReranker();
         }
 
-        public async Task<RetrievalOutcome> RunAsync(params string[] queries)
+        public async Task<RetrievalOutcome> RunAsync(params string[] queries) => await RunTimedAsync(null, queries);
+
+        public async Task<RetrievalOutcome> RunTimedAsync(RetrievalTimingLog? timing, params string[] queries)
         {
             await using var db = Database.NewContext();
-            return await Rig.Pipeline(db).ExecuteAsync(
+            return await Rig.Pipeline(db, timing).ExecuteAsync(
                 Scope, "snapshot-hash", [.. queries.Select(q => new RetrievalQuery(new Guid(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(q))), q))], Evidences, RetrievalPolicy.V1, ct: Ct);
         }
 
@@ -97,6 +99,50 @@ public sealed class RetrievalPipelineTests
             Rig.Dispose();
             await Database.DisposeAsync();
         }
+    }
+
+    [Fact]
+    public async Task The_optional_timing_log_observes_every_phase_per_gap_and_shared_without_changing_the_registry()
+    {
+        await using var s = await Scenario.CreateAsync();
+        var queries = new[] { "penale ritardo", "foro competente" };
+        var plain = (await s.RunAsync(queries)).Registry;
+        var log = new RetrievalTimingLog();
+        var timed = (await s.RunTimedAsync(log, queries)).Registry;
+
+        Assert.Equal(plain.Hash(), timed.Hash());   // stessa pipeline, stesso registro: la misura è sola osservazione
+        Assert.Equal(plain.PackageEvidence, timed.PackageEvidence);
+
+        var gapIds = timed.Gaps.Select(g => g.GapEvidenceId).ToList();
+        Assert.Equal(2, gapIds.Count);
+        foreach (var phase in new[] { RetrievalTimingLog.PhaseSearch, RetrievalTimingLog.PhaseRerank })
+        {
+            Assert.Equal(gapIds.Order(), log.Entries.Where(e => e.Phase == phase).Select(e => e.GapEvidenceId!.Value).Order());   // una voce per Gap, con il suo Gap
+        }
+
+        // fasi condivise: UNA volta sola e senza Gap; il totale racchiude tutte le altre
+        foreach (var phase in new[] { RetrievalTimingLog.PhaseReadiness, RetrievalTimingLog.PhaseIndexReady, RetrievalTimingLog.PhaseRerankerReady, RetrievalTimingLog.PhaseProvenance, RetrievalTimingLog.PhaseRegistry, RetrievalTimingLog.PhaseTotal })
+        {
+            var entry = Assert.Single(log.Entries, e => e.Phase == phase);
+            Assert.Null(entry.GapEvidenceId);
+            Assert.False(entry.Faulted);
+        }
+
+        var total = log.Entries.Single(e => e.Phase == RetrievalTimingLog.PhaseTotal);
+        Assert.All(log.Entries, e => Assert.True(e.StartedAt >= total.StartedAt && e.EndedAt <= total.EndedAt));
+        Assert.True(log.Entries.Where(e => e.Phase != RetrievalTimingLog.PhaseTotal).Sum(e => e.Milliseconds) <= total.Milliseconds + 1);   // fasi sequenziali: nessun doppio conteggio
+    }
+
+    [Fact]
+    public async Task A_failed_run_records_its_faulted_phase_and_propagates_the_same_exception()
+    {
+        await using var s = await Scenario.CreateAsync();
+        var log = new RetrievalTimingLog();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        await using var db = s.Database.NewContext();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => s.Rig.Pipeline(db, log).ExecuteAsync(s.Scope, "snapshot-hash", [new RetrievalQuery(Guid.NewGuid(), "penale")], s.Evidences, RetrievalPolicy.V1, ct: cancelled.Token));
+        Assert.Contains(log.Entries, e => e.Phase == RetrievalTimingLog.PhaseTotal && e.Faulted);
     }
 
     [Theory]
