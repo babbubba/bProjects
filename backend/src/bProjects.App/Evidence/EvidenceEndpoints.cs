@@ -6,6 +6,7 @@ using bProjects.App.Conversations;
 using bProjects.App.Documents;
 using bProjects.App.Persistence;
 using bProjects.App.Projects;
+using bProjects.App.Retrieval;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -142,6 +143,7 @@ public static class EvidenceEndpoints
         group.MapGet("/analyses/{analysisId:guid}/evidence-selection", Selection);
         group.MapGet("/documents/{documentId:guid}/versions/{version}/preparations/{generation}/coverage", PreparationCoverage);
         group.MapCoverageEndpoints();
+        group.MapRetrievalEndpoints();   // 003 T033: registro del recupero in sola lettura
         return app;
     }
 

@@ -9,6 +9,7 @@ using bProjects.App.AI;
 using bProjects.App.Analysis;
 using bProjects.App.Documents;
 using bProjects.App.Persistence;
+using bProjects.App.Retrieval;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -497,7 +498,7 @@ public static class CoverageEndpoints
 
         if (origin.Output is not null)
         {
-            return await CreateWithGapsAsync(db, run, revision, aiRevision, draftId, createdBy, loaded, origin.Output, origin.Stage, Find, ct);
+            return await CreateWithGapsAsync(db, run, revision, aiRevision, draftId, createdBy, loaded, origin.Output, origin.Stage, origin.Retrieval, Find, ct);
         }
 
         var findings = DocumentCoverage.Check(loaded.Input);
@@ -537,12 +538,12 @@ public static class CoverageEndpoints
     /// <summary>coverage-3 (T139): solo revisioni single-call v5. Le valutazioni sono lette dal WorkOutput committato e verificate (hash, forma, riferimenti): un'incoerenza impedisce il report.</summary>
     private static async Task<IResult> CreateWithGapsAsync(
         AppDbContext db, ProcessingRun run, AnalysisRevision revision, AnalysisRevision aiRevision, Guid? draftId, Guid createdBy, LoadedDocumentCoverage loaded, WorkOutput output,
-        bool stage, Func<Task<EvidenceCoverageReport?>> find, CancellationToken ct)
+        bool stage, WorkOutput? retrieval, Func<Task<EvidenceCoverageReport?>> find, CancellationToken ct)
     {
         GapAssessmentSet gaps;
         try
         {
-            gaps = stage ? GapAssessmentProjection.ProjectStage(output, loaded.Input) : GapAssessmentProjection.Project(output, loaded.Input);
+            gaps = stage ? GapAssessmentProjection.ProjectStage(output, loaded.Input, retrieval) : GapAssessmentProjection.Project(output, loaded.Input);
         }
         catch (DocumentWorkException ex)
         {
@@ -554,7 +555,7 @@ public static class CoverageEndpoints
         var summary = DocumentCoverage.SummarizeGaps(input, findings);
         var content = new DocumentCoverage3Content(
             DocumentCoverage.CheckerVersionV3, run.Id, aiRevision.Id, revision.Id, draftId, loaded.Hashes, summary, gaps.Hash, gaps.Records, loaded.Preparations, findings,
-            stage ? DocumentCoverage.LimitsStage : DocumentCoverage.LimitsV3, input.Reconciliation);
+            gaps.Retrieval is not null ? DocumentCoverage.LimitsRetrieval : stage ? DocumentCoverage.LimitsStage : DocumentCoverage.LimitsV3, input.Reconciliation, RetrievalCoverageSection.From(gaps.Retrieval));
         var report = new EvidenceCoverageReport
         {
             Id = Guid.NewGuid(),
@@ -597,7 +598,7 @@ public static class CoverageEndpoints
                 [.. v3.GapAssessments.Select(g => new GapAssessmentView(
                     g.GapEvidenceId, g.GapEvidenceVersionId, g.SourceSnapshotHash, g.Outcome.ToString(), g.Reason.ToString(), g.Rationale, g.SupportingEvidenceIds, g.OpenItemId,
                     g.OpenConflictId, g.OriginBatchId, g.SearchBasis, g.RetrievalComplete, g.AbsenceProven, g.AnsweredWithOpenConflict))],
-                v3.Preparations, [.. v3.Findings.Select(DocumentCoverageLoader.ToView)], v3.Limits, v3.Reconciliation);
+                v3.Preparations, [.. v3.Findings.Select(DocumentCoverageLoader.ToView)], v3.Limits, v3.Reconciliation, v3.Retrieval);
         }
 
         if (report.CheckerVersion == DocumentCoverage.CheckerVersion)
@@ -679,11 +680,37 @@ public sealed record DocumentCoverageContent(
     string CheckerVersion, Guid AnalysisId, Guid AiRevisionId, Guid RevisionId, Guid? DraftId, DocumentCoverageHashes Hashes, DocumentCoverageSummary Summary,
     IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
 
+/// <summary>
+/// Sintesi del registro del recupero nelle sole revisioni v7 con sorgente `retrieval` (003 T032, additiva e opzionale: assente in v5/v6, che restano byte-identici). Solo conteggi e dichiarazioni
+/// di metodo: nessun identificativo tecnico e nessuna affermazione di completezza o di assenza (<c>retrievalComplete</c> non è prova di completezza semantica).
+/// </summary>
+public sealed record RetrievalCoverageSection(
+    string SearchBasis, bool RetrievalComplete, bool Degraded, string PolicyVersion, int Gaps, int Candidates, int InPackage, int ExcludedForBudget, int NoEvidenceForBlock,
+    int AlwaysIncluded, int AlwaysIncludedInPackage)
+{
+    public static RetrievalCoverageSection? From(RetrievalRegistry? registry)
+    {
+        if (registry is null)
+        {
+            return null;
+        }
+
+        var candidates = registry.Gaps.SelectMany(g => g.Candidates).ToList();
+        return new(
+            registry.SearchBasis, registry.RetrievalComplete, registry.Degraded, registry.PolicyVersion, registry.Gaps.Count,
+            candidates.Select(c => c.BlockId).Distinct().Count(), registry.PackageEvidence.Count,
+            registry.Excluded.Count(e => e.Reason == CandidateRegistry.ReasonBudget),
+            candidates.Where(c => c.ExcludedReason == CandidateRegistry.ReasonNoEvidence).Select(c => c.BlockId).Distinct().Count(),
+            registry.AlwaysIncluded.Count, registry.AlwaysIncluded.Count(a => a.InPackage));
+    }
+}
+
 /// <summary>Contenuto persistito di coverage-3 (JSONB esistente): come coverage-2 più le valutazioni Gap della revisione AI originaria e il loro hash.</summary>
 public sealed record DocumentCoverage3Content(
     string CheckerVersion, Guid AnalysisId, Guid AiRevisionId, Guid RevisionId, Guid? DraftId, DocumentCoverageHashes Hashes, DocumentCoverageSummary3 Summary,
     string GapAssessmentsHash, IReadOnlyList<GapAssessmentRecord> GapAssessments, IReadOnlyList<PreparationCoverageRecord> Preparations,
-    IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
+    IReadOnlyList<DocumentCoverageFinding> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RetrievalCoverageSection? Retrieval = null);
 
 /// <summary>Elemento di AnalysisContent 1.1 con la sezione in cui si trova.</summary>
 public sealed record DocumentSectionItem(string Section, DocumentAnalysisItem Item, Guid? ConflictId = null);
@@ -761,6 +788,18 @@ public static class DocumentCoverage
         .. LimitsV3,
         "«Assenza provata» significa che il ledger completo dello snapshot (searchBasis ledger_exhaustive, retrievalComplete true) e l'estrazione completa delle porzioni non contengono alcuna evidenza pertinente secondo la valutazione AI: non prova l'assenza dell'informazione nel mondo né la correttezza della valutazione.",
         "La segnalazione «risposta documentale con conflitto aperto» è una guardia non bloccante calcolata dai riferimenti strutturali (conflitti Open e relazioni note): non cambia l'esito della valutazione e non arbitra fra le fonti.",
+    ];
+
+    /// <summary>
+    /// Limiti delle revisioni con sorgente `retrieval` (v7, 003): quelli di coverage-3 e dello stadio, con la natura del recupero. Nessuna «assenza provata» (il recupero non esamina l'intero ledger) e
+    /// nessuna attestazione di completezza dei conflitti.
+    /// </summary>
+    public static IReadOnlyList<string> LimitsRetrieval { get; } =
+    [
+        .. LimitsV3,
+        "La valutazione dei Gap si basa su un sottoinsieme di passaggi recuperati per pertinenza (searchBasis retrieval), non sull'intero ledger: un Gap senza risposta è sempre «assenza non provata», mai provata.",
+        "retrievalComplete indica soltanto che la procedura di recupero dichiarata è stata eseguita per intero: non è una prova di completezza semantica né di assenza dell'informazione nelle fonti.",
+        "La segnalazione «risposta documentale con conflitto aperto» è una guardia non bloccante calcolata dai riferimenti strutturali (conflitti Open e relazioni note): non cambia l'esito della valutazione, non arbitra fra le fonti e non attesta la completezza dei conflitti.",
     ];
 
     public static IReadOnlyList<DocumentSectionItem> Items(DocumentAnalysisContent content)
@@ -1127,7 +1166,8 @@ public sealed record GapAssessmentView(
 public sealed record DocumentCoverage3ReportView(
     Guid Id, Guid AnalysisId, Guid? RevisionId, Guid AiRevisionId, Guid? DraftId, string CheckerVersion, string InputHash, DateTimeOffset CreatedAt, string? CreatedBy,
     CoverageCountsView Counts, DocumentCoverageSummary3 Summary, DocumentCoverageHashes Hashes, string GapAssessmentsHash, IReadOnlyList<GapAssessmentView> GapAssessments,
-    IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null);
+    IReadOnlyList<PreparationCoverageRecord> Preparations, IReadOnlyList<DocumentCoverageFindingView> Findings, IReadOnlyList<string> Limits, ReconciliationCoverageSection? Reconciliation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RetrievalCoverageSection? Retrieval = null);
 
 /// <summary>GET di preparazione/coverage: stato strutturale della preparazione prima dell'analisi. Non avvia lavori e non persiste report.</summary>
 public sealed record PreparationCoverageView(
@@ -1157,9 +1197,9 @@ public sealed record ReconciliationCoverageSection(
 internal sealed record LoadedDocumentCoverage(DocumentCoverageInput Input, DocumentCoverageHashes Hashes, IReadOnlyList<PreparationCoverageRecord> Preparations);
 
 /// <summary>Versione del report scelta dall'origine della revisione AI; <see cref="Output"/> è il WorkOutput single-call v5 solo per coverage-3.</summary>
-internal sealed record CoverageOrigin(string CheckerVersion, WorkOutput? Output, bool Stage = false);
+internal sealed record CoverageOrigin(string CheckerVersion, WorkOutput? Output, bool Stage = false, WorkOutput? Retrieval = null);
 
-internal sealed record GapAssessmentSet(IReadOnlyList<GapAssessmentRecord> Records, string Hash);
+internal sealed record GapAssessmentSet(IReadOnlyList<GapAssessmentRecord> Records, string Hash, RetrievalRegistry? Retrieval = null);
 
 /// <summary>
 /// Proiezione read-only delle valutazioni `gap-assessment-1` dal WorkOutput single-call v5 committato (T139). Verifica hash del payload, del catalogo, del DTO e delle valutazioni, forma e riferimenti
@@ -1310,11 +1350,11 @@ internal static class GapAssessmentProjection
     /// dall'analisi della revisione AI originaria e dalla sua mappa item→evidenze (identità <c>refsHash</c> verificata) e ne risolve gli id canonici. I campi derivati
     /// (<c>searchBasis</c>, <c>retrievalComplete</c>, <c>absenceProven</c>, <c>answeredWithOpenConflict</c>) sono calcolati qui, mai dichiarati dal modello. Nessuna valutazione è sintetizzata o corretta.
     /// </summary>
-    public static GapAssessmentSet ProjectStage(WorkOutput output, DocumentCoverageInput input)
+    public static GapAssessmentSet ProjectStage(WorkOutput output, DocumentCoverageInput input, WorkOutput? retrieval = null)
     {
         try
         {
-            return ProjectStageCore(output, input);
+            return ProjectStageCore(output, input, retrieval);
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
         {
@@ -1322,12 +1362,28 @@ internal static class GapAssessmentProjection
         }
     }
 
-    private static GapAssessmentSet ProjectStageCore(WorkOutput output, DocumentCoverageInput input)
+    private static GapAssessmentSet ProjectStageCore(WorkOutput output, DocumentCoverageInput input, WorkOutput? retrievalOutput)
     {
         var payload = output.PayloadJson ?? throw Invalid("Payload inline del WorkOutput dello stadio Gap mancante.");
         if (CanonicalJson.Sha256Hex(payload) != output.OutputHash)
         {
             throw Invalid("Il payload del WorkOutput dello stadio Gap ha un hash diverso da OutputHash.");
+        }
+
+        // Sorgente `retrieval` (003 T032): il registro è letto dal WorkOutput del recupero con schema e hash verificati; deve essere consegnabile (`Package`), altrimenti il run non avrebbe prodotto uno stadio.
+        RetrievalRegistry? registry = null;
+        if (retrievalOutput is not null)
+        {
+            if (retrievalOutput.OwnerId != output.OwnerId || retrievalOutput.PayloadJson is null || CanonicalJson.Sha256Hex(retrievalOutput.PayloadJson) != retrievalOutput.OutputHash)
+            {
+                throw Invalid("Il WorkOutput del recupero non è del run della revisione o ha un hash diverso da OutputHash.");
+            }
+
+            registry = RetrievalOutput.Read(retrievalOutput.PayloadJson);
+            if (registry.Outcome != CandidateRegistry.OutcomePackage)
+            {
+                throw Invalid("Il registro del recupero non è consegnabile: nessun report su uno stadio senza candidati validi.");
+            }
         }
 
         using var document = JsonDocument.Parse(payload);
@@ -1375,12 +1431,14 @@ internal static class GapAssessmentProjection
                 ?? throw Invalid($"Il conflitto aperto {r.OpenConflict} della valutazione {r.Gap} non è nella revisione AI.");
 
             var (absenceProven, answeredWithConflict) = derivation.For(r.Outcome, r.Reason, support);
+            // Sorgente `retrieval`: un NoAnswer è «assenza non provata», MAI provata (FR-017–FR-019): la ricerca ha visto solo i passaggi recuperati, e `retrievalComplete` non è prova di completezza.
             projected.Add(new GapAssessmentRecord(
                 gap.EvidenceId, gap.EvidenceVersionId, catalog.Data.SourceHash, r.Outcome, r.Reason, r.Rationale, support, openItem, openConflict, output.BatchId,
-                GapStage.SearchBasisLedgerExhaustive, true, absenceProven, answeredWithConflict));
+                registry is null ? GapStage.SearchBasisLedgerExhaustive : CandidateRegistry.SearchBasis, registry?.RetrievalComplete ?? true,
+                registry is null && absenceProven, answeredWithConflict));
         }
 
-        return new(projected, read.GapAssessmentsHash);
+        return new(projected, read.GapAssessmentsHash, registry);
     }
 }
 
@@ -1408,12 +1466,21 @@ internal static class DocumentCoverageLoader
                     DocumentWorkException.IntegrityConflict, "L'algoritmo gap-stage-1 della revisione AI non corrisponde a un solo WorkOutput dello stadio Gap accanto a quelli della gerarchia.");
             }
 
-            return new(DocumentCoverage.CheckerVersionV3, await db.WorkOutputs.AsNoTracking().SingleAsync(o => o.Id == stageOutputs[0].Id, ct), Stage: true);
+            // Definizione v7 (003 T032): al più UN WorkOutput `retrieval-output-1` (il batch deterministico del recupero) accanto alla gerarchia e allo stadio; la sua presenza decide la sorgente `retrieval`.
+            var retrievalOutputs = outputs.Where(o => o.SchemaVersion == RetrievalStage.OutputSchema).ToList();
+            if (retrievalOutputs.Count > 1)
+            {
+                throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "La revisione AI ha più di un WorkOutput del recupero.");
+            }
+
+            return new(
+                DocumentCoverage.CheckerVersionV3, await db.WorkOutputs.AsNoTracking().SingleAsync(o => o.Id == stageOutputs[0].Id, ct), Stage: true,
+                Retrieval: retrievalOutputs.Count == 0 ? null : await db.WorkOutputs.AsNoTracking().SingleAsync(o => o.Id == retrievalOutputs[0].Id, ct));
         }
 
-        if (stageOutputs.Count > 0)
+        if (stageOutputs.Count > 0 || outputs.Any(o => o.SchemaVersion == RetrievalStage.OutputSchema))
         {
-            throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Un WorkOutput dello stadio Gap appartiene a una revisione AI di un altro algoritmo.");
+            throw new DocumentWorkException(DocumentWorkException.IntegrityConflict, "Un WorkOutput dello stadio Gap o del recupero appartiene a una revisione AI di un altro algoritmo.");
         }
 
         if (algorithm == DocumentAnalysisWorkflow.AlgorithmVersionV5)
