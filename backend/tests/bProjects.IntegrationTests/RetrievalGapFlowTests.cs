@@ -291,6 +291,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         var keys = JsonDocument.Parse(row!.PromptVersions!).RootElement;
         Assert.Equal(RetrievalPolicy.Version1, keys.GetProperty("retrievalPolicy").GetString());
         Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey).GetString());
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV4, keys.GetProperty("reconcile").GetString());   // la v8 congela il prompt della gerarchia document-reconcile-v4
     }
 
     [Fact]
@@ -523,6 +524,22 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     private Task<string> ManifestProfile(Guid run) =>
         Scalar<string>("SELECT coalesce(\"PlanJson\"->>'reconcileSchemaProfile', '') FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run));
 
+    /// <summary>Versioni del prompt persistite sui batch derivati della gerarchia (DTO reconcile-alias-1): <c>SameBatch</c> le confronta alla ripresa.</summary>
+    private Task<string> HierarchyPromptVersions(Guid run) =>
+        Scalar<string>("SELECT coalesce(string_agg(DISTINCT \"PromptVersion\", ','), '') FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = @s", ("r", run), ("s", ReconcileAliasContracts.SchemaVersion));
+
+    private static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>Il prompt di sistema REALMENTE inviato a ogni batch della gerarchia è quello della versione indicata (lo stadio Gap conserva il proprio).</summary>
+    private static void AssertHierarchyPrompt(DocumentChatWorkflowTests.FakeChatModel model, string version)
+    {
+        var expected = Lf(ReconcileAliasContracts.InstructionsFor(version));
+        var hierarchy = model.Requests.Where(r => !DocumentGapStageWorkflowTests.IsStage(r)).ToList();
+        Assert.NotEmpty(hierarchy);
+        Assert.All(hierarchy, r => Assert.Equal(expected, Lf(r.System)));
+        Assert.All(model.Requests.Where(DocumentGapStageWorkflowTests.IsStage), r => Assert.Equal(Lf(GapStage.Instructions), Lf(r.System)));
+    }
+
     [Fact]
     public async Task V8_sends_each_hierarchy_batch_the_schema_variant_of_its_stage_and_view_and_freezes_the_profile_in_the_manifest()
     {
@@ -557,6 +574,10 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.Contains(ReconcileSchemaVariant.Full, seen);
         Assert.Contains(ReconcileSchemaVariant.NoItems, seen);
         Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, await ManifestProfile(s.Run));
+
+        // Prompt della v8: document-reconcile-v4 in ogni batch della gerarchia (foglie A e B comprese) e nella versione persistita di ogni batch derivato.
+        AssertHierarchyPrompt(model, ReconcileAliasContracts.PromptVersionV4);
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV4, await HierarchyPromptVersions(s.Run));
     }
 
     [Fact]
@@ -578,6 +599,25 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.Contains(model.Requests, r => !DocumentGapStageWorkflowTests.IsStage(r) && VariantOf(r) == ReconcileSchemaVariant.NoItems);   // anche la foglia B: schema unico storico
         Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV7, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
         Assert.Equal(string.Empty, await ManifestProfile(s.Run));   // piano v7 invariato: nessuna chiave del profilo
+        AssertHierarchyPrompt(model, ReconcileAliasContracts.PromptVersion);                           // prompt storico document-reconcile-v3, mai il v4
+        Assert.Equal(ReconcileAliasContracts.PromptVersion, await HierarchyPromptVersions(s.Run));
+    }
+
+    [Fact]
+    public async Task A_v8_run_frozen_with_the_v3_reconcile_prompt_fails_as_incompatible_before_any_call()
+    {
+        // Forma della v8 prima del completamento con il prompt v4: mai reinterpretata (né come v7 né promossa al v4), nessuna selezione, misura o invio.
+        var s = await ArrangeAsync();
+        var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(SourceSnapshotStore.AnalysisPromptVersionsV8(new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 }))!;
+        keys["reconcile"] = ReconcileAliasContracts.PromptVersion;
+        await Execute("UPDATE \"ProcessingRuns\" SET \"PromptVersions\" = CAST(@p AS jsonb) WHERE \"Id\" = @r", ("p", JsonSerializer.Serialize(keys)), ("r", s.Run));
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.Equal((ProcessingRunStatus.Failed, "workflow_incompatible"), (result.Status, result.ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
     }
 
     [Fact]
@@ -655,6 +695,8 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.True(resumed.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");   // nessun integrity_conflict: l'inputHash ricalcolato coincide con quello pubblicato
         Assert.Equal(crashed, model.Requests[0].AllText);                                              // si riprende dal batch interrotto
         Assert.Equal(Canon(ReconcileAliasContracts.SchemaOf(ReconcileSchemaVariant.NoItems).GetRawText()), Canon(model.Requests[0].ResponseSchema!));
+        Assert.Equal(Lf(ReconcileAliasContracts.InstructionsFor(ReconcileAliasContracts.PromptVersionV4)), Lf(model.Requests[0].System));   // stesso prompt v4 alla ripresa
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV4, await HierarchyPromptVersions(s.Run));    // nessun batch con un'altra versione del prompt
         Assert.DoesNotContain(model.Requests, r => answered.Contains(r.AllText));                      // nessun batch Committed reinviato
         Assert.Equal(0, await Count(
             "SELECT count(*) FROM (SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r GROUP BY \"Ordinal\" HAVING count(*) > 1) d", ("r", s.Run)));   // nessuna riga orfana per ordinale
