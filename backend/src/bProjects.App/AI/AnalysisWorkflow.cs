@@ -389,7 +389,8 @@ public sealed class AnalysisWorkflow(
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var run = await db.ProcessingRuns.AsNoTracking().SingleAsync(r => r.Id == claim.RunId && r.Kind == ProcessingRunKind.Analysis, ct);
         if (documentary is not null && run.WorkflowDefinitionVersion is DocumentAnalysisWorkflow.DefinitionVersion or DocumentAnalysisWorkflow.DefinitionVersionV3 or DocumentAnalysisWorkflow.DefinitionVersionV4
-                or DocumentAnalysisWorkflow.DefinitionVersionV5 or DocumentAnalysisWorkflow.DefinitionVersionV6 or DocumentAnalysisWorkflow.DefinitionVersionV7)
+                or DocumentAnalysisWorkflow.DefinitionVersionV5 or DocumentAnalysisWorkflow.DefinitionVersionV6 or DocumentAnalysisWorkflow.DefinitionVersionV7
+                or DocumentAnalysisWorkflow.DefinitionVersionV8)
         {
             // Definizione documentale congelata alla richiesta (T057/T123/T125/T131/T141): {v2, v3, v4, v5} vanno al workflow documentale, che sceglie l'implementazione dalla
             // versione congelata (mai un downgrade) e ha il proprio guard di prompt, schema e versione MAF; il run non passa dal guard 001, che lo

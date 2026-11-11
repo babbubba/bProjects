@@ -212,10 +212,11 @@ public static class AnalysisEndpoints
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.AnalysisRunDeadline,
                 // Definizione/prompt/schema documentali v2 persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
-                WorkflowDefinitionVersion = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisDefinitionV7 : SourceSnapshotStore.AnalysisDefinitionV6) : ProcessingRun.AnalysisWorkflowVersion,
+                // Con il recupero: v8 (v7 + schemi della gerarchia per stadio e vista, correzione T040 Run 2); i run già congelati v7 restano v7.
+                WorkflowDefinitionVersion = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisDefinitionV8 : SourceSnapshotStore.AnalysisDefinitionV6) : ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
-                PromptVersions = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisPromptVersionsV7(retrieval.Value) : SourceSnapshotStore.AnalysisPromptVersionsV6()) : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
+                PromptVersions = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisPromptVersionsV8(retrieval.Value) : SourceSnapshotStore.AnalysisPromptVersionsV6()) : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };

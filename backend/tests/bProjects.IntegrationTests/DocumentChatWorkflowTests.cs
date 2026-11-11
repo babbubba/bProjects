@@ -556,7 +556,8 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
         return e;
     }
 
-    internal sealed record ChatRequest(string System, IReadOnlyList<(string Role, string Text)> Messages)
+    /// <summary>Richiesta ricevuta dal modello finto; <see cref="ResponseSchema"/> è lo schema di <c>response_format.json_schema</c> REALMENTE inviato (null senza output strutturato).</summary>
+    internal sealed record ChatRequest(string System, IReadOnlyList<(string Role, string Text)> Messages, string? ResponseSchema = null)
     {
         public string AllText => string.Join("\n", Messages.Select(m => m.Text));
 
@@ -606,9 +607,11 @@ public sealed class DocumentChatWorkflowTests : ArchiveTestBase
                 {
                     using var doc = JsonDocument.Parse(body);
                     var messages = doc.RootElement.GetProperty("messages").EnumerateArray().Select(m => (Role: m.GetProperty("role").GetString()!, Text: TextOf(m.GetProperty("content")))).ToList();
+                    var schema = doc.RootElement.TryGetProperty("response_format", out var format) && format.TryGetProperty("json_schema", out var jsonSchema)
+                        && jsonSchema.TryGetProperty("schema", out var sent) ? sent.GetRawText() : null;
                     var record = new ChatRequest(
                         string.Join("\n", messages.Where(m => m.Role is "system" or "developer").Select(m => m.Text)),
-                        [.. messages.Where(m => m.Role is not ("system" or "developer"))]);
+                        [.. messages.Where(m => m.Role is not ("system" or "developer"))], schema);
                     lock (Requests)
                     {
                         Requests.Add(record);

@@ -22,6 +22,9 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     /// <summary>Definizione congelata dalle NUOVE richieste di Analizza con il recupero abilitato (003 T028): v7 = v6 più le chiavi `retrieval*`. Senza `Retrieval:Enabled` le richieste restano v6.</summary>
     public const string AnalysisDefinitionV7 = DocumentAnalysisWorkflow.DefinitionVersionV7;
 
+    /// <summary>Definizione congelata dalle NUOVE richieste di Analizza con il recupero abilitato (correzione T040 Run 2): v8 = v7 più `reconcileSchemaProfile`. La v7 resta storica (run già congelati).</summary>
+    public const string AnalysisDefinitionV8 = DocumentAnalysisWorkflow.DefinitionVersionV8;
+
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV6;
@@ -227,6 +230,17 @@ public sealed class SourceSnapshotStore(AppDbContext db)
             keys[key] = value;
         }
 
+        return JsonSerializer.Serialize(keys);
+    }
+
+    /// <summary>
+    /// Versioni congelate di una nuova richiesta di Analizza v8: TUTTE le chiavi della v7 (invariate, <see cref="AnalysisPromptVersionsV7"/>) più <c>reconcileSchemaProfile</c>
+    /// (<see cref="ReconcileAliasContracts.SchemaProfileByBatch"/>): schemi della gerarchia scelti per stadio e vista del batch.
+    /// </summary>
+    public static string AnalysisPromptVersionsV8(bProjects.App.Retrieval.RetrievalOptions retrieval)
+    {
+        var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(AnalysisPromptVersionsV7(retrieval))!;
+        keys[DocumentAnalysisWorkflow.ReconcileSchemaProfileKey] = ReconcileAliasContracts.SchemaProfileByBatch;
         return JsonSerializer.Serialize(keys);
     }
 

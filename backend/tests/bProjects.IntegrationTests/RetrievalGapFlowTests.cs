@@ -279,15 +279,18 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     // ================================================================ freeze e percorso felice
 
     [Fact]
-    public async Task The_real_analyze_endpoint_freezes_v7_when_retrieval_is_enabled()
+    public async Task The_real_analyze_endpoint_freezes_v8_when_retrieval_is_enabled()
     {
+        // Correzione T040 Run 2 (decisione approvata): le NUOVE richieste con recupero congelano la v8 = v7 + `reconcileSchemaProfile`; i run già congelati v7 restano v7.
         var s = await ArrangeAsync(fillers: 1, fillerWords: 5);
 
-        Assert.Equal("project-analysis-documents-v7", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v8", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
         using var scope = App.Services.CreateScope();
         var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().ProcessingRuns.FindAsync([s.Run], Ct);
-        Assert.Equal(7, DocumentAnalysisWorkflow.ContractOf(row!));
-        Assert.Equal(RetrievalPolicy.Version1, JsonDocument.Parse(row!.PromptVersions!).RootElement.GetProperty("retrievalPolicy").GetString());
+        Assert.Equal(8, DocumentAnalysisWorkflow.ContractOf(row!));
+        var keys = JsonDocument.Parse(row!.PromptVersions!).RootElement;
+        Assert.Equal(RetrievalPolicy.Version1, keys.GetProperty("retrievalPolicy").GetString());
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey).GetString());
     }
 
     [Fact]
@@ -312,7 +315,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         var hierarchy = model.Requests.Count - 1;
         Assert.Equal(hierarchy, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'retrieval'", ("r", s.Run)));
         Assert.Equal(hierarchy + 1, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'gap'", ("r", s.Run)));
-        Assert.Equal("project-analysis-documents-v7", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v8", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
 
         // Registro congelato nel WorkOutput: pacchetto consegnabile, ordine, politica e hash.
         var registry = await RegistryOf(s.Run);
@@ -505,6 +508,156 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.Equal(registry.Hash(), (await RegistryOf(s.Run)).Hash());
         Assert.Equal(1, await Outputs(s.Run, "retrieval-output-1"));
         Assert.Equal(1, await Outputs(s.Run, "gap-stage-alias-1"));
+    }
+
+    // ================================================================ v8: schema della gerarchia per stadio e vista (correzione T040 Run 2, chiamata 026)
+
+    private static string Canon(string json) => CanonicalJson.Canonicalize(json);
+
+    private static ReconcileSchemaVariant VariantOf(DocumentChatWorkflowTests.ChatRequest request)
+    {
+        var p = DocumentReconcileAliasWorkflowTests.ParseAlias(request.AllText);
+        return ReconcileAliasContracts.SchemaVariantOf(p.Stage, Enum.Parse<ReconcileView>(p.View));
+    }
+
+    private Task<string> ManifestProfile(Guid run) =>
+        Scalar<string>("SELECT coalesce(\"PlanJson\"->>'reconcileSchemaProfile', '') FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", run));
+
+    [Fact]
+    public async Task V8_sends_each_hierarchy_batch_the_schema_variant_of_its_stage_and_view_and_freezes_the_profile_in_the_manifest()
+    {
+        var s = await ArrangeAsync();
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        var seen = new HashSet<ReconcileSchemaVariant>();
+        foreach (var request in model.Requests)
+        {
+            // Lo schema verificato è quello REALMENTE presente nel corpo HTTP (`response_format.json_schema.schema`), non quello dichiarato dal piano.
+            Assert.NotNull(request.ResponseSchema);
+            if (DocumentGapStageWorkflowTests.IsStage(request))
+            {
+                Assert.Equal(Canon(GapStageContracts.JsonSchema().GetRawText()), Canon(request.ResponseSchema!));   // lo stadio Gap conserva il proprio schema
+                continue;
+            }
+
+            var variant = VariantOf(request);
+            seen.Add(variant);
+            Assert.Equal(Canon(ReconcileAliasContracts.SchemaOf(variant).GetRawText()), Canon(request.ResponseSchema!));
+            if (variant != ReconcileSchemaVariant.Full)
+            {
+                Assert.Equal(0, JsonDocument.Parse(request.ResponseSchema!).RootElement.GetProperty("properties").GetProperty("items").GetProperty("maxItems").GetInt32());
+            }
+        }
+
+        // La gerarchia di questo corpus ha foglie in entrambe le viste: la foglia A riceve lo schema completo (fissato), la foglia B quello con `items` vuoto.
+        Assert.Contains(ReconcileSchemaVariant.Full, seen);
+        Assert.Contains(ReconcileSchemaVariant.NoItems, seen);
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, await ManifestProfile(s.Run));
+    }
+
+    [Fact]
+    public async Task A_run_frozen_as_v7_before_the_change_keeps_sending_the_single_pinned_schema_and_its_manifest_plan()
+    {
+        var s = await ArrangeAsync();
+        // Run congelato v7 (come quelli già esistenti): stessa selezione, chiavi v7 senza `reconcileSchemaProfile`.
+        await Execute(
+            "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = CAST(@p AS jsonb) WHERE \"Id\" = @r",
+            ("d", DocumentAnalysisWorkflow.DefinitionVersionV7), ("p", SourceSnapshotStore.AnalysisPromptVersionsV7(new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 })), ("r", s.Run));
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        var pinned = Canon(ReconcileAliasContracts.JsonSchema().GetRawText());
+        Assert.All(model.Requests.Where(r => !DocumentGapStageWorkflowTests.IsStage(r)), r => Assert.Equal(pinned, Canon(r.ResponseSchema!)));
+        Assert.Contains(model.Requests, r => !DocumentGapStageWorkflowTests.IsStage(r) && VariantOf(r) == ReconcileSchemaVariant.NoItems);   // anche la foglia B: schema unico storico
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV7, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal(string.Empty, await ManifestProfile(s.Run));   // piano v7 invariato: nessuna chiave del profilo
+    }
+
+    [Fact]
+    public async Task Under_v8_a_leaf_B_answer_with_items_is_still_rejected_by_the_validator_with_no_commit_and_no_further_call()
+    {
+        // La grammatica del provider è un aiuto, non una garanzia: il modello finto ignora lo schema e risponde come la chiamata 026 (un item per voce nella foglia B, nessun candidato).
+        var s = await ArrangeAsync();
+        string? rejected = null;
+        var model = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            Responder = r =>
+            {
+                if (DocumentGapStageWorkflowTests.IsStage(r))
+                {
+                    return Stage(r);
+                }
+
+                var p = DocumentReconcileAliasWorkflowTests.ParseAlias(r.AllText);
+                if (p is not { Stage: "leaf", View: "B" })
+                {
+                    return Hierarchy(r);
+                }
+
+                rejected = r.AllText;
+                var items = new JsonArray([.. p.Voci.Select((v, i) => JsonNode.Parse(JsonSerializer.Serialize(new { key = $"i{i + 1}", section = "requirements", text = v.Statement, classification = "Documented", evidence = new[] { v.Alias } })))]);
+                return new JsonObject
+                {
+                    ["contract"] = "reconcile-alias-1", ["descriptor"] = "gruppo B", ["noFindings"] = null, ["items"] = items, ["candidates"] = new JsonArray(), ["focus"] = null, ["patches"] = new JsonArray(),
+                }.ToJsonString();
+            },
+        };
+
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.NotNull(rejected);
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.WorkOutputInvalid), (result.Status, result.ErrorCode));
+        var row = await RunRow(s.Run);
+        Assert.Contains("items: ammessi solo nelle foglie della vista A", row.Message, StringComparison.Ordinal);
+        Assert.Equal(rejected, model.Requests[^1].AllText);                                          // nessuna chiamata dopo il rifiuto: nessun retry nascosto
+        Assert.Equal(ReconcileSchemaVariant.NoItems, VariantOf(model.Requests[^1]));                  // e la richiesta rifiutata portava lo schema con `items` vuoto
+        Assert.Equal(model.Requests.Count - 1, await Outputs(s.Run, ReconcileAliasContracts.SchemaVersion));   // l'output invalido non è Committed
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
+    }
+
+    [Fact]
+    public async Task A_crash_on_a_leaf_B_batch_resumes_with_the_same_input_hash_and_schema_and_never_resends_committed_batches()
+    {
+        var s = await ArrangeAsync();
+        string? crashed = null;
+        var crash = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            // Il processo muore alla prima foglia B (batch pubblicato e riservato, nessun output): i batch precedenti sono Committed.
+            Responder = r =>
+            {
+                if (!DocumentGapStageWorkflowTests.IsStage(r) && VariantOf(r) == ReconcileSchemaVariant.NoItems && crashed is null)
+                {
+                    crashed = r.AllText;
+                    throw new InvalidOperationException("crash simulato");
+                }
+
+                return Respond(r);
+            },
+        };
+        await Record.ExceptionAsync(() => RunAsync(s.Claim, crash));
+        Assert.NotNull(crashed);
+        var answered = crash.Requests.Where(r => r.AllText != crashed).Select(r => r.AllText).ToHashSet(StringComparer.Ordinal);
+        var committedBefore = await Outputs(s.Run, ReconcileAliasContracts.SchemaVersion);
+        Assert.Equal(answered.Count, committedBefore);
+
+        await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = 'Running', \"ErrorCode\" = NULL, \"ErrorMessage\" = NULL, \"LeaseOwner\" = 'owner-2', \"FencingToken\" = 2, \"AttemptCount\" = 2, \"LeaseUntil\" = now() + interval '10 minutes' WHERE \"Id\" = @r", ("r", s.Run));
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+        var resumed = await RunAsync(new AnalysisRunClaim(s.Run, "owner-2", 2, 2), model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(resumed.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");   // nessun integrity_conflict: l'inputHash ricalcolato coincide con quello pubblicato
+        Assert.Equal(crashed, model.Requests[0].AllText);                                              // si riprende dal batch interrotto
+        Assert.Equal(Canon(ReconcileAliasContracts.SchemaOf(ReconcileSchemaVariant.NoItems).GetRawText()), Canon(model.Requests[0].ResponseSchema!));
+        Assert.DoesNotContain(model.Requests, r => answered.Contains(r.AllText));                      // nessun batch Committed reinviato
+        Assert.Equal(0, await Count(
+            "SELECT count(*) FROM (SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r GROUP BY \"Ordinal\" HAVING count(*) > 1) d", ("r", s.Run)));   // nessuna riga orfana per ordinale
     }
 
     // ================================================================ coverage (T032) e invarianti di assenza (T039, per questa configurazione)

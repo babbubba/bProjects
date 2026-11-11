@@ -27,6 +27,19 @@ public enum AiSection
     [JsonStringEnumMemberName("openQuestions")] OpenQuestions,
 }
 
+/// <summary>Varianti dello schema nel profilo per batch v8 (<see cref="ReconcileAliasContracts.SchemaProfileByBatch"/>): stesso DTO, vincoli di grammatica diversi per stadio e vista.</summary>
+public enum ReconcileSchemaVariant
+{
+    /// <summary>Foglia della vista A: lo schema completo <c>reconcile-alias-1</c> (fissato), invariato.</summary>
+    Full,
+
+    /// <summary>Foglia della vista B, riduzione e cross: <c>items</c> e <c>patches</c> vuoti, <c>focus</c> null.</summary>
+    NoItems,
+
+    /// <summary>Espansione e confronto: <c>items</c> vuoto; patch e focus come nello schema completo.</summary>
+    Candidate,
+}
+
 /// <summary>Esito dichiarato dal modello sul candidato in esame: Compared/Open nel confronto, Unresolved nell'espansione (il server lo traduce in NotProcessed candidate_unresolved).</summary>
 public enum AiFocusOutcome { Compared, Open, Unresolved }
 
@@ -220,6 +233,61 @@ public static class ReconcileAliasContracts
 
     /// <summary>JSON Schema strict del DTO (stesso criterio di <see cref="AnalysisAliasContracts.JsonSchema"/>): vincola la forma, la risoluzione degli alias è del compositore.</summary>
     public static JsonElement JsonSchema() => Schema.Value;
+
+    /// <summary>
+    /// Profilo degli schemi per batch della definizione v8 (003, correzione T040 Run 2, chiamata 026): lo stesso DTO <c>reconcile-alias-1</c>, ma lo schema inviato al modello è scelto da stadio
+    /// e vista del batch. Chiave di freeze <c>reconcileSchemaProfile</c>; v4–v7 inviano sempre <see cref="JsonSchema"/> (fissato), mai le varianti.
+    /// </summary>
+    public const string SchemaProfileByBatch = "reconcile-alias-schema-by-batch-1";
+
+    private static readonly Lazy<JsonElement> SchemaNoItems = new(() => Restrict(Schema.Value, patchesAndFocus: true));
+
+    private static readonly Lazy<JsonElement> SchemaCandidate = new(() => Restrict(Schema.Value, patchesAndFocus: false));
+
+    /// <summary>
+    /// Schema del batch nel profilo <see cref="SchemaProfileByBatch"/>, ricavato dalle stesse regole del compositore (mai più permissivo né più restrittivo): foglia della vista A ⇒ <see cref="JsonSchema"/>
+    /// invariato; ogni altro batch ⇒ <c>items</c> vuoto (<c>maxItems: 0</c>); fuori da espansione e confronto anche <c>patches</c> vuoto e <c>focus</c> null. È un aiuto alla generazione (grammatica del
+    /// provider), non una validazione: il compositore resta l'unica garanzia e rifiuta comunque ogni violazione (<c>work_output_invalid</c>).
+    /// </summary>
+    public static JsonElement JsonSchemaFor(string stage, ReconcileView view) => SchemaOf(SchemaVariantOf(stage, view));
+
+    /// <summary>Variante del profilo per stadio e vista; uno stadio sconosciuto è un errore (nessun ripiego sullo schema completo).</summary>
+    public static ReconcileSchemaVariant SchemaVariantOf(string stage, ReconcileView view) => stage switch
+    {
+        "leaf" => view == ReconcileView.A ? ReconcileSchemaVariant.Full : ReconcileSchemaVariant.NoItems,
+        "reduce" or "cross" => ReconcileSchemaVariant.NoItems,
+        "expand" or "compare" => ReconcileSchemaVariant.Candidate,
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Stadio di riconciliazione sconosciuto: nessuno schema del profilo per batch."),
+    };
+
+    public static JsonElement SchemaOf(ReconcileSchemaVariant variant) => variant switch
+    {
+        ReconcileSchemaVariant.Full => Schema.Value,
+        ReconcileSchemaVariant.NoItems => SchemaNoItems.Value,
+        ReconcileSchemaVariant.Candidate => SchemaCandidate.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(variant), variant, "Variante dello schema sconosciuta."),
+    };
+
+    /// <summary>Hash canonici delle varianti del profilo, in ordine fisso: entrano nel <c>configHash</c> della v8, così una variante diversa è un'identità diversa.</summary>
+    public static string SchemaProfileHashes() => string.Join(
+        ',', Enum.GetValues<ReconcileSchemaVariant>().Select(v => $"{v}={CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOf(v).GetRawText()))}"));
+
+    /// <summary>Copia dello schema completo con <c>items</c> vuoto e, se richiesto, <c>patches</c> vuoto e <c>focus</c> null. Ordine e insieme delle proprietà obbligatorie invariati.</summary>
+    private static JsonElement Restrict(JsonElement full, bool patchesAndFocus)
+    {
+        var schema = JsonNode.Parse(full.GetRawText())!.AsObject();
+        var properties = schema["properties"]!.AsObject();
+        // `items` (schema degli elementi) resta accanto a `maxItems`: il convertitore schema→grammatica di llama.cpp applica i limiti agli array con schema degli elementi.
+        properties["items"]!["maxItems"] = 0;
+        if (patchesAndFocus)
+        {
+            properties["patches"]!["maxItems"] = 0;
+            properties["focus"] = new JsonObject { ["type"] = "null" };
+        }
+
+        using var document = JsonDocument.Parse(schema.ToJsonString());
+        return document.RootElement.Clone();
+    }
 
     private static JsonElement BuildSchema(string contract, bool gapAssessments)
     {
