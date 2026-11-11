@@ -380,3 +380,52 @@ Nessun esito `IgnoredByProvider`, `RejectedByProvider` o `Inconclusive`: nessuno
 - `minLength` non esercitato realmente.
 - Costrutti ignorati in silenzio dal provider: mitigati dal test sull'elenco chiuso di keyword, non da una prova reale.
 - La v9 non è mai stata eseguita su un modello reale.
+
+## Esito della verifica reale dei vincoli dello schema v9 (2026-11-11; una esecuzione, quattro richieste generative, nessun retry; T040 resta aperto)
+
+**Autorizzazione e modalità.**
+- Il committente ha autorizzato UNA sola esecuzione di `ReconcileSchemaV9SupportRealTests`, limitata a 4 richieste.
+- `BPROJECTS_TEST_DGX_ALLOW=1` è stato impostato solo nel processo del test; modello `Qwen3.6-35B-Smart`; endpoint e chiave dalle variabili d'ambiente (la chiave non compare nel rapporto).
+- Nessun codice, prompt, manifesto o parametro è stato modificato per ottenere il PASS. Albero di lavoro: commit `a0b9a51` più i soli file di test della verifica.
+- Esito del test: superato, 1 su 1, 19,8 s. Il Run 4 non è stato eseguito e il manifesto v4 non è stato toccato.
+- Il test ha un tetto duro di 4 richieste nel client (`RequestCapHandler`, esterno all'osservatore) e il client ha zero retry: richieste tentate 4, inviate 4.
+
+**Rapporto diagnostico.** `%TEMP%\bprojects-t040-campaign\schema-v9-support-report-20261111T221305333Z.json` (file locale, non versionato; 68531 byte), **SHA-256 `309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE`**. Contiene, per ogni chiamata, lo schema inviato, l'hash atteso e quello inviato, lo stato HTTP, `finish_reason`, l'output grezzo, gli scambi HTTP (richiesta e risposta) e i verdetti; `provenForExercisedFeatures = true`.
+
+**Prompt (identico nelle quattro richieste).** Sintetico, «prova di formato, nessun contenuto reale», costruito per INDURRE il comportamento vietato in ogni variante: `descriptor` = stringa vuota `""`, due candidati (`f1` fra E1 ed E2, `f2` fra N1 ed N2), `items: []`, `focus` null, `patches: []`. Il controllo (schema completo, invariato) mostra se il modello produce davvero il comportamento che la variante dovrebbe impedire; senza questa evidenza il verdetto sarebbe `Inconclusive`, mai `Honored`. Un test offline dimostra che la risposta che segue il prompt è ammessa dallo schema completo e rifiutata da ciascuna variante solo per `descriptor` ed estremi.
+
+**Le quattro richieste** (tutte `POST /v1/chat/completions`, HTTP 200, `finish_reason = stop`, temperatura 0, ragionamento spento, `max_tokens` 1024, `response_format` json_schema; 205 token di prompt ciascuna; l'hash canonico dello schema nel corpo coincide con quello congelato in tutte e quattro):
+
+| # | Variante | Hash dello schema inviato = congelato | Token output | Risultato |
+|---|---|---|---|---|
+| 1 | `Full` (controllo) | `648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54` | 208 | `descriptor` `""`; candidati E1–E2 e N1–N2 |
+| 2 | `LeafB` | `800f277ba1daa4d14ed0694d2dbea68add81ebb8dd1915817ab1df3a6a1aa4ce` | 213 | `descriptor` `"\"\""` (due virgolette); candidati E1–E2 ×2 |
+| 3 | `Reduce` | `06058502b68f2d19363b1bb408bfd613b4ccafd3f8e6453c3c32eba43ba56b6c` | 201 | `descriptor` `"\"\""` (due virgolette); candidati N1–N2 ×2 |
+| 4 | `Cross` | `bab4a2acd070c70569fb5b80c7ec251a1f9bff809f8f6e701d83dda6e659d5f9` | 193 | `descriptor` `null`; candidati N1–N2 ×2 |
+
+**Esito per vincolo (sei `Honored`).**
+
+| Vincolo | Esito | Evidenza |
+|---|---|---|
+| `descriptor` ≠ `""` (`minLength:1`) — LeafB | **Honored** | stringa non vuota (controllo: `""`) |
+| `descriptor` ≠ `""` (`minLength:1`) — Reduce | **Honored** | stringa non vuota (controllo: `""`) |
+| `descriptor` = `null` (`type:null`) — Cross | **Honored** | `null` (controllo: stringa) |
+| estremi `^E` (pattern) — LeafB | **Honored** | E1, E2, E1, E2 (controllo: anche N1, N2) |
+| estremi `^N` (pattern) — Reduce | **Honored** | N1, N2, N1, N2 (controllo: anche E1, E2) |
+| estremi `^N` (pattern) — Cross | **Honored** | N1, N2, N1, N2 (controllo: anche E1, E2) |
+
+Nessun esito `IgnoredByProvider`, `RejectedByProvider` o `Inconclusive`: nessuno stato 400/422, nessuna troncatura, controllo valido. `minLength:1` è quindi ora **esercitato realmente** (la sezione precedente lo dichiarava inferito dal sorgente).
+
+**Non esercitati (`NotExercised`).**
+- `descriptor` non null (`type:string`) su LeafB e Reduce: il prompt induce `""`, non null; il controllo non ha mostrato null.
+- LeafA, Expand e Compare: non inviati per il tetto di 4 richieste. I loro sottoschemi di `descriptor` ed estremi sono identici byte per byte a quelli di LeafB e Cross (verificato da un test offline), ma l'esito è **inferito, non provato**.
+- `maxItems:0` su `items` e `patches` e `focus` null nelle varianti v9: il prompt non li induce; misurati sulla v8 (NoItems) nella verifica precedente.
+- `descriptor` di soli spazi o oltre 512 caratteri: la grammatica non li esprime (nessun `maxLength`, nessun `\S`); restano al validatore.
+
+**Osservazioni (nessuna correzione applicata).**
+- **Descriptor semanticamente inutile.** In LeafB e Reduce il modello ha soddisfatto `minLength:1` copiando dal prompt la stringa letterale di due virgolette. È un valore non vuoto, non composto di soli spazi e lungo meno di 512 caratteri: il validatore della gerarchia lo accetterebbe. La grammatica garantisce quindi la forma, non il contenuto: nessun vincolo strutturale impedisce un descriptor privo di significato. Qui l'effetto è causato dal prompt sintetico, che chiedeva esplicitamente una stringa vuota.
+- **Candidati con gli stessi estremi.** In LeafB, Reduce e Cross il secondo candidato ha gli stessi estremi del primo (E1–E2 ×2, N1–N2 ×2): il prompt chiedeva per `f2` il prefisso che la variante vieta e la grammatica lo ha forzato sull'unico ammesso. Come il compositore e il validatore trattino candidati con lo stesso estremo e la stessa coppia non è stato misurato in questa prova.
+
+**Compatibilità dello schema ≠ validazione end-to-end.** La verifica dimostra che llama.cpp b10703 applica, a livello di grammatica, `string+minLength:1`, `null` e i prefissi `^E`/`^N` con questi schemi. Non dimostra che il flusso completo (documenti reali → gerarchia → compositore → validatore → indici) produca risultati corretti, né che il modello scelga valori sensati dentro lo spazio ammesso dalla grammatica; il validatore resta l'unica garanzia sulle regole che la grammatica non esprime (D9–D12, spazi, lunghezza). La v9 non è ancora mai stata eseguita su documenti reali: lo farebbe un Run 4, non eseguito.
+
+**Limiti.** Campione di una richiesta per variante, temperatura 0 e prompt sintetico, fuori dal prompt di produzione `document-reconcile-v4`. La build del provider (b10703) non è stata rilevata da questa prova: vale quanto rilevato nella verifica precedente (`/props` e `system_fingerprint`).
