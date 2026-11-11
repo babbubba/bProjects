@@ -56,6 +56,20 @@ La scelta (b1-ledger/b1-retrieval) è funzione deterministica di snapshot, misur
 
 Si **aggiungono** alle chiavi gerarchiche e `gap*` della v6 (che restano): `retrievalIndex` (`index-text-1` + `IndexConfigHash`), `retrievalPolicy` (`retrieval-policy-N`, `PolicyHash`), `retrievalRegistry` (`retrieval-registry-1`), `retrievalOutput` (`retrieval-output-1`), `retrievalModels` (nome+artefatto+dimensione dei due modelli). `ContractOf` restituisce 7 solo con l'insieme completo; la v6 rifiuta le chiavi `retrieval*`; combinazione mista ⇒ `workflow_incompatible`, mai reinterpretazione. Numero e nomi esatti sono **da fissare e verificare nel codice in T028** (la 002 ha 18 chiavi v6; il numero v7 è da calcolare, non assunto).
 
+### 4.1 Definizione `project-analysis-documents-v8` (correzione T040 Run 2, 2026-11-11)
+
+Decisione del committente dopo la chiamata 026 del Run 2 (foglia B con 139 `items`, rifiutata correttamente con `work_output_invalid`). v8 = v7 **identica** (routing, chiavi `gap*` e `retrieval*`, single-call, stadio Gap, recupero) più la chiave di freeze `reconcileSchemaProfile = reconcile-alias-schema-by-batch-1`. `ContractOf` restituisce 8 solo con tutte le chiavi v7 e quel valore; la chiave in v4–v7 è una combinazione mista (`workflow_incompatible`). Le **nuove** richieste con recupero congelano la v8; i run v7 esistenti restano v7 (nessuna conversione).
+
+Nella gerarchia della v8 lo schema JSON inviato a ogni batch (`response_format`, grammatica del provider) è scelto da stadio e vista, con le stesse regole del compositore:
+
+| Batch | Variante | Vincoli rispetto allo schema completo `reconcile-alias-1` (fissato) |
+|---|---|---|
+| foglia, vista A | `Full` | nessuno (schema invariato) |
+| foglia vista B, riduzione, cross | `NoItems` | `items` e `patches` con `maxItems: 0`, `focus` di tipo `null` |
+| espansione, confronto | `Candidate` | `items` con `maxItems: 0` |
+
+Invariati: prompt `document-reconcile-v3`, DTO `reconcile-alias-1`, compositore e validatore (unica garanzia: lo schema è un aiuto alla generazione, non una validazione), WorkOutput e replay degli output `Committed`. Identità: il `configHash` della v8 aggiunge il profilo e gli hash delle tre varianti, il piano del manifest la chiave `reconcileSchemaProfile`; v4–v7 restano byte per byte invariati. Il Pack misura con lo schema completo (composizione dei batch invariata); `inputHash` è l'hash del payload realmente inviato, variante inclusa. Nessun retry.
+
 ## 5. Modalità degradata e errori tipizzati (D-3)
 
 | Condizione | Esito del recupero | Esito del run | Invii LLM |

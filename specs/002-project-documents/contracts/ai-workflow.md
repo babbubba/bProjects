@@ -384,6 +384,7 @@ Estensione di §4 (gerarchia) e §7 (alias) per i run creati da `Analizza`. Stat
 - **Checkpoint e ripresa**: nessuna nuova tabella; replay su WorkOutput `Committed`; nessuna nuova inferenza dopo un output committato.
 - **Budget e deadline**: `MaxAiCallsPerRun`, `MaxDerivedBytes`, `MaxReconciliationLevels`, `MaxCandidatesPerRun` sono letti dallo snapshot persistito sul root del run (vedi §12), non dalla policy amministrativa corrente. La deadline originale è invariata; nessun azzeramento di contatori.
 - **Regressione nota**: N4 resta regressione semantica nota; nessun retry né correzione ad hoc. Prova e gate in tasks T131.
+- **Schema per stadio e vista (definizione v8, slice 003, 2026-11-11)**: solo per i run `project-analysis-documents-v8` lo schema inviato al modello è una variante di `reconcile-alias-1` scelta da stadio e vista (`items` vuoto fuori dalla foglia A; `patches` vuoto e `focus` null fuori da espansione e confronto). Il DTO, il compositore e il validatore sono invariati e restano l'unica garanzia. v4–v7 inviano sempre lo schema unico. Dettagli in `specs/003-retrieval-evidence-search/contracts/candidate-source.md` §4.1.
 
 ## 12. Limiti documentali congelati per run di analisi (T133, 2026-11-06)
 
