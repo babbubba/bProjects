@@ -5,6 +5,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using bProjects.App.AI;
+using bProjects.App.Analysis;
+using bProjects.App.Conversations;
+using bProjects.App.Documents;
 using bProjects.App.Retrieval;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -130,11 +133,50 @@ internal static class RetrievalGapCampaign
 
     // ================================================================ manifesto congelato
 
-    /// <summary>Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>). Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.</summary>
-    public const string FrozenManifestSha256 = "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181";
+    /// <summary>
+    /// Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>): versione 4, preparata per il Run 3 (T040 Run 2 non superato, v8 con prompt <c>document-reconcile-v4</c>).
+    /// Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.
+    /// </summary>
+    public const string FrozenManifestSha256 = "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf";
+
+    /// <summary>Hash della versione 3 del manifesto: quella USATA dal Run 2 (2026-11-10, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v3-run2.json`; i risultati del Run 2 si riferiscono a questa configurazione (definizione v7).</summary>
+    public const string Run2ManifestSha256 = "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181";
 
     /// <summary>Hash della versione 2 del manifesto: quella USATA dal Run 1 (2026-11-10, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v2-run1.json`; i risultati del Run 1 si riferiscono a questa configurazione.</summary>
     public const string Run1ManifestSha256 = "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb";
+
+    // ---- identità della pipeline di analisi per il Run 3 (letterali: congelati qui, mai letti dal prodotto; il preflight li confronta con quello che il prodotto realmente congela e invia).
+
+    /// <summary>Definizione di workflow del Run 3: v8 = v7 + profilo degli schemi per batch. Il Run 2 usava la v7 (<see cref="Run2DefinitionVersion"/>).</summary>
+    public const string DefinitionVersion = "project-analysis-documents-v8";
+
+    public const string Run2DefinitionVersion = "project-analysis-documents-v7";
+
+    /// <summary>Prompt della gerarchia di riconciliazione della v8 e SHA-256 della risorsa incorporata (testo UTF-8, senza trasformazioni).</summary>
+    public const string ReconcilePromptVersion = "document-reconcile-v4";
+
+    public const string ReconcilePromptSha256 = "d3e46528736e856eedfa43e1fa41785b0a87ab7ddba91881f57bb9c09c0da79d";
+
+    /// <summary>Prompt della v7 (Run 2), invariato e ancora in uso per le definizioni v4–v7.</summary>
+    public const string Run2ReconcilePromptVersion = "document-reconcile-v3";
+
+    public const string Run2ReconcilePromptSha256 = "0503d17360e21e8f72e357d1fcf0f0e32fbead294d970193af4eb61ff847c9e5";
+
+    /// <summary>Profilo degli schemi della gerarchia (chiave di freeze <c>reconcileSchemaProfile</c>) e hash canonici (RFC 8785, SHA-256) delle tre varianti, nell'ordine di <see cref="ReconcileSchemaVariant"/>.</summary>
+    public const string ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-1";
+
+    public static readonly IReadOnlyDictionary<string, string> ReconcileSchemaVariantHashes = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Full"] = "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
+        ["NoItems"] = "7b0a15de8844ecea8b5daa15009fe838bde652e261540074b3ac563bce6952b2",
+        ["Candidate"] = "facb96cb31ec0f0fc2ee8a42a0cf899a95cbe5af4d90abac4f163df6c5984f38",
+    };
+
+    /// <summary>Commit di codice a cui la v8 e il prompt v4 erano completi quando il manifesto v4 è stato preparato.</summary>
+    public const string CodeBaseline = "65cdcc8";
+
+    /// <summary>Modalità di output strutturato richiesta: lo schema JSON viene inviato al provider. Con <c>ValidatedTextJson</c> nessuno schema viaggia e la v8 si comporterebbe come la v7.</summary>
+    public const StructuredOutputMode RequiredStructuredOutputMode = StructuredOutputMode.JsonSchema;
 
     /// <summary>Fattore di stima dell'output dell'estrazione fissato per il Run 2 (CANDIDATO, non validato; il Run 1 usava 8,0). Deve coincidere con <see cref="AiOptions.ExtractionOutputExpansion"/> risolta dal runtime.</summary>
     public const double ExtractionOutputExpansion = 16.0;
@@ -151,9 +193,16 @@ internal static class RetrievalGapCampaign
         + "(riferimento del laboratorio 1-2 su 10 casi, tolleranza zero sotto i 10 casi, zero perdite per esclusione a monte); configurazione delle misure di latenza per Gap; ordine Single poi Multi in un solo test. Nessun adattamento delle attese ai risultati.";
 
     /// <summary>Motivo del ri-congelamento (versione 3), dopo il Run 1 non superato (finish=length in estrazione). Nessun adattamento di corpus, gold, domande, attese o soglie.</summary>
-    public const string FreezeReason =
+    public const string FreezeReasonV3 =
         "Dopo il Run 1 (estrazione troncata a finish=length, diagnosi offline in M3-real.md) il fattore di stima dell'output dell'estrazione e stato reso esplicito e ricalibrato in via preventiva da 8,0 a 16,0 (candidato, non validato); "
         + "il manifesto lo registra e il preflight rifiuta (NO-GO) ogni configurazione risolta diversa. Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema non cambiano.";
+
+    /// <summary>Motivo del ri-congelamento (versione 4), dopo il Run 2 non superato (work_output_invalid sulla chiamata 026, indici non costruiti). Nessun adattamento di corpus, gold, domande, attese, soglie, politica, modelli o parametri di estrazione.</summary>
+    public const string FreezeReason =
+        "Dopo il Run 2 (riconciliazione della foglia della vista B: items non ammessi, chiamata 026; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v7 a v8 con il prompt document-reconcile-v4 "
+        + "e il profilo degli schemi per batch reconcile-alias-schema-by-batch-1 (decisione del committente 2026-11-11). Il manifesto registra definizione, prompt con SHA-256, profilo e hash delle tre varianti dello schema; "
+        + "il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni configurazione risolta o identita del prodotto diversa, compresa una modalita di output strutturato diversa da JsonSchema. "
+        + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione non cambiano.";
 
     /// <summary>Caratteristiche del modello che richiedono una verifica REALE (non verificabili offline) e che la campagna registra senza dichiararle verificate.</summary>
     public static readonly string[] LlmUnverifiedCharacteristics = ["pesi effettivamente caricati", "quantizzazione", "artefatto/file del modello", "finestra di contesto effettiva (misurata dal profilo di runtime)", "comportamento del ragionamento (thinking=0 richiesto)"];
@@ -186,7 +235,7 @@ internal static class RetrievalGapCampaign
         var manifest = new
         {
             campaign = Id,
-            definition = "project-analysis-documents-v7",
+            definition = DefinitionVersion,
             config = new
             {
                 window = WindowTokens, output = OutputTokens, margin = MarginTokens, budget = BudgetTokens, thinking = Thinking,
@@ -197,6 +246,26 @@ internal static class RetrievalGapCampaign
                 extraction = new { outputExpansion = ExtractionOutputExpansion, calibration = ExpectedExtractionCalibration, option = "Ai:ExtractionOutputExpansion", previousRun1Value = PlannerLimits.DefaultOutputExpansion, status = "candidato, non validato da misura reale completa", preflight = "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza" },
                 llm = new { id = LlmModelId, source = "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline", unverified = LlmUnverifiedCharacteristics },
                 latency = new { perGap = LatencyReport.PerGapPhases, shared = LatencyReport.SharedPhases, attribution = "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap" },
+                reconcile = new
+                {
+                    prompt = new { version = ReconcilePromptVersion, sha256 = ReconcilePromptSha256, previousVersion = Run2ReconcilePromptVersion, previousSha256 = Run2ReconcilePromptSha256, note = "il v3 resta invariato e in uso per le definizioni v4-v7" },
+                    schemaProfile = new
+                    {
+                        key = DocumentAnalysisWorkflow.ReconcileSchemaProfileKey, value = ReconcileSchemaProfile, variantHashes = ReconcileSchemaVariantHashes,
+                        hashAlgorithm = "SHA-256 della forma canonica RFC 8785 dello schema",
+                        providerFeatures = new[] { "maxItems:0 su items (NoItems, Candidate) e su patches (NoItems)", "type:null su focus (NoItems)" },
+                        providerSupport = "NON verificato su llama.cpp b10703: se ignorate, la v8 si comporta come la v7 e il validatore rifiuta comunque; verifica reale minima predisposta in ReconcileSchemaSupportRealTests, non eseguita senza autorizzazione",
+                    },
+                    freezeKeys = new { reconcile = ReconcilePromptVersion, reconcileSchemaProfile = ReconcileSchemaProfile },
+                    preflight = "definizione, prompt (versione e SHA-256), profilo, hash delle varianti dello schema e chiavi di freeze del prodotto devono coincidere con questi valori, altrimenti NO-GO prima di ogni inferenza",
+                },
+                structuredOutput = new
+                {
+                    mode = RequiredStructuredOutputMode.ToString(),
+                    scope = "Ai:StructuredOutputMode e globale: vale anche per la fase Analysis",
+                    reason = "con ValidatedTextJson nessuno schema viene inviato e la v8 equivarrebbe alla v7",
+                    preflight = "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza",
+                },
             },
             thresholds = new
             {
@@ -206,15 +275,18 @@ internal static class RetrievalGapCampaign
             },
             freeze = new
             {
-                version = 3,
-                supersedes = Run1ManifestSha256,
+                version = 4,
+                supersedes = Run2ManifestSha256,
+                codeBaseline = CodeBaseline,
                 history = new object[]
                 {
                     new { version = 1, sha256 = SupersededManifestSha256, usedByRun = "nessuno (sostituita prima di ogni inferenza)" },
                     new { version = 2, sha256 = Run1ManifestSha256, usedByRun = "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json" },
+                    new { version = 3, sha256 = Run2ManifestSha256, usedByRun = "Run 2 (2026-11-10): non superato (work_output_invalid sulla riconciliazione, definizione v7), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v3-run2.json" },
                 },
                 reason = FreezeReason,
-                configDifferenceFromRun1 = "unica differenza di configurazione: ExtractionOutputExpansion 8.0 -> 16.0 (planner di estrazione; calibrazione preventiva, valore candidato non validato). Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema invariati.",
+                configDifferenceFromRun2 = "differenze rispetto al manifesto v3 (Run 2), uniche: definition project-analysis-documents-v7 -> project-analysis-documents-v8; nuove chiavi config.reconcile (prompt document-reconcile-v4 con SHA-256, profilo reconcile-alias-schema-by-batch-1, hash delle tre varianti dello schema, chiavi di freeze) "
+                    + "e config.structuredOutput (JsonSchema richiesto); freeze v4. Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione (ExtractionOutputExpansion 16.0) invariati.",
             },
             seed = LargeDocumentCorpus.Seed,
             extension = ExtensionDocuments.Select(d => new { d.Key, d.FileName, d.ExcludedByPm, textSha256 = Sha(d.Text) }).ToArray(),
@@ -289,7 +361,136 @@ internal static class RetrievalGapCampaign
             problems.Add($"etichetta di calibrazione {PlannerLimits.ExtractionCalibrationVersion} invece di {ExpectedExtractionCalibration}");
         }
 
+        // Output strutturato: Ai:StructuredOutputMode e globale e quindi vale per la fase Analysis. Qualunque valore diverso da JsonSchema (anche un valore numerico non definito) e NO-GO: con
+        // ValidatedTextJson InternalModelClient non invia alcuno schema e la v8 equivarrebbe alla v7 senza che nulla lo segnali.
+        if (options.StructuredOutputMode != RequiredStructuredOutputMode)
+        {
+            problems.Add($"StructuredOutputMode risolta {options.StructuredOutputMode} invece di {RequiredStructuredOutputMode}: nessuno schema sarebbe inviato al provider");
+        }
+
+        // Fase Analysis come risolta dal runtime (quella che usano estrazione di gerarchia e stadio Gap): output, ragionamento e modello fissati dalla campagna.
+        var analysis = options.ForPhase(AiPhase.Analysis);
+        if (analysis.MaxOutputTokens != OutputTokens)
+        {
+            problems.Add($"output della fase Analysis risolto {analysis.MaxOutputTokens} invece di {OutputTokens}");
+        }
+
+        if (analysis.EnableThinking != Thinking)
+        {
+            problems.Add($"ragionamento della fase Analysis risolto {analysis.EnableThinking} invece di {Thinking}");
+        }
+
+        if (!string.Equals(analysis.ModelId, LlmModelId, StringComparison.Ordinal))
+        {
+            problems.Add($"modello della fase Analysis risolto «{analysis.ModelId}» invece di {LlmModelId}");
+        }
+
         return problems.Count == 0 ? null : string.Join("; ", problems);
+    }
+
+    /// <summary>
+    /// Identità della pipeline di analisi come la vedrebbe una NUOVA richiesta di Analizza con il recupero abilitato: definizione congelata, prompt di riconciliazione (versione dichiarata nel freeze, versione
+    /// effettivamente instradata e SHA-256 della risorsa incorporata), profilo degli schemi con hash canonico delle varianti e contratto riconosciuto da <c>ContractOf</c>. Letta dal prodotto, mai da file.
+    /// </summary>
+    internal sealed record AnalysisIdentity(
+        string Definition, int? Contract, string FrozenReconcilePrompt, string DispatchedReconcilePrompt, string ReconcilePromptSha256, string? FrozenSchemaProfile,
+        IReadOnlyDictionary<string, string> SchemaVariantHashes)
+    {
+        /// <summary>Identità del prodotto per una nuova richiesta di Analizza; con <paramref name="retrieval"/> RISOLTE dall'applicazione in prova (altrimenti opzioni sintetiche con la politica 1, solo per i test).</summary>
+        public static AnalysisIdentity FromProduct(RetrievalOptions? retrieval = null)
+        {
+            var json = SourceSnapshotStore.AnalysisPromptVersionsV8(retrieval ?? new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 });
+            var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(json)!;
+            var definition = SourceSnapshotStore.AnalysisDefinitionV8;
+            var run = new ProcessingRun { WorkflowDefinitionVersion = definition, MafVersion = Conversation.CurrentMafVersion, PromptVersions = json };
+            var frozenPrompt = keys.GetValueOrDefault("reconcile") ?? string.Empty;
+            return new(
+                definition, DocumentAnalysisWorkflow.ContractOf(run), frozenPrompt, DocumentAnalysisWorkflow.ReconcilePromptOf(definition), EmbeddedPromptSha256(frozenPrompt),
+                keys.GetValueOrDefault(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey),
+                Enum.GetValues<ReconcileSchemaVariant>().ToDictionary(v => v.ToString(), v => CanonicalJson.HashText(CanonicalJson.Canonicalize(ReconcileAliasContracts.SchemaOf(v).GetRawText())), StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// Verifica delle <see cref="RetrievalOptions"/> RISOLTE dall'applicazione in prova: il recupero deve essere abilitato (altrimenti una nuova richiesta congelerebbe la v6, non la v8), con la politica, i modelli e
+    /// gli artefatti fissati. Null = compatibile; altrimenti NO-GO PRIMA di ogni upload e inferenza.
+    /// </summary>
+    public static string? RejectRetrievalOptions(RetrievalOptions options)
+    {
+        var problems = new List<string>();
+        if (!options.Enabled)
+        {
+            problems.Add("recupero non abilitato: una nuova richiesta di Analizza congelerebbe la v6, non la v8");
+        }
+
+        void Same(string what, object? found, object expected)
+        {
+            if (!Equals(found, expected))
+            {
+                problems.Add($"{what} risolto «{found}» invece di «{expected}»");
+            }
+        }
+
+        Same("politica di recupero", options.PolicyVersion, PolicyVersion);
+        Same("modello di embedding", options.Embedding.ModelId, EmbeddingModelId);
+        Same("artefatto di embedding", options.Embedding.Artifact, EmbeddingArtifact);
+        Same("dimensione dell'embedding", options.Embedding.Dimension, EmbeddingDimension);
+        Same("modello di riordino", options.Reranker.ModelId, RerankerModelId);
+        Same("artefatto di riordino", options.Reranker.Artifact, RerankerArtifact);
+        return problems.Count == 0 ? null : string.Join("; ", problems);
+    }
+
+    /// <summary>SHA-256 (UTF-8, senza trasformazioni) della risorsa incorporata di un prompt della riconciliazione; stringa vuota se la risorsa non esiste.</summary>
+    internal static string EmbeddedPromptSha256(string version)
+    {
+        using var stream = typeof(ReconcileAliasContracts).Assembly.GetManifestResourceStream($"Prompts.{version}.md");
+        if (stream is null)
+        {
+            return string.Empty;
+        }
+
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(reader.ReadToEnd())));
+    }
+
+    /// <summary>
+    /// Verifica PURA (nessuna rete, nessun database) che definizione, prompt, schemi e chiavi di freeze realmente prodotti dal prodotto coincidano con quelli congelati nel manifesto e con la definizione attesa
+    /// dalla prova (<paramref name="expectedDefinition"/>, quella che il controllo strutturale confronterebbe, ma solo a run concluso). Vuoto = coerente; altrimenti NO-GO PRIMA di ogni upload e inferenza.
+    /// </summary>
+    internal static IReadOnlyList<string> RejectIdentity(AnalysisIdentity actual, string expectedDefinition)
+    {
+        var problems = new List<string>();
+        void Same(string what, string? found, string expected)
+        {
+            if (!string.Equals(found, expected, StringComparison.Ordinal))
+            {
+                problems.Add($"{what}: il prodotto riporta «{found}» invece di «{expected}»");
+            }
+        }
+
+        Same("definizione congelata da una nuova richiesta di Analizza", actual.Definition, DefinitionVersion);
+        Same("definizione attesa dalla prova (controllo strutturale)", expectedDefinition, DefinitionVersion);
+        Same("chiave di freeze reconcile (prompt)", actual.FrozenReconcilePrompt, ReconcilePromptVersion);
+        Same("prompt di riconciliazione realmente instradato per la definizione", actual.DispatchedReconcilePrompt, ReconcilePromptVersion);
+        Same($"SHA-256 della risorsa incorporata {ReconcilePromptVersion}", actual.ReconcilePromptSha256, ReconcilePromptSha256);
+        Same("chiave di freeze reconcileSchemaProfile", actual.FrozenSchemaProfile, ReconcileSchemaProfile);
+        Same("profilo degli schemi supportato dal prodotto", ReconcileAliasContracts.SchemaProfileByBatch, ReconcileSchemaProfile);
+        if (actual.Contract != 8)
+        {
+            problems.Add($"contratto riconosciuto da ContractOf per il freeze v8: {actual.Contract?.ToString(CultureInfo.InvariantCulture) ?? "nessuno (workflow_incompatible)"} invece di 8");
+        }
+
+        foreach (var (variant, expected) in ReconcileSchemaVariantHashes)
+        {
+            Same($"hash canonico dello schema {variant}", actual.SchemaVariantHashes.GetValueOrDefault(variant), expected);
+        }
+
+        foreach (var extra in actual.SchemaVariantHashes.Keys.Except(ReconcileSchemaVariantHashes.Keys, StringComparer.Ordinal))
+        {
+            problems.Add($"variante dello schema non congelata nel manifesto: {extra}");
+        }
+
+        return problems;
     }
 
     /// <summary>Verifica del profilo effettivo del runtime (misurato) contro la configurazione fissata, modello compreso (<see cref="LlmModelId"/>, mai un altro). Null = compatibile.</summary>

@@ -1,0 +1,351 @@
+{
+  "campaign": "T040-retrieval-gap-1",
+  "frozenSha256": "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181",
+  "note": "Manifesto congelato PRIMA di ogni inferenza: corpus (hash del testo), gold (hash), domande, attese, soglie e configurazione. Rigenerabile solo con BPROJECTS_T040_WRITE_MANIFEST=1 e ri-congelamento esplicito della costante FrozenManifestSha256.",
+  "manifest": {
+    "campaign": "T040-retrieval-gap-1",
+    "definition": "project-analysis-documents-v7",
+    "config": {
+      "window": 32768,
+      "output": 16384,
+      "margin": 1024,
+      "budget": 15360,
+      "thinking": false,
+      "policy": "retrieval-policy-1",
+      "policyHash": "0c7049270c3960b8ca981a51fa6ab2ea0ceb24fccb4b978fa365d7d84d4f2245",
+      "embedding": {
+        "id": "bge-m3-Q5",
+        "artifact": "bge-m3-Q5_K_M.gguf",
+        "dimension": 1024
+      },
+      "reranker": {
+        "id": "bge-reranker-v2-m3",
+        "artifact": "bge-reranker-v2-m3-Q5_K_M.gguf"
+      },
+      "indexTextVersion": "index-text-1",
+      "fts": "italian",
+      "extraction": {
+        "outputExpansion": 16,
+        "calibration": "extraction-output-expansion-2026-11-10",
+        "option": "Ai:ExtractionOutputExpansion",
+        "previousRun1Value": 8,
+        "status": "candidato, non validato da misura reale completa",
+        "preflight": "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza"
+      },
+      "llm": {
+        "id": "Qwen3.6-35B-Smart",
+        "source": "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline",
+        "unverified": [
+          "pesi effettivamente caricati",
+          "quantizzazione",
+          "artefatto/file del modello",
+          "finestra di contesto effettiva (misurata dal profilo di runtime)",
+          "comportamento del ragionamento (thinking=0 richiesto)"
+        ]
+      },
+      "latency": {
+        "perGap": [
+          "search",
+          "rerank"
+        ],
+        "shared": [
+          "readiness",
+          "index_ready",
+          "reranker_ready",
+          "provenance",
+          "registry"
+        ],
+        "attribution": "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap"
+      }
+    },
+    "thresholds": {
+      "maxInvalidCitationsPer10": 2,
+      "lostConflicts": {
+        "labReference": "2 su 10 casi",
+        "scaledOnlyFromCases": 10,
+        "belowThatTolerance": 0,
+        "upstream": 0
+      },
+      "falseAnsweredInSnapshot": 0
+    },
+    "freeze": {
+      "version": 3,
+      "supersedes": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
+      "history": [
+        {
+          "version": 1,
+          "sha256": "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035",
+          "usedByRun": "nessuno (sostituita prima di ogni inferenza)"
+        },
+        {
+          "version": 2,
+          "sha256": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
+          "usedByRun": "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json"
+        }
+      ],
+      "reason": "Dopo il Run 1 (estrazione troncata a finish=length, diagnosi offline in M3-real.md) il fattore di stima dell'output dell'estrazione e stato reso esplicito e ricalibrato in via preventiva da 8,0 a 16,0 (candidato, non validato); il manifesto lo registra e il preflight rifiuta (NO-GO) ogni configurazione risolta diversa. Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema non cambiano.",
+      "configDifferenceFromRun1": "unica differenza di configurazione: ExtractionOutputExpansion 8.0 -> 16.0 (planner di estrazione; calibrazione preventiva, valore candidato non validato). Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema invariati."
+    },
+    "seed": 20261106,
+    "extension": [
+      {
+        "Key": "t040-parziale",
+        "FileName": "t040-formazione-operatori.txt",
+        "ExcludedByPm": false,
+        "textSha256": "4875ed379922933af6b4fd1d5d857a401ec192681e45185b8bcd2b9436d7e02e"
+      },
+      {
+        "Key": "t040-escluso",
+        "FileName": "t040-addendum-garanzie-reali.txt",
+        "ExcludedByPm": true,
+        "textSha256": "d46ade4f598dc9a9b9619ee30a903efa95ef4399fdabe6c07fc3d3080310675e"
+      }
+    ],
+    "scenarios": [
+      {
+        "Label": "T040-single",
+        "Origin": "T082 (documento singolo)",
+        "corpus": "T082-single",
+        "bulkRules": 260,
+        "fillerChars": 0,
+        "pmStatement": null,
+        "documents": [
+          {
+            "Key": "cap",
+            "FileName": "capitolato-aurora.txt",
+            "format": "Text",
+            "PlainTextSha256": "fb2fafe4ad61b11f168de998efc3334ffc988eced44bdb8411c660675027777b",
+            "chars": 21505,
+            "rules": 260
+          }
+        ],
+        "goldSha256": "b784f55051fb7c3d89376d2265b69c05a22e9d86c337eff52ad460a87ee9d0dc",
+        "questions": [
+          "Per quanti mesi il portale Aurora conserva i documenti di trasporto?",
+          "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+          "Qual è il numero di telefono dell'assistenza clienti?",
+          "Il termine di pagamento delle fatture è di 30 o di 60 giorni?",
+          "Qual è il limite del pegno sulle attrezzature?"
+        ],
+        "expectations": [
+          {
+            "Id": "present",
+            "Kind": "present",
+            "Question": "Per quanti mesi il portale Aurora conserva i documenti di trasporto?",
+            "QuestionToken": "conserva i documenti di trasporto",
+            "Outcome": "AnsweredInSnapshot",
+            "Reasons": [
+              "Answered"
+            ],
+            "SupportQuotes": [
+              [
+                "84 mesi"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "partial",
+            "Kind": "partial",
+            "Question": "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+            "QuestionToken": "formazione degli operatori",
+            "Outcome": "Open",
+            "Reasons": [
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "tre giornate"
+              ]
+            ],
+            "ForbiddenQuotes": [
+              "cinquantamila"
+            ],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "absent",
+            "Kind": "absent",
+            "Question": "Qual è il numero di telefono dell'assistenza clienti?",
+            "QuestionToken": "numero di telefono",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "conflict",
+            "Kind": "conflict",
+            "Question": "Il termine di pagamento delle fatture è di 30 o di 60 giorni?",
+            "QuestionToken": "30 o di 60 giorni",
+            "Outcome": "Open",
+            "Reasons": [
+              "Ambiguous",
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "30 giorni"
+              ],
+              [
+                "60 giorni"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": true
+          },
+          {
+            "Id": "excluded",
+            "Kind": "excluded",
+            "Question": "Qual è il limite del pegno sulle attrezzature?",
+            "QuestionToken": "pegno sulle attrezzature",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [
+              "cinquantamila",
+              "pegno sulle attrezzature non deve"
+            ],
+            "ExpectOpenConflict": false
+          }
+        ]
+      },
+      {
+        "Label": "T040-multi",
+        "Origin": "T083 (tre documenti)",
+        "corpus": "T083-multi",
+        "bulkRules": 270,
+        "fillerChars": 0,
+        "pmStatement": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+        "documents": [
+          {
+            "Key": "d1",
+            "FileName": "contratto-quadro-zefiro.txt",
+            "format": "Text",
+            "PlainTextSha256": "eb0efa9dc547cdd0b28a530a4a9e2a58c4af5718066594fdf8a59af98135fc29",
+            "chars": 7661,
+            "rules": 90
+          },
+          {
+            "Key": "d2",
+            "FileName": "allegato-tecnico-zefiro.md",
+            "format": "Markdown",
+            "PlainTextSha256": "1fd527fe1f80110213e673d6665935a59afdac89f9e39d1c078da70fb1bbc5aa",
+            "chars": 7576,
+            "rules": 90
+          },
+          {
+            "Key": "d3",
+            "FileName": "verbale-collaudo-zefiro.docx",
+            "format": "Docx",
+            "PlainTextSha256": "fb6402db2c5f17d80273b24a55df1dd1cba52ddd24596c9d342465ca48e90cac",
+            "chars": 7445,
+            "rules": 90
+          }
+        ],
+        "goldSha256": "be6691d6657d964882d7e81a4e42eeb1be48b63c74c757f3fbadf28b872b4052",
+        "questions": [
+          "Qual è la durata del contratto quadro Zefiro?",
+          "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+          "Qual è il numero di telefono dell'assistenza clienti?",
+          "Qual è la durata della garanzia sui ricambi?",
+          "Qual è il limite del pegno sulle attrezzature?"
+        ],
+        "expectations": [
+          {
+            "Id": "present",
+            "Kind": "present",
+            "Question": "Qual è la durata del contratto quadro Zefiro?",
+            "QuestionToken": "durata del contratto quadro",
+            "Outcome": "AnsweredInSnapshot",
+            "Reasons": [
+              "Answered"
+            ],
+            "SupportQuotes": [
+              [
+                "48 mesi"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "partial",
+            "Kind": "partial",
+            "Question": "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+            "QuestionToken": "formazione degli operatori",
+            "Outcome": "Open",
+            "Reasons": [
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "tre giornate"
+              ]
+            ],
+            "ForbiddenQuotes": [
+              "cinquantamila"
+            ],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "absent",
+            "Kind": "absent",
+            "Question": "Qual è il numero di telefono dell'assistenza clienti?",
+            "QuestionToken": "numero di telefono",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "conflict",
+            "Kind": "conflict",
+            "Question": "Qual è la durata della garanzia sui ricambi?",
+            "QuestionToken": "garanzia sui ricambi",
+            "Outcome": "Open",
+            "Reasons": [
+              "Ambiguous",
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "24 mesi"
+              ],
+              [
+                "36 mesi"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": true
+          },
+          {
+            "Id": "excluded",
+            "Kind": "excluded",
+            "Question": "Qual è il limite del pegno sulle attrezzature?",
+            "QuestionToken": "pegno sulle attrezzature",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [
+              "cinquantamila",
+              "pegno sulle attrezzature non deve"
+            ],
+            "ExpectOpenConflict": false
+          }
+        ]
+      }
+    ]
+  }
+}

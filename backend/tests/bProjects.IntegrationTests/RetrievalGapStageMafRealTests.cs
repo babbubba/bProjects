@@ -49,7 +49,7 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override IReadOnlyList<string> PmQuestions => [.. Scenario.Expectations.Select(e => e.Question)];
 
-    protected override string ExpectedDefinition => DocumentAnalysisWorkflow.DefinitionVersionV7;
+    protected override string ExpectedDefinition => RetrievalGapCampaign.DefinitionVersion;   // v8 (Run 3); il Run 2 usava la v7
 
     protected override bool GapStageExpected => true;
 
@@ -80,11 +80,29 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
         RetrievalGapCampaign.AddRetrieval(services, TestEnvironment.DgxEndpoint!, TestEnvironment.DgxApiKey!, _recorder, _timing);
     }
 
-    /// <summary>Guardia di configurazione PRIMA di ogni inferenza (una volta per la campagna): salto esplicito senza opt-in, ambiente compatibile, modello caricato dal router.</summary>
-    internal static async Task PreflightAsync()
+    /// <summary>
+    /// Guardia di configurazione PRIMA di ogni inferenza (una volta per la campagna), nell'ordine: (1) salto esplicito senza opt-in o senza ambiente completo (mai PASS); (2) controlli PURI, senza rete —
+    /// ambiente e manifesto congelato, identità della pipeline del prodotto (definizione, prompt con SHA-256, profilo e hash degli schemi, chiavi di freeze, definizione attesa dalla prova) e <see cref="AiOptions"/>
+    /// RISOLTE dall'applicazione in prova (StructuredOutputMode, fase Analysis, fattore di estrazione); tutti i problemi sono riportati insieme; (3) SOLO ORA la prima richiesta al modello (<see cref="Require"/>).
+    /// Un problema ai punti (1)-(2) è NO-GO: nessuna richiesta al DGX, nessun upload.
+    /// </summary>
+    internal async Task PreflightAsync()
     {
         TestEnvironment.RequireDgx();   // Skipped (mai PASS) senza opt-in
-        var problems = RetrievalGapCampaign.ValidateEnvironment(Environment.GetEnvironmentVariable);
+        RequireConfigured();            // Skipped senza ambiente completo; nessuna richiesta di rete
+        var problems = new List<string>(RetrievalGapCampaign.ValidateEnvironment(Environment.GetEnvironmentVariable));
+        var retrieval = App.Services.GetRequiredService<IOptions<RetrievalOptions>>().Value;
+        problems.AddRange(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.FromProduct(retrieval), ExpectedDefinition));
+        if (RetrievalGapCampaign.RejectRetrievalOptions(retrieval) is { } retrievalRejection)
+        {
+            problems.Add("RetrievalOptions risolte: " + retrievalRejection);
+        }
+
+        if (RejectOptions(App.Services.GetRequiredService<IOptions<AiOptions>>().Value) is { } optionsRejection)
+        {
+            problems.Add("AiOptions risolte: " + optionsRejection);
+        }
+
         Assert.True(problems.Count == 0, "T040: configurazione incompatibile, nessun upload né inferenza: " + string.Join(" | ", problems));
         await Require();
     }

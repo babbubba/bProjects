@@ -194,10 +194,14 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
         }
     }
 
-    /// <summary>Skip esplicito senza opt-in/ambiente; poi richiesta minima che carica il modello (router mode, come T067), senza fallback.</summary>
+    /// <summary>Skip esplicito senza opt-in/ambiente completo. Nessuna richiesta di rete: separato da <see cref="Require"/> perché un preflight possa verificare la configurazione PRIMA della prima inferenza.</summary>
+    protected static void RequireConfigured() =>
+        Assert.SkipUnless(Configured, (TestEnvironment.DgxUnavailableReason() ?? string.Empty) + " Servono BPROJECTS_TEST_DGX_* (con opt-in), BPROJECTS_TEST_PARSER_ENDPOINT/_SECRET e BPROJECTS_TEST_POSTGRES: livello DGX non eseguibile.");
+
+    /// <summary>Skip esplicito senza opt-in/ambiente; poi richiesta minima che carica il modello (router mode, come T067), senza fallback. È la PRIMA inferenza della prova.</summary>
     protected static async Task Require()
     {
-        Assert.SkipUnless(Configured, (TestEnvironment.DgxUnavailableReason() ?? string.Empty) + " Servono BPROJECTS_TEST_DGX_* (con opt-in), BPROJECTS_TEST_PARSER_ENDPOINT/_SECRET e BPROJECTS_TEST_POSTGRES: livello DGX non eseguibile.");
+        RequireConfigured();
         var options = RealOptions();
         using var model = new InternalModelClient(options, MafDiagnostics.Wrap());
         var warm = model.CreateChatOptions(temperature: 0, phase: AiPhase.Extraction);
@@ -319,18 +323,20 @@ public abstract class LargeDocumentRealFlow : ArchiveTestBase
     private async Task RunScenarioCoreAsync(string label, Func<int, Corpus> build)
     {
         var v = new Verdicts(label);
+
+        // Opzioni AI RISOLTE dall'applicazione in prova: controllate per prime, prima di sondare il runtime (profilo, tokenizer) e prima di ogni upload e inferenza.
+        if (RejectOptions(App.Services.GetRequiredService<IOptions<AiOptions>>().Value) is { } optionsRejection)
+        {
+            v.Check($"[STRUTTURALE] opzioni AI risolte incompatibili con la prova: {optionsRejection}. NO-GO: nessun upload, nessuna inferenza", false);
+            v.Flush();
+            return;
+        }
+
         var (corpus, profile, generatedTokens) = await BuildSizedAsync(build);
         var budget = profile.InputBudgetTokens;
         if (RequiredWindowTokens is { } requiredWindow && profile.WindowTokens != requiredWindow)
         {
             v.Check($"[STRUTTURALE] finestra misurata {profile.WindowTokens} diversa da quella richiesta dalla prova ({requiredWindow}): nessun upload, nessuna inferenza", false);
-            v.Flush();
-            return;
-        }
-
-        if (RejectOptions(App.Services.GetRequiredService<IOptions<AiOptions>>().Value) is { } optionsRejection)
-        {
-            v.Check($"[STRUTTURALE] opzioni AI risolte incompatibili con la prova: {optionsRejection}. NO-GO: nessun upload, nessuna inferenza", false);
             v.Flush();
             return;
         }
