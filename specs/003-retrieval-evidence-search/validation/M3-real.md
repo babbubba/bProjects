@@ -429,3 +429,44 @@ Nessun esito `IgnoredByProvider`, `RejectedByProvider` o `Inconclusive`: nessuno
 **Compatibilità dello schema ≠ validazione end-to-end.** La verifica dimostra che llama.cpp b10703 applica, a livello di grammatica, `string+minLength:1`, `null` e i prefissi `^E`/`^N` con questi schemi. Non dimostra che il flusso completo (documenti reali → gerarchia → compositore → validatore → indici) produca risultati corretti, né che il modello scelga valori sensati dentro lo spazio ammesso dalla grammatica; il validatore resta l'unica garanzia sulle regole che la grammatica non esprime (D9–D12, spazi, lunghezza). La v9 non è ancora mai stata eseguita su documenti reali: lo farebbe un Run 4, non eseguito.
 
 **Limiti.** Campione di una richiesta per variante, temperatura 0 e prompt sintetico, fuori dal prompt di produzione `document-reconcile-v4`. La build del provider (b10703) non è stata rilevata da questa prova: vale quanto rilevato nella verifica precedente (`/props` e `system_fingerprint`).
+
+## Preparazione offline del Run 4: manifesto T040 v5 (2026-11-11; nessuna inferenza DGX, Run 4 NON eseguito; T040 resta aperto)
+
+**Archivio del v4.** Il manifesto usato dal Run 3 è conservato invariato in `T040-campaign-manifest-v4-run3.json` (copia identica al blob versionato in `e94ff4e`, a meno dei fine riga). Il suo SHA-256 canonico resta `91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf` (`RetrievalGapCampaign.Run3ManifestSha256`); un test lo ricalcola dal contenuto archiviato, ne verifica versione, baseline, definizione, profilo e hash delle tre varianti, e controlla che l'identità v8 che il prodotto produce ancora per le run congelate v8 coincida con quella registrata.
+
+**Manifesto v5** (`T040-campaign-manifest.json`, `RetrievalGapCampaign.FrozenManifestSha256`): **SHA-256 `1646797463253cc9d786964e6cc056046ca3192f86adcd2973272f947e85ede1`**.
+- Definizione `project-analysis-documents-v9`, profilo `reconcile-alias-schema-by-batch-2`, prompt `document-reconcile-v4` invariato (stesso SHA-256 `d3e46528…a79d`).
+- Hash canonici delle sei varianti = golden `ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes`: LeafA `17001aef…9f09`, LeafB `800f277b…a4ce`, Reduce `06058502…6b7c`, Cross `bab4a2ac…d5f9`, Expand `37e08c9a…c97b`, Compare `b8c471d1…14a3`.
+- `freeze`: versione 5, `supersedes` = v4 del Run 3, history con quattro voci, `codeBaseline` = `184bed5`, `launchCommit` (regola, non valore).
+
+**Delta v4 → v5 completo e giustificato** (un test confronta foglia per foglia l'archivio v4 con il v5 e richiede l'insieme ESATTO delle differenze; le sezioni `campaign`, `thresholds`, `seed`, `extension`, `scenarios` e i campi `window`, `output`, `margin`, `budget`, `thinking`, `policy`, `policyHash`, `embedding`, `reranker`, `indexTextVersion`, `fts`, `extraction`, `llm`, `latency`, `structuredOutput`, `reconcile.prompt`, `reconcile.preflight` sono identici byte per byte):
+
+| Percorso | Differenza | Motivo |
+|---|---|---|
+| `definition` | v8 → v9 | decisione del committente 2026-11-11 |
+| `config.reconcile.schemaProfile.value` | profilo `-1` → `-2` | idem |
+| `…schemaProfile.variantHashes` | tre varianti (Full, NoItems, Candidate) → sei (LeafA, LeafB, Reduce, Cross, Expand, Compare) | il profilo `-2` ha sei varianti |
+| `…schemaProfile.providerFeatures` | due voci → tre | vincoli del profilo `-2` |
+| `…schemaProfile.providerSupport` | da «NON verificato» all'esito della verifica reale (rapporto `309D0C8A…25EE`, sei `Honored`, `NotExercised` dichiarati, «compatibilità dello schema, non validazione end-to-end») | esito della verifica reale |
+| `config.reconcile.freezeKeys.reconcileSchemaProfile` | `-1` → `-2` | chiave di freeze del profilo |
+| `freeze.version`, `freeze.supersedes`, `freeze.history[3]`, `freeze.reason` | 4 → 5; v4 del Run 3; nuova voce; motivo | versionamento |
+| `freeze.codeBaseline` | `65cdcc8` → `184bed5` | baseline del codice di prodotto della v9 |
+| `freeze.launchCommit` (nuova) | regola | commit di lancio distinto dal baseline |
+| `freeze.configDifferenceFromRun2` → `configDifferenceFromRun3` | sostituita | differenza dichiarata rispetto al v4 |
+
+Corpus, gold, domande, attese, soglie, politica, modelli, finestra, budget, parametri di estrazione (`ExtractionOutputExpansion` 16,0), output strutturato (`JsonSchema`) e criteri di accettazione non cambiano.
+
+**Baseline del codice e commit di lancio, registrati in modo distinto.**
+- `CodeBaseline` = `184bed5` (`feat(backend): definizione v9…`): ultimo commit che ha toccato `backend/src`; dopo di esso sono cambiati solo test e documenti (verificato con `git diff 184bed5 HEAD -- backend/src`, vuoto).
+- Il commit di lancio NON è nel manifesto (il commit che lo versiona non può citare sé stesso). Lo rileva l'harness al lancio (`RetrievalGapCampaign.LaunchRecord`) e lo scrive nel rapporto diagnostico di ogni scenario (sezione `launch`: HEAD, baseline, antenato, codice di prodotto invariato, albero tracciato pulito, hash del manifesto).
+- Il preflight (`RejectLaunch`, dopo `RejectIdentity` e prima di ogni upload e inferenza) è **NO-GO** se: HEAD non rilevabile; il baseline non è antenato di HEAD; `backend/src` o `backend/global.json` differiscono dal baseline (anche non committati o non tracciati); i file tracciati di `backend` e `specs` hanno modifiche non committate. I file non tracciati fuori dal prodotto (es. `docs/acceptance-trace`) non bloccano. Ogni valore non verificabile è NO-GO.
+
+**Harness e controlli fail-closed.**
+- `RejectIdentity` riconosce esattamente la v9: definizione, chiave `reconcile` e prompt instradato `document-reconcile-v4` con SHA-256 della risorsa incorporata, profilo `-2`, contratto 9, sei hash e nessuna variante extra. L'identità del prodotto è letta da `SourceSnapshotStore.DocumentaryAnalysisFreeze`.
+- `ExpectedDefinition` della campagna = v9. Le costanti del Run 3 (`Run3DefinitionVersion`, `Run3ReconcileSchemaProfile`, `Run3ReconcileSchemaVariantHashes`, `Run3CodeBaseline`, `Run3ManifestSha256`) restano per l'archivio.
+- Ogni deriva dell'identità (definizione, prompt, SHA, profilo, contratto, hash di ciascuna delle sei varianti, variante extra o mancante) e l'identità v8 contro il manifesto v5 sono NO-GO prima di ogni upload (test).
+- Codice di produzione, prompt, parser, criteri di accettazione: **non modificati** (`git diff -- backend/src` vuoto).
+
+**Test offline.** Build 0 avvisi, 0 errori. Classi mirate (`RetrievalGapCampaignTests`, `ReconcileSchema*`, `ReconcileDefinitionV*`): 266 superati, 2 ignorati (le due verifiche reali, senza opt-in DGX). Suite completa con PostgreSQL di test: vedi il rapporto finale di questa sessione. Review ECC `csharp-reviewer`: nessun problema CRITICAL o HIGH; finding MEDIUM (albero non committato non rilevato) e LOW (file di toolchain, `GIT_OPTIONAL_LOCKS`, copertura dei test) applicati.
+
+**Rischi residui.** Sono quelli della verifica v9: descriptor non vuoto ma privo di significato, candidati con gli stessi estremi, validazione end-to-end non ancora provata su documenti reali, vincoli `NotExercised` (LeafA, Expand, Compare, `type:string` non null), D9–D12 al solo validatore. Inoltre: nessun Run 4 è stato eseguito, quindi nulla garantisce che la v9 superi il gate T040; la qualità dei candidati `Inferred` (osservazione sulla 026) resta da valutare sui documenti reali; il tempo del Run 3 (≈47 minuti fino al fallimento) vale come ordine di grandezza.
