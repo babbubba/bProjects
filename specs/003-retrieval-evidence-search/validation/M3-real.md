@@ -297,3 +297,86 @@ Nessun esito `IgnoredByProvider`, `RejectedByProvider` o `Inconclusive`: nessuno
 **Osservazione.** Nelle varianti 2 e 3 la grammatica di llama.cpp emette per l'array vuoto `"items": [\n    \t],` (un carattere di tabulazione fra le parentesi): è JSON valido e il parser del test lo legge come array vuoto. Il comportamento del parser del prodotto su questa forma non è stato misurato qui (nessuna modifica al parser senza evidenza di un difetto).
 
 **Limiti.** Campione di tre richieste con temperatura 0 e prompt sintetico: dimostra che b10703 applica `maxItems:0` su `items` e `type:null` su `focus` con questo schema, non che la v8 produca candidati corretti sui documenti reali. Il Run 3 resta da eseguire e non è stato eseguito. Il punto 2 dell'elenco «Da fare prima di un GO reale» è soddisfatto; restano i punti 1, 3 e 4.
+
+## Esito del Run 3 (2026-11-11; manifesto T040 v4, definizione v8; una esecuzione, nessun retry; T040 resta aperto)
+
+**Esecuzione.**
+- Commit `b445871`, avvio alle 16:03:09 UTC, modello `Qwen3.6-35B-Smart` su llama.cpp b10703.
+- `T040-single` **FAIL** (40 PASS / 1 FAIL); `T040-multi` non eseguito (arresto su blocco, nessun rilancio).
+- Fallimento: run di analisi `Failed work_output_invalid` — «Output del batch 17911abd…e2a9 non valido: descriptor: obbligatorio nei batch che costruiscono nodi.»
+- Chiamate al modello: estrazione 15 (1386 s), Chat 5 (5 s), Analysis 5 (344 s); 0 `finish=length`.
+- Estrazione completa (8/8 porzioni, 16/16 fatti gold nel testo). Indice di recupero: 3 preparazioni `Ready` in 9,7 s (embedding reali, modelli riattivati on-demand).
+
+**Le cinque chiamate della gerarchia** (archivio locale `%TEMP%\bprojects-diag\20261111-160309-…RetrievalGapStageMafRealTests_Cam-48872147\`):
+
+| # | Batch | Schema inviato (v8) | Output | Esito |
+|---|---|---|---|---|
+| 022 | foglia A | `Full` | descriptor di 252 caratteri, 140 items, 2 candidati | ok |
+| 023 | foglia A | `Full` | descriptor di 275 caratteri, 142 items, 3 candidati | ok |
+| 024 | riduzione A | `NoItems` | descriptor di 153 caratteri, 1 candidato | ok |
+| 025 | foglia B | `NoItems` | descriptor di 132 caratteri, 3 candidati | ok |
+| **026** | **foglia B** | **`NoItems`** | **descriptor `null`**, `noFindings` null, items `[]`, 5 candidati `DependsOn`/`Inferred` verso E225, focus null, patches `[]` | **rifiutato** |
+
+- **Dati della chiamata 026:** 13921 token di prompt, 528 di completamento, `finish=stop`, 14,4 s.
+- **SHA-256 dei file locali (non versionati):**
+  - `026-assistant.txt` (1553 byte): `367067BE…F50A`;
+  - `026-request.json`: `00F747F1…13BE`;
+  - riepilogo `T040-single-164956.txt`: `C1CAE75E…105F`;
+  - `diagnostic-report-20261111-160307-T040-single.json`: `7DAA70C3…3BF0`.
+- L'output 026 è versionato come fixture dei test (`ReconcileSchemaProfileV9Tests.Run3Call026`).
+
+**Diagnosi (offline, nessuna inferenza).**
+- La correzione v8 ha funzionato su ciò che vincolava: in tutte le foglie B `items = []`, contro i 139 items del Run 2.
+- Il fallimento è una **discrepanza fra schema e validatore**: in ogni variante v8 lo schema dichiarava `descriptor` come `["string","null"]`, mentre il validatore della gerarchia (`ReconciliationHierarchy.InvokeAsync`) esige un descriptor non nullo nei batch che costruiscono nodi.
+- Il prompt v4 lo dichiara già («obbligatorio nelle foglie e nelle riduzioni»): non è un problema di prompt.
+- La matrice completa dei vincoli ha trovato altre discrepanze dello stesso tipo:
+  - focus non nullo e patch ammessi nella foglia A;
+  - estremi `N` ammessi nelle foglie, `E` nella riduzione e nel cross;
+  - esiti di `focus` non distinti fra espansione e confronto;
+  - descriptor valorizzato in cross, espansione e confronto.
+- Ci sono inoltre regole condizionali o semantiche (D9–D12) che la grammatica non esprime in modo semplice.
+- **Osservazione di qualità, fuori perimetro:** i 5 candidati della 026 sono collegamenti `Inferred` deboli («potrebbe…») tutti verso la stessa evidenza. Il confronto con la chiamata 025 del Run 2 resta da fare.
+
+## Correzione dopo il Run 3: definizione `project-analysis-documents-v9` (2026-11-11; OFFLINE, nessuna inferenza DGX; T040 resta aperto)
+
+**Decisione del committente.** Livelli 1 e 2 della proposta: profilo `reconcile-alias-schema-by-batch-2` con sei varianti per stadio e vista, `descriptor` come `type: string` con `minLength: 1` senza `maxLength`, prompt `document-reconcile-v4` invariato, DTO, compositore e validatore invariati, compatibilità integrale v4–v8. Il livello 3 (D9–D12) è rinviato. Contratto: `contracts/candidate-source.md` §4.2; 002 `contracts/ai-workflow.md` §11.
+
+**Supporto del provider.**
+- Verificato sul sorgente di llama.cpp b10703 (`common/json-schema-to-grammar.cpp`):
+  - supportati `type` (anche come array e `null`), `enum`, `const`, `pattern` ancorato, `minItems`/`maxItems` (solo con `items`), `minLength`/`maxLength` (solo con `type: "string"` esplicito, e ignorati se c'è un `pattern`), `anyOf`/`oneOf`;
+  - **non** supportati `\d \w \s \S \b`: un pattern che li contiene diventa «qualunque stringa» con un solo avviso;
+  - ignorati in silenzio `uniqueItems`, `if`/`then`/`else`, `not`.
+- La v9 usa solo costrutti già esercitati realmente (rapporto `schema-support`), più `type: "string"` non nullabile e `minLength: 1`. Quest'ultimo è **non esercitato realmente**: supporto inferito dal sorgente.
+
+**Versionamento e compatibilità.**
+- La v8 non è stata modificata. Prima del refactoring sono stati scritti e committati test golden:
+  - hash delle varianti `NoItems` `7b0a15de…52b2` e `Candidate` `facb96cb…4f38`;
+  - stringa `SchemaProfileHashes`;
+  - `configHash` del manifest di una run v8 = `4248ba71d408bcc425d61a7e1c2d54b867a56110fc876480cd70f56c38b2f3d1`.
+  Restano verdi dopo il refactoring (`ReconcileAliasMode.SchemaProfile` al posto del booleano).
+- Golden del profilo v9: `ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes`.
+- Le nuove richieste con recupero congelano la v9 attraverso un'unica funzione (`SourceSnapshotStore.DocumentaryAnalysisFreeze`), usata anche dall'harness T040.
+  - Effetto: il preflight del manifesto T040 v4, che è legato alla v8 e **non modificato**, risulta ora NO-GO prima di ogni upload e inferenza. Prima l'harness costruiva l'identità del prodotto con costanti v8 e la discrepanza sarebbe emersa solo al controllo strutturale a fine run.
+  - Un eventuale Run 4 richiede un manifesto nuovo: **non preparato**.
+
+**Test (offline).**
+- `ReconcileSchemaProfileV9Tests` — tabella stadio/vista e dispatch, forma di ogni variante, elenco chiuso di keyword compatibili con llama.cpp, golden v9. Inoltre:
+  - equivalenza fra schema e compositore per 6 varianti × 8 violazioni strutturali;
+  - regola del descriptor contro il vero validatore della gerarchia (`ReconciliationHierarchy.BuildAsync`), con i residui spazi e >512 caratteri rifiutati dal solo validatore;
+  - D9–D12 ammessi dalla grammatica e rifiutati dal validatore;
+  - regressione sulla 026 del Run 3: ammessa dallo schema v8, rifiutata dallo schema v9 solo per il descriptor, rifiutata dal validatore con lo stesso messaggio;
+  - conservazione dei 5 candidati (stesse identità canoniche e motivazioni) con un descriptor valorizzato.
+- `ReconcileDefinitionV9Tests` — contratto 9, freeze uguale alla v8 salvo il profilo, nessuna reinterpretazione fra v8 e v9.
+- `RetrievalGapFlowTests` (PostgreSQL) — teorie v8/v9:
+  - schema realmente inviato a ogni batch e profilo nel manifest;
+  - `configHash` della v9 diverso dal golden della v8;
+  - risposta di forma 026 rifiutata senza commit né chiamate successive;
+  - crash e ripresa su una foglia B con la variante del profilo congelato;
+  - foglia B con items rifiutata.
+- `RetrievalGapCampaignTests` — identità v8 coerente con il manifesto v4, identità del prodotto v9 NO-GO.
+
+**Rischi residui.**
+- D9–D12, spazi e lunghezza del descriptor, `noFindings` con output vuoto: affidati al solo validatore, che li rifiuta con `work_output_invalid` permanente (nessun retry).
+- `minLength` non esercitato realmente.
+- Costrutti ignorati in silenzio dal provider: mitigati dal test sull'elenco chiuso di keyword, non da una prova reale.
+- La v9 non è mai stata eseguita su un modello reale.

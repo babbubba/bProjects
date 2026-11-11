@@ -72,6 +72,42 @@ Nella gerarchia della v8 lo schema JSON inviato a ogni batch (`response_format`,
 
 Invariati: DTO `reconcile-alias-1`, compositore e validatore (unica garanzia: schema e prompt sono un aiuto alla generazione, non una validazione), WorkOutput e replay degli output `Committed`; v4–v7 continuano a usare `document-reconcile-v3`. Identità: il `configHash` della v8 contiene `prompt = document-reconcile-v4` e lo SHA delle sue istruzioni, il profilo e gli hash delle tre varianti; il piano del manifest la chiave `reconcileSchemaProfile`; ogni batch derivato della gerarchia v8 registra `PromptVersion = document-reconcile-v4` (confrontata alla ripresa). v4–v7 restano byte per byte invariati. Il Pack misura con lo schema completo (composizione dei batch invariata); `inputHash` è l'hash del payload realmente inviato, variante inclusa. Nessun retry.
 
+### 4.2 Definizione `project-analysis-documents-v9` (T040 dopo il Run 3, 2026-11-11/12)
+
+Run 3, chiamata 026 (foglia, vista B): il modello ha rispettato `items = []` e prodotto 5 candidati, ma con `descriptor: null` (`finish=stop`). Lo schema v8 ammetteva `["string","null"]` in ogni variante, mentre il validatore della gerarchia vuole un descriptor non nullo in ogni batch che costruisce nodi. Esito: `work_output_invalid` «descriptor: obbligatorio nei batch che costruiscono nodi».
+
+Decisione del committente (livelli 1 e 2): v9 = v8 **identica** (stesse chiavi, prompt `document-reconcile-v4` invariato, stesso DTO `reconcile-alias-1`, compositore e validatore), salvo `reconcileSchemaProfile = reconcile-alias-schema-by-batch-2`. Ogni stadio riceve una variante con i vincoli **strutturali** del proprio contratto. La grammatica non è mai più restrittiva del validatore.
+
+| Batch | Variante | `descriptor` | `items` | estremi dei candidati | `focus` | `patches` |
+|---|---|---|---|---|---|---|
+| foglia, vista A | `LeafA` | `type: string`, `minLength: 1` | ammessi | `^E…$` | `null` | `maxItems: 0` |
+| foglia, vista B | `LeafB` | `type: string`, `minLength: 1` | `maxItems: 0` | `^E…$` | `null` | `maxItems: 0` |
+| riduzione (A e B) | `Reduce` | `type: string`, `minLength: 1` | `maxItems: 0` | `^N…$` | `null` | `maxItems: 0` |
+| cross | `Cross` | `null` | `maxItems: 0` | `^N…$` | `null` | `maxItems: 0` |
+| espansione | `Expand` | `null` | `maxItems: 0` | `^E…$` | `null` o `{outcome: Unresolved}` | ammesse |
+| confronto | `Compare` | `null` | `maxItems: 0` | `^E…$` | obbligatorio, `outcome ∈ {Compared, Open}` | ammesse |
+
+- **Costrutti usati:** solo quelli del convertitore schema→grammatica di llama.cpp b10703 (`common/json-schema-to-grammar.cpp`), verificati nel sorgente e da un test che ammette solo un elenco chiuso di keyword.
+- **`type: null` e `maxItems: 0` su `items`:** provati con una chiamata reale (rapporto `schema-support` del 2026-11-11).
+- **`minLength: 1` sul descriptor:** non è mai stato esercitato realmente. Il sorgente lo applica solo con `type: "string"` esplicito e senza `pattern`.
+- **Nessun `maxLength`:** la grammatica troncherebbe il testo invece di rifiutarlo.
+
+**Restano al solo validatore (residui dichiarati, rifiuto provato da test):**
+- descriptor composto solo da spazi (`\S` non è supportato dal convertitore) o più lungo di 512 caratteri;
+- livello 3, rinviato:
+  - **D9**, coerenza delle patch: `value`/`op` (rifiutata dal codec strict), esattamente un bersaglio, `AddRelation` solo su item, evidenze obbligatorie per `AddSupport`/`ProposeAlternative`;
+  - **D10**, item: `assumptions` ⇒ `Assumed`, evidenze obbligatorie fuori da `openQuestions`;
+  - **D11**, motivo obbligatorio con esito `Open`;
+  - **D12**, stringhe vuote in `text`, `rationale` e `reason`;
+- `noFindings` obbligatorio quando l'output è vuoto;
+- unicità, risoluzione degli alias nel catalogo, base delle patch, origine delle evidenze.
+
+**Identità:**
+- `ContractOf` restituisce 9 solo con tutte le chiavi della v8 e il profilo `-2`. Il profilo `-1` su una v9, il `-2` su una v8, o il prompt v3 su una v9 danno `workflow_incompatible`.
+- Il `configHash` ha la stessa forma della v8 (profilo e hash delle sei varianti), quindi è un'identità diversa: nessun riuso di output o checkpoint fra v8 e v9.
+- Le **nuove** richieste con recupero congelano la v9 (`SourceSnapshotStore.DocumentaryAnalysisFreeze`, unica fonte per l'endpoint e per le verifiche).
+- Le run v8 (Run 3, manifesto T040 v4) restano v8: schemi, hash delle varianti e `configHash` invariati, fissati da test golden scritti prima del refactoring.
+
 ## 5. Modalità degradata e errori tipizzati (D-3)
 
 | Condizione | Esito del recupero | Esito del run | Invii LLM |
