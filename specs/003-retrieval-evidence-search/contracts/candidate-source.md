@@ -58,7 +58,9 @@ Si **aggiungono** alle chiavi gerarchiche e `gap*` della v6 (che restano): `retr
 
 ### 4.1 Definizione `project-analysis-documents-v8` (correzione T040 Run 2, 2026-11-11)
 
-Decisione del committente dopo la chiamata 026 del Run 2 (foglia B con 139 `items`, rifiutata correttamente con `work_output_invalid`). v8 = v7 **identica** (routing, chiavi `gap*` e `retrieval*`, single-call, stadio Gap, recupero) più la chiave di freeze `reconcileSchemaProfile = reconcile-alias-schema-by-batch-1`. `ContractOf` restituisce 8 solo con tutte le chiavi v7 e quel valore; la chiave in v4–v7 è una combinazione mista (`workflow_incompatible`). Le **nuove** richieste con recupero congelano la v8; i run v7 esistenti restano v7 (nessuna conversione).
+Decisione del committente dopo la chiamata 026 del Run 2 (foglia B con 139 `items`, rifiutata correttamente con `work_output_invalid`): schema specializzato **e** chiarimento del prompt. v8 = v7 **identica** (routing, chiavi `gap*` e `retrieval*`, single-call, stadio Gap, recupero) salvo due chiavi di freeze: `reconcile = document-reconcile-v4` (al posto del v3) e la nuova `reconcileSchemaProfile = reconcile-alias-schema-by-batch-1`. `ContractOf` restituisce 8 solo con tutte le altre chiavi v7, il prompt v4 e quel profilo; la chiave del profilo o il prompt v4 in v4–v7, oppure il prompt v3 in una v8, sono combinazioni miste (`workflow_incompatible`), mai reinterpretate.
+
+**Prompt `document-reconcile-v4`** (nuova risorsa; il v3 resta byte per byte, SHA-256 `0503d173…c9e5`; v4 `d3e46528…a79d`). Rispetto al v3 cambia solo: `items` vuoto «comprese le foglie della vista B»; l'obbligo di citare ogni evidenza vale «nelle foglie della vista A, e solo in quelle»; nelle foglie della vista B il compito è soltanto individuare i candidati, senza citare ogni evidenza né inventare collegamenti (nessuno ⇒ `candidates: []` e `noFindings` motivato). Ogni altra regola, in particolare quella sui conflitti, è letterale (test: tolti i tre frammenti, il v4 è il v3). Le **nuove** richieste con recupero congelano la v8; i run v7 esistenti restano v7 (nessuna conversione).
 
 Nella gerarchia della v8 lo schema JSON inviato a ogni batch (`response_format`, grammatica del provider) è scelto da stadio e vista, con le stesse regole del compositore:
 
@@ -68,7 +70,7 @@ Nella gerarchia della v8 lo schema JSON inviato a ogni batch (`response_format`,
 | foglia vista B, riduzione, cross | `NoItems` | `items` e `patches` con `maxItems: 0`, `focus` di tipo `null` |
 | espansione, confronto | `Candidate` | `items` con `maxItems: 0` |
 
-Invariati: prompt `document-reconcile-v3`, DTO `reconcile-alias-1`, compositore e validatore (unica garanzia: lo schema è un aiuto alla generazione, non una validazione), WorkOutput e replay degli output `Committed`. Identità: il `configHash` della v8 aggiunge il profilo e gli hash delle tre varianti, il piano del manifest la chiave `reconcileSchemaProfile`; v4–v7 restano byte per byte invariati. Il Pack misura con lo schema completo (composizione dei batch invariata); `inputHash` è l'hash del payload realmente inviato, variante inclusa. Nessun retry.
+Invariati: DTO `reconcile-alias-1`, compositore e validatore (unica garanzia: schema e prompt sono un aiuto alla generazione, non una validazione), WorkOutput e replay degli output `Committed`; v4–v7 continuano a usare `document-reconcile-v3`. Identità: il `configHash` della v8 contiene `prompt = document-reconcile-v4` e lo SHA delle sue istruzioni, il profilo e gli hash delle tre varianti; il piano del manifest la chiave `reconcileSchemaProfile`; ogni batch derivato della gerarchia v8 registra `PromptVersion = document-reconcile-v4` (confrontata alla ripresa). v4–v7 restano byte per byte invariati. Il Pack misura con lo schema completo (composizione dei batch invariata); `inputHash` è l'hash del payload realmente inviato, variante inclusa. Nessun retry.
 
 ## 5. Modalità degradata e errori tipizzati (D-3)
 
