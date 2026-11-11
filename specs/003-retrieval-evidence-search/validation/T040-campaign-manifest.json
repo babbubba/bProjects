@@ -1,10 +1,10 @@
 {
   "campaign": "T040-retrieval-gap-1",
-  "frozenSha256": "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf",
+  "frozenSha256": "1646797463253cc9d786964e6cc056046ca3192f86adcd2973272f947e85ede1",
   "note": "Manifesto congelato PRIMA di ogni inferenza: corpus (hash del testo), gold (hash), domande, attese, soglie e configurazione. Rigenerabile solo con BPROJECTS_T040_WRITE_MANIFEST=1 e ri-congelamento esplicito della costante FrozenManifestSha256.",
   "manifest": {
     "campaign": "T040-retrieval-gap-1",
-    "definition": "project-analysis-documents-v8",
+    "definition": "project-analysis-documents-v9",
     "config": {
       "window": 32768,
       "output": 16384,
@@ -67,22 +67,26 @@
         },
         "schemaProfile": {
           "key": "reconcileSchemaProfile",
-          "value": "reconcile-alias-schema-by-batch-1",
+          "value": "reconcile-alias-schema-by-batch-2",
           "variantHashes": {
-            "Full": "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
-            "NoItems": "7b0a15de8844ecea8b5daa15009fe838bde652e261540074b3ac563bce6952b2",
-            "Candidate": "facb96cb31ec0f0fc2ee8a42a0cf899a95cbe5af4d90abac4f163df6c5984f38"
+            "LeafA": "17001aef9ed768714129aba3f5d4b861e8e7d36632e6eaf78c7cf60c1ee49f09",
+            "LeafB": "800f277ba1daa4d14ed0694d2dbea68add81ebb8dd1915817ab1df3a6a1aa4ce",
+            "Reduce": "06058502b68f2d19363b1bb408bfd613b4ccafd3f8e6453c3c32eba43ba56b6c",
+            "Cross": "bab4a2acd070c70569fb5b80c7ec251a1f9bff809f8f6e701d83dda6e659d5f9",
+            "Expand": "37e08c9aa05d07b145dbee84d0775061f9f6c8735b670265cbbff1fd874cc97b",
+            "Compare": "b8c471d1b076af5e9fae32761d66966315fefc1b05f5c4c667714dcf808914a3"
           },
           "hashAlgorithm": "SHA-256 della forma canonica RFC 8785 dello schema",
           "providerFeatures": [
-            "maxItems:0 su items (NoItems, Candidate) e su patches (NoItems)",
-            "type:null su focus (NoItems)"
+            "descriptor type:string+minLength:1 (LeafA, LeafB, Reduce) e type:null (Cross, Expand, Compare)",
+            "estremi dei candidati pattern ^E (LeafA, LeafB, Expand, Compare) e ^N (Reduce, Cross)",
+            "maxItems:0 su items (tutte salvo LeafA) e su patches (LeafA, LeafB, Reduce, Cross); type:null su focus (LeafA, LeafB, Reduce, Cross); enum ridotto di focus.outcome (Expand, Compare)"
           ],
-          "providerSupport": "NON verificato su llama.cpp b10703: se ignorate, la v8 si comporta come la v7 e il validatore rifiuta comunque; verifica reale minima predisposta in ReconcileSchemaSupportRealTests, non eseguita senza autorizzazione"
+          "providerSupport": "Verificato realmente su llama.cpp b10703 (ReconcileSchemaV9SupportRealTests, 2026-11-11, quattro richieste, rapporto SHA-256 309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE): sei vincoli Honored (descriptor minLength:1 su LeafB e Reduce, descriptor null su Cross, estremi ^E su LeafB, estremi ^N su Reduce e Cross). NotExercised, inferiti e NON provati: descriptor type:string non null, LeafA, Expand e Compare (sottoschemi identici a quelli esercitati); maxItems:0 su items e patches e focus null misurati sulla v8, non ripetuti. Compatibilita dello schema, non validazione end-to-end: il validatore della gerarchia resta l'unica garanzia sulle regole che la grammatica non esprime (D9-D12, soli spazi, lunghezza del descriptor)"
         },
         "freezeKeys": {
           "reconcile": "document-reconcile-v4",
-          "reconcileSchemaProfile": "reconcile-alias-schema-by-batch-1"
+          "reconcileSchemaProfile": "reconcile-alias-schema-by-batch-2"
         },
         "preflight": "definizione, prompt (versione e SHA-256), profilo, hash delle varianti dello schema e chiavi di freeze del prodotto devono coincidere con questi valori, altrimenti NO-GO prima di ogni inferenza"
       },
@@ -104,9 +108,10 @@
       "falseAnsweredInSnapshot": 0
     },
     "freeze": {
-      "version": 4,
-      "supersedes": "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181",
-      "codeBaseline": "65cdcc8",
+      "version": 5,
+      "supersedes": "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf",
+      "codeBaseline": "184bed5",
+      "launchCommit": "non registrato nel manifesto: e l'HEAD effettivo al momento del lancio, rilevato dall'harness (git rev-parse HEAD) e scritto nel rapporto diagnostico di ogni scenario (sezione launch); il preflight lo rifiuta (NO-GO) se non rilevabile, se il baseline non e suo antenato, se backend/src o backend/global.json differiscono dal baseline (anche non committati o non tracciati) o se i file tracciati di backend e specs hanno modifiche non committate (il commit di lancio deve riprodurre harness, test e manifesto realmente eseguiti)",
       "history": [
         {
           "version": 1,
@@ -122,10 +127,15 @@
           "version": 3,
           "sha256": "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181",
           "usedByRun": "Run 2 (2026-11-10): non superato (work_output_invalid sulla riconciliazione, definizione v7), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v3-run2.json"
+        },
+        {
+          "version": 4,
+          "sha256": "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf",
+          "usedByRun": "Run 3 (2026-11-11): non superato (work_output_invalid sulla riconciliazione, descriptor null alla chiamata 026, definizione v8), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v4-run3.json"
         }
       ],
-      "reason": "Dopo il Run 2 (riconciliazione della foglia della vista B: items non ammessi, chiamata 026; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v7 a v8 con il prompt document-reconcile-v4 e il profilo degli schemi per batch reconcile-alias-schema-by-batch-1 (decisione del committente 2026-11-11). Il manifesto registra definizione, prompt con SHA-256, profilo e hash delle tre varianti dello schema; il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni configurazione risolta o identita del prodotto diversa, compresa una modalita di output strutturato diversa da JsonSchema. Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione non cambiano.",
-      "configDifferenceFromRun2": "differenze rispetto al manifesto v3 (Run 2), uniche: definition project-analysis-documents-v7 -> project-analysis-documents-v8; nuove chiavi config.reconcile (prompt document-reconcile-v4 con SHA-256, profilo reconcile-alias-schema-by-batch-1, hash delle tre varianti dello schema, chiavi di freeze) e config.structuredOutput (JsonSchema richiesto); freeze v4. Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione (ExtractionOutputExpansion 16.0) invariati."
+      "reason": "Dopo il Run 3 (foglia della vista B: descriptor null, chiamata 026, discrepanza fra schema e validatore; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v8 a v9 con il profilo degli schemi per batch reconcile-alias-schema-by-batch-2 a sei varianti (decisione del committente 2026-11-11); il prompt document-reconcile-v4 e invariato. I vincoli strutturali della v9 (descriptor, estremi dei candidati) sono stati verificati realmente su llama.cpp b10703 il 2026-11-11 (sei vincoli Honored, rapporto SHA-256 309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE; esiti NotExercised dichiarati in M3-real.md). Il manifesto registra definizione, profilo e hash delle sei varianti; il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni identita del prodotto diversa e ogni codice di prodotto diverso dal baseline. Corpus, gold, domande, attese, soglie, politica, modelli, finestra, parametri di estrazione, output strutturato e prompt non cambiano.",
+      "configDifferenceFromRun3": "differenze rispetto al manifesto v4 (Run 3), uniche: definition project-analysis-documents-v8 -> project-analysis-documents-v9; config.reconcile.schemaProfile (profilo reconcile-alias-schema-by-batch-1 -> reconcile-alias-schema-by-batch-2, hash delle varianti: tre -> sei, providerFeatures e providerSupport con l'esito della verifica reale) e config.reconcile.freezeKeys.reconcileSchemaProfile; freeze v5 (version, supersedes, codeBaseline, launchCommit, history, reason, differenza). Corpus, gold, domande, attese, soglie, politica, modelli, finestra, parametri di estrazione (ExtractionOutputExpansion 16.0), output strutturato e prompt document-reconcile-v4 (stesso SHA-256) invariati."
     },
     "seed": 20261106,
     "extension": [

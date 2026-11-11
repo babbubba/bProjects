@@ -134,10 +134,13 @@ internal static class RetrievalGapCampaign
     // ================================================================ manifesto congelato
 
     /// <summary>
-    /// Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>): versione 4, preparata per il Run 3 (T040 Run 2 non superato, v8 con prompt <c>document-reconcile-v4</c>).
-    /// Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.
+    /// Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>): versione 5, preparata per il Run 4 (T040 Run 3 non superato, definizione v9 con profilo di schema
+    /// <c>reconcile-alias-schema-by-batch-2</c> e prompt <c>document-reconcile-v4</c> invariato). Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.
     /// </summary>
-    public const string FrozenManifestSha256 = "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf";
+    public const string FrozenManifestSha256 = "1646797463253cc9d786964e6cc056046ca3192f86adcd2973272f947e85ede1";
+
+    /// <summary>Hash della versione 4 del manifesto: quella USATA dal Run 3 (2026-11-11, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v4-run3.json`; i risultati del Run 3 si riferiscono a questa configurazione (definizione v8).</summary>
+    public const string Run3ManifestSha256 = "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf";
 
     /// <summary>Hash della versione 3 del manifesto: quella USATA dal Run 2 (2026-11-10, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v3-run2.json`; i risultati del Run 2 si riferiscono a questa configurazione (definizione v7).</summary>
     public const string Run2ManifestSha256 = "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181";
@@ -147,8 +150,10 @@ internal static class RetrievalGapCampaign
 
     // ---- identità della pipeline di analisi per il Run 3 (letterali: congelati qui, mai letti dal prodotto; il preflight li confronta con quello che il prodotto realmente congela e invia).
 
-    /// <summary>Definizione di workflow del Run 3: v8 = v7 + profilo degli schemi per batch. Il Run 2 usava la v7 (<see cref="Run2DefinitionVersion"/>).</summary>
-    public const string DefinitionVersion = "project-analysis-documents-v8";
+    /// <summary>Definizione di workflow del Run 4: v9 = v8 con il profilo di schema per batch <c>-2</c> (sei varianti). Il Run 3 usava la v8 (<see cref="Run3DefinitionVersion"/>), il Run 2 la v7 (<see cref="Run2DefinitionVersion"/>).</summary>
+    public const string DefinitionVersion = "project-analysis-documents-v9";
+
+    public const string Run3DefinitionVersion = "project-analysis-documents-v8";
 
     public const string Run2DefinitionVersion = "project-analysis-documents-v7";
 
@@ -162,18 +167,47 @@ internal static class RetrievalGapCampaign
 
     public const string Run2ReconcilePromptSha256 = "0503d17360e21e8f72e357d1fcf0f0e32fbead294d970193af4eb61ff847c9e5";
 
-    /// <summary>Profilo degli schemi della gerarchia (chiave di freeze <c>reconcileSchemaProfile</c>) e hash canonici (RFC 8785, SHA-256) delle tre varianti, nell'ordine di <see cref="ReconcileSchemaVariant"/>.</summary>
-    public const string ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-1";
+    /// <summary>Profilo degli schemi della gerarchia del Run 4 (chiave di freeze <c>reconcileSchemaProfile</c>) e hash canonici (RFC 8785, SHA-256) delle sei varianti, nell'ordine di <see cref="ReconcileBatchSchema"/>. Copia dei golden di <c>ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes</c>, mai letta dal prodotto.</summary>
+    public const string ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-2";
 
     public static readonly IReadOnlyDictionary<string, string> ReconcileSchemaVariantHashes = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["Full"] = "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
+        ["LeafA"] = "17001aef9ed768714129aba3f5d4b861e8e7d36632e6eaf78c7cf60c1ee49f09",
+        ["LeafB"] = "800f277ba1daa4d14ed0694d2dbea68add81ebb8dd1915817ab1df3a6a1aa4ce",
+        ["Reduce"] = "06058502b68f2d19363b1bb408bfd613b4ccafd3f8e6453c3c32eba43ba56b6c",
+        ["Cross"] = "bab4a2acd070c70569fb5b80c7ec251a1f9bff809f8f6e701d83dda6e659d5f9",
+        ["Expand"] = "37e08c9aa05d07b145dbee84d0775061f9f6c8735b670265cbbff1fd874cc97b",
+        ["Compare"] = "b8c471d1b076af5e9fae32761d66966315fefc1b05f5c4c667714dcf808914a3",
+    };
+
+    /// <summary>Profilo degli schemi del Run 3 (definizione v8) e hash delle sue tre varianti, nell'ordine di <see cref="ReconcileSchemaVariant"/>: invariati e ancora prodotti dal prodotto per le run congelate v8.</summary>
+    public const string Run3ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-1";
+
+    public static readonly IReadOnlyDictionary<string, string> Run3ReconcileSchemaVariantHashes = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Full"] = FullSchemaHash,
         ["NoItems"] = "7b0a15de8844ecea8b5daa15009fe838bde652e261540074b3ac563bce6952b2",
         ["Candidate"] = "facb96cb31ec0f0fc2ee8a42a0cf899a95cbe5af4d90abac4f163df6c5984f38",
     };
 
-    /// <summary>Commit di codice a cui la v8 e il prompt v4 erano completi quando il manifesto v4 è stato preparato.</summary>
-    public const string CodeBaseline = "65cdcc8";
+    /// <summary>Hash canonico dello schema completo <c>reconcile-alias-1</c> (foglia della vista A nella v8; controllo delle verifiche reali dello schema). Invariato dalla v4.</summary>
+    public const string FullSchemaHash = "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54";
+
+    /// <summary>
+    /// BASELINE DEL CODICE DI PRODOTTO (<c>backend/src</c>): commit che ha introdotto la definizione v9 e il profilo <c>-2</c> (<c>feat(backend): definizione v9…</c>). Dopo di esso sono cambiati solo test e documenti.
+    /// Distinto dal COMMIT DI LANCIO (HEAD effettivo del Run 4), che il manifesto non può contenere (il commit che lo versiona non può citare sé stesso) e che l'harness rileva e registra al lancio
+    /// (<see cref="LaunchRecord"/>), rifiutando ogni codice di prodotto diverso da questo baseline.
+    /// </summary>
+    public const string CodeBaseline = "184bed5";
+
+    /// <summary>Baseline del codice di prodotto del manifesto v4 (Run 3): la v8 e il prompt v4 erano completi.</summary>
+    public const string Run3CodeBaseline = "65cdcc8";
+
+    /// <summary>Regola registrata nel manifesto per il commit di lancio: non è un valore, perché il commit che versiona il manifesto non può citare sé stesso.</summary>
+    public const string LaunchCommitRule =
+        "non registrato nel manifesto: e l'HEAD effettivo al momento del lancio, rilevato dall'harness (git rev-parse HEAD) e scritto nel rapporto diagnostico di ogni scenario (sezione launch); "
+        + "il preflight lo rifiuta (NO-GO) se non rilevabile, se il baseline non e suo antenato, se backend/src o backend/global.json differiscono dal baseline (anche non committati o non tracciati) "
+        + "o se i file tracciati di backend e specs hanno modifiche non committate (il commit di lancio deve riprodurre harness, test e manifesto realmente eseguiti)";
 
     /// <summary>Modalità di output strutturato richiesta: lo schema JSON viene inviato al provider. Con <c>ValidatedTextJson</c> nessuno schema viaggia e la v8 si comporterebbe come la v7.</summary>
     public const StructuredOutputMode RequiredStructuredOutputMode = StructuredOutputMode.JsonSchema;
@@ -198,11 +232,19 @@ internal static class RetrievalGapCampaign
         + "il manifesto lo registra e il preflight rifiuta (NO-GO) ogni configurazione risolta diversa. Corpus, gold, domande, attese, soglie, finestra, modello, prompt e schema non cambiano.";
 
     /// <summary>Motivo del ri-congelamento (versione 4), dopo il Run 2 non superato (work_output_invalid sulla chiamata 026, indici non costruiti). Nessun adattamento di corpus, gold, domande, attese, soglie, politica, modelli o parametri di estrazione.</summary>
-    public const string FreezeReason =
+    public const string FreezeReasonV4 =
         "Dopo il Run 2 (riconciliazione della foglia della vista B: items non ammessi, chiamata 026; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v7 a v8 con il prompt document-reconcile-v4 "
         + "e il profilo degli schemi per batch reconcile-alias-schema-by-batch-1 (decisione del committente 2026-11-11). Il manifesto registra definizione, prompt con SHA-256, profilo e hash delle tre varianti dello schema; "
         + "il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni configurazione risolta o identita del prodotto diversa, compresa una modalita di output strutturato diversa da JsonSchema. "
         + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione non cambiano.";
+
+    /// <summary>Motivo del ri-congelamento (versione 5), dopo il Run 3 non superato (work_output_invalid sulla chiamata 026: descriptor null ammesso dallo schema v8 e vietato dal validatore). Nessun adattamento di corpus, gold, domande, attese, soglie, politica, modelli, parametri di estrazione o prompt.</summary>
+    public const string FreezeReason =
+        "Dopo il Run 3 (foglia della vista B: descriptor null, chiamata 026, discrepanza fra schema e validatore; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v8 a v9 "
+        + "con il profilo degli schemi per batch reconcile-alias-schema-by-batch-2 a sei varianti (decisione del committente 2026-11-11); il prompt document-reconcile-v4 e invariato. I vincoli strutturali della v9 (descriptor, estremi dei candidati) "
+        + "sono stati verificati realmente su llama.cpp b10703 il 2026-11-11 (sei vincoli Honored, rapporto SHA-256 309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE; esiti NotExercised dichiarati in M3-real.md). "
+        + "Il manifesto registra definizione, profilo e hash delle sei varianti; il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni identita del prodotto diversa e ogni codice di prodotto diverso dal baseline. "
+        + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra, parametri di estrazione, output strutturato e prompt non cambiano.";
 
     /// <summary>Caratteristiche del modello che richiedono una verifica REALE (non verificabili offline) e che la campagna registra senza dichiararle verificate.</summary>
     public static readonly string[] LlmUnverifiedCharacteristics = ["pesi effettivamente caricati", "quantizzazione", "artefatto/file del modello", "finestra di contesto effettiva (misurata dal profilo di runtime)", "comportamento del ragionamento (thinking=0 richiesto)"];
@@ -253,8 +295,16 @@ internal static class RetrievalGapCampaign
                     {
                         key = DocumentAnalysisWorkflow.ReconcileSchemaProfileKey, value = ReconcileSchemaProfile, variantHashes = ReconcileSchemaVariantHashes,
                         hashAlgorithm = "SHA-256 della forma canonica RFC 8785 dello schema",
-                        providerFeatures = new[] { "maxItems:0 su items (NoItems, Candidate) e su patches (NoItems)", "type:null su focus (NoItems)" },
-                        providerSupport = "NON verificato su llama.cpp b10703: se ignorate, la v8 si comporta come la v7 e il validatore rifiuta comunque; verifica reale minima predisposta in ReconcileSchemaSupportRealTests, non eseguita senza autorizzazione",
+                        providerFeatures = new[]
+                        {
+                            "descriptor type:string+minLength:1 (LeafA, LeafB, Reduce) e type:null (Cross, Expand, Compare)",
+                            "estremi dei candidati pattern ^E (LeafA, LeafB, Expand, Compare) e ^N (Reduce, Cross)",
+                            "maxItems:0 su items (tutte salvo LeafA) e su patches (LeafA, LeafB, Reduce, Cross); type:null su focus (LeafA, LeafB, Reduce, Cross); enum ridotto di focus.outcome (Expand, Compare)",
+                        },
+                        providerSupport = "Verificato realmente su llama.cpp b10703 (ReconcileSchemaV9SupportRealTests, 2026-11-11, quattro richieste, rapporto SHA-256 309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE): sei vincoli Honored "
+                            + "(descriptor minLength:1 su LeafB e Reduce, descriptor null su Cross, estremi ^E su LeafB, estremi ^N su Reduce e Cross). NotExercised, inferiti e NON provati: descriptor type:string non null, LeafA, Expand e Compare "
+                            + "(sottoschemi identici a quelli esercitati); maxItems:0 su items e patches e focus null misurati sulla v8, non ripetuti. Compatibilita dello schema, non validazione end-to-end: il validatore della gerarchia resta l'unica garanzia "
+                            + "sulle regole che la grammatica non esprime (D9-D12, soli spazi, lunghezza del descriptor)",
                     },
                     freezeKeys = new { reconcile = ReconcilePromptVersion, reconcileSchemaProfile = ReconcileSchemaProfile },
                     preflight = "definizione, prompt (versione e SHA-256), profilo, hash delle varianti dello schema e chiavi di freeze del prodotto devono coincidere con questi valori, altrimenti NO-GO prima di ogni inferenza",
@@ -275,18 +325,21 @@ internal static class RetrievalGapCampaign
             },
             freeze = new
             {
-                version = 4,
-                supersedes = Run2ManifestSha256,
+                version = 5,
+                supersedes = Run3ManifestSha256,
                 codeBaseline = CodeBaseline,
+                launchCommit = LaunchCommitRule,
                 history = new object[]
                 {
                     new { version = 1, sha256 = SupersededManifestSha256, usedByRun = "nessuno (sostituita prima di ogni inferenza)" },
                     new { version = 2, sha256 = Run1ManifestSha256, usedByRun = "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json" },
                     new { version = 3, sha256 = Run2ManifestSha256, usedByRun = "Run 2 (2026-11-10): non superato (work_output_invalid sulla riconciliazione, definizione v7), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v3-run2.json" },
+                    new { version = 4, sha256 = Run3ManifestSha256, usedByRun = "Run 3 (2026-11-11): non superato (work_output_invalid sulla riconciliazione, descriptor null alla chiamata 026, definizione v8), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v4-run3.json" },
                 },
                 reason = FreezeReason,
-                configDifferenceFromRun2 = "differenze rispetto al manifesto v3 (Run 2), uniche: definition project-analysis-documents-v7 -> project-analysis-documents-v8; nuove chiavi config.reconcile (prompt document-reconcile-v4 con SHA-256, profilo reconcile-alias-schema-by-batch-1, hash delle tre varianti dello schema, chiavi di freeze) "
-                    + "e config.structuredOutput (JsonSchema richiesto); freeze v4. Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione (ExtractionOutputExpansion 16.0) invariati.",
+                configDifferenceFromRun3 = "differenze rispetto al manifesto v4 (Run 3), uniche: definition project-analysis-documents-v8 -> project-analysis-documents-v9; config.reconcile.schemaProfile (profilo reconcile-alias-schema-by-batch-1 -> reconcile-alias-schema-by-batch-2, "
+                    + "hash delle varianti: tre -> sei, providerFeatures e providerSupport con l'esito della verifica reale) e config.reconcile.freezeKeys.reconcileSchemaProfile; freeze v5 (version, supersedes, codeBaseline, launchCommit, history, reason, differenza). "
+                    + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra, parametri di estrazione (ExtractionOutputExpansion 16.0), output strutturato e prompt document-reconcile-v4 (stesso SHA-256) invariati.",
             },
             seed = LargeDocumentCorpus.Seed,
             extension = ExtensionDocuments.Select(d => new { d.Key, d.FileName, d.ExcludedByPm, textSha256 = Sha(d.Text) }).ToArray(),
@@ -489,10 +542,10 @@ internal static class RetrievalGapCampaign
         Same("prompt di riconciliazione realmente instradato per la definizione", actual.DispatchedReconcilePrompt, ReconcilePromptVersion);
         Same($"SHA-256 della risorsa incorporata {ReconcilePromptVersion}", actual.ReconcilePromptSha256, ReconcilePromptSha256);
         Same("chiave di freeze reconcileSchemaProfile", actual.FrozenSchemaProfile, ReconcileSchemaProfile);
-        Same("profilo degli schemi supportato dal prodotto", ReconcileAliasContracts.SchemaProfileByBatch, ReconcileSchemaProfile);
-        if (actual.Contract != 8)
+        Same("profilo degli schemi supportato dal prodotto", ReconcileAliasContracts.SchemaProfileByBatchV2, ReconcileSchemaProfile);
+        if (actual.Contract != 9)
         {
-            problems.Add($"contratto riconosciuto da ContractOf per il freeze v8: {actual.Contract?.ToString(CultureInfo.InvariantCulture) ?? "nessuno (workflow_incompatible)"} invece di 8");
+            problems.Add($"contratto riconosciuto da ContractOf per il freeze v9: {actual.Contract?.ToString(CultureInfo.InvariantCulture) ?? "nessuno (workflow_incompatible)"} invece di 9");
         }
 
         foreach (var (variant, expected) in ReconcileSchemaVariantHashes)
@@ -503,6 +556,130 @@ internal static class RetrievalGapCampaign
         foreach (var extra in actual.SchemaVariantHashes.Keys.Except(ReconcileSchemaVariantHashes.Keys, StringComparer.Ordinal))
         {
             problems.Add($"variante dello schema non congelata nel manifesto: {extra}");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// Identità di LANCIO, distinta dal baseline del codice di prodotto del manifesto (<see cref="CodeBaseline"/>): il commit effettivo (HEAD) con cui parte il Run, se il baseline ne è antenato e se il codice di prodotto
+    /// (<see cref="ProductPaths"/>, anche non committato o non tracciato) è identico al baseline e se i file tracciati di <c>backend</c> e <c>specs</c> (harness, test, manifesto) coincidono con HEAD, così che il commit di lancio
+    /// riproduca ciò che gira davvero. Un valore non rilevabile (<c>null</c>) è NO-GO, mai «presumibilmente uguale». I file NON tracciati fuori da <c>backend/src</c> (es. <c>docs/acceptance-trace</c>) sono ignorati.
+    /// </summary>
+    internal sealed record LaunchRecord(string? LaunchCommit, bool? BaselineIsAncestor, bool? ProductCodeUnchanged, bool? TrackedTreeClean, string? Error)
+    {
+        /// <summary>Percorsi del codice di prodotto e della toolchain che ne determina il comportamento: devono coincidere con il baseline.</summary>
+        public static readonly IReadOnlyList<string> ProductPaths = ["backend/src", "backend/global.json"];
+
+        /// <summary>Percorsi i cui file tracciati devono essere senza modifiche non committate al lancio: il commit di lancio deve riprodurre harness, test e manifesto realmente eseguiti.</summary>
+        public static readonly IReadOnlyList<string> TrackedPaths = ["backend", "specs"];
+
+        /// <summary>
+        /// Rileva l'identità di lancio con <c>git</c> (nessuna rete, sola lettura: <c>GIT_OPTIONAL_LOCKS=0</c>). Qualunque difficoltà (git assente, albero non versionato) produce campi <c>null</c> e un messaggio, mai un'eccezione.
+        /// <paramref name="baseline"/> è il baseline del manifesto (<see cref="CodeBaseline"/>); il parametro serve solo ai test su repository temporanei.
+        /// </summary>
+        public static LaunchRecord Read(string? repositoryRoot = null, string baseline = CodeBaseline)
+        {
+            try
+            {
+                var root = repositoryRoot ?? FindRepositoryRoot(AppContext.BaseDirectory);
+                if (root is null)
+                {
+                    return new(null, null, null, null, "repository git non trovato a partire da " + AppContext.BaseDirectory);
+                }
+
+                var (headExit, head) = Git(root, ["rev-parse", "HEAD"]);
+                var (ancestorExit, _) = Git(root, ["merge-base", "--is-ancestor", baseline, "HEAD"]);
+                var (diffExit, _) = Git(root, ["diff", "--quiet", baseline, "--", .. ProductPaths]);
+                var (untrackedExit, untracked) = Git(root, ["ls-files", "--others", "--exclude-standard", "--", .. ProductPaths]);
+                var (statusExit, status) = Git(root, ["status", "--porcelain", "--untracked-files=no", "--", .. TrackedPaths]);
+                return new(
+                    headExit == 0 && head.Trim().Length == 40 ? head.Trim() : null,
+                    ancestorExit switch { 0 => true, 1 => false, _ => null },
+                    diffExit == 0 && untrackedExit == 0 ? untracked.Trim().Length == 0 : diffExit == 1 ? false : null,
+                    statusExit == 0 ? status.Trim().Length == 0 : null,
+                    null);
+            }
+            catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or TimeoutException)
+            {
+                return new(null, null, null, null, e.GetType().Name);
+            }
+        }
+
+        private static string? FindRepositoryRoot(string start)
+        {
+            for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, ".git")) || File.Exists(Path.Combine(dir.FullName, ".git")))
+                {
+                    return dir.FullName;
+                }
+            }
+
+            return null;
+        }
+
+        private static (int Exit, string Output) Git(string root, string[] args)
+        {
+            var info = new ProcessStartInfo("git") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            info.Environment["GIT_OPTIONAL_LOCKS"] = "0";   // sola lettura: nessun aggiornamento opportunistico dell'indice
+            info.ArgumentList.Add("--no-pager");
+            foreach (var arg in args)
+            {
+                info.ArgumentList.Add(arg);
+            }
+
+            using var process = Process.Start(info) ?? throw new InvalidOperationException("git non avviato");
+            var output = process.StandardOutput.ReadToEndAsync();
+            _ = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException("git oltre 30 s");
+            }
+
+            return (process.ExitCode, output.GetAwaiter().GetResult());
+        }
+
+        public System.Text.Json.Nodes.JsonObject ToJson() => new()
+        {
+            ["launchCommit"] = LaunchCommit,
+            ["codeBaseline"] = CodeBaseline,
+            ["baselineIsAncestorOfLaunchCommit"] = BaselineIsAncestor,
+            ["productCodeUnchangedSinceBaseline"] = ProductCodeUnchanged,
+            ["productPaths"] = new System.Text.Json.Nodes.JsonArray([.. ProductPaths.Select(p => (System.Text.Json.Nodes.JsonNode?)p)]),
+            ["trackedTreeCleanOutsideUntracked"] = TrackedTreeClean,
+            ["manifestSha256"] = ManifestSha256(),
+            ["frozenManifestSha256"] = FrozenManifestSha256,
+            ["error"] = Error,
+        };
+    }
+
+    /// <summary>
+    /// Verifica PURA dell'identità di lancio (<see cref="LaunchRecord"/>): commit di lancio rilevato, baseline del codice di prodotto antenato di esso, codice di prodotto identico al baseline e file tracciati senza
+    /// modifiche non committate. Vuoto = coerente; altrimenti NO-GO PRIMA di ogni upload e inferenza. I test e i documenti possono cambiare DOPO il baseline purché committati (il commit di lancio li versiona), il codice di prodotto no.
+    /// </summary>
+    internal static IReadOnlyList<string> RejectLaunch(LaunchRecord launch)
+    {
+        var problems = new List<string>();
+        if (string.IsNullOrWhiteSpace(launch.LaunchCommit))
+        {
+            problems.Add($"commit di lancio non rilevabile ({launch.Error ?? "git non ha restituito HEAD"}): il Run non sarebbe riproducibile");
+        }
+
+        if (launch.BaselineIsAncestor != true)
+        {
+            problems.Add($"il baseline del codice di prodotto {CodeBaseline} non e un antenato del commit di lancio o non e verificabile");
+        }
+
+        if (launch.ProductCodeUnchanged != true)
+        {
+            problems.Add($"{string.Join(", ", LaunchRecord.ProductPaths)} differisce dal baseline {CodeBaseline} (anche non committato o non tracciato) o non e verificabile: il codice di prodotto del lancio non e quello del manifesto");
+        }
+
+        if (launch.TrackedTreeClean != true)
+        {
+            problems.Add($"file tracciati di {string.Join(", ", LaunchRecord.TrackedPaths)} con modifiche non committate o stato non verificabile: il commit di lancio non riprodurrebbe harness, test e manifesto realmente eseguiti");
         }
 
         return problems;

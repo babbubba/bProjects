@@ -97,6 +97,9 @@ internal sealed class IndexDiagnostics(Func<string> scenario)
 
     public JsonNode? AnalysisCalls { get; set; }
 
+    /// <summary>Identità di lancio (commit effettivo, baseline del codice di prodotto, stato di <c>backend/src</c>, hash del manifesto): distinta dal baseline che il manifesto registra.</summary>
+    public JsonNode? Launch { get; set; }
+
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
     /// <summary>Scrittura best-effort e atomica (file temporaneo + sostituzione): un errore di I/O non altera mai l'esito del test né sostituisce l'eccezione originale, e un rapporto buono non resta mai a metà.</summary>
@@ -119,6 +122,7 @@ internal sealed class IndexDiagnostics(Func<string> scenario)
                 ["http"] = JsonSerializer.SerializeToNode(Http, Web),
                 ["database"] = Database?.DeepClone(),
                 ["analysisCalls"] = AnalysisCalls?.DeepClone(),
+                ["launch"] = Launch?.DeepClone(),
             };
             var temporary = path + ".tmp";
             File.WriteAllText(temporary, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));

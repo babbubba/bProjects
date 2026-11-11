@@ -1,0 +1,392 @@
+{
+  "campaign": "T040-retrieval-gap-1",
+  "frozenSha256": "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf",
+  "note": "Manifesto congelato PRIMA di ogni inferenza: corpus (hash del testo), gold (hash), domande, attese, soglie e configurazione. Rigenerabile solo con BPROJECTS_T040_WRITE_MANIFEST=1 e ri-congelamento esplicito della costante FrozenManifestSha256.",
+  "manifest": {
+    "campaign": "T040-retrieval-gap-1",
+    "definition": "project-analysis-documents-v8",
+    "config": {
+      "window": 32768,
+      "output": 16384,
+      "margin": 1024,
+      "budget": 15360,
+      "thinking": false,
+      "policy": "retrieval-policy-1",
+      "policyHash": "0c7049270c3960b8ca981a51fa6ab2ea0ceb24fccb4b978fa365d7d84d4f2245",
+      "embedding": {
+        "id": "bge-m3-Q5",
+        "artifact": "bge-m3-Q5_K_M.gguf",
+        "dimension": 1024
+      },
+      "reranker": {
+        "id": "bge-reranker-v2-m3",
+        "artifact": "bge-reranker-v2-m3-Q5_K_M.gguf"
+      },
+      "indexTextVersion": "index-text-1",
+      "fts": "italian",
+      "extraction": {
+        "outputExpansion": 16,
+        "calibration": "extraction-output-expansion-2026-11-10",
+        "option": "Ai:ExtractionOutputExpansion",
+        "previousRun1Value": 8,
+        "status": "candidato, non validato da misura reale completa",
+        "preflight": "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza"
+      },
+      "llm": {
+        "id": "Qwen3.6-35B-Smart",
+        "source": "identificativo di configurazione confermato dal committente (2026-11-10); pesi, quantizzazione e artefatto caricato NON verificati offline",
+        "unverified": [
+          "pesi effettivamente caricati",
+          "quantizzazione",
+          "artefatto/file del modello",
+          "finestra di contesto effettiva (misurata dal profilo di runtime)",
+          "comportamento del ragionamento (thinking=0 richiesto)"
+        ]
+      },
+      "latency": {
+        "perGap": [
+          "search",
+          "rerank"
+        ],
+        "shared": [
+          "readiness",
+          "index_ready",
+          "reranker_ready",
+          "provenance",
+          "registry"
+        ],
+        "attribution": "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap"
+      },
+      "reconcile": {
+        "prompt": {
+          "version": "document-reconcile-v4",
+          "sha256": "d3e46528736e856eedfa43e1fa41785b0a87ab7ddba91881f57bb9c09c0da79d",
+          "previousVersion": "document-reconcile-v3",
+          "previousSha256": "0503d17360e21e8f72e357d1fcf0f0e32fbead294d970193af4eb61ff847c9e5",
+          "note": "il v3 resta invariato e in uso per le definizioni v4-v7"
+        },
+        "schemaProfile": {
+          "key": "reconcileSchemaProfile",
+          "value": "reconcile-alias-schema-by-batch-1",
+          "variantHashes": {
+            "Full": "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
+            "NoItems": "7b0a15de8844ecea8b5daa15009fe838bde652e261540074b3ac563bce6952b2",
+            "Candidate": "facb96cb31ec0f0fc2ee8a42a0cf899a95cbe5af4d90abac4f163df6c5984f38"
+          },
+          "hashAlgorithm": "SHA-256 della forma canonica RFC 8785 dello schema",
+          "providerFeatures": [
+            "maxItems:0 su items (NoItems, Candidate) e su patches (NoItems)",
+            "type:null su focus (NoItems)"
+          ],
+          "providerSupport": "NON verificato su llama.cpp b10703: se ignorate, la v8 si comporta come la v7 e il validatore rifiuta comunque; verifica reale minima predisposta in ReconcileSchemaSupportRealTests, non eseguita senza autorizzazione"
+        },
+        "freezeKeys": {
+          "reconcile": "document-reconcile-v4",
+          "reconcileSchemaProfile": "reconcile-alias-schema-by-batch-1"
+        },
+        "preflight": "definizione, prompt (versione e SHA-256), profilo, hash delle varianti dello schema e chiavi di freeze del prodotto devono coincidere con questi valori, altrimenti NO-GO prima di ogni inferenza"
+      },
+      "structuredOutput": {
+        "mode": "JsonSchema",
+        "scope": "Ai:StructuredOutputMode e globale: vale anche per la fase Analysis",
+        "reason": "con ValidatedTextJson nessuno schema viene inviato e la v8 equivarrebbe alla v7",
+        "preflight": "le AiOptions risolte dal runtime devono riportare questo valore, altrimenti NO-GO prima di ogni inferenza"
+      }
+    },
+    "thresholds": {
+      "maxInvalidCitationsPer10": 2,
+      "lostConflicts": {
+        "labReference": "2 su 10 casi",
+        "scaledOnlyFromCases": 10,
+        "belowThatTolerance": 0,
+        "upstream": 0
+      },
+      "falseAnsweredInSnapshot": 0
+    },
+    "freeze": {
+      "version": 4,
+      "supersedes": "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181",
+      "codeBaseline": "65cdcc8",
+      "history": [
+        {
+          "version": 1,
+          "sha256": "662431340021f99eb094814adc730eca54ba9776000412ea8df0fd9c3552c035",
+          "usedByRun": "nessuno (sostituita prima di ogni inferenza)"
+        },
+        {
+          "version": 2,
+          "sha256": "fbc0ecb348c8568bf8f799a0c1c4b79161087e95c2f2f2621fb2f713da79eefb",
+          "usedByRun": "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json"
+        },
+        {
+          "version": 3,
+          "sha256": "6aad99f8b78e81f421d78a38619b16ec0496ee0b7dc926e24b4a36890f293181",
+          "usedByRun": "Run 2 (2026-11-10): non superato (work_output_invalid sulla riconciliazione, definizione v7), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v3-run2.json"
+        }
+      ],
+      "reason": "Dopo il Run 2 (riconciliazione della foglia della vista B: items non ammessi, chiamata 026; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v7 a v8 con il prompt document-reconcile-v4 e il profilo degli schemi per batch reconcile-alias-schema-by-batch-1 (decisione del committente 2026-11-11). Il manifesto registra definizione, prompt con SHA-256, profilo e hash delle tre varianti dello schema; il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni configurazione risolta o identita del prodotto diversa, compresa una modalita di output strutturato diversa da JsonSchema. Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione non cambiano.",
+      "configDifferenceFromRun2": "differenze rispetto al manifesto v3 (Run 2), uniche: definition project-analysis-documents-v7 -> project-analysis-documents-v8; nuove chiavi config.reconcile (prompt document-reconcile-v4 con SHA-256, profilo reconcile-alias-schema-by-batch-1, hash delle tre varianti dello schema, chiavi di freeze) e config.structuredOutput (JsonSchema richiesto); freeze v4. Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione (ExtractionOutputExpansion 16.0) invariati."
+    },
+    "seed": 20261106,
+    "extension": [
+      {
+        "Key": "t040-parziale",
+        "FileName": "t040-formazione-operatori.txt",
+        "ExcludedByPm": false,
+        "textSha256": "4875ed379922933af6b4fd1d5d857a401ec192681e45185b8bcd2b9436d7e02e"
+      },
+      {
+        "Key": "t040-escluso",
+        "FileName": "t040-addendum-garanzie-reali.txt",
+        "ExcludedByPm": true,
+        "textSha256": "d46ade4f598dc9a9b9619ee30a903efa95ef4399fdabe6c07fc3d3080310675e"
+      }
+    ],
+    "scenarios": [
+      {
+        "Label": "T040-single",
+        "Origin": "T082 (documento singolo)",
+        "corpus": "T082-single",
+        "bulkRules": 260,
+        "fillerChars": 0,
+        "pmStatement": null,
+        "documents": [
+          {
+            "Key": "cap",
+            "FileName": "capitolato-aurora.txt",
+            "format": "Text",
+            "PlainTextSha256": "fb2fafe4ad61b11f168de998efc3334ffc988eced44bdb8411c660675027777b",
+            "chars": 21505,
+            "rules": 260
+          }
+        ],
+        "goldSha256": "b784f55051fb7c3d89376d2265b69c05a22e9d86c337eff52ad460a87ee9d0dc",
+        "questions": [
+          "Per quanti mesi il portale Aurora conserva i documenti di trasporto?",
+          "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+          "Qual è il numero di telefono dell'assistenza clienti?",
+          "Il termine di pagamento delle fatture è di 30 o di 60 giorni?",
+          "Qual è il limite del pegno sulle attrezzature?"
+        ],
+        "expectations": [
+          {
+            "Id": "present",
+            "Kind": "present",
+            "Question": "Per quanti mesi il portale Aurora conserva i documenti di trasporto?",
+            "QuestionToken": "conserva i documenti di trasporto",
+            "Outcome": "AnsweredInSnapshot",
+            "Reasons": [
+              "Answered"
+            ],
+            "SupportQuotes": [
+              [
+                "84 mesi"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "partial",
+            "Kind": "partial",
+            "Question": "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+            "QuestionToken": "formazione degli operatori",
+            "Outcome": "Open",
+            "Reasons": [
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "tre giornate"
+              ]
+            ],
+            "ForbiddenQuotes": [
+              "cinquantamila"
+            ],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "absent",
+            "Kind": "absent",
+            "Question": "Qual è il numero di telefono dell'assistenza clienti?",
+            "QuestionToken": "numero di telefono",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "conflict",
+            "Kind": "conflict",
+            "Question": "Il termine di pagamento delle fatture è di 30 o di 60 giorni?",
+            "QuestionToken": "30 o di 60 giorni",
+            "Outcome": "Open",
+            "Reasons": [
+              "Ambiguous",
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "30 giorni"
+              ],
+              [
+                "60 giorni"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": true
+          },
+          {
+            "Id": "excluded",
+            "Kind": "excluded",
+            "Question": "Qual è il limite del pegno sulle attrezzature?",
+            "QuestionToken": "pegno sulle attrezzature",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [
+              "cinquantamila",
+              "pegno sulle attrezzature non deve"
+            ],
+            "ExpectOpenConflict": false
+          }
+        ]
+      },
+      {
+        "Label": "T040-multi",
+        "Origin": "T083 (tre documenti)",
+        "corpus": "T083-multi",
+        "bulkRules": 270,
+        "fillerChars": 0,
+        "pmStatement": "Il cliente mi ha confermato per telefono che il limite di ordini per ciascuna sede è di 25 al giorno e che il termine di pagamento delle fatture è di 45 giorni.",
+        "documents": [
+          {
+            "Key": "d1",
+            "FileName": "contratto-quadro-zefiro.txt",
+            "format": "Text",
+            "PlainTextSha256": "eb0efa9dc547cdd0b28a530a4a9e2a58c4af5718066594fdf8a59af98135fc29",
+            "chars": 7661,
+            "rules": 90
+          },
+          {
+            "Key": "d2",
+            "FileName": "allegato-tecnico-zefiro.md",
+            "format": "Markdown",
+            "PlainTextSha256": "1fd527fe1f80110213e673d6665935a59afdac89f9e39d1c078da70fb1bbc5aa",
+            "chars": 7576,
+            "rules": 90
+          },
+          {
+            "Key": "d3",
+            "FileName": "verbale-collaudo-zefiro.docx",
+            "format": "Docx",
+            "PlainTextSha256": "fb6402db2c5f17d80273b24a55df1dd1cba52ddd24596c9d342465ca48e90cac",
+            "chars": 7445,
+            "rules": 90
+          }
+        ],
+        "goldSha256": "be6691d6657d964882d7e81a4e42eeb1be48b63c74c757f3fbadf28b872b4052",
+        "questions": [
+          "Qual è la durata del contratto quadro Zefiro?",
+          "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+          "Qual è il numero di telefono dell'assistenza clienti?",
+          "Qual è la durata della garanzia sui ricambi?",
+          "Qual è il limite del pegno sulle attrezzature?"
+        ],
+        "expectations": [
+          {
+            "Id": "present",
+            "Kind": "present",
+            "Question": "Qual è la durata del contratto quadro Zefiro?",
+            "QuestionToken": "durata del contratto quadro",
+            "Outcome": "AnsweredInSnapshot",
+            "Reasons": [
+              "Answered"
+            ],
+            "SupportQuotes": [
+              [
+                "48 mesi"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "partial",
+            "Kind": "partial",
+            "Question": "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+            "QuestionToken": "formazione degli operatori",
+            "Outcome": "Open",
+            "Reasons": [
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "tre giornate"
+              ]
+            ],
+            "ForbiddenQuotes": [
+              "cinquantamila"
+            ],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "absent",
+            "Kind": "absent",
+            "Question": "Qual è il numero di telefono dell'assistenza clienti?",
+            "QuestionToken": "numero di telefono",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": false
+          },
+          {
+            "Id": "conflict",
+            "Kind": "conflict",
+            "Question": "Qual è la durata della garanzia sui ricambi?",
+            "QuestionToken": "garanzia sui ricambi",
+            "Outcome": "Open",
+            "Reasons": [
+              "Ambiguous",
+              "Partial"
+            ],
+            "SupportQuotes": [
+              [
+                "24 mesi"
+              ],
+              [
+                "36 mesi"
+              ]
+            ],
+            "ForbiddenQuotes": [],
+            "ExpectOpenConflict": true
+          },
+          {
+            "Id": "excluded",
+            "Kind": "excluded",
+            "Question": "Qual è il limite del pegno sulle attrezzature?",
+            "QuestionToken": "pegno sulle attrezzature",
+            "Outcome": "Open",
+            "Reasons": [
+              "NoAnswer"
+            ],
+            "SupportQuotes": [],
+            "ForbiddenQuotes": [
+              "cinquantamila",
+              "pegno sulle attrezzature non deve"
+            ],
+            "ExpectOpenConflict": false
+          }
+        ]
+      }
+    ]
+  }
+}

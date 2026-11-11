@@ -67,12 +67,12 @@ internal static class ReconcileSchemaV9Probe
     public static string SchemaHash(string variant) => CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOf(variant).GetRawText()));
 
     /// <summary>
-    /// Hash CONGELATO della variante: per il controllo quello dello schema completo nel manifesto T040 v4 (<see cref="RetrievalGapCampaign.ReconcileSchemaVariantHashes"/>), per le varianti v9 il golden del profilo
+    /// Hash CONGELATO della variante: per il controllo quello dello schema completo (<see cref="RetrievalGapCampaign.FullSchemaHash"/>, invariato dal manifesto T040 v4), per le varianti v9 il golden del profilo
     /// (<see cref="ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes"/>). Indipendente dal codice di produzione: una deriva dello schema lo rende diverso da <see cref="SchemaHash"/>.
     /// </summary>
     public static string FrozenHash(string variant) =>
         variant == ControlVariant
-            ? RetrievalGapCampaign.ReconcileSchemaVariantHashes[ControlVariant]
+            ? RetrievalGapCampaign.FullSchemaHash
             : ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes.Split(',').Select(p => p.Split('=')).Single(p => p[0] == variant)[1];
 
     /// <summary>

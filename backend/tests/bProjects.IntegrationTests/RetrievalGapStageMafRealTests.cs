@@ -49,7 +49,7 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override IReadOnlyList<string> PmQuestions => [.. Scenario.Expectations.Select(e => e.Question)];
 
-    protected override string ExpectedDefinition => RetrievalGapCampaign.DefinitionVersion;   // v8 (Run 3); il Run 2 usava la v7
+    protected override string ExpectedDefinition => RetrievalGapCampaign.DefinitionVersion;   // v9 (Run 4); il Run 3 usava la v8, il Run 2 la v7
 
     protected override bool GapStageExpected => true;
 
@@ -93,6 +93,7 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
         var problems = new List<string>(RetrievalGapCampaign.ValidateEnvironment(Environment.GetEnvironmentVariable));
         var retrieval = App.Services.GetRequiredService<IOptions<RetrievalOptions>>().Value;
         problems.AddRange(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.FromProduct(retrieval), ExpectedDefinition));
+        problems.AddRange(RetrievalGapCampaign.RejectLaunch(RetrievalGapCampaign.LaunchRecord.Read()));   // commit di lancio rilevato e codice di prodotto = baseline del manifesto
         if (RetrievalGapCampaign.RejectRetrievalOptions(retrieval) is { } retrievalRejection)
         {
             problems.Add("RetrievalOptions risolte: " + retrievalRejection);
@@ -113,6 +114,7 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
     /// </summary>
     protected override async Task OnFinalizingAsync()
     {
+        Guarded(() => _indexDiagnostics.Launch = RetrievalGapCampaign.LaunchRecord.Read().ToJson());   // commit di lancio effettivo, distinto dal baseline del codice nel manifesto
         Guarded(() => _indexDiagnostics.Http = RetrievalIndexGate.HttpSummary(_recorder.Calls));
         Guarded(() => _indexDiagnostics.AnalysisCalls = AnalysisCallReport.Build(MafDiagnostics.Current().Dir, _callsBefore));   // solo le chiamate di QUESTO scenario (Single e Multi condividono la sessione)
         var database = new System.Text.Json.Nodes.JsonObject();

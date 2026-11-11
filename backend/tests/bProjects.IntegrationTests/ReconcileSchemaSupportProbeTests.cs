@@ -81,9 +81,9 @@ public sealed class ReconcileSchemaSupportProbeTests
 
         Assert.Equal(3, provider.Requests);   // una richiesta per variante, mai ripetuta
         Assert.Equal(["Full", "NoItems", "Candidate"], calls.Select(c => c.Variant));
-        Assert.Equal(["Full", "NoItems", "Candidate"], RetrievalGapCampaign.ReconcileSchemaVariantHashes.Keys);   // stesso ordine del manifesto
+        Assert.Equal(["Full", "NoItems", "Candidate"], RetrievalGapCampaign.Run3ReconcileSchemaVariantHashes.Keys);   // stesso ordine del manifesto
         // Lo schema REALMENTE nel corpo HTTP di ciascuna richiesta è quello congelato nel manifesto v4 (hash canonico): nessuna copia ricostruita dal test.
-        Assert.All(calls, c => Assert.Equal(RetrievalGapCampaign.ReconcileSchemaVariantHashes[c.Variant], c.RequestSchemaHash));
+        Assert.All(calls, c => Assert.Equal(RetrievalGapCampaign.Run3ReconcileSchemaVariantHashes[c.Variant], c.RequestSchemaHash));
 
         var full = SentSchema(handler.Exchanges[0]).GetProperty("properties");
         Assert.False(full.GetProperty("items").TryGetProperty("maxItems", out _));   // il controllo è lo schema completo, invariato
@@ -201,8 +201,8 @@ public sealed class ReconcileSchemaSupportProbeTests
     [Fact]
     public void The_variant_hashes_the_probe_computes_are_the_ones_frozen_in_the_manifest()
     {
-        Assert.Equal(RetrievalGapCampaign.ReconcileSchemaVariantHashes.Keys, ReconcileSchemaSupportProbe.Variants);
-        Assert.All(ReconcileSchemaSupportProbe.Variants, v => Assert.Equal(RetrievalGapCampaign.ReconcileSchemaVariantHashes[v], ReconcileSchemaSupportProbe.SchemaHash(v)));
+        Assert.Equal(RetrievalGapCampaign.Run3ReconcileSchemaVariantHashes.Keys, ReconcileSchemaSupportProbe.Variants);
+        Assert.All(ReconcileSchemaSupportProbe.Variants, v => Assert.Equal(RetrievalGapCampaign.Run3ReconcileSchemaVariantHashes[v], ReconcileSchemaSupportProbe.SchemaHash(v)));
         Assert.Null(ReconcileSchemaSupportProbe.RequestSchemaHash("""{"model":"m"}"""));   // senza response_format (ValidatedTextJson) nessuno schema: hash assente
         Assert.Null(ReconcileSchemaSupportProbe.RequestSchemaHash("non json"));
     }
