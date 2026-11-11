@@ -500,14 +500,14 @@ public sealed class DocumentWorkflowRoutingTests : ArchiveTestBase
         Assert.DoesNotContain("evidenceMap", v3.SchemaJson);                                   // l'involucro v2 non e piu quello misurato per v3
         Assert.Equal(analysis.BuildRegimePayload().SchemaJson, v2.SchemaJson);
         Assert.Contains("evidenceMap", v2.SchemaJson);
-        Assert.Equal(v2.SchemaJson, analysis.BuildRegimePayload("project-analysis-documents-v9").SchemaJson);   // ignota: nessun upgrade implicito (l'esito e del claim)
+        Assert.Equal(v2.SchemaJson, analysis.BuildRegimePayload("project-analysis-documents-v99").SchemaJson);   // ignota: nessun upgrade implicito (l'esito e del claim)
         Assert.Equal((AiPhase.Analysis, (DocumentPayload?)null), (v3.Phase, v3.Payload));
     }
 
     // ================================================================ definizione ignota o incompatibile: errore esplicito
 
     [Theory]
-    [InlineData("project-analysis-documents-v9", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]      // definizione ignota
+    [InlineData("project-analysis-documents-v99", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]     // definizione ignota
     [InlineData("project-document-documents-v2", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]      // definizione di un'altra famiglia
     [InlineData("project-analysis-documents-v2", """{"analysis":"document-analysis-v1","analysisSchema":"1.1.0"}""")]      // prompt congelato diverso
     [InlineData("project-analysis-v3", """{"analysis":"document-analysis-v2"}""")]                                         // 001 con prompt documentale: nessuna reinterpretazione

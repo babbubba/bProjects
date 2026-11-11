@@ -601,7 +601,7 @@ public sealed partial class DocumentAnalysisAliasWorkflowTests : ArchiveTestBase
     }
 
     [Theory]
-    [InlineData("project-analysis-documents-v9", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]     // definizione ignota
+    [InlineData("project-analysis-documents-v99", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]    // definizione ignota
     [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v2","analysisSchema":"1.1.0"}""")]                                                      // v3 con prompt v2: nessuna reinterpretazione
     [InlineData("project-analysis-documents-v2", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-1"}""")]     // v2 con prompt v3
     [InlineData("project-analysis-documents-v3", """{"analysis":"document-analysis-v3","analysisSchema":"1.1.0","analysisAiSchema":"document-analysis-alias-9"}""")]     // schema AI ignoto

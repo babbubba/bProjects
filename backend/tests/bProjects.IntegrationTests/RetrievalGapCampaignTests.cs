@@ -794,8 +794,9 @@ public sealed class RetrievalGapCampaignTests
         Assert.Contains("NON verificato", reconcile["schemaProfile"]!["providerSupport"]!.GetValue<string>(), StringComparison.Ordinal);   // il supporto del provider non e dichiarato verificato
         Assert.Equal("JsonSchema", manifest["config"]!["structuredOutput"]!["mode"]!.GetValue<string>());
 
-        // Gli hash registrati sono quelli che il PRODOTTO calcola adesso (non una copia del test): nessuna deriva fra manifesto e codice.
-        var product = RetrievalGapCampaign.AnalysisIdentity.FromProduct();
+        // Gli hash registrati sono quelli che il PRODOTTO calcola adesso per il profilo della v8 (non una copia del test): nessuna deriva fra manifesto e codice. Il profilo v8 resta immutato anche
+        // dopo l'introduzione della v9 (golden in ReconcileSchemaProfileTests).
+        var product = RetrievalGapCampaign.AnalysisIdentity.V8();
         var recorded = reconcile["schemaProfile"]!["variantHashes"]!.AsObject().ToDictionary(p => p.Key, p => p.Value!.GetValue<string>());
         Assert.Equal(["Full", "NoItems", "Candidate"], recorded.Keys);
         Assert.Equal(product.SchemaVariantHashes.OrderBy(p => p.Key), recorded.OrderBy(p => p.Key));
@@ -805,9 +806,9 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
-    public void The_product_identity_matches_every_literal_frozen_in_the_campaign_and_nothing_is_missing()
+    public void The_v8_identity_still_matches_every_literal_frozen_in_the_campaign_and_nothing_is_missing()
     {
-        var product = RetrievalGapCampaign.AnalysisIdentity.FromProduct();
+        var product = RetrievalGapCampaign.AnalysisIdentity.V8();
         Assert.Empty(RetrievalGapCampaign.RejectIdentity(product, RetrievalGapCampaign.DefinitionVersion));
         Assert.Equal(
             ("project-analysis-documents-v8", 8, "document-reconcile-v4", "document-reconcile-v4", "reconcile-alias-schema-by-batch-1"),
@@ -820,9 +821,29 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
+    public void The_product_now_freezes_v9_so_the_v4_manifest_bound_to_v8_is_a_NO_GO_before_any_inference()
+    {
+        // 003, T040 dopo il Run 3: le nuove richieste congelano la v9. Il manifesto T040 v4 (Run 3) resta legato alla v8 e NON è modificato: il preflight lo rifiuta prima di ogni upload e inferenza,
+        // invece di scoprire la differenza al controllo strutturale a run concluso. Un eventuale Run 4 richiede un manifesto nuovo (non preparato).
+        var product = RetrievalGapCampaign.AnalysisIdentity.FromProduct();
+        Assert.Equal(
+            ("project-analysis-documents-v9", 9, "document-reconcile-v4", "document-reconcile-v4", "reconcile-alias-schema-by-batch-2"),
+            (product.Definition, product.Contract, product.FrozenReconcilePrompt, product.DispatchedReconcilePrompt, product.FrozenSchemaProfile));
+        Assert.Equal(["LeafA", "LeafB", "Reduce", "Cross", "Expand", "Compare"], product.SchemaVariantHashes.Keys);
+
+        var problems = string.Join(" | ", RetrievalGapCampaign.RejectIdentity(product, RetrievalGapCampaign.DefinitionVersion));
+        foreach (var fragment in new[] { "definizione congelata da una nuova richiesta", "reconcileSchemaProfile", "ContractOf", "hash canonico dello schema Full", "variante dello schema non congelata nel manifesto: LeafA" })
+        {
+            Assert.Contains(fragment, problems, StringComparison.Ordinal);
+        }
+
+        Assert.Equal("project-analysis-documents-v8", RetrievalGapCampaign.DefinitionVersion);   // il manifesto e la prova restano sulla v8
+    }
+
+    [Fact]
     public void Every_drift_between_the_product_identity_and_the_frozen_one_is_a_NO_GO_before_any_inference()
     {
-        var product = RetrievalGapCampaign.AnalysisIdentity.FromProduct();
+        var product = RetrievalGapCampaign.AnalysisIdentity.V8();
         const string v8 = RetrievalGapCampaign.DefinitionVersion;
 
         void One(RetrievalGapCampaign.AnalysisIdentity identity, string expectedDefinition, string fragment)
@@ -913,8 +934,11 @@ public sealed class RetrievalGapCampaignTests
         Assert.Contains("modello di embedding", RetrievalGapCampaign.RejectRetrievalOptions(Fixed(o => o.Embedding.ModelId = "altro")), StringComparison.Ordinal);
         Assert.Contains("artefatto di riordino", RetrievalGapCampaign.RejectRetrievalOptions(Fixed(o => o.Reranker.Artifact = "altro.gguf")), StringComparison.Ordinal);
         Assert.Contains("dimensione dell'embedding", RetrievalGapCampaign.RejectRetrievalOptions(Fixed(o => o.Embedding.Dimension = 768)), StringComparison.Ordinal);
-        // L'identita costruita dalle opzioni RISOLTE coincide con quella congelata.
-        Assert.Empty(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.FromProduct(Fixed()), RetrievalGapCampaign.DefinitionVersion));
+        // L'identita v8 costruita dalle opzioni RISOLTE coincide con quella congelata; quella del prodotto attuale (v9) e NO-GO per il manifesto v4.
+        Assert.Empty(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.V8(Fixed()), RetrievalGapCampaign.DefinitionVersion));
+        Assert.Contains(
+            RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.FromProduct(Fixed()), RetrievalGapCampaign.DefinitionVersion),
+            p => p.Contains("definizione congelata da una nuova richiesta", StringComparison.Ordinal));
         InOrder(Section(TestSource("RetrievalGapStageMafRealTests.cs"), "internal async Task PreflightAsync()"), "RejectRetrievalOptions(", "RejectOptions(App.Services", "await Require()");
     }
 

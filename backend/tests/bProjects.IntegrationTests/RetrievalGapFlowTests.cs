@@ -279,19 +279,19 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     // ================================================================ freeze e percorso felice
 
     [Fact]
-    public async Task The_real_analyze_endpoint_freezes_v8_when_retrieval_is_enabled()
+    public async Task The_real_analyze_endpoint_freezes_v9_when_retrieval_is_enabled()
     {
-        // Correzione T040 Run 2 (decisione approvata): le NUOVE richieste con recupero congelano la v8 = v7 + `reconcileSchemaProfile`; i run già congelati v7 restano v7.
+        // Correzione T040 dopo il Run 3 (decisione approvata): le NUOVE richieste con recupero congelano la v9 = v8 con `reconcileSchemaProfile = -2`; i run già congelati v7 e v8 restano tali.
         var s = await ArrangeAsync(fillers: 1, fillerWords: 5);
 
-        Assert.Equal("project-analysis-documents-v8", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v9", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
         using var scope = App.Services.CreateScope();
         var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().ProcessingRuns.FindAsync([s.Run], Ct);
-        Assert.Equal(8, DocumentAnalysisWorkflow.ContractOf(row!));
+        Assert.Equal(9, DocumentAnalysisWorkflow.ContractOf(row!));
         var keys = JsonDocument.Parse(row!.PromptVersions!).RootElement;
         Assert.Equal(RetrievalPolicy.Version1, keys.GetProperty("retrievalPolicy").GetString());
-        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey).GetString());
-        Assert.Equal(ReconcileAliasContracts.PromptVersionV4, keys.GetProperty("reconcile").GetString());   // la v8 congela il prompt della gerarchia document-reconcile-v4
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatchV2, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey).GetString());
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV4, keys.GetProperty("reconcile").GetString());   // la v9 conserva il prompt della gerarchia document-reconcile-v4
     }
 
     [Fact]
@@ -316,7 +316,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         var hierarchy = model.Requests.Count - 1;
         Assert.Equal(hierarchy, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'retrieval'", ("r", s.Run)));
         Assert.Equal(hierarchy + 1, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'gap'", ("r", s.Run)));
-        Assert.Equal("project-analysis-documents-v8", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v9", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
 
         // Registro congelato nel WorkOutput: pacchetto consegnabile, ordine, politica e hash.
         var registry = await RegistryOf(s.Run);
@@ -540,17 +540,34 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.All(model.Requests.Where(DocumentGapStageWorkflowTests.IsStage), r => Assert.Equal(Lf(GapStage.Instructions), Lf(r.System)));
     }
 
-    [Fact]
-    public async Task V8_sends_each_hierarchy_batch_the_schema_variant_of_its_stage_and_view_and_freezes_the_profile_in_the_manifest()
+    /// <summary>Profilo degli schemi per batch della definizione del test: v8 (<c>-1</c>, congelata esplicitamente) o v9 (<c>-2</c>, freeze delle nuove richieste).</summary>
+    private static string ProfileOf(bool v8) => v8 ? ReconcileAliasContracts.SchemaProfileByBatch : ReconcileAliasContracts.SchemaProfileByBatchV2;
+
+    /// <summary>Variante (nome e schema) che il profilo assegna al batch della richiesta, ricavata da stadio e vista letti nel messaggio realmente inviato.</summary>
+    private static (string Name, JsonElement Schema) ExpectedVariant(DocumentChatWorkflowTests.ChatRequest request, bool v8)
+    {
+        var p = DocumentReconcileAliasWorkflowTests.ParseAlias(request.AllText);
+        return ReconcileAliasContracts.ProfileSchemaFor(ProfileOf(v8), p.Stage, Enum.Parse<ReconcileView>(p.View));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Each_hierarchy_batch_receives_the_schema_variant_of_its_frozen_profile_and_the_profile_is_frozen_in_the_manifest(bool v8)
     {
         var s = await ArrangeAsync();
+        if (v8)
+        {
+            await FreezeV8(s.Run);
+        }
+
         var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
 
         var result = await RunAsync(s.Claim, model);
 
         var row = await RunRow(s.Run);
         Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
-        var seen = new HashSet<ReconcileSchemaVariant>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var request in model.Requests)
         {
             // Lo schema verificato è quello REALMENTE presente nel corpo HTTP (`response_format.json_schema.schema`), non quello dichiarato dal piano.
@@ -561,21 +578,34 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
                 continue;
             }
 
-            var variant = VariantOf(request);
-            seen.Add(variant);
-            Assert.Equal(Canon(ReconcileAliasContracts.SchemaOf(variant).GetRawText()), Canon(request.ResponseSchema!));
-            if (variant != ReconcileSchemaVariant.Full)
+            var (name, schema) = ExpectedVariant(request, v8);
+            seen.Add(name);
+            Assert.Equal(Canon(schema.GetRawText()), Canon(request.ResponseSchema!));
+            var p = DocumentReconcileAliasWorkflowTests.ParseAlias(request.AllText);
+            var properties = JsonDocument.Parse(request.ResponseSchema!).RootElement.GetProperty("properties");
+            if (p is not { Stage: "leaf", View: "A" })
             {
-                Assert.Equal(0, JsonDocument.Parse(request.ResponseSchema!).RootElement.GetProperty("properties").GetProperty("items").GetProperty("maxItems").GetInt32());
+                Assert.Equal(0, properties.GetProperty("items").GetProperty("maxItems").GetInt32());
+            }
+
+            if (!v8)
+            {
+                // v9: il descriptor è una stringa non vuota nei batch che costruiscono nodi (foglie e riduzioni), null altrove: la 026 del Run 3 non è più ammessa dalla grammatica.
+                var expectedType = p.Stage is "leaf" or "reduce" ? "string" : "null";
+                Assert.Equal(expectedType, properties.GetProperty("descriptor").GetProperty("type").GetString());
             }
         }
 
-        // La gerarchia di questo corpus ha foglie in entrambe le viste: la foglia A riceve lo schema completo (fissato), la foglia B quello con `items` vuoto.
-        Assert.Contains(ReconcileSchemaVariant.Full, seen);
-        Assert.Contains(ReconcileSchemaVariant.NoItems, seen);
-        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, await ManifestProfile(s.Run));
+        // La gerarchia di questo corpus ha foglie in entrambe le viste.
+        Assert.Contains(v8 ? nameof(ReconcileSchemaVariant.Full) : nameof(ReconcileBatchSchema.LeafA), seen);
+        Assert.Contains(v8 ? nameof(ReconcileSchemaVariant.NoItems) : nameof(ReconcileBatchSchema.LeafB), seen);
+        Assert.Equal(ProfileOf(v8), await ManifestProfile(s.Run));
+        Assert.Equal(v8 ? DocumentAnalysisWorkflow.DefinitionVersionV8 : DocumentAnalysisWorkflow.DefinitionVersionV9,
+            await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        var configHash = await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run));
+        Assert.Equal(v8, configHash == PinnedV8ReconcileConfigHash);   // la v9 è un'identità diversa: nessun riuso di checkpoint o output fra le due definizioni
 
-        // Prompt della v8: document-reconcile-v4 in ogni batch della gerarchia (foglie A e B comprese) e nella versione persistita di ogni batch derivato.
+        // Prompt di v8 e v9: document-reconcile-v4 in ogni batch della gerarchia (foglie A e B comprese) e nella versione persistita di ogni batch derivato.
         AssertHierarchyPrompt(model, ReconcileAliasContracts.PromptVersionV4);
         Assert.Equal(ReconcileAliasContracts.PromptVersionV4, await HierarchyPromptVersions(s.Run));
     }
@@ -647,11 +677,18 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.Equal(0, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
     }
 
-    [Fact]
-    public async Task Under_v8_a_leaf_B_answer_with_items_is_still_rejected_by_the_validator_with_no_commit_and_no_further_call()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_leaf_B_answer_with_items_is_still_rejected_by_the_validator_with_no_commit_and_no_further_call(bool v8)
     {
-        // La grammatica del provider è un aiuto, non una garanzia: il modello finto ignora lo schema e risponde come la chiamata 026 (un item per voce nella foglia B, nessun candidato).
+        // La grammatica del provider è un aiuto, non una garanzia: il modello finto ignora lo schema e risponde come la chiamata 026 del Run 2 (un item per voce nella foglia B, nessun candidato).
         var s = await ArrangeAsync();
+        if (v8)
+        {
+            await FreezeV8(s.Run);
+        }
+
         string? rejected = null;
         var model = new DocumentChatWorkflowTests.FakeChatModel
         {
@@ -684,22 +721,86 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         var row = await RunRow(s.Run);
         Assert.Contains("items: ammessi solo nelle foglie della vista A", row.Message, StringComparison.Ordinal);
         Assert.Equal(rejected, model.Requests[^1].AllText);                                          // nessuna chiamata dopo il rifiuto: nessun retry nascosto
-        Assert.Equal(ReconcileSchemaVariant.NoItems, VariantOf(model.Requests[^1]));                  // e la richiesta rifiutata portava lo schema con `items` vuoto
+        var (variant, sent) = ExpectedVariant(model.Requests[^1], v8);                                 // e la richiesta rifiutata portava lo schema con `items` vuoto
+        Assert.Equal(v8 ? nameof(ReconcileSchemaVariant.NoItems) : nameof(ReconcileBatchSchema.LeafB), variant);
+        Assert.Equal(Canon(sent.GetRawText()), Canon(model.Requests[^1].ResponseSchema!));
         Assert.Equal(model.Requests.Count - 1, await Outputs(s.Run, ReconcileAliasContracts.SchemaVersion));   // l'output invalido non è Committed
         Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", s.Run)));
     }
 
-    [Fact]
-    public async Task A_crash_on_a_leaf_B_batch_resumes_with_the_same_input_hash_and_schema_and_never_resends_committed_batches()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_leaf_B_answer_shaped_like_call_026_of_run_3_is_rejected_for_the_null_descriptor_with_no_commit_and_no_further_call(bool v8)
+    {
+        // Run 3 di T040, chiamata 026: items vuoti, candidati DependsOn/Inferred fra le evidenze del batch, descriptor null, finish=stop. Il modello finto ignora la grammatica (come può fare il
+        // provider): il validatore, invariato, rifiuta l'output; la v9 invia in più una grammatica che non ammette quel null.
+        var s = await ArrangeAsync();
+        if (v8)
+        {
+            await FreezeV8(s.Run);
+        }
+
+        string? rejected = null;
+        var model = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            Responder = r =>
+            {
+                if (DocumentGapStageWorkflowTests.IsStage(r))
+                {
+                    return Stage(r);
+                }
+
+                var p = DocumentReconcileAliasWorkflowTests.ParseAlias(r.AllText);
+                if (p is not { Stage: "leaf", View: "B" })
+                {
+                    return Hierarchy(r);
+                }
+
+                rejected = r.AllText;
+                var aliases = p.Voci.Select(v => v.Alias).ToList();
+                var candidates = new JsonArray([.. aliases.Skip(1).Select((alias, i) => JsonNode.Parse(JsonSerializer.Serialize(new
+                {
+                    key = $"f{i + 1}", left = alias, right = aliases[0], type = "DependsOn", basis = "Inferred", rationale = "Possibile dipendenza da verificare fra le due regole.",
+                })))]);
+                return new JsonObject
+                {
+                    ["contract"] = "reconcile-alias-1", ["descriptor"] = null, ["noFindings"] = candidates.Count == 0 ? "nessun collegamento" : null, ["items"] = new JsonArray(),
+                    ["candidates"] = candidates, ["focus"] = null, ["patches"] = new JsonArray(),
+                }.ToJsonString();
+            },
+        };
+
+        var result = await RunAsync(s.Claim, model);
+
+        Assert.NotNull(rejected);
+        Assert.Equal((ProcessingRunStatus.Failed, DocumentWorkException.WorkOutputInvalid), (result.Status, result.ErrorCode));
+        var row = await RunRow(s.Run);
+        Assert.Contains("descriptor: obbligatorio nei batch che costruiscono nodi", row.Message, StringComparison.Ordinal);   // lo stesso messaggio del Run 3
+        Assert.Equal(rejected, model.Requests[^1].AllText);                                                                   // nessun retry, nessuna chiamata successiva
+        Assert.Equal(model.Requests.Count - 1, await Outputs(s.Run, ReconcileAliasContracts.SchemaVersion));                 // l'output invalido non è Committed
+        var sent = JsonDocument.Parse(model.Requests[^1].ResponseSchema!).RootElement.GetProperty("properties").GetProperty("descriptor");
+        Assert.Equal(v8 ? """{"type":["string","null"]}""" : """{"type":"string","minLength":1}""", sent.GetRawText());      // v8: null ammesso (il buco); v9: vietato dalla grammatica
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_crash_on_a_leaf_B_batch_resumes_with_the_same_input_hash_and_schema_and_never_resends_committed_batches(bool v8)
     {
         var s = await ArrangeAsync();
+        if (v8)
+        {
+            await FreezeV8(s.Run);
+        }
+
         string? crashed = null;
         var crash = new DocumentChatWorkflowTests.FakeChatModel
         {
             // Il processo muore alla prima foglia B (batch pubblicato e riservato, nessun output): i batch precedenti sono Committed.
             Responder = r =>
             {
-                if (!DocumentGapStageWorkflowTests.IsStage(r) && VariantOf(r) == ReconcileSchemaVariant.NoItems && crashed is null)
+                if (!DocumentGapStageWorkflowTests.IsStage(r) && DocumentReconcileAliasWorkflowTests.ParseAlias(r.AllText) is { Stage: "leaf", View: "B" } && crashed is null)
                 {
                     crashed = r.AllText;
                     throw new InvalidOperationException("crash simulato");
@@ -721,7 +822,8 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         var row = await RunRow(s.Run);
         Assert.True(resumed.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");   // nessun integrity_conflict: l'inputHash ricalcolato coincide con quello pubblicato
         Assert.Equal(crashed, model.Requests[0].AllText);                                              // si riprende dal batch interrotto
-        Assert.Equal(Canon(ReconcileAliasContracts.SchemaOf(ReconcileSchemaVariant.NoItems).GetRawText()), Canon(model.Requests[0].ResponseSchema!));
+        var resumedSchema = v8 ? ReconcileAliasContracts.SchemaOf(ReconcileSchemaVariant.NoItems) : ReconcileAliasContracts.SchemaOf(ReconcileBatchSchema.LeafB);
+        Assert.Equal(Canon(resumedSchema.GetRawText()), Canon(model.Requests[0].ResponseSchema!));        // stessa variante del profilo congelato alla ripresa
         Assert.Equal(Lf(ReconcileAliasContracts.InstructionsFor(ReconcileAliasContracts.PromptVersionV4)), Lf(model.Requests[0].System));   // stesso prompt v4 alla ripresa
         Assert.Equal(ReconcileAliasContracts.PromptVersionV4, await HierarchyPromptVersions(s.Run));    // nessun batch con un'altra versione del prompt
         Assert.DoesNotContain(model.Requests, r => answered.Contains(r.AllText));                      // nessun batch Committed reinviato

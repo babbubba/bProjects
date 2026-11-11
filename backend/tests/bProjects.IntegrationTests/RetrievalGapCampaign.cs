@@ -396,23 +396,38 @@ internal static class RetrievalGapCampaign
         string Definition, int? Contract, string FrozenReconcilePrompt, string DispatchedReconcilePrompt, string ReconcilePromptSha256, string? FrozenSchemaProfile,
         IReadOnlyDictionary<string, string> SchemaVariantHashes)
     {
-        /// <summary>Identità del prodotto per una nuova richiesta di Analizza; con <paramref name="retrieval"/> RISOLTE dall'applicazione in prova (altrimenti opzioni sintetiche con la politica 1, solo per i test).</summary>
+        /// <summary>
+        /// Identità del prodotto per una NUOVA richiesta di Analizza con il recupero, letta dallo stesso freeze dell'endpoint (<see cref="SourceSnapshotStore.DocumentaryAnalysisFreeze"/>), mai da costanti
+        /// della prova; con <paramref name="retrieval"/> RISOLTE dall'applicazione in prova (altrimenti opzioni sintetiche con la politica 1, solo per i test). Dalla v9 il prodotto congela la v9: un
+        /// manifesto legato alla v8 (T040 v4) è NO-GO prima di ogni upload e inferenza.
+        /// </summary>
         public static AnalysisIdentity FromProduct(RetrievalOptions? retrieval = null)
         {
-            var json = SourceSnapshotStore.AnalysisPromptVersionsV8(retrieval ?? new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 });
-            var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(json)!;
-            var definition = SourceSnapshotStore.AnalysisDefinitionV8;
-            var run = new ProcessingRun { WorkflowDefinitionVersion = definition, MafVersion = Conversation.CurrentMafVersion, PromptVersions = json };
-            var frozenPrompt = keys.GetValueOrDefault("reconcile") ?? string.Empty;
-            return new(
-                definition, DocumentAnalysisWorkflow.ContractOf(run), frozenPrompt, DocumentAnalysisWorkflow.ReconcilePromptOf(definition), EmbeddedPromptSha256(frozenPrompt),
-                keys.GetValueOrDefault(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey),
-                Enum.GetValues<ReconcileSchemaVariant>().ToDictionary(v => v.ToString(), v => CanonicalJson.HashText(CanonicalJson.Canonicalize(ReconcileAliasContracts.SchemaOf(v).GetRawText())), StringComparer.Ordinal));
+            var (definition, json) = SourceSnapshotStore.DocumentaryAnalysisFreeze(useRetrieval: true, retrieval ?? new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 });
+            return ForFreeze(definition, json);
         }
+
+        /// <summary>Identità di un freeze dato (definizione e versioni congelate): contratto, prompt instradato, SHA della risorsa e hash delle varianti del profilo congelato, come li calcola il prodotto.</summary>
+        public static AnalysisIdentity ForFreeze(string definition, string promptVersions)
+        {
+            var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(promptVersions)!;
+            var run = new ProcessingRun { WorkflowDefinitionVersion = definition, MafVersion = Conversation.CurrentMafVersion, PromptVersions = promptVersions };
+            var frozenPrompt = keys.GetValueOrDefault("reconcile") ?? string.Empty;
+            var profile = keys.GetValueOrDefault(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey);
+            var variants = profile is ReconcileAliasContracts.SchemaProfileByBatch or ReconcileAliasContracts.SchemaProfileByBatchV2
+                ? ReconcileAliasContracts.ProfileVariants(profile).ToDictionary(v => v.Name, v => CanonicalJson.HashText(CanonicalJson.Canonicalize(v.Schema.GetRawText())), StringComparer.Ordinal)
+                : new Dictionary<string, string>(StringComparer.Ordinal);
+            return new(
+                definition, DocumentAnalysisWorkflow.ContractOf(run), frozenPrompt, DocumentAnalysisWorkflow.ReconcilePromptOf(definition), EmbeddedPromptSha256(frozenPrompt), profile, variants);
+        }
+
+        /// <summary>Identità della v8 come la congelava il prodotto fino alla v9 (quella del manifesto T040 v4 e del Run 3).</summary>
+        public static AnalysisIdentity V8(RetrievalOptions? retrieval = null) =>
+            ForFreeze(SourceSnapshotStore.AnalysisDefinitionV8, SourceSnapshotStore.AnalysisPromptVersionsV8(retrieval ?? new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 }));
     }
 
     /// <summary>
-    /// Verifica delle <see cref="RetrievalOptions"/> RISOLTE dall'applicazione in prova: il recupero deve essere abilitato (altrimenti una nuova richiesta congelerebbe la v6, non la v8), con la politica, i modelli e
+    /// Verifica delle <see cref="RetrievalOptions"/> RISOLTE dall'applicazione in prova: il recupero deve essere abilitato (altrimenti una nuova richiesta congelerebbe la v6, senza recupero), con la politica, i modelli e
     /// gli artefatti fissati. Null = compatibile; altrimenti NO-GO PRIMA di ogni upload e inferenza.
     /// </summary>
     public static string? RejectRetrievalOptions(RetrievalOptions options)
@@ -420,7 +435,7 @@ internal static class RetrievalGapCampaign
         var problems = new List<string>();
         if (!options.Enabled)
         {
-            problems.Add("recupero non abilitato: una nuova richiesta di Analizza congelerebbe la v6, non la v8");
+            problems.Add("recupero non abilitato: una nuova richiesta di Analizza congelerebbe la v6, senza recupero");
         }
 
         void Same(string what, object? found, object expected)
