@@ -580,6 +580,33 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.Equal(ReconcileAliasContracts.PromptVersionV4, await HierarchyPromptVersions(s.Run));
     }
 
+    /// <summary>Congela esplicitamente il run come v8 (come quelli del Run 3 di T040): indipendente dalla definizione congelata per le nuove richieste.</summary>
+    private Task FreezeV8(Guid run) => Execute(
+        "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = CAST(@p AS jsonb) WHERE \"Id\" = @r",
+        ("d", DocumentAnalysisWorkflow.DefinitionVersionV8), ("p", SourceSnapshotStore.AnalysisPromptVersionsV8(new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 })), ("r", run));
+
+    // Golden del configHash della gerarchia v8 (003, T040 dopo il Run 3), fissato PRIMA dell'introduzione della v9 con la configurazione AI del rig: prompt v4 e SHA delle istruzioni,
+    // DTO, catalogo, id canonici, profilo `-1` e hash delle sue varianti, modello, output, thinking e budget. Un refactoring che cambiasse un solo byte della v8 lo romperebbe.
+    private const string PinnedV8ReconcileConfigHash = "4248ba71d408bcc425d61a7e1c2d54b867a56110fc876480cd70f56c38b2f3d1";
+
+    [Fact]
+    public async Task A_v8_run_keeps_its_pinned_reconcile_config_hash_and_manifest_plan_profile()
+    {
+        var s = await ArrangeAsync();
+        await FreezeV8(s.Run);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        var configHash = await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run));
+        Assert.True(PinnedV8ReconcileConfigHash == configHash, configHash);
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV8, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatch, await ManifestProfile(s.Run));
+        Assert.All(model.Requests.Where(r => !DocumentGapStageWorkflowTests.IsStage(r)), r => Assert.Equal(Canon(ReconcileAliasContracts.SchemaOf(VariantOf(r)).GetRawText()), Canon(r.ResponseSchema!)));
+    }
+
     [Fact]
     public async Task A_run_frozen_as_v7_before_the_change_keeps_sending_the_single_pinned_schema_and_its_manifest_plan()
     {

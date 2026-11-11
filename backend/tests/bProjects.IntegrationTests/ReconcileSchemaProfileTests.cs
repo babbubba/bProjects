@@ -225,6 +225,23 @@ public sealed class ReconcileSchemaProfileTests
         Assert.Equal("reconcile-alias-schema-by-batch-1", ReconcileAliasContracts.SchemaProfileByBatch);
     }
 
+    // Golden del profilo v8 (003, T040 dopo il Run 3): fissati PRIMA dell'introduzione della v9. Il profilo `-1` è stato usato dal Run 3 (manifesto T040 v4): nessuna variante, nessun hash
+    // e nessuna stringa del profilo può cambiare retroattivamente.
+    private const string PinnedNoItemsHash = "7b0a15de8844ecea8b5daa15009fe838bde652e261540074b3ac563bce6952b2";
+    private const string PinnedCandidateHash = "facb96cb31ec0f0fc2ee8a42a0cf899a95cbe5af4d90abac4f163df6c5984f38";
+
+    [Fact]
+    public void The_v8_profile_variants_and_their_hash_string_are_pinned_byte_for_byte()
+    {
+        string Hash(ReconcileSchemaVariant v) => CanonicalJson.HashText(CanonicalJson.Canonicalize(Raw(v)));
+
+        Assert.True(PinnedNoItemsHash == Hash(ReconcileSchemaVariant.NoItems), Hash(ReconcileSchemaVariant.NoItems));
+        Assert.True(PinnedCandidateHash == Hash(ReconcileSchemaVariant.Candidate), Hash(ReconcileSchemaVariant.Candidate));
+        Assert.Equal([ReconcileSchemaVariant.Full, ReconcileSchemaVariant.NoItems, ReconcileSchemaVariant.Candidate], Enum.GetValues<ReconcileSchemaVariant>());
+        Assert.Equal(
+            $"Full={PinnedReconcileSchemaHash},NoItems={PinnedNoItemsHash},Candidate={PinnedCandidateHash}", ReconcileAliasContracts.SchemaProfileHashes());
+    }
+
     // ================================================================ 6. schema ⇔ compositore
 
     [Theory]
