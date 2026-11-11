@@ -40,6 +40,32 @@ public enum ReconcileSchemaVariant
     Candidate,
 }
 
+/// <summary>
+/// Varianti dello schema nel profilo per batch v9 (<see cref="ReconcileAliasContracts.SchemaProfileByBatchV2"/>): stesso DTO <c>reconcile-alias-1</c>, una variante per stadio (e per vista nelle foglie)
+/// con i vincoli strutturali del contratto di quello stadio (nullabilità di <c>descriptor</c> e <c>focus</c>, cardinalità di <c>items</c> e <c>patches</c>, prefisso degli estremi dei candidati).
+/// Il profilo v8 (<see cref="ReconcileSchemaVariant"/>) resta congelato e distinto.
+/// </summary>
+public enum ReconcileBatchSchema
+{
+    /// <summary>Foglia della vista A: items ammessi, descriptor obbligatorio, estremi E, focus null, patches vuote.</summary>
+    LeafA,
+
+    /// <summary>Foglia della vista B: items vuoti, descriptor obbligatorio, estremi E, focus null, patches vuote.</summary>
+    LeafB,
+
+    /// <summary>Riduzione (viste A e B): items vuoti, descriptor obbligatorio, estremi N, focus null, patches vuote.</summary>
+    Reduce,
+
+    /// <summary>Cross: items vuoti, descriptor null, estremi N, focus null, patches vuote.</summary>
+    Cross,
+
+    /// <summary>Espansione: items vuoti, descriptor null, estremi E, focus null oppure Unresolved, patches ammesse.</summary>
+    Expand,
+
+    /// <summary>Confronto: items vuoti, descriptor null, estremi E, focus obbligatorio Compared oppure Open, patches ammesse.</summary>
+    Compare,
+}
+
 /// <summary>Esito dichiarato dal modello sul candidato in esame: Compared/Open nel confronto, Unresolved nell'espansione (il server lo traduce in NotProcessed candidate_unresolved).</summary>
 public enum AiFocusOutcome { Compared, Open, Unresolved }
 
@@ -298,6 +324,125 @@ public static class ReconcileAliasContracts
         {
             properties["patches"]!["maxItems"] = 0;
             properties["focus"] = new JsonObject { ["type"] = "null" };
+        }
+
+        using var document = JsonDocument.Parse(schema.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Profilo degli schemi per batch della definizione v9 (003, T040 dopo il Run 3, chiamata 026: <c>descriptor: null</c> ammesso dallo schema v8 e vietato dal validatore). Stesso DTO, stesso
+    /// compositore e validatore: lo schema di ogni batch esprime i vincoli STRUTTURALI del contratto del suo stadio (livelli 1 e 2), mai più permissivi né più restrittivi del validatore.
+    /// Restano al solo validatore le regole semantiche e quelle condizionali (livello 3, D9–D12: coerenza op/value/target delle patch, sezione/classificazione/evidenze degli item,
+    /// motivo dell'esito Open, stringhe vuote nei testi), la lunghezza massima di 512 caratteri del descriptor (nessun <c>maxLength</c>: la grammatica troncherebbe invece di rifiutare) e i testi
+    /// composti di soli spazi (<c>\S</c> non è supportato dal convertitore di llama.cpp).
+    /// </summary>
+    public const string SchemaProfileByBatchV2 = "reconcile-alias-schema-by-batch-2";
+
+    /// <summary>Estremi dei candidati che sono nodi o insiemi (riduzione e cross); le evidenze usano <see cref="AnalysisAliasPattern.Evidence"/>.</summary>
+    public const string NodeAliasPattern = "^N[1-9][0-9]*$";
+
+    private static readonly Lazy<IReadOnlyDictionary<ReconcileBatchSchema, JsonElement>> BatchSchemas = new(() =>
+        Enum.GetValues<ReconcileBatchSchema>().ToDictionary(s => s, s => BuildBatchSchema(Schema.Value, s)));
+
+    /// <summary>Variante del profilo v9 per stadio e vista. Uno stadio sconosciuto o una foglia fuori dalle viste A e B è un errore: nessun ripiego su un altro schema.</summary>
+    public static ReconcileBatchSchema BatchSchemaOf(string stage, ReconcileView view) => stage switch
+    {
+        "leaf" => view switch
+        {
+            ReconcileView.A => ReconcileBatchSchema.LeafA,
+            ReconcileView.B => ReconcileBatchSchema.LeafB,
+            _ => throw new ArgumentOutOfRangeException(nameof(view), view, "Le foglie della riconciliazione appartengono alla vista A o B."),
+        },
+        "reduce" => ReconcileBatchSchema.Reduce,
+        "cross" => ReconcileBatchSchema.Cross,
+        "expand" => ReconcileBatchSchema.Expand,
+        "compare" => ReconcileBatchSchema.Compare,
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Stadio di riconciliazione sconosciuto: nessuno schema del profilo per batch v9."),
+    };
+
+    public static JsonElement SchemaOf(ReconcileBatchSchema variant) =>
+        BatchSchemas.Value.TryGetValue(variant, out var schema) ? schema : throw new ArgumentOutOfRangeException(nameof(variant), variant, "Variante dello schema v9 sconosciuta.");
+
+    /// <summary>Hash canonici delle varianti del profilo v9, in ordine fisso: entrano nel <c>configHash</c> della v9 (il profilo v8 ha i propri, invariati).</summary>
+    public static string SchemaProfileV2Hashes() => string.Join(
+        ',', Enum.GetValues<ReconcileBatchSchema>().Select(v => $"{v}={CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOf(v).GetRawText()))}"));
+
+    /// <summary>
+    /// Variante (nome stabile e schema) di un profilo per batch congelato, per stadio e vista: <see cref="SchemaProfileByBatch"/> (v8) o <see cref="SchemaProfileByBatchV2"/> (v9).
+    /// Profilo ignoto ⇒ eccezione: mai un ripiego su un altro profilo o sullo schema completo.
+    /// </summary>
+    public static (string Name, JsonElement Schema) ProfileSchemaFor(string profile, string stage, ReconcileView view) => profile switch
+    {
+        SchemaProfileByBatch => Named(SchemaVariantOf(stage, view)),
+        SchemaProfileByBatchV2 => Named(BatchSchemaOf(stage, view)),
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
+    };
+
+    /// <summary>Tutte le varianti di un profilo congelato, in ordine fisso (un agente per variante).</summary>
+    public static IReadOnlyList<(string Name, JsonElement Schema)> ProfileVariants(string profile) => profile switch
+    {
+        SchemaProfileByBatch => [.. Enum.GetValues<ReconcileSchemaVariant>().Select(Named)],
+        SchemaProfileByBatchV2 => [.. Enum.GetValues<ReconcileBatchSchema>().Select(Named)],
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
+    };
+
+    private static (string Name, JsonElement Schema) Named(ReconcileSchemaVariant variant) => (variant.ToString(), SchemaOf(variant));
+
+    private static (string Name, JsonElement Schema) Named(ReconcileBatchSchema variant) => (variant.ToString(), SchemaOf(variant));
+
+    /// <summary>Hash delle varianti del profilo congelato che entrano nel <c>configHash</c> (per la v8 la stessa stringa di sempre, <see cref="SchemaProfileHashes"/>).</summary>
+    public static string ProfileHashes(string profile) => profile switch
+    {
+        SchemaProfileByBatch => SchemaProfileHashes(),
+        SchemaProfileByBatchV2 => SchemaProfileV2Hashes(),
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
+    };
+
+    /// <summary>
+    /// Copia dello schema completo con i vincoli strutturali dello stadio. Ordine e insieme delle proprietà obbligatorie invariati; solo costrutti del convertitore schema→grammatica di llama.cpp
+    /// (<c>type</c> anche <c>null</c>, <c>enum</c>, <c>pattern</c> ancorato, <c>minLength</c> con <c>type: string</c> e senza <c>pattern</c>, <c>maxItems</c> accanto a <c>items</c>).
+    /// </summary>
+    private static JsonElement BuildBatchSchema(JsonElement full, ReconcileBatchSchema variant)
+    {
+        var schema = JsonNode.Parse(full.GetRawText())!.AsObject();
+        var properties = schema["properties"]!.AsObject();
+        var buildsNode = variant is ReconcileBatchSchema.LeafA or ReconcileBatchSchema.LeafB or ReconcileBatchSchema.Reduce;
+        var nodeEndpoints = variant is ReconcileBatchSchema.Reduce or ReconcileBatchSchema.Cross;
+        var candidateStage = variant is ReconcileBatchSchema.Expand or ReconcileBatchSchema.Compare;
+
+        // descriptor: stringa non vuota nei batch che costruiscono nodi (foglie e riduzioni), null altrove. Lunghezza massima e soli spazi restano al validatore.
+        properties["descriptor"] = buildsNode ? new JsonObject { ["type"] = "string", ["minLength"] = 1 } : new JsonObject { ["type"] = "null" };
+
+        if (variant != ReconcileBatchSchema.LeafA)
+        {
+            properties["items"]!["maxItems"] = 0;
+        }
+
+        // Estremi dei candidati: evidenze nelle foglie, nell'espansione e nel confronto; nodi o insiemi nella riduzione e nel cross.
+        var endpoint = nodeEndpoints ? NodeAliasPattern : AnalysisAliasPattern.Evidence;
+        var candidate = properties["candidates"]!["items"]!["properties"]!.AsObject();
+        candidate["left"]!["pattern"] = endpoint;
+        candidate["right"]!["pattern"] = endpoint;
+
+        var focus = properties["focus"]!.AsObject();
+        switch (variant)
+        {
+            case ReconcileBatchSchema.Expand:
+                focus["properties"]!["outcome"]!["enum"] = new JsonArray(nameof(AiFocusOutcome.Unresolved));
+                break;
+            case ReconcileBatchSchema.Compare:
+                focus["type"] = "object";
+                focus["properties"]!["outcome"]!["enum"] = new JsonArray(nameof(AiFocusOutcome.Compared), nameof(AiFocusOutcome.Open));
+                break;
+            default:
+                properties["focus"] = new JsonObject { ["type"] = "null" };
+                break;
+        }
+
+        if (!candidateStage)
+        {
+            properties["patches"]!["maxItems"] = 0;
         }
 
         using var document = JsonDocument.Parse(schema.ToJsonString());

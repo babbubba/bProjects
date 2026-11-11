@@ -1064,7 +1064,8 @@ public static class DocumentCoverage
 
     /// <summary>D3 (AI §13.8): l'avviso di ripetizione strutturale si applica solo alle revisioni della definizione v6; i report v5 e precedenti restano identici.</summary>
     public static bool AppliesStructuralRepetition(string? workflowDefinition) =>
-        workflowDefinition is DocumentAnalysisWorkflow.DefinitionVersionV6 or DocumentAnalysisWorkflow.DefinitionVersionV7 or DocumentAnalysisWorkflow.DefinitionVersionV8;
+        workflowDefinition is DocumentAnalysisWorkflow.DefinitionVersionV6 or DocumentAnalysisWorkflow.DefinitionVersionV7 or DocumentAnalysisWorkflow.DefinitionVersionV8
+            or DocumentAnalysisWorkflow.DefinitionVersionV9;
 
     /// <summary>
     /// D3 — avviso STRUTTURALE (semantic risk, confidenza media, mai bloccante) per un item ordinario che ripete l'alternativa di un conflitto: stesso insieme NON vuoto di evidenze collegate, stessa

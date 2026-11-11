@@ -199,6 +199,9 @@ public static class AnalysisEndpoints
             }
 
             var now = (await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").ToListAsync(ct)).Single();
+            // Definizione/prompt/schema documentali persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
+            // Con il recupero: v9 (v8 con il profilo degli schemi per batch -2, correzione T040 dopo il Run 3); i run già congelati v7 e v8 restano tali.
+            var freeze = SourceSnapshotStore.DocumentaryAnalysisFreeze(useRetrieval, retrieval.Value);
             var run = new ProcessingRun
             {
                 Id = Guid.NewGuid(),
@@ -211,12 +214,10 @@ public static class AnalysisEndpoints
                 RequestedAt = now,
                 Status = ProcessingRunStatus.Queued,
                 DeadlineAt = now + policy.AnalysisRunDeadline,
-                // Definizione/prompt/schema documentali v2 persistiti alla richiesta solo con almeno una fonte Ready; i run 001 restano sul grafo v3.
-                // Con il recupero: v8 (v7 + schemi della gerarchia per stadio e vista, correzione T040 Run 2); i run già congelati v7 restano v7.
-                WorkflowDefinitionVersion = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisDefinitionV8 : SourceSnapshotStore.AnalysisDefinitionV6) : ProcessingRun.AnalysisWorkflowVersion,
+                WorkflowDefinitionVersion = documentary ? freeze.Definition : ProcessingRun.AnalysisWorkflowVersion,
                 MafVersion = Conversation.CurrentMafVersion,
                 AgentConfig = FrozenConfig(ai.Value, policy, AiPhase.Analysis),
-                PromptVersions = documentary ? (useRetrieval ? SourceSnapshotStore.AnalysisPromptVersionsV8(retrieval.Value) : SourceSnapshotStore.AnalysisPromptVersionsV6()) : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
+                PromptVersions = documentary ? freeze.PromptVersions : JsonSerializer.Serialize(new { analysis = ConversationalAgent.ConsolidationPromptVersion }),
                 MaxAttempts = policy.MaxAttempts,
                 UpdatedAt = now,
             };

@@ -25,6 +25,9 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     /// <summary>Definizione congelata dalle NUOVE richieste di Analizza con il recupero abilitato (correzione T040 Run 2): v8 = v7 più `reconcileSchemaProfile`. La v7 resta storica (run già congelati).</summary>
     public const string AnalysisDefinitionV8 = DocumentAnalysisWorkflow.DefinitionVersionV8;
 
+    /// <summary>Definizione congelata dalle NUOVE richieste di Analizza con il recupero abilitato (003, T040 dopo il Run 3): v9 = v8 con il profilo degli schemi per batch <c>-2</c>. La v8 resta storica.</summary>
+    public const string AnalysisDefinitionV9 = DocumentAnalysisWorkflow.DefinitionVersionV9;
+
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV6;
@@ -242,6 +245,24 @@ public sealed class SourceSnapshotStore(AppDbContext db)
         var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(AnalysisPromptVersionsV7(retrieval))!;
         keys["reconcile"] = ReconcileAliasContracts.PromptVersionV4;
         keys[DocumentAnalysisWorkflow.ReconcileSchemaProfileKey] = ReconcileAliasContracts.SchemaProfileByBatch;
+        return JsonSerializer.Serialize(keys);
+    }
+
+    /// <summary>
+    /// Definizione e versioni congelate da una NUOVA richiesta di Analizza documentale (unica fonte per l'endpoint e per le verifiche che devono conoscere il freeze reale): con il recupero abilitato
+    /// la v9, altrimenti la v6.
+    /// </summary>
+    public static (string Definition, string PromptVersions) DocumentaryAnalysisFreeze(bool useRetrieval, bProjects.App.Retrieval.RetrievalOptions retrieval) =>
+        useRetrieval ? (AnalysisDefinitionV9, AnalysisPromptVersionsV9(retrieval)) : (AnalysisDefinitionV6, AnalysisPromptVersionsV6());
+
+    /// <summary>
+    /// Versioni congelate di una nuova richiesta di Analizza v9: le chiavi della v8 (<see cref="AnalysisPromptVersionsV8"/>, prompt document-reconcile-v4 compreso) con <c>reconcileSchemaProfile</c> =
+    /// <see cref="ReconcileAliasContracts.SchemaProfileByBatchV2"/>. Stesso insieme di chiavi della v8: cambia solo il valore del profilo. Il freeze v8 non cambia.
+    /// </summary>
+    public static string AnalysisPromptVersionsV9(bProjects.App.Retrieval.RetrievalOptions retrieval)
+    {
+        var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(AnalysisPromptVersionsV8(retrieval))!;
+        keys[DocumentAnalysisWorkflow.ReconcileSchemaProfileKey] = ReconcileAliasContracts.SchemaProfileByBatchV2;
         return JsonSerializer.Serialize(keys);
     }
 

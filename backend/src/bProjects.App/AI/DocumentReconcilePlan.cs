@@ -17,14 +17,15 @@ namespace bProjects.App.AI;
 /// server e definizione v4. Senza adattatore (<c>null</c>) il piano è quello v2, storico e immutato.
 /// </summary>
 /// <remarks>
-/// <c>SchemaByBatch</c> (v8, profilo <see cref="ReconcileAliasContracts.SchemaProfileByBatch"/>): lo schema inviato a ogni batch è la variante di stadio e vista; il Pack misura sempre con lo
-/// <c>Schema</c> completo (composizione dei batch invariata). Le varianti differiscono di pochi token (la variante Candidate è il completo più <c>"maxItems":0</c>), coperti dalla riserva di
-/// intestazione del Pack; la rimisura del payload realmente inviato resta esatta e fail-closed (<c>document_limit_exceeded</c>). Falso per v4–v7: un solo schema, storico e immutato.
-/// <c>PromptVersion</c>: prompt congelato della gerarchia (<see cref="ReconcileAliasContracts.PromptVersion"/> per v4–v7, <see cref="ReconcileAliasContracts.PromptVersionV4"/> per v8); entra nel
-/// <c>configHash</c> con lo SHA delle istruzioni e nella versione del prompt di ogni batch derivato. Obbligatorio: nessun valore predefinito che possa far ricadere una v8 sul v3.
+/// <c>SchemaProfile</c>: profilo congelato degli schemi per batch — <see cref="ReconcileAliasContracts.SchemaProfileByBatch"/> (v8) o <see cref="ReconcileAliasContracts.SchemaProfileByBatchV2"/>
+/// (v9) — oppure <c>null</c> (v4–v7: un solo schema, storico e immutato). Obbligatorio come <c>PromptVersion</c>: nessun valore predefinito che possa far ricadere una v8/v9 sullo schema unico. Con un profilo lo schema inviato a ogni batch è la variante di stadio e vista; il Pack misura sempre con lo <c>Schema</c>
+/// completo (composizione dei batch invariata). Le varianti differiscono di pochi token dallo schema completo, coperti dalla riserva di intestazione del Pack; la rimisura del payload realmente
+/// inviato resta esatta e fail-closed (<c>document_limit_exceeded</c>).
+/// <c>PromptVersion</c>: prompt congelato della gerarchia (<see cref="ReconcileAliasContracts.PromptVersion"/> per v4–v7, <see cref="ReconcileAliasContracts.PromptVersionV4"/> per v8 e v9); entra
+/// nel <c>configHash</c> con lo SHA delle istruzioni e nella versione del prompt di ogni batch derivato. Obbligatorio: nessun valore predefinito che possa far ricadere una v8/v9 sul v3.
 /// </remarks>
 internal sealed record ReconcileAliasMode(
-    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, bool SchemaByBatch = false);
+    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, string? SchemaProfile);
 
 /// <summary>
 /// Stadio Gap dedicato della definizione v6 (D1, AI §13.7): metadati documentali dello snapshot (mappa laterale) per il formato <c>gap-stage-message-1</c>. Presente solo se l'analisi ha almeno un Gap
@@ -81,8 +82,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private ReconcileAssembly? _assembled;
     private readonly GapStageMode? _gap;
     private readonly BatchAgentSpec? _gapAgent;
-    private readonly Dictionary<ReconcileSchemaVariant, BatchAgentSpec>? _variantAgents;
-    private readonly Dictionary<string, ReconcileSchemaVariant> _variants = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, BatchAgentSpec>? _variantAgents;
+    private readonly Dictionary<string, string> _variants = new(StringComparer.Ordinal);
     private readonly string? _gapSchemaJson;
     private GapStagePlanState? _gapState;
     private int _finishedBatches = -1;
@@ -125,8 +126,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _limits = limits is null ? new ReconciliationLimits() : new ReconciliationLimits(MaxCandidates: limits.MaxCandidatesPerRun, MaxDerivedBytes: limits.MaxDerivedBytes);
 
         var settings = options.ForPhase(AiPhase.Analysis);
-        // v2 (storico): forma e hash di configurazione invariati; v4 aggiunge soltanto la modalità di output strutturato; v8 aggiunge il profilo degli schemi per batch e gli hash delle sue varianti,
-        // e i suoi `prompt`/`instructions` sono quelli di document-reconcile-v4 (v4–v7 restano byte per byte quelli di sempre, prompt v3).
+        // v2 (storico): forma e hash di configurazione invariati; v4 aggiunge soltanto la modalità di output strutturato; v8 e v9 aggiungono il profilo degli schemi per batch e gli hash delle sue
+        // varianti (stessa forma: la v8 resta byte per byte quella di prima della v9), e i loro `prompt`/`instructions` sono quelli di document-reconcile-v4 (v4–v7: prompt v3, invariati).
         var configHash = DocumentAnalysisWorkflow.Sha(alias switch
         {
             null => JsonSerializer.Serialize(new
@@ -134,17 +135,17 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, model = settings.ModelId,
                 maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
             }),
-            { SchemaByBatch: false } => JsonSerializer.Serialize(new
+            { SchemaProfile: null } => JsonSerializer.Serialize(new
             {
                 prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
                 canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, model = settings.ModelId, maxOutput = settings.MaxOutputTokens,
                 thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
             }),
-            _ => JsonSerializer.Serialize(new
+            { SchemaProfile: { } byBatch } => JsonSerializer.Serialize(new
             {
                 prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
-                canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, schemaProfile = ReconcileAliasContracts.SchemaProfileByBatch,
-                schemaProfileHashes = ReconcileAliasContracts.SchemaProfileHashes(), model = settings.ModelId, maxOutput = settings.MaxOutputTokens,
+                canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, schemaProfile = byBatch,
+                schemaProfileHashes = ReconcileAliasContracts.ProfileHashes(byBatch), model = settings.ModelId, maxOutput = settings.MaxOutputTokens,
                 thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
             }),
         });
@@ -154,15 +155,16 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 ? client.CreateChatOptions(alias.Schema, ReconcileAliasContracts.SchemaName, temperature: 0.1f, phase: AiPhase.Analysis)
                 : client.CreateChatOptions(temperature: 0.1f, phase: AiPhase.Analysis),
             AiPhase.Analysis, profile.Fingerprint);
-        if (alias is { Structured: true, SchemaByBatch: true })
+        if (alias is { Structured: true, SchemaProfile: { } schemaProfile })
         {
-            // v8: un agente per variante, stesse istruzioni, nome, fase e fingerprint; cambia solo lo schema della risposta. La variante Full è lo schema completo, come `Agent`.
-            _variantAgents = Enum.GetValues<ReconcileSchemaVariant>().ToDictionary(
-                v => v,
+            // v8/v9: un agente per variante del profilo congelato, stesse istruzioni, nome, fase e fingerprint; cambia solo lo schema della risposta.
+            _variantAgents = ReconcileAliasContracts.ProfileVariants(schemaProfile).ToDictionary(
+                v => v.Name,
                 v => new BatchAgentSpec(
                     "DocumentReconcile", DocumentAnalysisWorkflow.AgentId + "-reconcile", _instructions,
-                    client.CreateChatOptions(ReconcileAliasContracts.SchemaOf(v), ReconcileAliasContracts.SchemaName, temperature: 0.1f, phase: AiPhase.Analysis),
-                    AiPhase.Analysis, profile.Fingerprint));
+                    client.CreateChatOptions(v.Schema, ReconcileAliasContracts.SchemaName, temperature: 0.1f, phase: AiPhase.Analysis),
+                    AiPhase.Analysis, profile.Fingerprint),
+                StringComparer.Ordinal);
         }
 
         var policyHash = rootPolicyHash is not null && System.Text.RegularExpressions.Regex.IsMatch(rootPolicyHash, "^[0-9a-f]{64}$") ? rootPolicyHash : DocumentAnalysisWorkflow.Sha("document-reconcile-policy-v1");
@@ -177,9 +179,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         {
             plan["adapter"] = ReconcileAliasContracts.SchemaVersion;
             plan["catalog"] = alias.RunCatalog.RunIndependentHash;
-            if (alias.SchemaByBatch)
+            if (alias.SchemaProfile is { } frozenProfile)
             {
-                plan["reconcileSchemaProfile"] = ReconcileAliasContracts.SchemaProfileByBatch;   // solo v8: v4–v7 conservano il piano di sempre
+                plan["reconcileSchemaProfile"] = frozenProfile;   // solo v8/v9: v4–v7 conservano il piano di sempre
             }
         }
 
@@ -221,7 +223,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     public BatchAgentSpec Agent { get; }
 
     /// <summary>
-    /// Agente del batch. v8 (profilo per batch, output strutturato): l'agente della variante di stadio e vista, registrata da <see cref="ComposeAsync"/> nello stesso esecutore subito prima dell'invio
+    /// Agente del batch. v8/v9 (profilo per batch, output strutturato): l'agente della variante di stadio e vista, registrata da <see cref="ComposeAsync"/> nello stesso esecutore subito prima dell'invio
     /// (e da <see cref="PrepareAsync"/> per la misura). Variante non nota ⇒ <c>checkpoint_incompatible</c>: mai un ripiego silenzioso sullo schema completo.
     /// </summary>
     public BatchAgentSpec AgentFor(BatchRef batch)
@@ -241,10 +243,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             : throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, $"Schema del batch {batch.BatchId} non determinato: il batch non è stato composto dal piano.");
     }
 
-    /// <summary>Variante dello schema del batch (v8): stessa funzione per la misura dell'inputHash, per l'agente dell'invio e per i test di coerenza.</summary>
-    internal ReconcileSchemaVariant? SchemaVariantOf(string batchId) => _variants.TryGetValue(batchId, out var variant) ? variant : null;
-
-    /// <summary>Schema JSON realmente inviato per la richiesta: la variante di stadio e vista in v8, altrimenti lo schema unico del piano (o nessuno senza output strutturato).</summary>
+    /// <summary>Schema JSON realmente inviato per la richiesta: la variante di stadio e vista del profilo congelato (v8/v9), altrimenti lo schema unico del piano (o nessuno senza output strutturato).</summary>
     private string? SchemaJsonFor(ReconcileBatchRequest request)
     {
         if (_variantAgents is null)
@@ -252,9 +251,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             return _schemaJson;
         }
 
-        var variant = ReconcileAliasContracts.SchemaVariantOf(request.Batch.Stage, request.View);
-        _variants[request.Batch.BatchId] = variant;
-        return ReconcileAliasContracts.SchemaOf(variant).GetRawText();
+        var (name, schema) = ReconcileAliasContracts.ProfileSchemaFor(_alias!.SchemaProfile!, request.Batch.Stage, request.View);
+        _variants[request.Batch.BatchId] = name;
+        return schema.GetRawText();
     }
 
     private bool IsGapBatch(BatchRef batch) => _gap is not null && _finishedBatches >= 0 && batch.Ordinal == GapOrdinal;
