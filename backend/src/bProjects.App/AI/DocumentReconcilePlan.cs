@@ -20,8 +20,11 @@ namespace bProjects.App.AI;
 /// <c>SchemaByBatch</c> (v8, profilo <see cref="ReconcileAliasContracts.SchemaProfileByBatch"/>): lo schema inviato a ogni batch è la variante di stadio e vista; il Pack misura sempre con lo
 /// <c>Schema</c> completo (composizione dei batch invariata). Le varianti differiscono di pochi token (la variante Candidate è il completo più <c>"maxItems":0</c>), coperti dalla riserva di
 /// intestazione del Pack; la rimisura del payload realmente inviato resta esatta e fail-closed (<c>document_limit_exceeded</c>). Falso per v4–v7: un solo schema, storico e immutato.
+/// <c>PromptVersion</c>: prompt congelato della gerarchia (<see cref="ReconcileAliasContracts.PromptVersion"/> per v4–v7, <see cref="ReconcileAliasContracts.PromptVersionV4"/> per v8); entra nel
+/// <c>configHash</c> con lo SHA delle istruzioni e nella versione del prompt di ogni batch derivato. Obbligatorio: nessun valore predefinito che possa far ricadere una v8 sul v3.
 /// </remarks>
-internal sealed record ReconcileAliasMode(AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, bool SchemaByBatch = false);
+internal sealed record ReconcileAliasMode(
+    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, bool SchemaByBatch = false);
 
 /// <summary>
 /// Stadio Gap dedicato della definizione v6 (D1, AI §13.7): metadati documentali dello snapshot (mappa laterale) per il formato <c>gap-stage-message-1</c>. Presente solo se l'analisi ha almeno un Gap
@@ -59,6 +62,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private readonly DocumentPreflight _preflight;
     private readonly DocumentRuntimeProfile _profile;
     private readonly string _instructions;
+    private readonly string _promptVersion;
     private readonly IServiceScopeFactory _scopes;
     private readonly string _manifestIdentity;
     private readonly ReconciliationContext _context;
@@ -108,11 +112,12 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 AiPhase.Analysis, profile.Fingerprint);
         }
 
-        _instructions = alias is null ? ReconciliationHierarchy.Instructions : ReconcileAliasContracts.Instructions;
+        _instructions = alias is null ? ReconciliationHierarchy.Instructions : ReconcileAliasContracts.InstructionsFor(alias.PromptVersion);
         _schemaVersion = alias is null ? SchemaVersion : ReconcileAliasContracts.SchemaVersion;
         _schemaJson = alias is { Structured: true } ? alias.Schema.GetRawText() : null;
         var definition = alias?.Definition ?? DocumentAnalysisWorkflow.DefinitionVersion;
-        var promptVersion = alias is null ? ReconciliationHierarchy.PromptVersion : ReconcileAliasContracts.PromptVersion;
+        var promptVersion = alias is null ? ReconciliationHierarchy.PromptVersion : alias.PromptVersion;
+        _promptVersion = promptVersion;
         _evidence = input.Evidence.ToDictionary(e => e.EvidenceId);
 
         // Tetti della policy congelata del root (AI §4.5): senza limiti espliciti restano i default del motore.
@@ -120,8 +125,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _limits = limits is null ? new ReconciliationLimits() : new ReconciliationLimits(MaxCandidates: limits.MaxCandidatesPerRun, MaxDerivedBytes: limits.MaxDerivedBytes);
 
         var settings = options.ForPhase(AiPhase.Analysis);
-        // v2 (storico): forma e hash di configurazione invariati; v4 aggiunge soltanto la modalità di output strutturato; v8 aggiunge il profilo degli schemi per batch e gli hash delle sue varianti
-        // (v4–v7 restano byte per byte quelli di sempre).
+        // v2 (storico): forma e hash di configurazione invariati; v4 aggiunge soltanto la modalità di output strutturato; v8 aggiunge il profilo degli schemi per batch e gli hash delle sue varianti,
+        // e i suoi `prompt`/`instructions` sono quelli di document-reconcile-v4 (v4–v7 restano byte per byte quelli di sempre, prompt v3).
         var configHash = DocumentAnalysisWorkflow.Sha(alias switch
         {
             null => JsonSerializer.Serialize(new
@@ -1112,7 +1117,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private ReconcileBatchRequest Placeholder(IReadOnlyList<CatalogEntry> entries, IReadOnlyList<CatalogNode> nodes) => new(
         new DerivedBatchInput(
             new string('0', 64), _alias is null ? NodeStage : entries.Count > 0 ? (_state.CandidatePhase ? "expand" : "leaf") : "reduce", null, null, null, 0, [], "{}", null, "measured",
-            new string('0', 64), _schemaVersion, _alias is null ? ReconciliationHierarchy.PromptVersion : ReconcileAliasContracts.PromptVersion),
+            new string('0', 64), _schemaVersion, _promptVersion),
         ReconcileView.A, 0, entries, nodes);
 
     /// <summary>Messaggio alias del batch (§11): soli alias, nessun UUID né hash. Stessa funzione per il Pack, per la misura finale e per l'invio.</summary>

@@ -234,12 +234,13 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     }
 
     /// <summary>
-    /// Versioni congelate di una nuova richiesta di Analizza v8: TUTTE le chiavi della v7 (invariate, <see cref="AnalysisPromptVersionsV7"/>) più <c>reconcileSchemaProfile</c>
-    /// (<see cref="ReconcileAliasContracts.SchemaProfileByBatch"/>): schemi della gerarchia scelti per stadio e vista del batch.
+    /// Versioni congelate di una nuova richiesta di Analizza v8: le chiavi della v7 (<see cref="AnalysisPromptVersionsV7"/>) con <c>reconcile</c> = <see cref="ReconcileAliasContracts.PromptVersionV4"/>
+    /// al posto del v3, più <c>reconcileSchemaProfile</c> (<see cref="ReconcileAliasContracts.SchemaProfileByBatch"/>): schemi della gerarchia scelti per stadio e vista del batch. Il freeze v7 non cambia.
     /// </summary>
     public static string AnalysisPromptVersionsV8(bProjects.App.Retrieval.RetrievalOptions retrieval)
     {
         var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(AnalysisPromptVersionsV7(retrieval))!;
+        keys["reconcile"] = ReconcileAliasContracts.PromptVersionV4;
         keys[DocumentAnalysisWorkflow.ReconcileSchemaProfileKey] = ReconcileAliasContracts.SchemaProfileByBatch;
         return JsonSerializer.Serialize(keys);
     }

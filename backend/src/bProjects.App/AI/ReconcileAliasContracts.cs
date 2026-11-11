@@ -160,10 +160,25 @@ public static class ReconcileAliasContracts
     public const string PromptVersion = "document-reconcile-v3";
     public const string CatalogVersion = "reconcile-alias-catalog-1";
 
+    /// <summary>
+    /// Prompt della gerarchia della definizione v8: il v3 con l'obbligo di copertura tramite <c>items</c> ristretto alle foglie della vista A e il compito delle foglie della vista B
+    /// (solo candidati, nessun collegamento inventato). Le definizioni v4–v7 restano sul v3 (<see cref="PromptVersion"/>).
+    /// </summary>
+    public const string PromptVersionV4 = "document-reconcile-v4";
+
     private static readonly Lazy<string> Prompt = new(() => LoadPrompt(PromptVersion + ".md"));
+    private static readonly Lazy<string> PromptV4 = new(() => LoadPrompt(PromptVersionV4 + ".md"));
 
     /// <summary>Istruzioni di sistema dei batch alias (AI/Prompts/document-reconcile-v3.md, risorsa incorporata); il v2 resta congelato.</summary>
     public static string Instructions => Prompt.Value;
+
+    /// <summary>Istruzioni di una versione congelata del prompt della gerarchia con alias: v3 (v4–v7) o v4 (v8). Versione ignota ⇒ eccezione, mai un ripiego su un altro prompt.</summary>
+    public static string InstructionsFor(string promptVersion) => promptVersion switch
+    {
+        PromptVersion => Prompt.Value,
+        PromptVersionV4 => PromptV4.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(promptVersion), promptVersion, "Prompt della riconciliazione con alias non supportato."),
+    };
 
     /// <summary>Stesse regole del codec dell'analisi con alias: extra, duplicati, null non dichiarati, enum fuori dal set e numeri fra virgolette sono <see cref="JsonException"/>.</summary>
     public static AiReconcileOutput Decode(string json)
