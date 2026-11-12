@@ -362,6 +362,14 @@ public sealed class DocumentAnalysisWorkflow(
     // La v8 resta storica e immutata (usata dal Run 3, manifesto T040 v4).
     public const string DefinitionVersionV9 = "project-analysis-documents-v9";
 
+    // v10 (003, T040 dopo il Run 4 / chiamate 034–036: enumerazione quadratica dei candidati in un'espansione, `finish=length`): come la v9 (stesse chiavi, stesso single-call, stessi stadi Gap e recupero, stesso DTO
+    // reconcile-alias-1) con prompt `document-reconcile-v5`, profilo degli schemi `reconcile-alias-schema-by-batch-3` (solo l'espansione riceve `candidates.maxItems = 16`) e la chiave `reconcileExpansion`
+    // (algoritmo `expansion-grid-1`: membership esplicita `membership-1`, griglia deterministica di blocchi, saturazione fail-closed e precheck del budget). La v9 resta storica e immutata (Run 4, manifesto T040 v5).
+    public const string DefinitionVersionV10 = "project-analysis-documents-v10";
+
+    /// <summary>Chiave di freeze dell'algoritmo di espansione (solo v10); la sua presenza in ogni altra definizione è una combinazione mista non riconosciuta.</summary>
+    public const string ReconcileExpansionKey = "reconcileExpansion";
+
     /// <summary>Chiave di freeze del profilo degli schemi della gerarchia (solo v8 e v9, ciascuna con il proprio valore); la sua presenza in una v6/v7 è una combinazione mista non riconosciuta.</summary>
     public const string ReconcileSchemaProfileKey = "reconcileSchemaProfile";
 
@@ -445,18 +453,24 @@ public sealed class DocumentAnalysisWorkflow(
         // D2 (AI §13.8): la chiave `analysisMessageFormat` esiste solo nella definizione v6 e solo con un valore supportato; in v2-v5 (o con valore ignoto) la combinazione è mista ⇒ workflow_incompatible,
         // mai reinterpretata. L'ASSENZA della chiave in una v6 è il formato 1 storico (richieste v6 congelate prima di D2): resta valida e invariata.
         // 003 T028: le chiavi `retrieval*` esistono solo nelle definizioni v7, v8 e v9; in ogni altra definizione la combinazione è mista ⇒ workflow_incompatible, mai reinterpretata.
-        if (contract is not (7 or 8 or 9) && RetrievalStage.Inspect(run.PromptVersions).AnyKey)
+        if (contract is not (7 or 8 or 9 or 10) && RetrievalStage.Inspect(run.PromptVersions).AnyKey)
         {
             return null;
         }
 
-        // La chiave `reconcileSchemaProfile` esiste solo nella v8 e nella v9 (ciascuna con il proprio valore, verificato da ContractOfCore); altrove la combinazione è mista.
-        if (contract is not (8 or 9) && HasKey(run, ReconcileSchemaProfileKey))
+        // La chiave `reconcileSchemaProfile` esiste solo nella v8, v9 e v10 (ciascuna con il proprio valore, verificato da ContractOfCore); altrove la combinazione è mista.
+        if (contract is not (8 or 9 or 10) && HasKey(run, ReconcileSchemaProfileKey))
         {
             return null;
         }
 
-        return HasKey(run, AnalysisMessageFormatKey) && (contract is not (6 or 7 or 8 or 9) || MessageFormatOf(run) == MessageFormatState.Unsupported) ? null : contract;
+        // La chiave `reconcileExpansion` esiste solo nella v10 (valore verificato da ContractOfCore): su ogni altra definizione la combinazione è mista ⇒ workflow_incompatible, mai reinterpretata.
+        if (contract is not 10 && HasKey(run, ReconcileExpansionKey))
+        {
+            return null;
+        }
+
+        return HasKey(run, AnalysisMessageFormatKey) && (contract is not (6 or 7 or 8 or 9 or 10) || MessageFormatOf(run) == MessageFormatState.Unsupported) ? null : contract;
     }
 
     /// <summary>Formato del messaggio single-call congelato nel run (D2): assente = 1 (storico), <c>message-format-2</c> = 2, altro valore = non supportato.</summary>
@@ -549,6 +563,14 @@ public sealed class DocumentAnalysisWorkflow(
             return 9;
         }
 
+        // v10: le chiavi della v9 con prompt `document-reconcile-v5`, profilo `reconcile-alias-schema-by-batch-3` e `reconcileExpansion = expansion-grid-1`. Un valore diverso o mancante (anche il prompt v4, il
+        // profilo -2 o l'assenza della chiave) ⇒ workflow_incompatible: nessuna reinterpretazione fra v9 e v10.
+        if (run.WorkflowDefinitionVersion == DefinitionVersionV10 && StagedKeysMatch(run, ReconcileAliasContracts.PromptVersionV5) && RetrievalStage.Inspect(run.PromptVersions).AllSupported
+            && run.PromptVersionMatches(ReconcileSchemaProfileKey, ReconcileAliasContracts.SchemaProfileByBatchV3) && run.PromptVersionMatches(ReconcileExpansionKey, ReconcileAliasContracts.ExpansionAlgorithm))
+        {
+            return 10;
+        }
+
         // v4: le versioni del percorso alias più quelle della riconciliazione gerarchica con alias (prompt, schema AI, algoritmo del motore, catalogo del batch).
         return run.WorkflowDefinitionVersion == DefinitionVersionV4 && alias && HierarchyMatches(run) ? 4 : null;
     }
@@ -593,13 +615,18 @@ public sealed class DocumentAnalysisWorkflow(
 
     /// <summary>Prompt della gerarchia con alias della definizione congelata: document-reconcile-v4 per v8 e v9, document-reconcile-v3 per v4–v7 (storici, invariati).</summary>
     public static string ReconcilePromptOf(string definition) =>
-        definition is DefinitionVersionV8 or DefinitionVersionV9 ? ReconcileAliasContracts.PromptVersionV4 : ReconcileAliasContracts.PromptVersion;
+        definition is DefinitionVersionV10 ? ReconcileAliasContracts.PromptVersionV5
+        : definition is DefinitionVersionV8 or DefinitionVersionV9 ? ReconcileAliasContracts.PromptVersionV4 : ReconcileAliasContracts.PromptVersion;
+
+    /// <summary>Algoritmo di espansione della definizione congelata: <c>expansion-grid-1</c> per la v10, nessuno (espansione storica) per v4–v9.</summary>
+    public static string? ReconcileExpansionOf(string definition) => definition == DefinitionVersionV10 ? ReconcileAliasContracts.ExpansionAlgorithm : null;
 
     /// <summary>Profilo degli schemi per batch della definizione congelata: <c>-1</c> per la v8, <c>-2</c> per la v9, nessuno (schema unico storico) per v4–v7.</summary>
     public static string? ReconcileSchemaProfileOf(string definition) => definition switch
     {
         DefinitionVersionV8 => ReconcileAliasContracts.SchemaProfileByBatch,
         DefinitionVersionV9 => ReconcileAliasContracts.SchemaProfileByBatchV2,
+        DefinitionVersionV10 => ReconcileAliasContracts.SchemaProfileByBatchV3,
         _ => null,
     };
 
@@ -648,7 +675,7 @@ public sealed class DocumentAnalysisWorkflow(
 
         try
         {
-            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, contract is 6 or 7 or 8 or 9 && MessageFormatOf(run) == MessageFormatState.V2 ? 2 : 1, ct) : RunGraphAsync(db, claim, limits, ct));
+            await (contract >= 3 ? RunAliasGraphAsync(db, claim, contract, limits, contract >= 5 ? GapPromptOf(run) : PromptVersionV3, contract >= 5 && OutputPolicyOf(run) == OutputPolicyState.Current, contract is 6 or 7 or 8 or 9 or 10 && MessageFormatOf(run) == MessageFormatState.V2 ? 2 : 1, ct) : RunGraphAsync(db, claim, limits, ct));
         }
         catch (Exception ex) when (Find<DocumentWorkException>(ex) is { } work)
         {
@@ -677,8 +704,8 @@ public sealed class DocumentAnalysisWorkflow(
         definitionVersion switch
         {
             DefinitionVersionV3 or DefinitionVersionV4 => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchema().GetRawText(), factory.Preflight),
-            DefinitionVersionV5 or DefinitionVersionV6 or DefinitionVersionV7 or DefinitionVersionV8 or DefinitionVersionV9
-                => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136)–v9: schema del DTO alias-2
+            DefinitionVersionV5 or DefinitionVersionV6 or DefinitionVersionV7 or DefinitionVersionV8 or DefinitionVersionV9 or DefinitionVersionV10
+                => new(AiPhase.Analysis, null, AnalysisAliasContracts.JsonSchemaV2().GetRawText(), factory.Preflight),   // v5 (T136)–v10: schema del DTO alias-2
             _ => BuildRegimePayload(),
         };
 
@@ -737,7 +764,7 @@ public sealed class DocumentAnalysisWorkflow(
         // v8/v9: schemi per stadio e vista del profilo congelato e prompt document-reconcile-v4 (verificati da ContractOf sulle chiavi congelate); v4–v7: schema unico e prompt v3, invariati.
         var alias = aliasCatalog is null ? null : new ReconcileAliasMode(
             aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), definition,
-            PromptVersion: ReconcilePromptOf(definition), SchemaProfile: ReconcileSchemaProfileOf(definition));
+            PromptVersion: ReconcilePromptOf(definition), SchemaProfile: ReconcileSchemaProfileOf(definition), Expansion: ReconcileExpansionOf(definition));
         var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias, gapStage);
         var maxCalls = alias is null ? documents.Value.MaxAiCallsPerRun : frozenLimits.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
@@ -805,10 +832,11 @@ public sealed class DocumentAnalysisWorkflow(
                 return;
             }
 
-            if (contract is 6 or 7 or 8 or 9)
+            if (contract is 6 or 7 or 8 or 9 or 10)
             {
                 await RunStagedAsync(
-                    db, claim, input, catalog, limits, structured, contract switch { 9 => DefinitionVersionV9, 8 => DefinitionVersionV8, 7 => DefinitionVersionV7, _ => DefinitionVersionV6 }, ct);
+                    db, claim, input, catalog, limits, structured,
+                    contract switch { 10 => DefinitionVersionV10, 9 => DefinitionVersionV9, 8 => DefinitionVersionV8, 7 => DefinitionVersionV7, _ => DefinitionVersionV6 }, ct);
                 return;
             }
 
@@ -843,7 +871,7 @@ public sealed class DocumentAnalysisWorkflow(
         var store = new DocumentWorkStore(planDb, writer);
         var plan = new DocumentAnalysisAliasPlan(
             claim, input, catalog, messages, instructions, measure, structured, factory, client, schema, scopes,
-            contract switch { 9 => DefinitionVersionV9, 8 => DefinitionVersionV8, 7 => DefinitionVersionV7, 6 => DefinitionVersionV6, 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
+            contract switch { 10 => DefinitionVersionV10, 9 => DefinitionVersionV9, 8 => DefinitionVersionV8, 7 => DefinitionVersionV7, 6 => DefinitionVersionV6, 5 => DefinitionVersionV5, 4 => DefinitionVersionV4, _ => DefinitionVersionV3 }, promptVersion);
         var maxCalls = contract >= 4 ? limits.MaxAiCallsPerRun : documents.Value.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));
         var checkpoints = CheckpointManager.CreateJson(new PostgresCheckpointStore(planDb, writer));
@@ -870,7 +898,7 @@ public sealed class DocumentAnalysisWorkflow(
     {
         var gapCount = catalog.Data.Evidence.Count(e => e.Kind == EvidenceKind.Gap);
         var hierarchyCatalog = AnalysisAliasCatalog.Build(input, SchemaVersionV3);   // identità alias-1 come in v4: il DTO del batch è reconcile-alias-1
-        var retrieval = definition is DefinitionVersionV7 or DefinitionVersionV8 or DefinitionVersionV9;   // v8/v9 = v7 + profilo degli schemi per batch: stesso recupero
+        var retrieval = definition is DefinitionVersionV7 or DefinitionVersionV8 or DefinitionVersionV9 or DefinitionVersionV10;   // v8/v9/v10 = v7 + profilo degli schemi per batch: stesso recupero
         if (gapCount == 0)
         {
             await RunReconcileGraphAsync(db, claim, input, limits, ct, hierarchyCatalog, definition);

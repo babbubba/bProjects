@@ -114,10 +114,12 @@ public sealed class ReconcileDefinitionV9Tests
     }
 
     [Fact]
-    public void The_new_documentary_analysis_freeze_is_v9_with_retrieval_and_v6_without()
+    public void The_v9_freeze_stays_available_for_historical_runs_while_new_documentary_analyses_freeze_v10_with_retrieval_and_v6_without()
     {
-        Assert.Equal((V9, SourceSnapshotStore.AnalysisPromptVersionsV9(Retrieval)), SourceSnapshotStore.DocumentaryAnalysisFreeze(true, Retrieval));
+        // Dalla definizione v10 (003, dopo il Run 4) le NUOVE richieste con recupero congelano la v10 (ReconcileDefinitionV10Tests); il freeze v9 resta costruibile e riconosciuto per i run già congelati.
+        Assert.Equal(("project-analysis-documents-v10", SourceSnapshotStore.AnalysisPromptVersionsV10(Retrieval)), SourceSnapshotStore.DocumentaryAnalysisFreeze(true, Retrieval));
         Assert.Equal((SourceSnapshotStore.AnalysisDefinitionV6, SourceSnapshotStore.AnalysisPromptVersionsV6()), SourceSnapshotStore.DocumentaryAnalysisFreeze(false, Retrieval));
+        Assert.Equal(9, DocumentAnalysisWorkflow.ContractOf(Run(V9Keys(), V9)));
         Assert.True(bProjects.App.Evidence.DocumentCoverage.AppliesStructuralRepetition(V9));
     }
 }

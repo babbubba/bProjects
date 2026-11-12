@@ -129,7 +129,7 @@ public sealed class ReconcileSchemaProfileV9Tests
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.BatchSchemaOf("leaf", ReconcileView.Cross));
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.BatchSchemaOf("Leaf", ReconcileView.A));
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.BatchSchemaOf("", ReconcileView.A));
-        Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.ProfileSchemaFor("reconcile-alias-schema-by-batch-3", "leaf", ReconcileView.A));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.ProfileSchemaFor("reconcile-alias-schema-by-batch-4", "leaf", ReconcileView.A));   // il -3 è il profilo v10 (ReconcileSchemaProfileV10Tests)
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.ProfileVariants(""));
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.ProfileHashes("reconcile-alias-schema-by-batch-0"));
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.SchemaOf((ReconcileBatchSchema)99));
@@ -388,7 +388,8 @@ public sealed class ReconcileSchemaProfileV9Tests
     {
         // Espansione e confronto passano dallo stesso InvokeAsync con buildsNode=false (descriptor obbligatoriamente null), come il cross; la variante v9 lo dichiara con type null.
         var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "bProjects.App", "AI", "ReconciliationCandidates.cs"));
-        Assert.Contains("ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct)", source, StringComparison.Ordinal);
+        // Dalla v10 la stessa chiamata riceve in coda la membership opzionale (`groups`, null per v4–v9): resto invariato.
+        Assert.Contains("ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct, groups)", source, StringComparison.Ordinal);
         Assert.All(new[] { ReconcileBatchSchema.Expand, ReconcileBatchSchema.Compare }, v =>
             Assert.NotEmpty(ReconcileSchemaSubset.Violations(SchemaOf(v), Mutated(v, o => o["descriptor"] = "gruppo").ToJsonString())));
     }

@@ -279,19 +279,21 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     // ================================================================ freeze e percorso felice
 
     [Fact]
-    public async Task The_real_analyze_endpoint_freezes_v9_when_retrieval_is_enabled()
+    public async Task The_real_analyze_endpoint_freezes_v10_when_retrieval_is_enabled()
     {
-        // Correzione T040 dopo il Run 3 (decisione approvata): le NUOVE richieste con recupero congelano la v9 = v8 con `reconcileSchemaProfile = -2`; i run già congelati v7 e v8 restano tali.
+        // Dopo il T040 Run 4 (decisione approvata): le NUOVE richieste con recupero congelano la v10 tramite il normale percorso del prodotto = v9 con prompt document-reconcile-v5, profilo -3 e
+        // `reconcileExpansion = expansion-grid-1`; i run già congelati v7, v8 e v9 restano tali.
         var s = await ArrangeAsync(fillers: 1, fillerWords: 5);
 
-        Assert.Equal("project-analysis-documents-v9", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v10", await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", s.Run)));
         using var scope = App.Services.CreateScope();
         var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().ProcessingRuns.FindAsync([s.Run], Ct);
-        Assert.Equal(9, DocumentAnalysisWorkflow.ContractOf(row!));
+        Assert.Equal(10, DocumentAnalysisWorkflow.ContractOf(row!));
         var keys = JsonDocument.Parse(row!.PromptVersions!).RootElement;
         Assert.Equal(RetrievalPolicy.Version1, keys.GetProperty("retrievalPolicy").GetString());
-        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatchV2, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey).GetString());
-        Assert.Equal(ReconcileAliasContracts.PromptVersionV4, keys.GetProperty("reconcile").GetString());   // la v9 conserva il prompt della gerarchia document-reconcile-v4
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatchV3, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey).GetString());
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV5, keys.GetProperty("reconcile").GetString());
+        Assert.Equal(ReconcileAliasContracts.ExpansionAlgorithm, keys.GetProperty(DocumentAnalysisWorkflow.ReconcileExpansionKey).GetString());
     }
 
     [Fact]
@@ -316,7 +318,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         var hierarchy = model.Requests.Count - 1;
         Assert.Equal(hierarchy, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'retrieval'", ("r", s.Run)));
         Assert.Equal(hierarchy + 1, await Scalar<int>("SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r AND \"Stage\" = 'gap'", ("r", s.Run)));
-        Assert.Equal("project-analysis-documents-v9", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal("project-analysis-documents-v10", await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
 
         // Registro congelato nel WorkOutput: pacchetto consegnabile, ordine, politica e hash.
         var registry = await RegistryOf(s.Run);
@@ -556,10 +558,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     public async Task Each_hierarchy_batch_receives_the_schema_variant_of_its_frozen_profile_and_the_profile_is_frozen_in_the_manifest(bool v8)
     {
         var s = await ArrangeAsync();
-        if (v8)
-        {
-            await FreezeV8(s.Run);
-        }
+        await (v8 ? FreezeV8(s.Run) : FreezeV9(s.Run));   // «v8: false» = la v9 storica congelata esplicitamente (il default del prodotto è ora la v10)
 
         var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
 
@@ -609,6 +608,11 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         AssertHierarchyPrompt(model, ReconcileAliasContracts.PromptVersionV4);
         Assert.Equal(ReconcileAliasContracts.PromptVersionV4, await HierarchyPromptVersions(s.Run));
     }
+
+    /// <summary>Congela esplicitamente il run come v9 (come quelli del Run 4 di T040): dalla v10 le nuove richieste congelano la v10, le analisi v9 già congelate restano v9.</summary>
+    private Task FreezeV9(Guid run) => Execute(
+        "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = CAST(@p AS jsonb) WHERE \"Id\" = @r",
+        ("d", DocumentAnalysisWorkflow.DefinitionVersionV9), ("p", SourceSnapshotStore.AnalysisPromptVersionsV9(new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 })), ("r", run));
 
     /// <summary>Congela esplicitamente il run come v8 (come quelli del Run 3 di T040): indipendente dalla definizione congelata per le nuove richieste.</summary>
     private Task FreezeV8(Guid run) => Execute(
@@ -684,10 +688,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     {
         // La grammatica del provider è un aiuto, non una garanzia: il modello finto ignora lo schema e risponde come la chiamata 026 del Run 2 (un item per voce nella foglia B, nessun candidato).
         var s = await ArrangeAsync();
-        if (v8)
-        {
-            await FreezeV8(s.Run);
-        }
+        await (v8 ? FreezeV8(s.Run) : FreezeV9(s.Run));   // «v8: false» = la v9 storica congelata esplicitamente (il default del prodotto è ora la v10)
 
         string? rejected = null;
         var model = new DocumentChatWorkflowTests.FakeChatModel
@@ -736,10 +737,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         // Run 3 di T040, chiamata 026: items vuoti, candidati DependsOn/Inferred fra le evidenze del batch, descriptor null, finish=stop. Il modello finto ignora la grammatica (come può fare il
         // provider): il validatore, invariato, rifiuta l'output; la v9 invia in più una grammatica che non ammette quel null.
         var s = await ArrangeAsync();
-        if (v8)
-        {
-            await FreezeV8(s.Run);
-        }
+        await (v8 ? FreezeV8(s.Run) : FreezeV9(s.Run));   // «v8: false» = la v9 storica congelata esplicitamente (il default del prodotto è ora la v10)
 
         string? rejected = null;
         var model = new DocumentChatWorkflowTests.FakeChatModel
@@ -789,10 +787,7 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
     public async Task A_crash_on_a_leaf_B_batch_resumes_with_the_same_input_hash_and_schema_and_never_resends_committed_batches(bool v8)
     {
         var s = await ArrangeAsync();
-        if (v8)
-        {
-            await FreezeV8(s.Run);
-        }
+        await (v8 ? FreezeV8(s.Run) : FreezeV9(s.Run));   // «v8: false» = la v9 storica congelata esplicitamente (il default del prodotto è ora la v10)
 
         string? crashed = null;
         var crash = new DocumentChatWorkflowTests.FakeChatModel
@@ -829,6 +824,110 @@ public sealed class RetrievalGapFlowTests : ReconcileRig, IDisposable
         Assert.DoesNotContain(model.Requests, r => answered.Contains(r.AllText));                      // nessun batch Committed reinviato
         Assert.Equal(0, await Count(
             "SELECT count(*) FROM (SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r GROUP BY \"Ordinal\" HAVING count(*) > 1) d", ("r", s.Run)));   // nessuna riga orfana per ordinale
+    }
+
+    // ================================================================ v10: espansione con membership, profilo -3, prompt v5 (T040 dopo il Run 4)
+
+    [Fact]
+    public async Task A_v10_run_sends_each_batch_with_the_profile_3_schema_and_the_v5_prompt_and_every_expansion_declares_the_membership()
+    {
+        var s = await ArrangeAsync();   // il normale percorso del prodotto: le nuove richieste con recupero congelano la v10
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        var expansions = 0;
+        foreach (var request in model.Requests.Where(r => !DocumentGapStageWorkflowTests.IsStage(r)))
+        {
+            var p = DocumentReconcileAliasWorkflowTests.ParseAlias(request.AllText);
+            var (_, schema) = ReconcileAliasContracts.ProfileSchemaFor(ReconcileAliasContracts.SchemaProfileByBatchV3, p.Stage, Enum.Parse<ReconcileView>(p.View));
+            Assert.Equal(Canon(schema.GetRawText()), Canon(request.ResponseSchema!));          // lo schema REALMENTE inviato è la variante del profilo -3
+            var properties = JsonDocument.Parse(request.ResponseSchema!).RootElement.GetProperty("properties");
+            Assert.Equal(p.Stage == "expand", properties.GetProperty("candidates").TryGetProperty("maxItems", out var cap) && cap.GetInt32() == 16);
+            Assert.Equal(p.Stage == "expand", request.AllText.Contains("gruppo=", StringComparison.Ordinal));   // membership solo nelle espansioni
+            if (p.Stage == "expand")
+            {
+                expansions++;
+                Assert.Contains("Ogni voce indica il gruppo di appartenenza", request.AllText, StringComparison.Ordinal);
+                Assert.DoesNotContain("Risolvilo con le voci integrali", request.AllText, StringComparison.Ordinal);
+            }
+        }
+
+        // Il corpus di questo rig non genera candidati di gruppo: le espansioni con membership sono provate nel rig «sharedKey» (DocumentReconcileAliasWorkflowTests, v10).
+        Assert.Equal(0, expansions);
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV10, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatchV3, await ManifestProfile(s.Run));
+        var configHash = await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run));
+        Assert.True(PinnedV10ReconcileConfigHash == configHash, configHash);   // la v10 è un'identità propria: nessun riuso di checkpoint o output con v8 e v9
+        Assert.NotEqual(PinnedV9ReconcileConfigHash, configHash);
+        AssertHierarchyPrompt(model, ReconcileAliasContracts.PromptVersionV5);
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV5, await HierarchyPromptVersions(s.Run));
+    }
+
+    // Golden del configHash della gerarchia v10 con la configurazione AI del rig: prompt v5 e SHA delle istruzioni, DTO, catalogo, profilo -3 e hash delle sue varianti, blocco `expansion`, modello, output, thinking e budget.
+    private const string PinnedV10ReconcileConfigHash = "4db97fba68acb0f66d79026ae4912d564ef3dc7b8bdec2f2340b928c01255c4d";
+
+    // Golden del configHash della gerarchia v9 con la configurazione del rig, fissato dal prodotto del commit 184bed5 (baseline del Run 4, prima della v10): un refactoring che cambiasse un solo byte della v9 lo romperebbe.
+    private const string PinnedV9ReconcileConfigHash = "3712e94711d46b6c57993ccc9c50b87ea31648e19a100c2bbe0453f87da2ead5";
+
+    [Fact]
+    public async Task A_v9_run_keeps_its_pinned_reconcile_config_hash_and_manifest_plan_profile()
+    {
+        var s = await ArrangeAsync();
+        await FreezeV9(s.Run);
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+
+        var result = await RunAsync(s.Claim, model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        var configHash = await Scalar<string>("SELECT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run));
+        Assert.True(PinnedV9ReconcileConfigHash == configHash, configHash);
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV9, await Scalar<string>("SELECT \"DefinitionVersion\" FROM \"WorkManifests\" WHERE \"OwnerId\" = @r", ("r", s.Run)));
+        Assert.Equal(ReconcileAliasContracts.SchemaProfileByBatchV2, await ManifestProfile(s.Run));
+        Assert.DoesNotContain(model.Requests, r => !DocumentGapStageWorkflowTests.IsStage(r) && r.AllText.Contains("gruppo=", StringComparison.Ordinal));   // nessuna membership nelle definizioni storiche
+        AssertHierarchyPrompt(model, ReconcileAliasContracts.PromptVersionV4);
+    }
+
+    [Fact]
+    public async Task A_crash_on_a_leaf_B_batch_resumes_a_v10_run_with_the_same_input_hash_schema_and_prompt_v5_and_never_resends_committed_batches()
+    {
+        var s = await ArrangeAsync();   // v10 dal normale percorso del prodotto
+
+        string? crashed = null;
+        var crash = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            Responder = r =>
+            {
+                if (!DocumentGapStageWorkflowTests.IsStage(r) && DocumentReconcileAliasWorkflowTests.ParseAlias(r.AllText) is { Stage: "leaf", View: "B" } && crashed is null)
+                {
+                    crashed = r.AllText;
+                    throw new InvalidOperationException("crash simulato");
+                }
+
+                return Respond(r);
+            },
+        };
+        await Record.ExceptionAsync(() => RunAsync(s.Claim, crash));
+        Assert.NotNull(crashed);
+        var answered = crash.Requests.Where(r => r.AllText != crashed).Select(r => r.AllText).ToHashSet(StringComparer.Ordinal);
+        Assert.Equal(answered.Count, await Outputs(s.Run, ReconcileAliasContracts.SchemaVersion));
+
+        await Execute("UPDATE \"ProcessingRuns\" SET \"Status\" = 'Running', \"ErrorCode\" = NULL, \"ErrorMessage\" = NULL, \"LeaseOwner\" = 'owner-2', \"FencingToken\" = 2, \"AttemptCount\" = 2, \"LeaseUntil\" = now() + interval '10 minutes' WHERE \"Id\" = @r", ("r", s.Run));
+        var model = new DocumentChatWorkflowTests.FakeChatModel { Responder = Respond };
+        var resumed = await RunAsync(new AnalysisRunClaim(s.Run, "owner-2", 2, 2), model);
+
+        var row = await RunRow(s.Run);
+        Assert.True(resumed.Status == ProcessingRunStatus.Completed, $"{row.Code}: {row.Message}");
+        Assert.Equal(crashed, model.Requests[0].AllText);
+        Assert.Equal(Canon(ReconcileAliasContracts.SchemaOfV3(ReconcileBatchSchema.LeafB).GetRawText()), Canon(model.Requests[0].ResponseSchema!));
+        Assert.Equal(Lf(ReconcileAliasContracts.InstructionsFor(ReconcileAliasContracts.PromptVersionV5)), Lf(model.Requests[0].System));
+        Assert.Equal(ReconcileAliasContracts.PromptVersionV5, await HierarchyPromptVersions(s.Run));
+        Assert.DoesNotContain(model.Requests, r => answered.Contains(r.AllText));
+        Assert.Equal(0, await Count(
+            "SELECT count(*) FROM (SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r GROUP BY \"Ordinal\" HAVING count(*) > 1) d", ("r", s.Run)));
     }
 
     // ================================================================ coverage (T032) e invarianti di assenza (T039, per questa configurazione)

@@ -467,12 +467,19 @@ internal static class RetrievalGapCampaign
             var run = new ProcessingRun { WorkflowDefinitionVersion = definition, MafVersion = Conversation.CurrentMafVersion, PromptVersions = promptVersions };
             var frozenPrompt = keys.GetValueOrDefault("reconcile") ?? string.Empty;
             var profile = keys.GetValueOrDefault(DocumentAnalysisWorkflow.ReconcileSchemaProfileKey);
-            var variants = profile is ReconcileAliasContracts.SchemaProfileByBatch or ReconcileAliasContracts.SchemaProfileByBatchV2
+            var variants = profile is ReconcileAliasContracts.SchemaProfileByBatch or ReconcileAliasContracts.SchemaProfileByBatchV2 or ReconcileAliasContracts.SchemaProfileByBatchV3
                 ? ReconcileAliasContracts.ProfileVariants(profile).ToDictionary(v => v.Name, v => CanonicalJson.HashText(CanonicalJson.Canonicalize(v.Schema.GetRawText())), StringComparer.Ordinal)
                 : new Dictionary<string, string>(StringComparer.Ordinal);
             return new(
                 definition, DocumentAnalysisWorkflow.ContractOf(run), frozenPrompt, DocumentAnalysisWorkflow.ReconcilePromptOf(definition), EmbeddedPromptSha256(frozenPrompt), profile, variants);
         }
+
+        /// <summary>
+        /// Identità della v9 come la congelava il prodotto fino alla v10 (quella del manifesto T040 v5 e del Run 4). Dalla v10 il prodotto congela la v10 tramite il normale percorso: un Run con il manifesto v5
+        /// (definizione v9) è NO-GO finché non esiste un manifesto v6 (non ancora congelato). Questa identità serve solo a provare che il manifesto v5 archiviato resta riproducibile.
+        /// </summary>
+        public static AnalysisIdentity V9(RetrievalOptions? retrieval = null) =>
+            ForFreeze(SourceSnapshotStore.AnalysisDefinitionV9, SourceSnapshotStore.AnalysisPromptVersionsV9(retrieval ?? new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 }));
 
         /// <summary>Identità della v8 come la congelava il prodotto fino alla v9 (quella del manifesto T040 v4 e del Run 3).</summary>
         public static AnalysisIdentity V8(RetrievalOptions? retrieval = null) =>

@@ -735,4 +735,91 @@ public sealed class ReconcileAliasComposerTests
         var asLeafA = Compose(assistant!, LeafA(1, 2));
         Assert.DoesNotContain(asLeafA.Violations, v => v.StartsWith("items: ammessi solo", StringComparison.Ordinal));   // in A la regola di stadio non scatta (restano alias fuori catalogo)
     }
+
+    // ================================================================ v10: membership-1 e tetto dei candidati dell'espansione (003, T040 dopo il Run 4)
+
+    private static ReconcileCandidate GroupFocus() => new()
+    {
+        CandidateId = new string('f', 64), Kind = CandidateKind.Relation, Left = new CandidateEndpoint { Kind = CandidateEndpointKind.Set, Id = new string('5', 64), Hash = new string('6', 64) },
+        Right = new CandidateEndpoint { Kind = CandidateEndpointKind.Evidence, Id = Input.Evidence[2].EvidenceId.ToString("D"), Hash = Input.Evidence[2].ContentHash },
+        ProposedType = ReconcileProposedType.SameRule, Rationale = "shared_literal_key", Basis = EvidenceRelationBasis.Inferred, OriginBatchIds = ["x"], ParentCandidateId = null,
+    };
+
+    private static ReconcileBatchRequest WithGroups(ReconcileBatchRequest request, params (int Entry, ExpansionTag Tag)[] tags) =>
+        request with { Groups = new ExpansionGroups(tags.ToDictionary(t => Input.Evidence[t.Entry - 1].EvidenceId, t => t.Tag)) };
+
+    private static string Message(ReconcileBatchRequest request) =>
+        Assert.IsType<Microsoft.Extensions.AI.ChatMessage>(Assert.Single(ReconcileAliasMessages.Build(RunCatalog, Catalog(request), request, Input.Evidence.ToDictionary(e => e.EvidenceId)))).Text;
+
+    [Fact]
+    public void The_membership_message_declares_the_group_of_each_entry_and_without_groups_the_historical_message_is_byte_identical()
+    {
+        var focus = GroupFocus();
+        var plain = Message(Request("expand", ReconcileView.A, [3, 4, 5], null, [focus]));
+        var grouped = Message(WithGroups(Request("expand", ReconcileView.A, [3, 4, 5], null, [focus]), (3, ExpansionTag.Right), (4, ExpansionTag.Both), (5, ExpansionTag.Left)));
+
+        // Storico (v4–v9): nessuna indicazione di gruppo, riga del candidato invariata.
+        Assert.DoesNotContain("gruppo=", plain, StringComparison.Ordinal);
+        Assert.Contains("Candidato in esame: SameRule fra [N1] e [E3] (motivo: shared_literal_key). Risolvilo con le voci integrali sotto.\n", plain, StringComparison.Ordinal);
+
+        // membership-1 (v10): etichette = alias degli estremi; una voce in entrambi i gruppi li porta entrambi.
+        Assert.Contains("(motivo: shared_literal_key). Ogni voce indica il gruppo di appartenenza (gruppo=...)", grouped, StringComparison.Ordinal);
+        Assert.DoesNotContain("Risolvilo", grouped, StringComparison.Ordinal);
+        Assert.Matches(@"<<<VOCE \[E3\] origine=\w+ tipo=\w+ polarita=\w+ gruppo=E3>>>", grouped);
+        Assert.Matches(@"<<<VOCE \[E4\] origine=\w+ tipo=\w+ polarita=\w+ gruppo=N1,E3>>>", grouped);
+        Assert.Matches(@"<<<VOCE \[E5\] origine=\w+ tipo=\w+ polarita=\w+ gruppo=N1>>>", grouped);
+    }
+
+    [Fact]
+    public void The_membership_message_fails_closed_without_a_group_for_an_entry_or_without_the_candidate()
+    {
+        var focus = GroupFocus();
+        var missing = WithGroups(Request("expand", ReconcileView.A, [3, 5], null, [focus]), (3, ExpansionTag.Right));
+        Assert.Throws<InvalidOperationException>(() => Message(missing));
+
+        var noFocus = WithGroups(Request("expand", ReconcileView.A, [3], null, null), (3, ExpansionTag.Right));
+        Assert.Throws<InvalidOperationException>(() => Message(noFocus));
+    }
+
+    [Fact]
+    public void The_membership_does_not_change_the_catalog_hash_so_historical_checkpoints_are_unaffected()
+    {
+        var focus = GroupFocus();
+        var plain = Request("expand", ReconcileView.A, [3, 4, 5], null, [focus]);
+        var grouped = WithGroups(plain, (3, ExpansionTag.Right), (4, ExpansionTag.Both), (5, ExpansionTag.Left));
+
+        Assert.Equal(Catalog(plain).CatalogHash, Catalog(grouped).CatalogHash);
+    }
+
+    private static string CappedCandidates(int count) => Dto(
+        o => o["candidates"] = new JsonArray([.. Enumerable.Range(1, 5).SelectMany(a => Enumerable.Range(a + 1, 5 - a).Select(b => (a, b)))
+            .SelectMany(p => new[] { "Contradicts", "Confirms", "Qualifies", "Corrects" }.Select(t => (p.a, p.b, t))).Take(count)
+            .Select((c, i) => Cand($"f{i + 1}", $"E{c.a}", $"E{c.b}", c.t))]), noFindings: null, descriptor: null).ToJsonString();
+
+    [Fact]
+    public void An_expansion_with_groups_rejects_more_candidates_than_the_cap_without_truncating_and_accepts_exactly_the_cap()
+    {
+        var focus = GroupFocus();
+        var request = WithGroups(Request("expand", ReconcileView.A, [1, 2, 3, 4, 5], null, [focus]), (1, ExpansionTag.Left), (2, ExpansionTag.Left), (3, ExpansionTag.Right), (4, ExpansionTag.Both), (5, ExpansionTag.Right));
+
+        var atCap = Compose(CappedCandidates(ReconcileAliasContracts.ExpansionCandidateCap), request);
+        var overCap = Compose(CappedCandidates(ReconcileAliasContracts.ExpansionCandidateCap + 1), request);
+
+        Assert.True(atCap.IsValid, string.Join(" | ", atCap.Violations));         // 16 candidati sono validi: il motore li dichiara «saturi», non il compositore
+        Assert.Equal(ReconcileAliasContracts.ExpansionCandidateCap, atCap.Result!.Candidates.Count);
+        Assert.False(overCap.IsValid);
+        Assert.Contains(overCap.Violations, v => v.Contains("oltre il tetto di 16", StringComparison.Ordinal));
+        Assert.Equal(DocumentWorkException.WorkOutputInvalid, overCap.ErrorCode);
+    }
+
+    [Fact]
+    public void Without_groups_there_is_no_cap_so_the_historical_expansions_are_validated_exactly_as_before()
+    {
+        var request = Request("expand", ReconcileView.A, [1, 2, 3, 4, 5], null, [GroupFocus()]);
+
+        var many = Compose(CappedCandidates(ReconcileAliasContracts.ExpansionCandidateCap + 1), request);
+
+        Assert.True(many.IsValid, string.Join(" | ", many.Violations));
+        Assert.Equal(ReconcileAliasContracts.ExpansionCandidateCap + 1, many.Result!.Candidates.Count);
+    }
 }

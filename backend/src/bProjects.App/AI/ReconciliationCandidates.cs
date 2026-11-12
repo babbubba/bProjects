@@ -45,6 +45,19 @@ public sealed record CandidateRun(
 /// <summary>Limiti globali (§4.3): chiamate (retry inclusi, contati dal chiamante con <see cref="CallBudget.Add"/>), candidati, byte derivati e deadline. Prevalgono; mai pruning.</summary>
 public sealed record ReconciliationLimits(int MaxCalls = 512, int MaxCandidates = 100_000, long MaxDerivedBytes = long.MaxValue, DateTimeOffset? Deadline = null);
 
+/// <summary>
+/// Policy dell'espansione con membership (definizione v10, algoritmo <see cref="ReconcileAliasContracts.ExpansionAlgorithm"/>), congelata nel run. <paramref name="CandidateCap"/> è il tetto di candidati per risposta
+/// (protezione, mai selezione); <paramref name="RunCallLimit"/> è il limite PERSISTITO di chiamate del run (<c>MaxAiCallsPerRun</c> dello snapshot dei limiti), <paramref name="ReservedCalls"/> le chiamate
+/// certe che restano dopo la gerarchia (stadio Gap). <c>null</c> = espansione storica (v4–v9), invariata.
+/// </summary>
+public sealed record ExpansionPolicy(int CandidateCap, int RunCallLimit, int ReservedCalls);
+
+/// <summary>
+/// Misura il payload COMPLETO (istruzioni, schema della variante Expand, candidato in esame, membership, voci, fonti, item e relazioni) del messaggio che verrà realmente inviato per un blocco di espansione.
+/// Le voci arrivano già nell'ordine del messaggio. Funzione pura dei dati e del tokenizer: stessa misura al replay.
+/// </summary>
+public delegate ValueTask<UnitMeasure> ExpansionMeasurer(ReconcileCandidate candidate, ReconcileView view, ExpansionGroups groups, IReadOnlyList<CatalogEntry> members, CancellationToken ct);
+
 /// <summary>Contatore condiviso delle chiamate: ogni invio e ogni retry (che il port dichiara con <see cref="Add"/>) conta, un replay/cache hit no.</summary>
 public sealed class CallBudget
 {
@@ -66,6 +79,15 @@ public sealed class ReconciliationCandidates
     public const string EntryDoesNotFit = "entry_does_not_fit";
     public const string LimitReached = "limit_reached";
 
+    /// <summary>v10: almeno un blocco dell'espansione ha raggiunto il tetto di candidati; i figli validi restano conservati, il genitore non dichiara la copertura (mai Expanded né Compared). Prevale su <see cref="CandidateUnresolved"/>.</summary>
+    public const string ExpansionSaturated = "expansion_saturated";
+
+    /// <summary>v10: le chiamate necessarie all'espansione (e ai confronti dei suoi figli, nel caso peggiore) non entrano nel limite persistito del run: nessuna chiamata spesa per questo candidato.</summary>
+    public const string ExpansionBudgetExceeded = "expansion_budget_exceeded";
+
+    /// <summary>v10: la copertura delle coppie rilevanti non è dimostrata (blocco non completo o griglia non verificabile): mai <c>no_candidate_after_full_scan</c>.</summary>
+    public const string ExpansionCoverageIncomplete = "expansion_coverage_incomplete";
+
     private readonly ReconciliationSnapshot snapshot;
     private readonly ReconciliationDirectoryResult directory;
     private readonly HierarchyResult hierarchy;
@@ -85,11 +107,21 @@ public sealed class ReconciliationCandidates
     private readonly List<string> order = [];
     private readonly Dictionary<string, ReconcileView> views = new(StringComparer.Ordinal);
     private int ordinal;
+    private readonly ExpansionPolicy? expansion;
+    private readonly ExpansionMeasurer? expansionMeasurer;
 
     public ReconciliationCandidates(
         ReconciliationSnapshot snapshot, ReconciliationDirectoryResult directory, HierarchyResult hierarchy, ReconciliationContext context, PackMeasurer<CatalogEntry> measurer,
-        ReconcileInvoker invoke, ReconciliationLimits? limits = null, CallBudget? calls = null, TimeProvider? time = null)
+        ReconcileInvoker invoke, ReconciliationLimits? limits = null, CallBudget? calls = null, TimeProvider? time = null, ExpansionPolicy? expansion = null,
+        ExpansionMeasurer? expansionMeasurer = null)
     {
+        if ((expansion is null) != (expansionMeasurer is null))
+        {
+            throw new ArgumentException("La policy dell'espansione e il suo misuratore vanno forniti insieme (o nessuno dei due: espansione storica).");
+        }
+
+        this.expansion = expansion;
+        this.expansionMeasurer = expansionMeasurer;
         this.snapshot = snapshot;
         this.directory = directory;
         this.hierarchy = hierarchy;
@@ -240,8 +272,166 @@ public sealed class ReconciliationCandidates
         return [];
     }
 
+    /// <summary>
+    /// Espansione v10 (algoritmo <c>expansion-grid-1</c>, contratto §4.3 emendato per la sola v10): i membri dei due estremi sono partizionati in una GRIGLIA deterministica di blocchi, calcolata e misurata PRIMA di ogni
+    /// chiamata, in modo che ogni coppia rilevante (due evidenze distinte, una per gruppo; una voce in entrambi i gruppi vale per entrambi) compaia in almeno un blocco. Ogni voce dichiara i gruppi di appartenenza
+    /// (<see cref="ExpansionGroups"/>, calcolati sugli insiemi interi). Un blocco è Completo (risposta valida, sotto il tetto, <c>focus</c> null), Saturo (tetto raggiunto) o Non risolto (<c>focus</c> Unresolved).
+    /// Il genitore diventa <c>Expanded</c>/<c>Compared(no_candidate_after_full_scan)</c> SOLO se tutti i blocchi sono Completi e la copertura è verificata; altrimenti <c>NotProcessed</c> con un motivo
+    /// (precedenza: saturazione, poi non risolto). Nessun pruning, top-k o troncamento: i figli validi di OGNI blocco restano candidati e l'hash di OGNI output entra nella disposition.
+    /// La sequenza dei blocchi è una funzione pura dei membri, dei tag, del misuratore e dei limiti congelati: il replay ricostruisce gli stessi batch (ordinali locali 0..n-1, livello 0, nessun genitore).
+    /// </summary>
+    private async ValueTask<IReadOnlyList<string>> ExpandGridAsync(ReconcileCandidate candidate, CancellationToken ct)
+    {
+        var policy = expansion!;
+        var measure = expansionMeasurer!;
+        var left = ReconciliationExpansionGrid.Ordered(Members(candidate.Left).Distinct());
+        var right = ReconciliationExpansionGrid.Ordered(Members(candidate.Right).Distinct());
+        var tags = ReconciliationExpansionGrid.Tags(left, right);
+        var groups = new ExpansionGroups(tags);
+        var view = ViewOf(candidate);
+        var limitsOfBatch = context.Limits;
+
+        List<CatalogEntry> InMessageOrder(IReadOnlyList<Guid> ids) => [.. ReconciliationExpansionGrid.MessageOrder(ids, tags).Select(g => entries[g])];
+        ValueTask<UnitMeasure> MeasureAsync(IReadOnlyList<Guid> ids) => measure(candidate, view, groups, InMessageOrder(ids), ct);
+
+        // 1) Griglia: bisezione deterministica del prodotto S1 x S2 (si divide il lato con più membri) finché il messaggio COMPLETO di ogni cella entra nel budget. Lo spazio delle coppie si conserva esattamente.
+        string? failure = null;
+        var accepted = new List<ExpansionCell>();
+        async ValueTask FitAsync(ExpansionCell cell)
+        {
+            if (failure is not null)
+            {
+                return;
+            }
+
+            var members = ReconciliationExpansionGrid.UnionOf(cell);
+            if (!ReconciliationExpansionGrid.IsRelevant(members, tags))
+            {
+                accepted.Add(cell);   // nessuna coppia rilevante: accettata intera senza misura e poi scartata da Blocks (non genera alcuna chiamata)
+                return;
+            }
+
+            var measured = await MeasureAsync(members);
+            if (measured.Quality == TokenCountQuality.Unavailable)
+            {
+                // Come il Pack storico: senza tokenizer o calibrazione non si decide nulla (mai «non entra»).
+                throw new RuntimeUnverifiedException("conteggio del payload dell'espansione non disponibile (nessun tokenizer o calibrazione identificata)");
+            }
+
+            if (limitsOfBatch.Fits(measured))
+            {
+                accepted.Add(cell);
+                return;
+            }
+
+            if (ReconciliationExpansionGrid.Split(cell) is not { } halves)
+            {
+                failure = $"{PairDoesNotFit}: due evidenze del candidato non entrano insieme nel budget di input ({measured.Tokens} token misurati su {limitsOfBatch.InputBudgetTokens}) con il candidato in esame e la membership.";
+                return;
+            }
+
+            foreach (var half in halves)
+            {
+                await FitAsync(half);
+            }
+        }
+
+        await FitAsync(new ExpansionCell(left, right));
+        if (failure is not null)
+        {
+            Set(candidate.CandidateId, CandidateState.NotProcessed, [], [], failure);
+            return [];
+        }
+
+        var blocks = ReconciliationExpansionGrid.Blocks(accepted, tags);
+        var coverage = ReconciliationExpansionGrid.Verify(left, right, blocks);
+        if (blocks.Count == 0)
+        {
+            // Nessuna coppia rilevante (es. un solo membro comune ai due gruppi): nessun output da attestare, quindi nessun Compared senza hash. Fail-closed con un motivo esplicito.
+            Set(candidate.CandidateId, CandidateState.NotProcessed, [], [], $"{ExpansionCoverageIncomplete}: i due gruppi non contengono alcuna coppia di evidenze distinte da mettere a confronto; nessuna scansione da attestare.");
+            return [];
+        }
+
+        if (!coverage.Complete)
+        {
+            Set(candidate.CandidateId, CandidateState.NotProcessed, [], [], $"{ExpansionCoverageIncomplete}: la griglia copre {coverage.CoveredPairs} coppie rilevanti su {coverage.RequiredPairs}.");
+            return [];
+        }
+
+        // 2) Precheck del budget di chiamate, SOLO su quantità deterministiche (batch della gerarchia, chiamate del motore, disposition): identico al replay e dopo un crash. Il contatore persistito del port
+        // può essere maggiore (retry, riserve già consumate): in quel caso la riserva del port rifiuta (CallLimitExceeded), sempre fail-closed. Il lavoro futuro non prevedibile NON è coperto da questa stima.
+        var perBlock = 1 + policy.CandidateCap;   // 1 espansione + fino a CandidateCap confronti dei figli (anche un blocco saturo ne conserva CandidateCap)
+        var required = (long)blocks.Count * perBlock;
+        var consumed = hierarchy.Outcomes.Count + Calls.Used;
+        var owedCompares = dispositions.Values.Count(d => d.State == CandidateState.Pending && d.CandidateId != candidate.CandidateId
+            && candidates[d.CandidateId] is { Left.Kind: CandidateEndpointKind.Evidence, Right.Kind: CandidateEndpointKind.Evidence });
+        var available = (long)policy.RunCallLimit - policy.ReservedCalls - consumed - owedCompares;
+        if (required > available)
+        {
+            Set(
+                candidate.CandidateId, CandidateState.NotProcessed, [], [],
+                $"{ExpansionBudgetExceeded}: servono fino a {required} chiamate ({blocks.Count} blocchi x (1 espansione + {policy.CandidateCap} confronti dei figli)) e ne restano {available} "
+                + $"({policy.RunCallLimit} del run - {policy.ReservedCalls} riservate - {consumed} già impiegate - {owedCompares} confronti già dovuti): nessuna chiamata spesa per questo candidato.");
+            return [];
+        }
+
+        // 3) Esecuzione dei blocchi nell'ordine della griglia. Si proseguono tutti i blocchi anche dopo un blocco saturo o non risolto: i figli validi sono candidati reali.
+        var hashes = new List<string>();
+        var children = new SortedSet<string>(StringComparer.Ordinal);
+        var saturated = 0;
+        var unresolved = 0;
+        foreach (var block in blocks)
+        {
+            var ordered = InMessageOrder(block.Members);
+            var packed = new PackedBatch<CatalogEntry>(block.Ordinal, ordered, await measure(candidate, view, groups, ordered, ct));
+            var outcome = await RunBatchAsync(packed, "expand", candidate, ct, groups);
+            hashes.Add(outcome.OutputHash);
+            var own = outcome.Result.Dispositions.SingleOrDefault();
+            if (outcome.Result.Dispositions.Count > 1 || (own is not null && (own.CandidateId != candidate.CandidateId
+                || own.State is not (CandidateState.Pending or CandidateState.NotProcessed) || (own.State == CandidateState.NotProcessed && own.Reason != CandidateUnresolved))))
+            {
+                throw Invalid(outcome, "l'espansione può solo lasciare il candidato Pending o NotProcessed con candidate_unresolved.");
+            }
+
+            unresolved += own?.State == CandidateState.NotProcessed ? 1 : 0;
+            saturated += outcome.Result.Candidates.Count >= policy.CandidateCap ? 1 : 0;
+            foreach (var child in AddChildren(outcome, candidate))
+            {
+                children.Add(child);
+            }
+        }
+
+        hashes.Sort(StringComparer.Ordinal);
+        if (saturated > 0)
+        {
+            Set(
+                candidate.CandidateId, CandidateState.NotProcessed, [.. children], hashes,
+                $"{ExpansionSaturated}: {saturated} blocchi su {blocks.Count} hanno raggiunto il tetto di {policy.CandidateCap} candidati; il collegamento non è dichiarato completo (i figli validi sono conservati).");
+        }
+        else if (unresolved > 0)
+        {
+            Set(candidate.CandidateId, CandidateState.NotProcessed, [.. children], hashes, CandidateUnresolved);
+        }
+        else if (children.Count > 0)
+        {
+            Set(candidate.CandidateId, CandidateState.Expanded, [.. children], hashes, null);
+        }
+        else
+        {
+            // Tutti i blocchi Completi e la griglia verificata: ogni coppia rilevante è stata messa davanti al modello (attestazione di visita, non di assenza certa di conflitti).
+            Set(candidate.CandidateId, CandidateState.Compared, [], hashes, NoCandidateAfterFullScan);
+        }
+
+        return [.. children];
+    }
+
     private async ValueTask<IReadOnlyList<string>> ExpandAsync(ReconcileCandidate candidate, CancellationToken ct)
     {
+        if (expansion is not null)
+        {
+            return await ExpandGridAsync(candidate, ct);
+        }
+
         var manifest = Members(candidate.Left).Concat(Members(candidate.Right)).Distinct().OrderBy(g => g.ToString("D"), StringComparer.Ordinal).Select(g => entries[g]).ToList();
         IReadOnlyList<PackedBatch<CatalogEntry>> batches;
         try
@@ -293,7 +483,7 @@ public sealed class ReconciliationCandidates
         return [.. children];
     }
 
-    private async ValueTask<BatchOutcome> RunBatchAsync(PackedBatch<CatalogEntry> batch, string stage, ReconcileCandidate candidate, CancellationToken ct)
+    private async ValueTask<BatchOutcome> RunBatchAsync(PackedBatch<CatalogEntry> batch, string stage, ReconcileCandidate candidate, CancellationToken ct, ExpansionGroups? groups = null)
     {
         var view = ViewOf(candidate);
         GuardLimits(candidate);
@@ -302,7 +492,7 @@ public sealed class ReconciliationCandidates
             context.PromptVersion);
         ordinal++;
         Calls.Add();
-        var outcome = await ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct);
+        var outcome = await ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct, groups);
         Calls.Add(0, System.Text.Encoding.UTF8.GetByteCount(ReconciliationCodec.Canonical(outcome.Result)));
         outcomes.Add(outcome);
         return outcome;

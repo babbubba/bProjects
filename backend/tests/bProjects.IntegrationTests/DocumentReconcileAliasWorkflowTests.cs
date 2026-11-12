@@ -94,8 +94,9 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
     /// Modello finto del corpus «sharedKey»: l'espansione che riapre i documenti 1 e 8 NELLO STESSO batch trova il collegamento (usa solo alias ricevuti in quel messaggio), il confronto
     /// è Open (conflitto) o Compared (con una patch sulla base del server). Con <paramref name="unresolved"/> l'espansione segnala un collegamento senza estremi.
     /// </summary>
-    private static DocumentChatWorkflowTests.FakeChatModel LinkModel(string compareOutcome = "Open", bool patch = false, bool unresolved = false) => new()
+    private static DocumentChatWorkflowTests.FakeChatModel LinkModel(string compareOutcome = "Open", bool patch = false, bool unresolved = false, int contextWindow = DocumentChatWorkflowTests.FakeChatModel.Window) => new()
     {
+        ContextWindow = contextWindow,
         Responder = r =>
         {
             var p = ParseAlias(r.AllText);
@@ -250,6 +251,89 @@ public sealed class DocumentReconcileAliasWorkflowTests : ReconcileRig
         Assert.Equal(2, conflict.Alternatives.SelectMany(a => a.EvidenceRefs).Distinct().Count());
         Assert.Equal(1, await Count("SELECT count(*) FROM \"RunCandidateDispositions\" WHERE \"RunId\" = @r AND \"State\" = 'Open'", ("r", run)));
         Assert.All(model.Requests, r => Assert.DoesNotMatch(AnyUuid, r.AllText));
+    }
+
+    // ================================================================ v10: espansione con membership e griglia (T040 dopo il Run 4), stesso corpus «sharedKey»
+
+    /// <summary>Finestra con budget di input un poco più ampio di quello dei run v4 del rig (input e output: la stima dell'output di un blocco è pari ai suoi token): il prompt v5, la riga del candidato e la membership aggiungono qualche centinaio di token a ogni espansione, e la coppia deve ENTRARE (altrimenti pair_does_not_fit, fail-closed).</summary>
+    private const int V10Output = 2000;
+
+    private static int V10Window => 2800 + V10Output + BoundaryMargin;
+
+    /// <summary>Congela esplicitamente il run come v10 (il normale freeze del prodotto con il recupero): stesse fonti del run v4, senza Gap, quindi gerarchia senza stadio Gap.</summary>
+    private Task FreezeV10(Guid run) => Execute(
+        "UPDATE \"ProcessingRuns\" SET \"WorkflowDefinitionVersion\" = @d, \"PromptVersions\" = CAST(@p AS jsonb) WHERE \"Id\" = @r",
+        ("d", DocumentAnalysisWorkflow.DefinitionVersionV10), ("p", bProjects.App.Documents.SourceSnapshotStore.AnalysisPromptVersionsV10(new bProjects.App.Retrieval.RetrievalOptions { PolicyVersion = bProjects.App.Retrieval.RetrievalPolicy.Version1 })), ("r", run));
+
+    [Fact]
+    public async Task A_v10_run_expands_the_distant_groups_with_membership_and_still_finds_the_cross_document_conflict()
+    {
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        await FreezeV10(run);
+        var model = LinkModel("Open", contextWindow: V10Window);
+
+        var result = await RunAsync(claim, model, contextWindow: V10Window, maxOutputTokens: V10Output);
+
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(run));
+        var expansions = model.Requests.Where(r => ParseAlias(r.AllText).Stage == "expand").ToList();
+        Assert.NotEmpty(expansions);
+        Assert.All(expansions, r =>
+        {
+            Assert.Contains("Ogni voce indica il gruppo di appartenenza", r.AllText, StringComparison.Ordinal);
+            Assert.Matches(@"<<<VOCE \[E\d+\] origine=\w+ tipo=\w+ polarita=\w+ gruppo=", r.AllText);
+            Assert.DoesNotContain("Risolvilo con le voci integrali", r.AllText, StringComparison.Ordinal);
+            Assert.Equal(16, JsonDocument.Parse(r.ResponseSchema!).RootElement.GetProperty("properties").GetProperty("candidates").GetProperty("maxItems").GetInt32());   // il tetto è nello schema REALMENTE inviato
+        });
+        Assert.DoesNotContain(model.Requests.Where(r => ParseAlias(r.AllText).Stage != "expand"), r => r.AllText.Contains("gruppo=", StringComparison.Ordinal));   // membership solo nelle espansioni
+        var content = DocumentAnalysisContentJson.Deserialize(await Scalar<string>("SELECT \"ContentJson\"::text FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", run)));
+        var conflict = Assert.Single(content.Conflicts);
+        Assert.Equal(AnalysisConflictStatus.Open, conflict.Status);
+        Assert.Equal(2, conflict.Alternatives.SelectMany(a => a.EvidenceRefs).Distinct().Count());
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"RunCandidateDispositions\" WHERE \"RunId\" = @r AND \"State\" = 'Open'", ("r", run)));
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"RunCandidateDispositions\" WHERE \"RunId\" = @r AND \"State\" = 'NotProcessed'", ("r", run)));   // nessun candidato lasciato non terminale
+        Assert.All(model.Requests, r => Assert.DoesNotMatch(AnyUuid, r.AllText));
+    }
+
+    [Fact]
+    public async Task A_crash_in_the_middle_of_a_v10_expansion_resumes_the_same_batches_without_resending_committed_ones_and_without_checkpoint_incompatibility()
+    {
+        var (run, claim) = await ArrangeAsync(sharedKey: true);
+        await FreezeV10(run);
+        var link = LinkModel("Open", contextWindow: V10Window);
+        string? crashed = null;
+        var failing = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            ContextWindow = V10Window,
+            // Il processo muore alla prima espansione: batch pubblicato e riservato, nessun output Committed per esso.
+            Responder = r =>
+            {
+                if (ParseAlias(r.AllText).Stage == "expand" && crashed is null)
+                {
+                    crashed = r.AllText;
+                    throw new InvalidOperationException("processo terminato");
+                }
+
+                return link.Responder!(r);
+            },
+        };
+        await Assert.ThrowsAnyAsync<Exception>(() => RunAsync(claim, failing, contextWindow: V10Window, maxOutputTokens: V10Output));
+        Assert.NotNull(crashed);
+        var committed = await Count("SELECT count(*) FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", run));
+        Assert.Equal(failing.Requests.Count - 1, committed);
+
+        var healthy = LinkModel("Open", contextWindow: V10Window);
+        var resumed = await RunAsync(claim, healthy, contextWindow: V10Window, maxOutputTokens: V10Output);
+
+        Assert.True(resumed.Status == ProcessingRunStatus.Completed, await Message(run));   // nessun checkpoint_incompatible: stessa sequenza di blocchi, stessi hash di payload
+        Assert.Equal(crashed, healthy.Requests[0].AllText);                                   // si riprende dal batch interrotto, identico byte per byte
+        Assert.Empty(healthy.Requests.Select(r => r.AllText).Intersect(failing.Requests.Where(r => r.AllText != crashed).Select(r => r.AllText)));   // nessun batch Committed reinviato
+        Assert.Equal(0, await Count("SELECT count(*) FROM (SELECT \"Ordinal\" FROM \"DerivedBatches\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r GROUP BY \"Ordinal\" HAVING count(*) > 1) d", ("r", run)));
+        Assert.Equal(failing.Requests.Count + healthy.Requests.Count, await Scalar<int>("SELECT \"CallCount\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run)));   // la chiamata caduta ha consumato la sua riserva (costo prudenziale)
+
+        var again = LinkModel("Open", contextWindow: V10Window);
+        var replay = await RunAsync(claim, again, contextWindow: V10Window, maxOutputTokens: V10Output);
+        Assert.Equal(resumed.ResultRevisionId, replay.ResultRevisionId);
+        Assert.Empty(again.Requests);   // un replay a run completato non invia nulla
     }
 
     [Fact]

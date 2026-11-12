@@ -199,7 +199,7 @@ public sealed class ReconcileDefinitionV8Tests
 
     [Theory]
     [InlineData("document-reconcile-v2")]
-    [InlineData("document-reconcile-v5")]
+    [InlineData("document-reconcile-v6")]   // il v5 è il prompt della definizione v10 (ReconcileDefinitionV10Tests)
     [InlineData("")]
     public void An_unknown_reconcile_prompt_version_is_rejected_and_never_falls_back(string version) =>
         Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.InstructionsFor(version));

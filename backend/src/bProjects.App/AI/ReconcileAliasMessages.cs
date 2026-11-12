@@ -26,10 +26,28 @@ public static class ReconcileAliasMessages
     {
         var text = new StringBuilder();
         text.Append("Tipo di batch: ").Append(StageLabel(request.Batch.Stage)).Append('\n').Append("Vista: ").Append(request.View).Append('\n');
+        var groups = request.Groups;
+        string? leftLabel = null;
+        string? rightLabel = null;
         if (catalog.Focus is { } focus)
         {
             string Side(CandidateEndpoint e) => $"[{catalog.AliasOf(e)}]";
-            text.Append($"Candidato in esame: {focus.ProposedType} fra {Side(focus.Left)} e {Side(focus.Right)} (motivo: {focus.Rationale}). Risolvilo con le voci integrali sotto.\n");
+            if (groups is null)
+            {
+                text.Append($"Candidato in esame: {focus.ProposedType} fra {Side(focus.Left)} e {Side(focus.Right)} (motivo: {focus.Rationale}). Risolvilo con le voci integrali sotto.\n");
+            }
+            else
+            {
+                // membership-1 (v10): le etichette dei gruppi sono gli alias degli estremi; ogni voce dichiara a quale gruppo appartiene.
+                leftLabel = catalog.AliasOf(focus.Left) ?? throw new InvalidOperationException("Estremo sinistro del candidato senza alias nel catalogo del batch.");
+                rightLabel = catalog.AliasOf(focus.Right) ?? throw new InvalidOperationException("Estremo destro del candidato senza alias nel catalogo del batch.");
+                text.Append($"Candidato in esame: {focus.ProposedType} fra {Side(focus.Left)} e {Side(focus.Right)} (motivo: {focus.Rationale}). "
+                    + "Ogni voce indica il gruppo di appartenenza (gruppo=...): cerca collegamenti fra una voce di un gruppo e una dell'altro.\n");
+            }
+        }
+        else if (groups is not null)
+        {
+            throw new InvalidOperationException("La membership dell'espansione richiede il candidato in esame.");
         }
 
         var documentSpans = new List<int>();
@@ -37,7 +55,8 @@ public static class ReconcileAliasMessages
         {
             var known = run.Evidence(entry.Alias)!;
             var start = text.Length;
-            text.Append($"<<<VOCE [{entry.Alias}] origine={known.Origin} tipo={known.Kind} polarita={known.Polarity}>>>\n").Append(evidence[entry.EvidenceId].Statement).Append('\n');
+            var membership = groups is null ? string.Empty : " gruppo=" + GroupLabel(groups, entry.EvidenceId, leftLabel!, rightLabel!);
+            text.Append($"<<<VOCE [{entry.Alias}] origine={known.Origin} tipo={known.Kind} polarita={known.Polarity}{membership}>>>\n").Append(evidence[entry.EvidenceId].Statement).Append('\n');
             foreach (var link in known.Sources)
             {
                 text.Append($"<<<FONTE [{link.SourceAlias}] ruolo={link.Role}>>>\n").Append(run.Source(link.SourceAlias)!.Quote).Append("\n<<<FINE FONTE>>>\n");
@@ -85,6 +104,16 @@ public static class ReconcileAliasMessages
 
         return [message];
     }
+
+    private static string GroupLabel(ExpansionGroups groups, Guid evidenceId, string left, string right) =>
+        groups.Tags.TryGetValue(evidenceId, out var tag)
+            ? tag switch
+            {
+                ExpansionTag.Left => left,
+                ExpansionTag.Right => right,
+                _ => left + "," + right,
+            }
+            : throw new InvalidOperationException($"L'evidenza {evidenceId:D} non ha un gruppo nella membership del batch.");
 
     private static IEnumerable<string> EvidenceAliases(AnalysisAliasCatalog run, ReconcileAliasCatalog catalog, string handle) =>
         catalog.ItemEvidence[handle].Select(id => run.EvidenceById(id)!.Alias).OrderBy(AnalysisAliasPattern.Number);

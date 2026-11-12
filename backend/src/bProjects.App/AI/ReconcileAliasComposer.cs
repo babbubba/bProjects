@@ -232,6 +232,13 @@ public static class ReconcileAliasComposer
             var candidates = new List<ReconcileCandidate>();
             var ids = new Dictionary<string, string>(StringComparer.Ordinal);
             var keys = new HashSet<string>(StringComparer.Ordinal);
+            // v10 (membership-1): il tetto del profilo -3 è una protezione. La grammatica lo impone già; qui lo si ripete come difesa in profondità (output senza schema o provider che lo ignora):
+            // oltre il tetto è un rifiuto, mai un troncamento. Un'espansione che RAGGIUNGE il tetto è valida ma satura (lo decide il motore, che non dichiara la copertura).
+            if (_stage == "expand" && request.Groups is not null && dto.Candidates.Count > ReconcileAliasContracts.ExpansionCandidateCap)
+            {
+                _errors.Add($"candidates: {dto.Candidates.Count} candidati oltre il tetto di {ReconcileAliasContracts.ExpansionCandidateCap} dell'espansione (nessun troncamento: output non valido).");
+            }
+
             for (var i = 0; i < dto.Candidates.Count; i++)
             {
                 var c = dto.Candidates[i];

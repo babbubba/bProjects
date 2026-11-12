@@ -9,7 +9,14 @@ namespace bProjects.App.AI;
 
 /// <summary>Richiesta di un batch: foglie con voci integrali, riduzioni e Cross con soli nodi (descriptor); espansioni e confronti con voci integrali e il candidato in <c>Focus</c>.</summary>
 public sealed record ReconcileBatchRequest(
-    DerivedBatchInput Batch, ReconcileView View, int Level, IReadOnlyList<CatalogEntry> Entries, IReadOnlyList<CatalogNode> Nodes, IReadOnlyList<ReconcileCandidate>? Focus = null);
+    DerivedBatchInput Batch, ReconcileView View, int Level, IReadOnlyList<CatalogEntry> Entries, IReadOnlyList<CatalogNode> Nodes, IReadOnlyList<ReconcileCandidate>? Focus = null,
+    ExpansionGroups? Groups = null);
+
+/// <summary>
+/// Membership esplicita dell'espansione (formato <c>membership-1</c>, solo definizione v10): per ogni evidenza del batch, il gruppo del candidato in esame a cui appartiene (solo sinistro, solo destro, entrambi).
+/// Calcolata dal server sugli insiemi INTERI dei due estremi, mai sul solo blocco. <c>null</c> per ogni altro stadio e per le definizioni v4–v9: il messaggio resta quello storico, byte per byte.
+/// </summary>
+public sealed record ExpansionGroups(IReadOnlyDictionary<Guid, ExpansionTag> Tags);
 
 /// <summary>Invia il batch al modello (con lookup/riserva/commit del chiamante) e restituisce il testo JSON dell'output.</summary>
 public delegate ValueTask<string> ReconcileInvoker(ReconcileBatchRequest request, CancellationToken ct);
@@ -146,9 +153,9 @@ public static class ReconciliationHierarchy
 
     internal static async ValueTask<BatchOutcome> InvokeAsync(
         DerivedBatchInput batch, ReconcileView view, int level, IReadOnlyList<CatalogEntry> entries, IReadOnlyList<CatalogNode> inputNodes, ReconciliationSnapshot snapshot,
-        ReconciliationCatalog catalog, ReconcileInvoker invoke, bool buildsNode, IReadOnlyList<ReconcileCandidate>? focus, CancellationToken ct)
+        ReconciliationCatalog catalog, ReconcileInvoker invoke, bool buildsNode, IReadOnlyList<ReconcileCandidate>? focus, CancellationToken ct, ExpansionGroups? groups = null)
     {
-        var text = await invoke(new ReconcileBatchRequest(batch, view, level, entries, inputNodes, focus), ct);
+        var text = await invoke(new ReconcileBatchRequest(batch, view, level, entries, inputNodes, focus, groups), ct);
         ReconcileResult result;
         try
         {

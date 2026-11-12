@@ -103,15 +103,16 @@ public sealed class ReconciliationCandidateTests
 
     internal static async Task<Rig> SetupAsync(
         Model model, int evidence = 30, IReadOnlyList<SnapshotRelation>? relations = null, PackMeasurer<CatalogEntry>? measurer = null, ReconciliationLimits? limits = null,
-        CallBudget? calls = null, TimeProvider? time = null)
+        CallBudget? calls = null, TimeProvider? time = null, ExpansionPolicy? expansion = null, ExpansionMeasurer? expansionMeasurer = null, ReconciliationContext? context = null)
     {
         var snapshot = new ReconciliationSnapshot(ReconciliationFixtures.Project, ReconciliationFixtures.SourceHash, [.. Enumerable.Range(1, evidence).Select(Ev)], relations ?? []);
         var facts = Enumerable.Range(1, evidence).ToDictionary(n => Id(n), n => new DirectoryFacts(new EvidenceStructure($"s{n:D2}", n is 2 or 3 or 4 ? "stessa azione" : $"a{n:D2}", null, null, null, null, null, null), []));
         facts[Id(1)] = new(new EvidenceStructure("s01", "a01", "regola", null, null, null, null, null), []);
         facts[Id(30)] = new(new EvidenceStructure("s30", "a30", "regola", null, null, null, null, null), []);
-        var directory = await ReconciliationDirectory.BuildAsync(snapshot, facts, Context, Measurers, Ct);
-        var hierarchy = await ReconciliationHierarchy.BuildAsync(snapshot, directory, Context, Descriptors, model.Invoke, Ct);
-        return new(snapshot, directory, hierarchy, new ReconciliationCandidates(snapshot, directory, hierarchy, Context, measurer ?? Leaf, model.Invoke, limits, calls, time), model);
+        var ctx = context ?? Context;
+        var directory = await ReconciliationDirectory.BuildAsync(snapshot, facts, ctx, Measurers, Ct);
+        var hierarchy = await ReconciliationHierarchy.BuildAsync(snapshot, directory, ctx, Descriptors, model.Invoke, Ct);
+        return new(snapshot, directory, hierarchy, new ReconciliationCandidates(snapshot, directory, hierarchy, ctx, measurer ?? Leaf, model.Invoke, limits, calls, time, expansion, expansionMeasurer), model);
     }
 
     // ------------------------------------------------------------------ conflitto cross-documento / distante

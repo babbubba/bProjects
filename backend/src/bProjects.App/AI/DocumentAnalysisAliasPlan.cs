@@ -43,7 +43,7 @@ internal sealed class DocumentAnalysisAliasPlan : IDocumentBatchPlan, IInformedR
         _definition = definition;
         // v5 (T136): la definizione congelata sceglie l'intero profilo di versioni; v3/v4 conservano i valori storici.
         _gaps = definition is DocumentAnalysisWorkflow.DefinitionVersionV5 or DocumentAnalysisWorkflow.DefinitionVersionV6 or DocumentAnalysisWorkflow.DefinitionVersionV7
-            or DocumentAnalysisWorkflow.DefinitionVersionV8 or DocumentAnalysisWorkflow.DefinitionVersionV9;
+            or DocumentAnalysisWorkflow.DefinitionVersionV8 or DocumentAnalysisWorkflow.DefinitionVersionV9 or DocumentAnalysisWorkflow.DefinitionVersionV10;
         (_prompt, _schemaVersion, _schemaName, _algorithm, _validation) = _gaps
             ? (gapPrompt, DocumentAnalysisWorkflow.SchemaVersionV5, DocumentAnalysisWorkflow.SchemaNameV5, DocumentAnalysisWorkflow.AlgorithmVersionV5, DocumentAnalysisWorkflow.ValidationVersionV5)
             : (DocumentAnalysisWorkflow.PromptVersionV3, DocumentAnalysisWorkflow.SchemaVersionV3, DocumentAnalysisWorkflow.SchemaNameV3, DocumentAnalysisWorkflow.AlgorithmVersionV3, DocumentAnalysisWorkflow.ValidationVersionV3);

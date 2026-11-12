@@ -25,7 +25,7 @@ namespace bProjects.App.AI;
 /// nel <c>configHash</c> con lo SHA delle istruzioni e nella versione del prompt di ogni batch derivato. Obbligatorio: nessun valore predefinito che possa far ricadere una v8/v9 sul v3.
 /// </remarks>
 internal sealed record ReconcileAliasMode(
-    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, string? SchemaProfile);
+    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, string? SchemaProfile, string? Expansion = null);
 
 /// <summary>
 /// Stadio Gap dedicato della definizione v6 (D1, AI §13.7): metadati documentali dello snapshot (mappa laterale) per il formato <c>gap-stage-message-1</c>. Presente solo se l'analisi ha almeno un Gap
@@ -56,6 +56,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     public const string NodeStage = "reconcile";
 
     private const int HeaderReserveTokens = 256;
+
+    /// <summary>v10: chiamate certe che restano dopo la gerarchia e i candidati (UN batch dello stadio Gap); il retrieval è deterministico e non conta. Entra nel <c>configHash</c> della v10.</summary>
+    internal const int ExpansionReservedCalls = 1;
 
     private readonly AnalysisRunClaim _claim;
     private readonly DocumentAnalysisInput _input;
@@ -124,6 +127,18 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         // Tetti della policy congelata del root (AI §4.5): senza limiti espliciti restano i default del motore.
         _maxLevels = limits?.MaxReconciliationLevels ?? 32;
         _limits = limits is null ? new ReconciliationLimits() : new ReconciliationLimits(MaxCandidates: limits.MaxCandidatesPerRun, MaxDerivedBytes: limits.MaxDerivedBytes);
+        if (alias?.Expansion is not null)
+        {
+            // v10: espansione con membership. Richiede il profilo -3 (schema dell'espansione con il tetto) e i limiti congelati del run: il limite PERSISTITO di chiamate è l'unica autorità del precheck.
+            if (alias.SchemaProfile != ReconcileAliasContracts.SchemaProfileByBatchV3 || alias.Expansion != ReconcileAliasContracts.ExpansionAlgorithm || limits is null)
+            {
+                throw new ArgumentException("L'espansione con membership richiede il profilo di schema -3, l'algoritmo congelato e i limiti del run.", nameof(alias));
+            }
+
+            _expansionPolicy = new ExpansionPolicy(ReconcileAliasContracts.ExpansionCandidateCap, limits.MaxAiCallsPerRun, ExpansionReservedCalls);
+            // Il guardiano delle chiamate del motore (GuardLimits) segue lo STESSO limite persistito del precheck: un'espansione ammessa dal precheck non viene interrotta a metà da un tetto diverso.
+            _limits = _limits with { MaxCalls = limits.MaxAiCallsPerRun };
+        }
 
         var settings = options.ForPhase(AiPhase.Analysis);
         // v2 (storico): forma e hash di configurazione invariati; v4 aggiunge soltanto la modalità di output strutturato; v8 e v9 aggiungono il profilo degli schemi per batch e gli hash delle sue
@@ -140,6 +155,20 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
                 canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, model = settings.ModelId, maxOutput = settings.MaxOutputTokens,
                 thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
+            }),
+            // v10: profilo -3, prompt v5 e algoritmo di espansione con membership; chiavi AGGIUNTE in un ramo proprio, così la forma (e l'hash) di v8 e v9 restano byte per byte quelli di prima.
+            { Expansion: { } expansionAlgorithm, SchemaProfile: { } byBatchV10 } => JsonSerializer.Serialize(new
+            {
+                prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
+                canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, schemaProfile = byBatchV10,
+                schemaProfileHashes = ReconcileAliasContracts.ProfileHashes(byBatchV10),
+                expansion = new
+                {
+                    algorithm = expansionAlgorithm, cap = ReconcileAliasContracts.ExpansionCandidateCap, messageFormat = ReconcileAliasContracts.MembershipFormat,
+                    childCompares = ReconcileAliasContracts.ExpansionCandidateCap, reservedCalls = ExpansionReservedCalls,
+                    reasons = new[] { ReconciliationCandidates.ExpansionSaturated, ReconciliationCandidates.ExpansionBudgetExceeded, ReconciliationCandidates.ExpansionCoverageIncomplete },
+                },
+                model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
             }),
             { SchemaProfile: { } byBatch } => JsonSerializer.Serialize(new
             {
@@ -181,7 +210,16 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             plan["catalog"] = alias.RunCatalog.RunIndependentHash;
             if (alias.SchemaProfile is { } frozenProfile)
             {
-                plan["reconcileSchemaProfile"] = frozenProfile;   // solo v8/v9: v4–v7 conservano il piano di sempre
+                plan["reconcileSchemaProfile"] = frozenProfile;   // solo v8/v9/v10: v4–v7 conservano il piano di sempre
+            }
+
+            if (alias.Expansion is { } frozenExpansion)
+            {
+                // solo v10: v4–v9 conservano il piano di sempre (nessuna chiave aggiunta).
+                plan["reconcileExpansion"] = new JsonObject
+                {
+                    ["algorithm"] = frozenExpansion, ["cap"] = ReconcileAliasContracts.ExpansionCandidateCap, ["messageFormat"] = ReconcileAliasContracts.MembershipFormat,
+                };
             }
         }
 
@@ -206,6 +244,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     private readonly int _maxLevels;
     private readonly ReconciliationLimits _limits;
+    private readonly ExpansionPolicy? _expansionPolicy;
 
     /// <summary>Vero dopo il commit atomico del run da questo piano.</summary>
     public bool Committed { get; private set; }
@@ -341,7 +380,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             _directory ??= await ReconciliationDirectory.BuildAsync(snapshot, _facts, _context, new ReconciliationMeasurers(LeafMeasurer, PageMeasurer), ct);
             var hierarchy = await ReconciliationHierarchy.BuildAsync(snapshot, _directory, _context, NodeMeasurer, Invoke, ct);
             state.CandidatePhase = true;
-            var engine = new ReconciliationCandidates(snapshot, _directory, hierarchy, _context, LeafMeasurer, Invoke, _limits);
+            var engine = new ReconciliationCandidates(
+                snapshot, _directory, hierarchy, _context, LeafMeasurer, Invoke, _limits, expansion: _expansionPolicy, expansionMeasurer: _expansionPolicy is null ? null : ExpansionMeasurer);
             await engine.RunPhasesAsync(ct);
             var final = await ReconciliationFinalPass.RunAsync(engine, snapshot, _directory, [], ct);
             var finished = new ReconcileEngineResult(_directory, hierarchy, final.Run, final);
@@ -1075,6 +1115,32 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     private PackMeasurer<CatalogEntry> LeafMeasurer => (members, ct) =>
         MeasureAsync("e|" + string.Join(',', members.Select(m => m.EntryId)) + "|" + VisibleItems(members), () => Compose(Placeholder(members, [])), ct);
+
+    /// <summary>
+    /// Misuratore dei blocchi di espansione v10: il payload effettivo del batch (istruzioni v5, schema della variante Expand del profilo -3, candidato in esame, membership, voci, fonti, item già proposti e
+    /// relazioni note), costruito con la STESSA funzione che compone il messaggio inviato. Chiave di cache con prefisso proprio (mai <c>e|</c>): include formato, candidato, vista e tag di ogni voce.
+    /// </summary>
+    private ValueTask<UnitMeasure> ExpansionMeasurer(ReconcileCandidate candidate, ReconcileView view, ExpansionGroups groups, IReadOnlyList<CatalogEntry> members, CancellationToken ct)
+    {
+        var key = "g|" + ReconcileAliasContracts.MembershipFormat + "|" + candidate.CandidateId + "|" + view + "|"
+            + string.Join(',', members.Select(m => m.EntryId + ":" + groups.Tags[m.EvidenceId])) + "|" + VisibleItems(members);
+        var request = new ReconcileBatchRequest(
+            new DerivedBatchInput(new string('0', 64), "expand", null, null, null, 0, [], "{}", null, "measured", new string('0', 64), _schemaVersion, _promptVersion), view, 0, members, [],
+            [candidate], groups);
+        var (_, schema) = ReconcileAliasContracts.ProfileSchemaFor(_alias!.SchemaProfile!, "expand", view);
+        return MeasureWithSchemaAsync(key, () => ComposeAlias(request, _state), _alias.Structured ? schema.GetRawText() : null, ct);
+    }
+
+    private async ValueTask<UnitMeasure> MeasureWithSchemaAsync(string key, Func<IReadOnlyList<ChatMessage>> messages, string? schemaJson, CancellationToken ct)
+    {
+        if (_measures.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages(), schemaJson), ct, _profile.Fingerprint);
+        return _measures[key] = new UnitMeasure(measured.Tokens, measured.Quality, measured.PayloadHash, measured.Tokens);
+    }
 
     private PackMeasurer<CatalogNode> NodeMeasurer => (members, ct) =>
         MeasureAsync("n|" + string.Join(',', members.Select(m => m.NodeId)), () => Compose(Placeholder([], members)), ct);

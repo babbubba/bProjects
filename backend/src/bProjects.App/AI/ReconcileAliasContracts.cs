@@ -192,8 +192,24 @@ public static class ReconcileAliasContracts
     /// </summary>
     public const string PromptVersionV4 = "document-reconcile-v4";
 
+    /// <summary>
+    /// Prompt della gerarchia della definizione v10: il v4 più la sezione dell'espansione con membership esplicita (<see cref="MembershipFormat"/>: ogni voce indica il gruppo di appartenenza) e il tetto di
+    /// <see cref="ExpansionCandidateCap"/> candidati. v4 resta intatto per le definizioni v8 e v9.
+    /// </summary>
+    public const string PromptVersionV5 = "document-reconcile-v5";
+
+    /// <summary>Tetto di candidati per risposta dell'espansione nel profilo -3 (protezione contro l'enumerazione quadratica, mai criterio di selezione): oltre, il server non dichiara la copertura.</summary>
+    public const int ExpansionCandidateCap = 16;
+
+    /// <summary>Algoritmo di espansione congelato nella v10 (chiave <c>reconcileExpansion</c>): griglia deterministica di blocchi con membership, saturazione fail-closed e precheck del budget.</summary>
+    public const string ExpansionAlgorithm = "expansion-grid-1";
+
+    /// <summary>Formato del messaggio dell'espansione con membership esplicita (ogni VOCE porta <c>gruppo=…</c>); solo v10.</summary>
+    public const string MembershipFormat = "membership-1";
+
     private static readonly Lazy<string> Prompt = new(() => LoadPrompt(PromptVersion + ".md"));
     private static readonly Lazy<string> PromptV4 = new(() => LoadPrompt(PromptVersionV4 + ".md"));
+    private static readonly Lazy<string> PromptV5 = new(() => LoadPrompt(PromptVersionV5 + ".md"));
 
     /// <summary>Istruzioni di sistema dei batch alias (AI/Prompts/document-reconcile-v3.md, risorsa incorporata); il v2 resta congelato.</summary>
     public static string Instructions => Prompt.Value;
@@ -203,6 +219,7 @@ public static class ReconcileAliasContracts
     {
         PromptVersion => Prompt.Value,
         PromptVersionV4 => PromptV4.Value,
+        PromptVersionV5 => PromptV5.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(promptVersion), promptVersion, "Prompt della riconciliazione con alias non supportato."),
     };
 
@@ -339,6 +356,13 @@ public static class ReconcileAliasContracts
     /// </summary>
     public const string SchemaProfileByBatchV2 = "reconcile-alias-schema-by-batch-2";
 
+    /// <summary>
+    /// Profilo degli schemi per batch della definizione v10 (003, T040 dopo il Run 4, chiamate 034–036): le stesse sei varianti del profilo -2, byte per byte, tranne l'espansione che riceve
+    /// <c>candidates.maxItems = <see cref="ExpansionCandidateCap"/></c>. Il tetto è una protezione contro l'enumerazione quadratica osservata (162 candidati, <c>finish=length</c>), non un criterio di selezione:
+    /// un'espansione che raggiunge il tetto è «satura» e il server non dichiara mai la copertura. Il profilo -2 resta congelato e distinto.
+    /// </summary>
+    public const string SchemaProfileByBatchV3 = "reconcile-alias-schema-by-batch-3";
+
     /// <summary>Estremi dei candidati che sono nodi o insiemi (riduzione e cross); le evidenze usano <see cref="AnalysisAliasPattern.Evidence"/>.</summary>
     public const string NodeAliasPattern = "^N[1-9][0-9]*$";
 
@@ -364,6 +388,26 @@ public static class ReconcileAliasContracts
     public static JsonElement SchemaOf(ReconcileBatchSchema variant) =>
         BatchSchemas.Value.TryGetValue(variant, out var schema) ? schema : throw new ArgumentOutOfRangeException(nameof(variant), variant, "Variante dello schema v9 sconosciuta.");
 
+    // Profilo -3: dizionario SEPARATO (clone delle varianti -2 con il solo tetto sull'espansione). `ReconcileBatchSchema` non riceve nuovi membri e `SchemaProfileV2Hashes`/`ProfileVariants(-2)` non cambiano.
+    private static readonly Lazy<IReadOnlyDictionary<ReconcileBatchSchema, JsonElement>> BatchSchemasV3 = new(() =>
+        Enum.GetValues<ReconcileBatchSchema>().ToDictionary(s => s, s => s == ReconcileBatchSchema.Expand ? WithCandidateCap(SchemaOf(s), ExpansionCandidateCap) : SchemaOf(s)));
+
+    /// <summary>Schema del batch nel profilo <see cref="SchemaProfileByBatchV3"/>: identico al -2 salvo <c>candidates.maxItems</c> nell'espansione (accanto a <c>items</c>, il costrutto che il convertitore di llama.cpp applica).</summary>
+    public static JsonElement SchemaOfV3(ReconcileBatchSchema variant) =>
+        BatchSchemasV3.Value.TryGetValue(variant, out var schema) ? schema : throw new ArgumentOutOfRangeException(nameof(variant), variant, "Variante dello schema v10 sconosciuta.");
+
+    /// <summary>Hash canonici delle varianti del profilo -3, in ordine fisso: entrano nel <c>configHash</c> della v10 (i profili -1 e -2 hanno i propri, invariati).</summary>
+    public static string SchemaProfileV3Hashes() => string.Join(
+        ',', Enum.GetValues<ReconcileBatchSchema>().Select(v => $"{v}={CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOfV3(v).GetRawText()))}"));
+
+    private static JsonElement WithCandidateCap(JsonElement schema, int cap)
+    {
+        var node = JsonNode.Parse(schema.GetRawText())!.AsObject();
+        node["properties"]!["candidates"]!["maxItems"] = cap;
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
     /// <summary>Hash canonici delle varianti del profilo v9, in ordine fisso: entrano nel <c>configHash</c> della v9 (il profilo v8 ha i propri, invariati).</summary>
     public static string SchemaProfileV2Hashes() => string.Join(
         ',', Enum.GetValues<ReconcileBatchSchema>().Select(v => $"{v}={CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOf(v).GetRawText()))}"));
@@ -376,6 +420,7 @@ public static class ReconcileAliasContracts
     {
         SchemaProfileByBatch => Named(SchemaVariantOf(stage, view)),
         SchemaProfileByBatchV2 => Named(BatchSchemaOf(stage, view)),
+        SchemaProfileByBatchV3 => NamedV3(BatchSchemaOf(stage, view)),
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
     };
 
@@ -384,6 +429,7 @@ public static class ReconcileAliasContracts
     {
         SchemaProfileByBatch => [.. Enum.GetValues<ReconcileSchemaVariant>().Select(Named)],
         SchemaProfileByBatchV2 => [.. Enum.GetValues<ReconcileBatchSchema>().Select(Named)],
+        SchemaProfileByBatchV3 => [.. Enum.GetValues<ReconcileBatchSchema>().Select(NamedV3)],
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
     };
 
@@ -391,11 +437,14 @@ public static class ReconcileAliasContracts
 
     private static (string Name, JsonElement Schema) Named(ReconcileBatchSchema variant) => (variant.ToString(), SchemaOf(variant));
 
+    private static (string Name, JsonElement Schema) NamedV3(ReconcileBatchSchema variant) => (variant.ToString(), SchemaOfV3(variant));
+
     /// <summary>Hash delle varianti del profilo congelato che entrano nel <c>configHash</c> (per la v8 la stessa stringa di sempre, <see cref="SchemaProfileHashes"/>).</summary>
     public static string ProfileHashes(string profile) => profile switch
     {
         SchemaProfileByBatch => SchemaProfileHashes(),
         SchemaProfileByBatchV2 => SchemaProfileV2Hashes(),
+        SchemaProfileByBatchV3 => SchemaProfileV3Hashes(),
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
     };
 
