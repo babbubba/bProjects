@@ -760,7 +760,7 @@ internal static class RetrievalGapCampaign
     {
         RetrievalException.EmbeddingUnavailable or RetrievalException.IndexNotReady or RetrievalException.RerankerUnavailable => "RECUPERO (servizi o indice del retrieval)",
         "gap_ledger_exceeds_input" or "gap_assessment_exceeds_output" => "ROUTING DELLO STADIO GAP (budget: il recupero non ha potuto sostituire l'intero ledger)",
-        "work_output_invalid" or "gap_stage_invalid" => "STADIO GAP o RICONCILIAZIONE (output del modello non valido: vedere calls.jsonl e texts del recorder diagnostico)",
+        "work_output_invalid" or "gap_stage_invalid" => "STADIO GAP o RICONCILIAZIONE (output del modello non valido o troncato: le risposte grezze NNN-assistant.txt sono nell'archivio MafDiagnostics, cartella `analysisCallsSession` del rapporto diagnostico; la cartella texts del recorder di estrazione NON le contiene)",
         "" => "codice assente",
         _ => "ESTRAZIONE/RICONCILIAZIONE o altro (codice non specifico del recupero: vedere summary.json del recorder diagnostico)",
     };

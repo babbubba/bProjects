@@ -117,6 +117,7 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
         Guarded(() => _indexDiagnostics.Launch = RetrievalGapCampaign.LaunchRecord.Read().ToJson());   // commit di lancio effettivo, distinto dal baseline del codice nel manifesto
         Guarded(() => _indexDiagnostics.Http = RetrievalIndexGate.HttpSummary(_recorder.Calls));
         Guarded(() => _indexDiagnostics.AnalysisCalls = AnalysisCallReport.Build(MafDiagnostics.Current().Dir, _callsBefore));   // solo le chiamate di QUESTO scenario (Single e Multi condividono la sessione)
+        Guarded(() => _indexDiagnostics.AnalysisCallsSession = MafDiagnostics.Current().Dir);   // percorso completo: i raw*File del rapporto sono solo nomi
         var database = new System.Text.Json.Nodes.JsonObject();
         try
         {

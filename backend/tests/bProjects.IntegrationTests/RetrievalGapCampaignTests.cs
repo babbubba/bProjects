@@ -197,6 +197,11 @@ public sealed class RetrievalGapCampaignTests
         Assert.StartsWith("RECUPERO", RetrievalGapCampaign.Classify(RetrievalException.RerankerUnavailable));
         Assert.StartsWith("ROUTING", RetrievalGapCampaign.Classify("gap_ledger_exceeds_input"));
         Assert.StartsWith("STADIO GAP", RetrievalGapCampaign.Classify("work_output_invalid"));
+        // Run 4: il messaggio rimandava a «texts del recorder diagnostico» (cartella dell'estrazione, vuota per queste chiamate). Deve indicare l'archivio MafDiagnostics e il campo del rapporto che ne dà il percorso.
+        var cause = RetrievalGapCampaign.Classify("work_output_invalid");
+        Assert.Contains("MafDiagnostics", cause, StringComparison.Ordinal);
+        Assert.Contains("analysisCallsSession", cause, StringComparison.Ordinal);
+        Assert.DoesNotContain("texts del recorder diagnostico", cause, StringComparison.Ordinal);
         Assert.StartsWith("ESTRAZIONE", RetrievalGapCampaign.Classify("document_extraction_failed"));
         Assert.Equal("codice assente", RetrievalGapCampaign.Classify(""));
     }

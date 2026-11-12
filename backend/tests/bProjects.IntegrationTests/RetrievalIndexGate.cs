@@ -97,6 +97,12 @@ internal sealed class IndexDiagnostics(Func<string> scenario)
 
     public JsonNode? AnalysisCalls { get; set; }
 
+    /// <summary>
+    /// Percorso COMPLETO della sessione <c>MafDiagnostics</c> (<c>%TEMP%\bprojects-diag\&lt;sessione&gt;</c>) che contiene <c>NNN-request.json</c>, <c>-response.txt</c>, <c>-assistant.txt</c>, <c>-result.json</c> delle chiamate di
+    /// <see cref="AnalysisCalls"/> (i cui <c>raw*File</c> sono solo nomi). Distinta dalla cartella <c>texts</c> del recorder di estrazione (<c>bprojects-i5-real\diag</c>), che NON contiene queste risposte.
+    /// </summary>
+    public string? AnalysisCallsSession { get; set; }
+
     /// <summary>Identità di lancio (commit effettivo, baseline del codice di prodotto, stato di <c>backend/src</c>, hash del manifesto): distinta dal baseline che il manifesto registra.</summary>
     public JsonNode? Launch { get; set; }
 
@@ -122,6 +128,7 @@ internal sealed class IndexDiagnostics(Func<string> scenario)
                 ["http"] = JsonSerializer.SerializeToNode(Http, Web),
                 ["database"] = Database?.DeepClone(),
                 ["analysisCalls"] = AnalysisCalls?.DeepClone(),
+                ["analysisCallsSession"] = AnalysisCallsSession,
                 ["launch"] = Launch?.DeepClone(),
             };
             var temporary = path + ".tmp";
@@ -150,6 +157,10 @@ internal static class AnalysisCallReport
     };
 
     private static string Sha(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+
+    /// <summary>Numero di oggetti con chiave <c>"key": "&lt;prefisso&gt;&lt;n&gt;"</c> già comparsi nel testo (anche troncato). Le virgolette dentro le stringhe JSON sono precedute da una barra e non corrispondono.</summary>
+    internal static int StartedObjects(string text, string prefix) =>
+        System.Text.RegularExpressions.Regex.Matches(text, "\"key\"\\s*:\\s*\"" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[1-9][0-9]*\"").Count;
 
     private static string? Field(string text, string label)
     {
@@ -224,6 +235,11 @@ internal static class AnalysisCallReport
                     entry["outcome"] = result["outcome"]?.ToString();
                     entry["httpStatus"] = result["httpStatus"]?.DeepClone();
                     entry["finishReason"] = result["finishReason"]?.ToString();
+                    if (string.Equals(entry["finishReason"]?.ToString(), "length", StringComparison.Ordinal))
+                    {
+                        entry["truncated"] = true;   // solo se vero: i rapporti storici non hanno il campo
+                    }
+
                     entry["durationMs"] = result["totalMs"]?.DeepClone();
                     entry["promptTokens"] = result["usage"]?["prompt_tokens"]?.DeepClone();
                     entry["completionTokens"] = result["usage"]?["completion_tokens"]?.DeepClone();
@@ -271,6 +287,11 @@ internal static class AnalysisCallReport
                 catch (JsonException)
                 {
                     entry["jsonParsable"] = false;
+                    // Output non parsabile (tipicamente troncato da finish=length): conteggio PARZIALE degli oggetti AVVIATI con `key` completa (l'ultimo può essere incompleto). Serve a riconoscere
+                    // subito un'enumerazione fuori misura (Run 4, chiamata 036: 163 candidati avviati) senza leggere decine di KB. Campi aggiuntivi: i rapporti storici non li hanno.
+                    entry["partialItemsStarted"] = StartedObjects(text, "i");
+                    entry["partialCandidatesStarted"] = StartedObjects(text, "f");
+                    entry["partialPatchesStarted"] = StartedObjects(text, "p");
                 }
             }
 

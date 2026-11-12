@@ -242,4 +242,57 @@ public sealed class RetrievalIndexGateTests
     {
         Assert.Empty(AnalysisCallReport.Build(Path.Combine(Path.GetTempPath(), "bprojects-gate-tests", "assente-" + Guid.NewGuid().ToString("N"))));
     }
+
+    // ---------------------------------------------------------------- diagnostica dopo il Run 4 (chiamata 036): solo campi aggiuntivi, nessun effetto su richieste o gate
+
+    private static string TruncatedCandidates(int complete) =>
+        "{\"contract\":\"reconcile-alias-1\",\"descriptor\":null,\"noFindings\":null,\"items\":[],\"candidates\":["
+        + string.Concat(Enumerable.Range(1, complete).Select(n => $"{{\"key\":\"f{n}\",\"left\":\"E1\",\"right\":\"E{n + 1}\",\"type\":\"SameRule\",\"basis\":\"Inferred\",\"rationale\":\"r\"}},"))
+        + $"{{\"key\": \"f{complete + 1}\",\n\"left\": \"E1\",\n\"ri";   // l'ultimo oggetto è troncato a metà: la chiave è completa, l'oggetto no
+
+    [Fact]
+    public void A_truncated_output_reports_how_many_objects_were_started_and_flags_the_truncation()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "bprojects-gate-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        WriteCall(dir, "001", "Tipo di batch: espansione\nVista: A\n<<<VOCE [E1] origine=Document tipo=Requirement polarita=Affirmed>>>\nx", TruncatedCandidates(162), finish: "length", completion: 16384);
+        WriteCall(dir, "002", "Tipo di batch: espansione\nVista: A\n", Output(items: 0, candidates: 1));   // completa e parsabile: nessun campo parziale
+
+        var calls = AnalysisCallReport.Build(dir);
+
+        Assert.False(calls[0]!["jsonParsable"]!.GetValue<bool>());
+        Assert.True(calls[0]!["truncated"]!.GetValue<bool>());
+        Assert.Equal(163, calls[0]!["partialCandidatesStarted"]!.GetValue<int>());   // 162 completi + 1 avviato e troncato
+        Assert.Equal(0, calls[0]!["partialItemsStarted"]!.GetValue<int>());
+        Assert.Equal(0, calls[0]!["partialPatchesStarted"]!.GetValue<int>());
+        Assert.True(calls[1]!["jsonParsable"]!.GetValue<bool>());
+        Assert.Null(calls[1]!["truncated"]);                       // campi presenti solo dove servono: la forma storica dei rapporti non cambia
+        Assert.Null(calls[1]!["partialCandidatesStarted"]);
+        Assert.Equal(1, calls[1]!["candidatesCount"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void The_started_objects_count_ignores_keys_quoted_inside_strings_and_other_prefixes()
+    {
+        Assert.Equal(1, AnalysisCallReport.StartedObjects("{\"key\":\"f1\",\"rationale\":\"cita \\\"key\\\": \\\"f2\\\" nel testo\"", "f"));
+        Assert.Equal(0, AnalysisCallReport.StartedObjects("{\"key\":\"i1\"}", "f"));
+        Assert.Equal(0, AnalysisCallReport.StartedObjects("{\"key\":\"f0\"}", "f"));   // le chiavi partono da 1
+        Assert.Equal(0, AnalysisCallReport.StartedObjects(string.Empty, "f"));
+    }
+
+    [Fact]
+    public void The_diagnostic_report_carries_the_full_path_of_the_raw_archive_session_and_has_it_null_when_unknown()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "bprojects-gate-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var session = Path.Combine(dir, "bprojects-diag", "20261111-234029-sessione");
+        var withSession = Path.Combine(dir, "con.json");
+        var without = Path.Combine(dir, "senza.json");
+
+        new IndexDiagnostics(() => "t") { AnalysisCallsSession = session }.Persist(withSession);
+        new IndexDiagnostics(() => "t").Persist(without);
+
+        Assert.Equal(session, JsonNode.Parse(File.ReadAllText(withSession))!["analysisCallsSession"]!.ToString());
+        Assert.Null(JsonNode.Parse(File.ReadAllText(without))!["analysisCallsSession"]);   // un rapporto storico/senza sessione resta valido
+    }
 }
