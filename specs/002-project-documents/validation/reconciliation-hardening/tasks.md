@@ -46,7 +46,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Impatto:** nessuno.
 - **STOP:** sessione o file mancante, o hash diverso: fermarsi, senza ricostruire a mano.
 
-### [ ] RH-006 — Costruttore di fixture → richiesta, catalogo e snapshot
+### [x] RH-006 — Costruttore di fixture → richiesta, catalogo e snapshot
 - **Scopo:** comporre una fixture reale con il compositore di produzione senza database né tokenizer, condizione per RH-002, RH-017 e RH-022.
 - **File:** nuovo `backend/tests/bProjects.IntegrationTests/Reconciliation/Replay/ReplayFixtureBuilder.cs`. Riusare i costruttori dei test di `ReconcileAliasComposerTests` e `ReconcileRig` per `AnalysisAliasCatalog`, `ReconcileAliasCatalog`, `ReconciliationSnapshot` e `ReconcileBatchRequest`.
 - **Modifiche precise:**
