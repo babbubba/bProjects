@@ -577,7 +577,7 @@ Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, ness
 
 - [x] T154 [US2] DET+TEST — RH-001: fixture `Reconciliation/Replay/run{R}-{NNN}.json`, `PROVENANCE.json` e `Extract-ReplayFixtures.ps1` in `backend/tests/bProjects.IntegrationTests/`, test `ReconcileReplayFixturesTests.Fixtures_are_complete_and_untampered`. Dip.: nessuna. Dettaglio: RH-001 in `validation/reconciliation-hardening/tasks.md`.
 - [x] T155 [US2] DET+TEST — RH-006: `Reconciliation/Replay/ReplayFixtureBuilder.cs` e `ReplayFixtureBuilderTests`. Dip.: T154. Dettaglio: RH-006.
-- [ ] T156 [US2] DET+TEST — RH-002: `ReconcileContractMatrixTests.cs` (nove casi di caratterizzazione, esito attuale, incoerenze comprese). Dip.: nessuna. Dettaglio: RH-002.
+- [x] T156 [US2] DET+TEST — RH-002: `ReconcileContractMatrixTests.cs` (nove casi di caratterizzazione, esito attuale, incoerenze comprese). Dip.: nessuna. Dettaglio: RH-002.
 - [ ] T157 [US2] DET+TEST — RH-003: `ReconcileSchemaInstanceGenerator.cs` (seed 20261113) e `ReconcileSchemaPropertyTests.cs`. Dip.: T156. Dettaglio: RH-003.
 - [ ] T158 [US2] DET+TEST — RH-004: `CountingLlamaRuntime.cs` e `ReconcileMeasurementBudgetTests.cs`, tabella «Evidenze M0». Dip.: nessuna. Dettaglio: RH-004.
 - [ ] T159 [US2] DET+TEST — RH-005: `ReconcileExpansionCostSimulationTests.cs`, tabella «Evidenze M0». Dip.: T158. Dettaglio: RH-005.

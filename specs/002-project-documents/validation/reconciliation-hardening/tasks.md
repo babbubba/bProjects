@@ -64,7 +64,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Decisioni risolte:** il replay è **per batch**. Non si ricostruiscono gerarchie intere: i confini delle foglie dipendono dal tokenizer reale.
 - **STOP:** se il catalogo non è ricostruibile senza GUID reali, limitarsi alle fixture ricostruibili e documentarle.
 
-### [ ] RH-002 — Matrice di contratto eseguibile (caratterizzazione v10 e v6)
+### [x] RH-002 — Matrice di contratto eseguibile (caratterizzazione v10 e v6)
 - **Scopo:** fissare in test il comportamento attuale della matrice del §4.1 dell'assessment, incoerenze comprese.
 - **File:** nuovo `ReconcileContractMatrixTests.cs`, che usa `ReconcileSchemaSubset` (validazione contro lo schema inviato), `ReconcileAliasComposer.Compose` e `ReconciliationHierarchy.InvokeAsync` o `ReconcileRig`.
 - **Casi** (v10 con profilo `-3`, e v6 con schema unico; si asserisce l'esito attuale):
