@@ -252,23 +252,25 @@ public sealed class RetrievalGapCampaignTests
         Assert.NotEmpty(manifest["config"]!["llm"]!["unverified"]!.AsArray());
         Assert.Equal(0, manifest["thresholds"]!["lostConflicts"]!["belowThatTolerance"]!.GetValue<int>());
         Assert.Equal(0, manifest["thresholds"]!["lostConflicts"]!["upstream"]!.GetValue<int>());
-        Assert.Equal(5, manifest["freeze"]!["version"]!.GetValue<int>());
-        Assert.Equal(RetrievalGapCampaign.Run3ManifestSha256, manifest["freeze"]!["supersedes"]!.GetValue<string>());   // v5 sostituisce la v4 USATA dal Run 3
+        Assert.Equal(6, manifest["freeze"]!["version"]!.GetValue<int>());
+        Assert.Equal(RetrievalGapCampaign.Run4ManifestSha256, manifest["freeze"]!["supersedes"]!.GetValue<string>());   // v6 sostituisce la v5 USATA dal Run 4
         Assert.Equal(
-            [RetrievalGapCampaign.SupersededManifestSha256, RetrievalGapCampaign.Run1ManifestSha256, RetrievalGapCampaign.Run2ManifestSha256, RetrievalGapCampaign.Run3ManifestSha256],
+            [RetrievalGapCampaign.SupersededManifestSha256, RetrievalGapCampaign.Run1ManifestSha256, RetrievalGapCampaign.Run2ManifestSha256, RetrievalGapCampaign.Run3ManifestSha256, RetrievalGapCampaign.Run4ManifestSha256],
             manifest["freeze"]!["history"]!.AsArray().Select(h => h!["sha256"]!.GetValue<string>()));
-        Assert.Equal([1, 2, 3, 4], manifest["freeze"]!["history"]!.AsArray().Select(h => h!["version"]!.GetValue<int>()));
+        Assert.Equal([1, 2, 3, 4, 5], manifest["freeze"]!["history"]!.AsArray().Select(h => h!["version"]!.GetValue<int>()));
         Assert.Equal(RetrievalGapCampaign.CodeBaseline, manifest["freeze"]!["codeBaseline"]!.GetValue<string>());
         Assert.Equal(RetrievalGapCampaign.LaunchCommitRule, manifest["freeze"]!["launchCommit"]!.GetValue<string>());   // il commit di lancio NON e un valore del manifesto: e una regola
+        Assert.NotEqual(RetrievalGapCampaign.CodeBaseline, RetrievalGapCampaign.Run4CodeBaseline);
         Assert.NotEqual(RetrievalGapCampaign.CodeBaseline, RetrievalGapCampaign.Run3CodeBaseline);
         Assert.NotEqual(RetrievalGapCampaign.Run1ManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
         Assert.NotEqual(RetrievalGapCampaign.Run2ManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
         Assert.NotEqual(RetrievalGapCampaign.Run3ManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
+        Assert.NotEqual(RetrievalGapCampaign.Run4ManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
         Assert.NotEqual(RetrievalGapCampaign.SupersededManifestSha256, RetrievalGapCampaign.FrozenManifestSha256);
-        Assert.Contains("Run 3", manifest["freeze"]!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Contains("v8 -> project-analysis-documents-v9", manifest["freeze"]!["configDifferenceFromRun3"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("Run 4", manifest["freeze"]!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("v9 -> project-analysis-documents-v10", manifest["freeze"]!["configDifferenceFromRun4"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal(RetrievalGapCampaign.DefinitionVersion, manifest["definition"]!.GetValue<string>());
-        Assert.Equal("project-analysis-documents-v9", manifest["definition"]!.GetValue<string>());
+        Assert.Equal("project-analysis-documents-v10", manifest["definition"]!.GetValue<string>());
 
         // corpus, gold, domande e attese: contenuto per scenario identico a quello della versione 1 (hash del testo e del gold, ricalcolati qui con lo stesso generatore, non letti dal manifesto)
         foreach (var scenario in RetrievalGapCampaign.Sequence)
@@ -588,9 +590,9 @@ public sealed class RetrievalGapCampaignTests
             Assert.Equal(value!.ToJsonString(), configNow[key]!.ToJsonString());   // nessuna chiave preesistente di config e cambiata
         }
 
-        // Rispetto al Run 1: il fattore di estrazione (v3) e, dal v4, l'identità della riconciliazione e la modalità di output strutturato. La definizione passa da v7 a v9 (v8 nel manifesto v4, dal v5 la v9).
+        // Rispetto al Run 1: il fattore di estrazione (v3) e, dal v4, l'identità della riconciliazione e la modalità di output strutturato. La definizione passa da v7 a v10 (v8 nel manifesto v4, v9 nel v5, dal v6 la v10).
         Assert.Equal(["extraction", "reconcile", "structuredOutput"], configNow.Select(p => p.Key).Except(configRun1.Select(p => p.Key)).ToArray());
-        Assert.Equal(("project-analysis-documents-v7", "project-analysis-documents-v9"), (run1["definition"]!.GetValue<string>(), now["definition"]!.GetValue<string>()));
+        Assert.Equal(("project-analysis-documents-v7", "project-analysis-documents-v10"), (run1["definition"]!.GetValue<string>(), now["definition"]!.GetValue<string>()));
     }
 
     [Fact]
@@ -752,6 +754,41 @@ public sealed class RetrievalGapCampaignTests
         return JsonNode.Parse(File.ReadAllText(path))!;
     }
 
+    private static string ArchivedRun4File() => Path.Combine(Path.GetDirectoryName(ManifestFile())!, "T040-campaign-manifest-v5-run4.json");
+
+    private static JsonNode ArchivedRun4Manifest()
+    {
+        var path = ArchivedRun4File();
+        Assert.True(File.Exists(path), $"manca la copia del manifesto usato dal Run 4: {path}");
+        return JsonNode.Parse(File.ReadAllText(path))!;
+    }
+
+    [Fact]
+    public void The_manifest_used_by_run4_is_preserved_unchanged_and_still_hashes_to_the_recorded_value()
+    {
+        var archived = ArchivedRun4Manifest();
+        Assert.Equal("1646797463253cc9d786964e6cc056046ca3192f86adcd2973272f947e85ede1", RetrievalGapCampaign.Run4ManifestSha256);   // il valore del Run 4 (commit b3d1c69), letterale
+        Assert.Equal(RetrievalGapCampaign.Run4ManifestSha256, archived["frozenSha256"]!.GetValue<string>());
+        Assert.Equal(RetrievalGapCampaign.Run4ManifestSha256, Sha256Of(archived["manifest"]!.ToJsonString()));   // il contenuto conservato e quello che ha dato l'hash del Run 4
+
+        // La copia e identica al file versionato al commit del manifesto v5 (SHA-256 del file, non solo dell'albero JSON), a meno dei fine riga che un checkout con autocrlf puo convertire.
+        Assert.Equal("b565d62e168f0dfe99521772b31c894d3ea61fb89fcf6d3346be3abc1cb577f7", Sha256Of(File.ReadAllText(ArchivedRun4File()).Replace("\r\n", "\n", StringComparison.Ordinal)));
+
+        var manifest = archived["manifest"]!;
+        Assert.Equal(5, manifest["freeze"]!["version"]!.GetValue<int>());
+        Assert.Equal(RetrievalGapCampaign.Run3ManifestSha256, manifest["freeze"]!["supersedes"]!.GetValue<string>());
+        Assert.Equal(RetrievalGapCampaign.Run4CodeBaseline, manifest["freeze"]!["codeBaseline"]!.GetValue<string>());
+        Assert.Equal(RetrievalGapCampaign.Run4DefinitionVersion, manifest["definition"]!.GetValue<string>());   // il Run 4 girava sulla v9
+        Assert.Equal(RetrievalGapCampaign.Run4ReconcilePromptVersion, manifest["config"]!["reconcile"]!["prompt"]!["version"]!.GetValue<string>());
+        Assert.Equal(RetrievalGapCampaign.Run4ReconcilePromptSha256, manifest["config"]!["reconcile"]!["prompt"]!["sha256"]!.GetValue<string>());
+        Assert.Equal(RetrievalGapCampaign.Run4ReconcileSchemaProfile, manifest["config"]!["reconcile"]!["schemaProfile"]!["value"]!.GetValue<string>());
+        Assert.Equal(
+            RetrievalGapCampaign.Run4ReconcileSchemaVariantHashes.OrderBy(p => p.Key),
+            manifest["config"]!["reconcile"]!["schemaProfile"]!["variantHashes"]!.AsObject().ToDictionary(p => p.Key, p => p.Value!.GetValue<string>()).OrderBy(p => p.Key));
+        Assert.False(manifest["config"]!["reconcile"]!.AsObject().ContainsKey("expansion"));   // il v5 non conosceva l'algoritmo di espansione
+        Assert.False(manifest["config"]!["reconcile"]!["freezeKeys"]!.AsObject().ContainsKey("reconcileExpansion"));
+    }
+
     [Fact]
     public void The_manifest_used_by_run3_is_preserved_unchanged_and_still_hashes_to_the_recorded_value()
     {
@@ -776,7 +813,7 @@ public sealed class RetrievalGapCampaignTests
     public void The_v5_manifest_differs_from_the_v4_of_run3_only_by_the_declared_delta_and_every_difference_is_justified()
     {
         var v4 = ArchivedRun3Manifest()["manifest"]!;
-        var v5 = JsonNode.Parse(RetrievalGapCampaign.BuildManifestJson())!;
+        var v5 = ArchivedRun4Manifest()["manifest"]!;   // il manifesto v5 e ora l'archivio del Run 4: la relazione storica v4 -> v5 resta verificabile byte per byte
         var delta = new List<string>();
         Diff(v4, v5, string.Empty, delta);
 
@@ -829,7 +866,7 @@ public sealed class RetrievalGapCampaignTests
         Assert.Equal(v4["config"]!["reconcile"]!["schemaProfile"]!["key"]!.ToJsonString(), v5["config"]!["reconcile"]!["schemaProfile"]!["key"]!.ToJsonString());
         Assert.Equal(v4["config"]!["reconcile"]!["schemaProfile"]!["hashAlgorithm"]!.ToJsonString(), v5["config"]!["reconcile"]!["schemaProfile"]!["hashAlgorithm"]!.ToJsonString());
 
-        Assert.Equal((RetrievalGapCampaign.Run3DefinitionVersion, RetrievalGapCampaign.DefinitionVersion), (v4["definition"]!.GetValue<string>(), v5["definition"]!.GetValue<string>()));
+        Assert.Equal((RetrievalGapCampaign.Run3DefinitionVersion, RetrievalGapCampaign.Run4DefinitionVersion), (v4["definition"]!.GetValue<string>(), v5["definition"]!.GetValue<string>()));
         Assert.Equal(16.0, v5["config"]!["extraction"]!["outputExpansion"]!.GetValue<double>());   // parametri di estrazione invariati
         Assert.Equal(RetrievalGapCampaign.LlmModelId, v5["config"]!["llm"]!["id"]!.GetValue<string>());
         // I quattro elementi di history del v5: i primi tre identici a quelli del v4, il quarto e il Run 3.
@@ -886,32 +923,129 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
-    public void The_v5_manifest_registers_definition_prompt_sha_profile_and_six_schema_hashes_unambiguously_and_matching_the_product()
+    public void The_v6_manifest_registers_definition_prompt_sha_profile_six_schema_hashes_and_expansion_unambiguously_and_matching_the_product()
     {
         var manifest = JsonNode.Parse(RetrievalGapCampaign.BuildManifestJson())!;
         var reconcile = manifest["config"]!["reconcile"]!;
-        Assert.Equal("project-analysis-documents-v9", manifest["definition"]!.GetValue<string>());
-        Assert.Equal(("document-reconcile-v4", "d3e46528736e856eedfa43e1fa41785b0a87ab7ddba91881f57bb9c09c0da79d"), (reconcile["prompt"]!["version"]!.GetValue<string>(), reconcile["prompt"]!["sha256"]!.GetValue<string>()));
-        Assert.Equal(("document-reconcile-v3", "0503d17360e21e8f72e357d1fcf0f0e32fbead294d970193af4eb61ff847c9e5"), (reconcile["prompt"]!["previousVersion"]!.GetValue<string>(), reconcile["prompt"]!["previousSha256"]!.GetValue<string>()));
-        Assert.Equal(("reconcileSchemaProfile", "reconcile-alias-schema-by-batch-2"), (reconcile["schemaProfile"]!["key"]!.GetValue<string>(), reconcile["schemaProfile"]!["value"]!.GetValue<string>()));
-        Assert.Equal(("document-reconcile-v4", "reconcile-alias-schema-by-batch-2"), (reconcile["freezeKeys"]!["reconcile"]!.GetValue<string>(), reconcile["freezeKeys"]!["reconcileSchemaProfile"]!.GetValue<string>()));
-        // Il supporto del provider: verificato per i soli vincoli esercitati, con l'hash del rapporto; il resto resta dichiarato inferito e NON provato.
+        Assert.Equal("project-analysis-documents-v10", manifest["definition"]!.GetValue<string>());
+        Assert.Equal(("document-reconcile-v5", "7e11e26c8e7a5865e36253504d714c82926249b7328f3e22c49de2ba8671057c"), (reconcile["prompt"]!["version"]!.GetValue<string>(), reconcile["prompt"]!["sha256"]!.GetValue<string>()));
+        Assert.Equal(("document-reconcile-v4", "d3e46528736e856eedfa43e1fa41785b0a87ab7ddba91881f57bb9c09c0da79d"), (reconcile["prompt"]!["previousVersion"]!.GetValue<string>(), reconcile["prompt"]!["previousSha256"]!.GetValue<string>()));
+        Assert.Equal(("reconcileSchemaProfile", "reconcile-alias-schema-by-batch-3"), (reconcile["schemaProfile"]!["key"]!.GetValue<string>(), reconcile["schemaProfile"]!["value"]!.GetValue<string>()));
+        Assert.Equal(("document-reconcile-v5", "reconcile-alias-schema-by-batch-3", "expansion-grid-1"), (reconcile["freezeKeys"]!["reconcile"]!.GetValue<string>(), reconcile["freezeKeys"]!["reconcileSchemaProfile"]!.GetValue<string>(), reconcile["freezeKeys"]!["reconcileExpansion"]!.GetValue<string>()));
+        Assert.Equal(("reconcileExpansion", "expansion-grid-1"), (reconcile["expansion"]!["key"]!.GetValue<string>(), reconcile["expansion"]!["algorithm"]!.GetValue<string>()));
+        Assert.Equal(16, reconcile["expansion"]!["candidateCap"]!.GetValue<int>());
+        // Il supporto del provider: verificato per i soli vincoli esercitati, con l'hash dei rapporti; il resto resta dichiarato inferito e NON provato.
         var support = reconcile["schemaProfile"]!["providerSupport"]!.GetValue<string>();
         Assert.Contains("309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE", support, StringComparison.Ordinal);
+        Assert.Contains("4D42A6CFF39FDD343B1474D5CA29D957B673B7CE1BA2C0B3C6FA545EFF992816", support, StringComparison.Ordinal);
         Assert.Contains("sei vincoli Honored", support, StringComparison.Ordinal);
         Assert.Contains("NotExercised, inferiti e NON provati", support, StringComparison.Ordinal);
+        Assert.Contains("Non provato: il comportamento con il prompt document-reconcile-v5", support, StringComparison.Ordinal);
         Assert.Contains("non validazione end-to-end", support, StringComparison.Ordinal);
         Assert.Equal("JsonSchema", manifest["config"]!["structuredOutput"]!["mode"]!.GetValue<string>());
 
-        // Gli hash registrati sono quelli che il PRODOTTO calcola adesso per il profilo della v9 (non una copia del test): nessuna deriva fra manifesto e codice. Dalla v10 il prodotto congela la v10 per le
-        // nuove richieste: l'identità v9 è quella delle analisi già congelate (V9), che il manifesto v5 archiviato continua a descrivere.
-        var product = RetrievalGapCampaign.AnalysisIdentity.V9();
+        // Gli hash registrati sono quelli che il PRODOTTO calcola adesso per il profilo della v10 (non una copia del test): nessuna deriva fra manifesto e codice.
+        var product = RetrievalGapCampaign.AnalysisIdentity.FromProduct();
         var recorded = reconcile["schemaProfile"]!["variantHashes"]!.AsObject().ToDictionary(p => p.Key, p => p.Value!.GetValue<string>());
         Assert.Equal(["LeafA", "LeafB", "Reduce", "Cross", "Expand", "Compare"], recorded.Keys);
         Assert.Equal(product.SchemaVariantHashes.OrderBy(p => p.Key), recorded.OrderBy(p => p.Key));
         Assert.Equal(6, recorded.Values.Distinct().Count());   // sei varianti, sei schemi diversi
         Assert.Equal(reconcile["prompt"]!["sha256"]!.GetValue<string>(), product.ReconcilePromptSha256);
-        Assert.DoesNotContain(RetrievalGapCampaign.FullSchemaHash, recorded.Values);   // lo schema completo non e piu inviato da nessun batch del profilo -2
+        Assert.Equal(reconcile["expansion"]!["algorithm"]!.GetValue<string>(), product.FrozenExpansionAlgorithm);
+        Assert.DoesNotContain(RetrievalGapCampaign.FullSchemaHash, recorded.Values);   // lo schema completo non e inviato da nessun batch del profilo -3
+        Assert.Equal(ReconcileSchemaProfileV10Tests.PinnedV10ProfileHashes, string.Join(',', recorded.Select(p => $"{p.Key}={p.Value}")));   // i sei hash sono i golden del profilo -3, in ordine
+    }
+
+    [Fact]
+    public void The_v6_manifest_records_the_cross_candidate_and_global_call_limit_risks_explicitly_and_the_preflight_rejects_another_limit()
+    {
+        var expansion = JsonNode.Parse(RetrievalGapCampaign.BuildManifestJson())!["config"]!["reconcile"]!["expansion"]!;
+        var risks = expansion["knownRisks"]!.AsArray().Select(r => r!.GetValue<string>()).ToArray();
+        Assert.Contains(risks, r => r.StartsWith("CROSS:", StringComparison.Ordinal) && r.Contains("quadratico", StringComparison.Ordinal));
+        Assert.Contains(risks, r => r.StartsWith("LIMITE GLOBALE DI 512 CHIAMATE:", StringComparison.Ordinal) && r.Contains("expansion_budget_exceeded", StringComparison.Ordinal) && r.Contains("340", StringComparison.Ordinal));
+        Assert.Contains(risks, r => r.Contains("CallLimitExceeded", StringComparison.Ordinal));   // il lavoro futuro non prevedibile non e coperto dal precheck
+        Assert.Equal(512, expansion["callLimit"]!["maxAiCallsPerRun"]!.GetValue<int>());
+        Assert.Equal(RetrievalGapCampaign.MaxAiCallsPerRun, new bProjects.App.Documents.DocumentOptions().MaxAiCallsPerRun);   // il default di prodotto e il valore congelato
+
+        Assert.Null(RetrievalGapCampaign.RejectDocumentOptions(new bProjects.App.Documents.DocumentOptions()));
+        Assert.Null(RetrievalGapCampaign.RejectDocumentOptions(new bProjects.App.Documents.DocumentOptions { MaxAiCallsPerRun = 512 }));
+        foreach (var other in new[] { 0, 256, 511, 513, 1024 })
+        {
+            Assert.Contains("MaxAiCallsPerRun risolto", RetrievalGapCampaign.RejectDocumentOptions(new bProjects.App.Documents.DocumentOptions { MaxAiCallsPerRun = other }), StringComparison.Ordinal);
+        }
+
+        // Il controllo e collegato al preflight: dopo le AiOptions e prima della prima richiesta al modello.
+        InOrder(Section(TestSource("RetrievalGapStageMafRealTests.cs"), "internal async Task PreflightAsync()"), "RejectOptions(App.Services", "RetrievalGapCampaign.RejectDocumentOptions(", "problems.Add(\"DocumentOptions risolte: \"", "await Require()");
+    }
+
+    [Fact]
+    public void The_v6_manifest_differs_from_the_v5_of_run4_only_by_the_declared_delta_and_every_difference_is_justified()
+    {
+        var v5 = ArchivedRun4Manifest()["manifest"]!;
+        var v6 = JsonNode.Parse(RetrievalGapCampaign.BuildManifestJson())!;
+        var delta = new List<string>();
+        Diff(v5, v6, string.Empty, delta);
+
+        // Delta ESATTO v5 -> v6, ciascuna voce con la sua giustificazione. Nient'altro: corpus, gold, domande, attese, soglie, politica, modelli, finestra, budget, estrazione, output strutturato non compaiono.
+        (string Path, string Why)[] declared =
+        [
+            ("changed definition", "definizione v9 -> v10 (decisione del committente 2026-11-12)"),
+            ("changed config.reconcile.prompt.version", "prompt document-reconcile-v4 -> v5"),
+            ("changed config.reconcile.prompt.sha256", "SHA-256 della risorsa v5"),
+            ("changed config.reconcile.prompt.previousVersion", "il precedente diventa il v4"),
+            ("changed config.reconcile.prompt.previousSha256", "SHA-256 del v4"),
+            ("changed config.reconcile.prompt.note", "nota sul v4 e sulle tre righe del v5"),
+            ("changed config.reconcile.schemaProfile.value", "profilo -2 -> -3"),
+            ("changed config.reconcile.schemaProfile.variantHashes.Expand", "unica variante con candidates.maxItems = 16"),
+            ("added config.reconcile.schemaProfile.providerFeatures[3]", "vincolo candidates.maxItems:16"),
+            ("changed config.reconcile.schemaProfile.providerSupport", "esito della sonda reale del 2026-11-13 (rapporto 4D42A6CF...)"),
+            ("changed config.reconcile.freezeKeys.reconcile", "chiave di freeze del prompt v5"),
+            ("changed config.reconcile.freezeKeys.reconcileSchemaProfile", "chiave di freeze del profilo -3"),
+            ("added config.reconcile.freezeKeys.reconcileExpansion", "chiave di freeze dell'algoritmo expansion-grid-1"),
+            ("added config.reconcile.expansion", "algoritmo, membership, griglia, tetto, saturazione, limite di 512 chiamate, rischi noti, proiezione"),
+            ("changed freeze.version", "5 -> 6"),
+            ("changed freeze.supersedes", "v5 (Run 4)"),
+            ("changed freeze.codeBaseline", "baseline del codice di prodotto della v10"),
+            ("added freeze.history[4]", "il v5 e usato dal Run 4"),
+            ("changed freeze.reason", "motivo del ri-congelamento"),
+            ("removed freeze.configDifferenceFromRun3", "sostituita"),
+            ("added freeze.configDifferenceFromRun4", "differenza dichiarata rispetto al v5"),
+        ];
+        Assert.Equal(declared.Select(d => d.Path).Order(StringComparer.Ordinal), delta.Order(StringComparer.Ordinal));
+        Assert.All(declared, d => Assert.False(string.IsNullOrWhiteSpace(d.Why)));
+
+        // Le sezioni di merito sono identiche byte per byte, non solo «senza differenze riportate».
+        foreach (var section in new[] { "campaign", "thresholds", "seed", "extension", "scenarios" })
+        {
+            Assert.Equal(v5[section]!.ToJsonString(), v6[section]!.ToJsonString());
+        }
+
+        foreach (var key in new[] { "window", "output", "margin", "budget", "thinking", "policy", "policyHash", "embedding", "reranker", "indexTextVersion", "fts", "extraction", "llm", "latency", "structuredOutput" })
+        {
+            Assert.Equal(v5["config"]![key]!.ToJsonString(), v6["config"]![key]!.ToJsonString());   // finestra, budget, politica, modelli, estrazione, LLM, latenza e output strutturato invariati
+        }
+
+        Assert.Equal(15360, v6["config"]!["budget"]!.GetValue<int>());
+        Assert.Equal(v5["config"]!["reconcile"]!["preflight"]!.ToJsonString(), v6["config"]!["reconcile"]!["preflight"]!.ToJsonString());
+        Assert.Equal(v5["config"]!["reconcile"]!["schemaProfile"]!["key"]!.ToJsonString(), v6["config"]!["reconcile"]!["schemaProfile"]!["key"]!.ToJsonString());
+        Assert.Equal(v5["config"]!["reconcile"]!["schemaProfile"]!["hashAlgorithm"]!.ToJsonString(), v6["config"]!["reconcile"]!["schemaProfile"]!["hashAlgorithm"]!.ToJsonString());
+        Assert.Equal(v5["freeze"]!["launchCommit"]!.ToJsonString(), v6["freeze"]!["launchCommit"]!.ToJsonString());   // la regola del commit di lancio non cambia
+        // Le cinque varianti diverse dall'espansione sono identiche byte per byte nei due profili.
+        foreach (var variant in new[] { "LeafA", "LeafB", "Reduce", "Cross", "Compare" })
+        {
+            Assert.Equal(v5["config"]!["reconcile"]!["schemaProfile"]!["variantHashes"]![variant]!.ToJsonString(), v6["config"]!["reconcile"]!["schemaProfile"]!["variantHashes"]![variant]!.ToJsonString());
+        }
+
+        Assert.Equal((RetrievalGapCampaign.Run4DefinitionVersion, RetrievalGapCampaign.DefinitionVersion), (v5["definition"]!.GetValue<string>(), v6["definition"]!.GetValue<string>()));
+        Assert.Equal(16.0, v6["config"]!["extraction"]!["outputExpansion"]!.GetValue<double>());   // parametri di estrazione invariati
+        Assert.Equal(RetrievalGapCampaign.LlmModelId, v6["config"]!["llm"]!["id"]!.GetValue<string>());
+        // I cinque elementi di history del v6: i primi quattro identici a quelli del v5, il quinto e il Run 4.
+        Assert.Equal(v5["freeze"]!["history"]!.ToJsonString(), new JsonArray(v6["freeze"]!["history"]!.AsArray().Take(4).Select(h => h!.DeepClone()).ToArray()).ToJsonString());
+        Assert.Equal(RetrievalGapCampaign.Run4ManifestSha256, v6["freeze"]!["history"]![4]!["sha256"]!.GetValue<string>());
+        // Il prompt v4 resta quello del v5 archiviato (stesso SHA-256) e il v5 e una risorsa diversa.
+        Assert.Equal(v5["config"]!["reconcile"]!["prompt"]!["sha256"]!.GetValue<string>(), v6["config"]!["reconcile"]!["prompt"]!["previousSha256"]!.GetValue<string>());
+        Assert.NotEqual(RetrievalGapCampaign.Run4ReconcilePromptSha256, RetrievalGapCampaign.ReconcilePromptSha256);
+        Assert.Equal(RetrievalGapCampaign.Run4ReconcilePromptSha256, RetrievalGapCampaign.EmbeddedPromptSha256(RetrievalGapCampaign.Run4ReconcilePromptVersion));
     }
 
     [Fact]
@@ -942,34 +1076,50 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
-    public void The_v9_identity_of_frozen_v9_runs_matches_every_literal_frozen_in_the_v5_manifest_and_the_v10_product_is_NO_GO_until_a_v6_manifest_exists()
+    public void The_v10_product_identity_matches_every_literal_frozen_in_the_v6_manifest_and_the_v9_identity_of_the_archived_v5_is_NO_GO_for_it()
     {
-        // Dalla definizione v10 le NUOVE richieste congelano la v10 tramite il normale percorso del prodotto: il manifesto v5 (Run 4, definizione v9) non descrive più il prodotto e un Run con esso è NO-GO
-        // prima di ogni upload e inferenza. Nessun opt-in nell'harness: il manifesto v6 si prepara e si congela solo dopo l'approvazione.
+        // Dalla definizione v10 le NUOVE richieste congelano la v10 tramite il normale percorso del prodotto (nessun opt-in nell'harness): è l'identità che il manifesto v6 congela. Il manifesto v5
+        // archiviato (Run 4, definizione v9) non descrive più il prodotto, e viceversa: nessuno dei due accetta l'identità dell'altro.
         var current = RetrievalGapCampaign.AnalysisIdentity.FromProduct();
-        Assert.Equal(("project-analysis-documents-v10", 10, "document-reconcile-v5", "reconcile-alias-schema-by-batch-3"), (current.Definition, current.Contract, current.FrozenReconcilePrompt, current.FrozenSchemaProfile));
-        var rejected = RetrievalGapCampaign.RejectIdentity(current, RetrievalGapCampaign.DefinitionVersion);
+        Assert.Empty(RetrievalGapCampaign.RejectIdentity(current, RetrievalGapCampaign.DefinitionVersion));
+        Assert.Equal(
+            ("project-analysis-documents-v10", 10, "document-reconcile-v5", "document-reconcile-v5", "reconcile-alias-schema-by-batch-3", "expansion-grid-1"),
+            (current.Definition, current.Contract, current.FrozenReconcilePrompt, current.DispatchedReconcilePrompt, current.FrozenSchemaProfile, current.FrozenExpansionAlgorithm));
+        Assert.Equal(["LeafA", "LeafB", "Reduce", "Cross", "Expand", "Compare"], current.SchemaVariantHashes.Keys);
+        Assert.Equal(RetrievalGapCampaign.ReconcileSchemaVariantHashes.OrderBy(p => p.Key), current.SchemaVariantHashes.OrderBy(p => p.Key));
+        Assert.Equal(RetrievalGapCampaign.ReconcilePromptSha256, current.ReconcilePromptSha256);
+        Assert.Equal("project-analysis-documents-v10", RetrievalGapCampaign.DefinitionVersion);
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV10, RetrievalGapCampaign.DefinitionVersion);
+
+        // L'identità v9 delle analisi già congelate resta riproducibile e coincide con i letterali del manifesto v5 archiviato, ma per il manifesto v6 è NO-GO.
+        var v9 = RetrievalGapCampaign.AnalysisIdentity.V9();
+        var rejected = RetrievalGapCampaign.RejectIdentity(v9, RetrievalGapCampaign.DefinitionVersion);
         Assert.Contains(rejected, p => p.Contains("definizione congelata da una nuova richiesta", StringComparison.Ordinal));
         Assert.Contains(rejected, p => p.Contains("contratto riconosciuto da ContractOf", StringComparison.Ordinal));
         Assert.Contains(rejected, p => p.Contains("reconcileSchemaProfile", StringComparison.Ordinal));
+        Assert.Contains(rejected, p => p.Contains("reconcileExpansion", StringComparison.Ordinal));
         Assert.Contains(rejected, p => p.Contains("hash canonico dello schema Expand", StringComparison.Ordinal));
+        Assert.Contains(rejected, p => p.Contains("SHA-256 della risorsa incorporata", StringComparison.Ordinal));
+        Assert.Null(v9.FrozenExpansionAlgorithm);   // la v9 non conosce l'algoritmo
 
-        var product = RetrievalGapCampaign.AnalysisIdentity.V9();
-        Assert.Empty(RetrievalGapCampaign.RejectIdentity(product, RetrievalGapCampaign.DefinitionVersion));
+        var archived = ArchivedRun4Manifest()["manifest"]!["config"]!["reconcile"]!;
         Assert.Equal(
             ("project-analysis-documents-v9", 9, "document-reconcile-v4", "document-reconcile-v4", "reconcile-alias-schema-by-batch-2"),
-            (product.Definition, product.Contract, product.FrozenReconcilePrompt, product.DispatchedReconcilePrompt, product.FrozenSchemaProfile));
-        Assert.Equal(["LeafA", "LeafB", "Reduce", "Cross", "Expand", "Compare"], product.SchemaVariantHashes.Keys);
-        Assert.Equal(RetrievalGapCampaign.ReconcileSchemaVariantHashes.OrderBy(p => p.Key), product.SchemaVariantHashes.OrderBy(p => p.Key));
-        Assert.Equal(RetrievalGapCampaign.ReconcilePromptSha256, product.ReconcilePromptSha256);
-        Assert.Equal("project-analysis-documents-v9", RetrievalGapCampaign.DefinitionVersion);
+            (v9.Definition, v9.Contract, v9.FrozenReconcilePrompt, v9.DispatchedReconcilePrompt, v9.FrozenSchemaProfile));
+        Assert.Equal(archived["prompt"]!["sha256"]!.GetValue<string>(), v9.ReconcilePromptSha256);
+        Assert.Equal(
+            archived["schemaProfile"]!["variantHashes"]!.AsObject().ToDictionary(p => p.Key, p => p.Value!.GetValue<string>()).OrderBy(p => p.Key),
+            v9.SchemaVariantHashes.OrderBy(p => p.Key));
+        Assert.Equal(RetrievalGapCampaign.Run4ReconcileSchemaVariantHashes.OrderBy(p => p.Key), v9.SchemaVariantHashes.OrderBy(p => p.Key));
+        Assert.Equal(RetrievalGapCampaign.Run4ReconcilePromptSha256, v9.ReconcilePromptSha256);
+        Assert.Equal(RetrievalGapCampaign.Run4DefinitionVersion, v9.Definition);
     }
 
     [Fact]
     public void Every_drift_between_the_product_identity_and_the_frozen_one_is_a_NO_GO_before_any_inference()
     {
-        var product = RetrievalGapCampaign.AnalysisIdentity.V9();   // l'identità v9 del manifesto v5; il prodotto corrente (v10) è NO-GO per il v5 (test precedente)
-        const string v8 = RetrievalGapCampaign.DefinitionVersion;   // la definizione frozen del manifesto v5 (v9)
+        var product = RetrievalGapCampaign.AnalysisIdentity.FromProduct();   // l'identità v10 del manifesto v6; l'identità v9 storica è NO-GO per il v6 (test precedente)
+        const string v8 = RetrievalGapCampaign.DefinitionVersion;   // la definizione frozen del manifesto v6 (v10)
 
         void One(RetrievalGapCampaign.AnalysisIdentity identity, string expectedDefinition, string fragment)
         {
@@ -984,11 +1134,17 @@ public sealed class RetrievalGapCampaignTests
         One(product with { ReconcilePromptSha256 = RetrievalGapCampaign.Run2ReconcilePromptSha256 }, v8, "SHA-256 della risorsa incorporata");   // risorsa v4 sostituita da un'altra
         One(product with { ReconcilePromptSha256 = string.Empty }, v8, "SHA-256 della risorsa incorporata");                                  // risorsa mancante
         One(product with { FrozenSchemaProfile = null }, v8, "reconcileSchemaProfile");
-        One(product with { FrozenSchemaProfile = RetrievalGapCampaign.Run3ReconcileSchemaProfile }, v8, "reconcileSchemaProfile");   // il profilo del Run 3 non e quello del Run 4
+        One(product with { FrozenSchemaProfile = RetrievalGapCampaign.Run3ReconcileSchemaProfile }, v8, "reconcileSchemaProfile");   // il profilo del Run 3 non e quello del Run 5
+        One(product with { FrozenSchemaProfile = RetrievalGapCampaign.Run4ReconcileSchemaProfile }, v8, "reconcileSchemaProfile");   // il profilo del Run 4 (-2) non e quello del Run 5
+        One(product with { FrozenExpansionAlgorithm = null }, v8, "reconcileExpansion");   // chiave di espansione assente
+        One(product with { FrozenExpansionAlgorithm = "expansion-grid-2" }, v8, "reconcileExpansion");   // algoritmo diverso
+        One(product with { FrozenReconcilePrompt = RetrievalGapCampaign.Run4ReconcilePromptVersion }, v8, "chiave di freeze reconcile");   // prompt v4 con la definizione v10
         One(product with { Contract = null }, v8, "ContractOf");
         One(product with { Contract = 7 }, v8, "ContractOf");
         One(product with { Contract = 8 }, v8, "ContractOf");   // il contratto della v8
+        One(product with { Contract = 9 }, v8, "ContractOf");   // il contratto della v9
         One(product, RetrievalGapCampaign.Run3DefinitionVersion, "definizione attesa dalla prova");   // ExpectedDefinition rimasta alla v8: fallirebbe solo a run concluso
+        One(product, RetrievalGapCampaign.Run4DefinitionVersion, "definizione attesa dalla prova");   // ExpectedDefinition rimasta alla v9 (Run 4)
 
         foreach (var variant in RetrievalGapCampaign.ReconcileSchemaVariantHashes.Keys)
         {
@@ -1061,9 +1217,9 @@ public sealed class RetrievalGapCampaignTests
         Assert.Contains("modello di embedding", RetrievalGapCampaign.RejectRetrievalOptions(Fixed(o => o.Embedding.ModelId = "altro")), StringComparison.Ordinal);
         Assert.Contains("artefatto di riordino", RetrievalGapCampaign.RejectRetrievalOptions(Fixed(o => o.Reranker.Artifact = "altro.gguf")), StringComparison.Ordinal);
         Assert.Contains("dimensione dell'embedding", RetrievalGapCampaign.RejectRetrievalOptions(Fixed(o => o.Embedding.Dimension = 768)), StringComparison.Ordinal);
-        // L'identita v9 costruita dalle opzioni RISOLTE coincide con quella congelata nel manifesto v5; quella v8 (manifesto v4 del Run 3) e NO-GO.
-        Assert.Empty(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.V9(Fixed()), RetrievalGapCampaign.DefinitionVersion));
-        Assert.NotEmpty(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.FromProduct(Fixed()), RetrievalGapCampaign.DefinitionVersion));   // v10 del prodotto: NO-GO per il manifesto v5
+        // L'identita v10 costruita dalle opzioni RISOLTE coincide con quella congelata nel manifesto v6; quelle v9 (manifesto v5 del Run 4) e v8 (manifesto v4 del Run 3) sono NO-GO.
+        Assert.Empty(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.FromProduct(Fixed()), RetrievalGapCampaign.DefinitionVersion));
+        Assert.NotEmpty(RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.V9(Fixed()), RetrievalGapCampaign.DefinitionVersion));   // v9 storica: NO-GO per il manifesto v6
         Assert.Contains(
             RetrievalGapCampaign.RejectIdentity(RetrievalGapCampaign.AnalysisIdentity.V8(Fixed()), RetrievalGapCampaign.DefinitionVersion),
             p => p.Contains("definizione congelata da una nuova richiesta", StringComparison.Ordinal));
@@ -1103,15 +1259,16 @@ public sealed class RetrievalGapCampaignTests
     }
 
     [Fact]
-    public void The_definition_expected_by_the_real_campaign_is_the_frozen_v9_in_both_scenarios()
+    public void The_definition_expected_by_the_real_campaign_is_the_frozen_v10_in_both_scenarios()
     {
         var property = typeof(LargeDocumentRealFlow).GetProperty("ExpectedDefinition", BindingFlags.Instance | BindingFlags.NonPublic)!;
         foreach (var type in new[] { typeof(RetrievalGapStageMafRealTests.Campaign), typeof(RetrievalGapStageMafRealTests.MultiScenario) })
         {
-            Assert.Equal("project-analysis-documents-v9", property.GetValue(Activator.CreateInstance(type)));
+            Assert.Equal("project-analysis-documents-v10", property.GetValue(Activator.CreateInstance(type)));
         }
 
-        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV9, RetrievalGapCampaign.DefinitionVersion);
+        Assert.Equal(DocumentAnalysisWorkflow.DefinitionVersionV10, RetrievalGapCampaign.DefinitionVersion);
+        Assert.NotEqual(DocumentAnalysisWorkflow.DefinitionVersionV9, RetrievalGapCampaign.DefinitionVersion);
         Assert.NotEqual(DocumentAnalysisWorkflow.DefinitionVersionV8, RetrievalGapCampaign.DefinitionVersion);
         Assert.NotEqual(DocumentAnalysisWorkflow.DefinitionVersionV7, RetrievalGapCampaign.DefinitionVersion);
         Assert.DoesNotContain("DefinitionVersionV7", TestSource("RetrievalGapStageMafRealTests.cs"), StringComparison.Ordinal);   // nessun riferimento residuo alla v7 nella campagna

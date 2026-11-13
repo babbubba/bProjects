@@ -49,7 +49,7 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
 
     protected override IReadOnlyList<string> PmQuestions => [.. Scenario.Expectations.Select(e => e.Question)];
 
-    protected override string ExpectedDefinition => RetrievalGapCampaign.DefinitionVersion;   // v9 (Run 4); il Run 3 usava la v8, il Run 2 la v7
+    protected override string ExpectedDefinition => RetrievalGapCampaign.DefinitionVersion;   // v10 (Run 5); il Run 4 usava la v9, il Run 3 la v8, il Run 2 la v7
 
     protected override bool GapStageExpected => true;
 
@@ -102,6 +102,11 @@ public abstract class RetrievalGapStageMafRealTests : LargeDocumentRealFlow
         if (RejectOptions(App.Services.GetRequiredService<IOptions<AiOptions>>().Value) is { } optionsRejection)
         {
             problems.Add("AiOptions risolte: " + optionsRejection);
+        }
+
+        if (RetrievalGapCampaign.RejectDocumentOptions(App.Services.GetRequiredService<IOptions<bProjects.App.Documents.DocumentOptions>>().Value) is { } documentRejection)
+        {
+            problems.Add("DocumentOptions risolte: " + documentRejection);
         }
 
         Assert.True(problems.Count == 0, "T040: configurazione incompatibile, nessun upload né inferenza: " + string.Join(" | ", problems));

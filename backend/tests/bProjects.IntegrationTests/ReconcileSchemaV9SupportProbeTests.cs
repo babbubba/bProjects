@@ -361,10 +361,10 @@ public sealed class ReconcileSchemaV9SupportProbeTests
         Assert.Equal(RetrievalGapCampaign.Run3ReconcileSchemaVariantHashes["Full"], ReconcileSchemaV9Probe.FrozenHash("Full"));   // il controllo è lo schema completo del manifesto v4
         Assert.Equal(RetrievalGapCampaign.FullSchemaHash, ReconcileSchemaV9Probe.FrozenHash("Full"));
         // Le sei varianti v9 del manifesto v5 sono i golden del profilo, nello stesso ordine: la prova e il manifesto non possono divergere.
-        Assert.Equal(Enum.GetNames<ReconcileBatchSchema>(), RetrievalGapCampaign.ReconcileSchemaVariantHashes.Keys);
+        Assert.Equal(Enum.GetNames<ReconcileBatchSchema>(), RetrievalGapCampaign.Run4ReconcileSchemaVariantHashes.Keys);
         Assert.Equal(
             ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes,
-            string.Join(',', RetrievalGapCampaign.ReconcileSchemaVariantHashes.Select(p => $"{p.Key}={p.Value}")));
+            string.Join(',', RetrievalGapCampaign.Run4ReconcileSchemaVariantHashes.Select(p => $"{p.Key}={p.Value}")));
         Assert.Equal(4, ReconcileSchemaV9Probe.Variants.Select(ReconcileSchemaV9Probe.FrozenHash).Distinct().Count());
         // Le sei varianti v9 hanno golden propri; il frozen della prova è esattamente la stringa del profilo.
         foreach (var variant in Enum.GetNames<ReconcileBatchSchema>())

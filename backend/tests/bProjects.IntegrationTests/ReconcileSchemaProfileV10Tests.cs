@@ -12,7 +12,7 @@ public sealed class ReconcileSchemaProfileV10Tests
     private static readonly ReconcileBatchSchema[] All = Enum.GetValues<ReconcileBatchSchema>();
 
     // Golden del profilo -3: un run v10 congelato dipende da questi byte. Ogni cambiamento richiede un nuovo profilo e una nuova definizione.
-    private const string PinnedV10ProfileHashes =
+    internal const string PinnedV10ProfileHashes =
         "LeafA=17001aef9ed768714129aba3f5d4b861e8e7d36632e6eaf78c7cf60c1ee49f09,LeafB=800f277ba1daa4d14ed0694d2dbea68add81ebb8dd1915817ab1df3a6a1aa4ce,"
         + "Reduce=06058502b68f2d19363b1bb408bfd613b4ccafd3f8e6453c3c32eba43ba56b6c,Cross=bab4a2acd070c70569fb5b80c7ec251a1f9bff809f8f6e701d83dda6e659d5f9,"
         + "Expand=02490207aef819a90c708468ec75a43439695af6863bcc762fdf8fe49e45d89b,Compare=b8c471d1b076af5e9fae32761d66966315fefc1b05f5c4c667714dcf808914a3";

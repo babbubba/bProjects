@@ -134,10 +134,13 @@ internal static class RetrievalGapCampaign
     // ================================================================ manifesto congelato
 
     /// <summary>
-    /// Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>): versione 5, preparata per il Run 4 (T040 Run 3 non superato, definizione v9 con profilo di schema
-    /// <c>reconcile-alias-schema-by-batch-2</c> e prompt <c>document-reconcile-v4</c> invariato). Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.
+    /// Hash del manifesto congelato (SHA-256 del JSON compatto di <see cref="BuildManifestJson"/>): versione 6, preparata per il Run 5 (T040 Run 4 non superato, definizione v10 con profilo di schema
+    /// <c>reconcile-alias-schema-by-batch-3</c>, prompt <c>document-reconcile-v5</c> e algoritmo di espansione <c>expansion-grid-1</c>). Cambiarlo è un atto esplicito di ri-congelamento, mai un adattamento a un risultato.
     /// </summary>
-    public const string FrozenManifestSha256 = "1646797463253cc9d786964e6cc056046ca3192f86adcd2973272f947e85ede1";
+    public const string FrozenManifestSha256 = "871e884c75d7a88640fa0c5632cd3074c5bd31b2ef3abbe943781564a5c50599";
+
+    /// <summary>Hash della versione 5 del manifesto: quella USATA dal Run 4 (2026-11-12, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v5-run4.json`; i risultati del Run 4 si riferiscono a questa configurazione (definizione v9).</summary>
+    public const string Run4ManifestSha256 = "1646797463253cc9d786964e6cc056046ca3192f86adcd2973272f947e85ede1";
 
     /// <summary>Hash della versione 4 del manifesto: quella USATA dal Run 3 (2026-11-11, M3-real.md, esito non superato). Conservata invariata in `T040-campaign-manifest-v4-run3.json`; i risultati del Run 3 si riferiscono a questa configurazione (definizione v8).</summary>
     public const string Run3ManifestSha256 = "91a1d09676e038b5bbe4bd122638704a4b8831105d8579a5c110aa339338ebaf";
@@ -150,27 +153,53 @@ internal static class RetrievalGapCampaign
 
     // ---- identità della pipeline di analisi per il Run 3 (letterali: congelati qui, mai letti dal prodotto; il preflight li confronta con quello che il prodotto realmente congela e invia).
 
-    /// <summary>Definizione di workflow del Run 4: v9 = v8 con il profilo di schema per batch <c>-2</c> (sei varianti). Il Run 3 usava la v8 (<see cref="Run3DefinitionVersion"/>), il Run 2 la v7 (<see cref="Run2DefinitionVersion"/>).</summary>
-    public const string DefinitionVersion = "project-analysis-documents-v9";
+    /// <summary>Definizione di workflow del Run 5: v10 = v9 con prompt <c>document-reconcile-v5</c>, profilo <c>-3</c> (solo l'espansione con <c>candidates.maxItems = 16</c>) e algoritmo <c>expansion-grid-1</c>. Il Run 4 usava la v9 (<see cref="Run4DefinitionVersion"/>), il Run 3 la v8, il Run 2 la v7.</summary>
+    public const string DefinitionVersion = "project-analysis-documents-v10";
+
+    public const string Run4DefinitionVersion = "project-analysis-documents-v9";
 
     public const string Run3DefinitionVersion = "project-analysis-documents-v8";
 
     public const string Run2DefinitionVersion = "project-analysis-documents-v7";
 
-    /// <summary>Prompt della gerarchia di riconciliazione della v8 e SHA-256 della risorsa incorporata (testo UTF-8, senza trasformazioni).</summary>
-    public const string ReconcilePromptVersion = "document-reconcile-v4";
+    /// <summary>Prompt della gerarchia di riconciliazione della v10 e SHA-256 della risorsa incorporata (testo UTF-8, senza trasformazioni).</summary>
+    public const string ReconcilePromptVersion = "document-reconcile-v5";
 
-    public const string ReconcilePromptSha256 = "d3e46528736e856eedfa43e1fa41785b0a87ab7ddba91881f57bb9c09c0da79d";
+    public const string ReconcilePromptSha256 = "7e11e26c8e7a5865e36253504d714c82926249b7328f3e22c49de2ba8671057c";
+
+    /// <summary>Prompt delle definizioni v8 e v9 (Run 3 e Run 4), invariato.</summary>
+    public const string Run4ReconcilePromptVersion = "document-reconcile-v4";
+
+    public const string Run4ReconcilePromptSha256 = "d3e46528736e856eedfa43e1fa41785b0a87ab7ddba91881f57bb9c09c0da79d";
+
+    /// <summary>Algoritmo di espansione congelato dalla v10 (chiave di freeze <c>reconcileExpansion</c>): griglia deterministica con membership esplicita, saturazione fail-closed e precheck del budget.</summary>
+    public const string ExpansionAlgorithm = "expansion-grid-1";
+
+    /// <summary>Limite persistito delle chiamate AI di un run (<c>Documents:MaxAiCallsPerRun</c>): il precheck del budget dell'espansione è calcolato su questo valore, quindi un valore risolto diverso è NO-GO.</summary>
+    public const int MaxAiCallsPerRun = 512;
 
     /// <summary>Prompt della v7 (Run 2), invariato e ancora in uso per le definizioni v4–v7.</summary>
     public const string Run2ReconcilePromptVersion = "document-reconcile-v3";
 
     public const string Run2ReconcilePromptSha256 = "0503d17360e21e8f72e357d1fcf0f0e32fbead294d970193af4eb61ff847c9e5";
 
-    /// <summary>Profilo degli schemi della gerarchia del Run 4 (chiave di freeze <c>reconcileSchemaProfile</c>) e hash canonici (RFC 8785, SHA-256) delle sei varianti, nell'ordine di <see cref="ReconcileBatchSchema"/>. Copia dei golden di <c>ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes</c>, mai letta dal prodotto.</summary>
-    public const string ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-2";
+    /// <summary>Profilo degli schemi della gerarchia del Run 5 (chiave di freeze <c>reconcileSchemaProfile</c>) e hash canonici (RFC 8785, SHA-256) delle sei varianti, nell'ordine di <see cref="ReconcileBatchSchema"/>. Copia dei golden di <c>ReconcileSchemaProfileV10Tests.PinnedV10ProfileHashes</c>, mai letta dal prodotto.</summary>
+    public const string ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-3";
 
     public static readonly IReadOnlyDictionary<string, string> ReconcileSchemaVariantHashes = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["LeafA"] = "17001aef9ed768714129aba3f5d4b861e8e7d36632e6eaf78c7cf60c1ee49f09",
+        ["LeafB"] = "800f277ba1daa4d14ed0694d2dbea68add81ebb8dd1915817ab1df3a6a1aa4ce",
+        ["Reduce"] = "06058502b68f2d19363b1bb408bfd613b4ccafd3f8e6453c3c32eba43ba56b6c",
+        ["Cross"] = "bab4a2acd070c70569fb5b80c7ec251a1f9bff809f8f6e701d83dda6e659d5f9",
+        ["Expand"] = "02490207aef819a90c708468ec75a43439695af6863bcc762fdf8fe49e45d89b",
+        ["Compare"] = "b8c471d1b076af5e9fae32761d66966315fefc1b05f5c4c667714dcf808914a3",
+    };
+
+    /// <summary>Profilo degli schemi del Run 4 (definizione v9) e hash delle sue sei varianti: invariati e ancora prodotti dal prodotto per le run congelate v9 (<c>ReconcileSchemaProfileV9Tests.PinnedV9ProfileHashes</c>).</summary>
+    public const string Run4ReconcileSchemaProfile = "reconcile-alias-schema-by-batch-2";
+
+    public static readonly IReadOnlyDictionary<string, string> Run4ReconcileSchemaVariantHashes = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["LeafA"] = "17001aef9ed768714129aba3f5d4b861e8e7d36632e6eaf78c7cf60c1ee49f09",
         ["LeafB"] = "800f277ba1daa4d14ed0694d2dbea68add81ebb8dd1915817ab1df3a6a1aa4ce",
@@ -194,11 +223,15 @@ internal static class RetrievalGapCampaign
     public const string FullSchemaHash = "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54";
 
     /// <summary>
-    /// BASELINE DEL CODICE DI PRODOTTO (<c>backend/src</c>): commit che ha introdotto la definizione v9 e il profilo <c>-2</c> (<c>feat(backend): definizione v9…</c>). Dopo di esso sono cambiati solo test e documenti.
-    /// Distinto dal COMMIT DI LANCIO (HEAD effettivo del Run 4), che il manifesto non può contenere (il commit che lo versiona non può citare sé stesso) e che l'harness rileva e registra al lancio
+    /// BASELINE DEL CODICE DI PRODOTTO (<c>backend/src</c>): commit che ha introdotto la definizione v10 (<c>feat(backend): definizione v10 con espansione a membership…</c>). Dopo di esso sono cambiati solo test e documenti
+    /// (verificato con <c>git diff d63e7cb HEAD -- backend/src backend/global.json</c>, vuoto).
+    /// Distinto dal COMMIT DI LANCIO (HEAD effettivo del Run 5), che il manifesto non può contenere (il commit che lo versiona non può citare sé stesso) e che l'harness rileva e registra al lancio
     /// (<see cref="LaunchRecord"/>), rifiutando ogni codice di prodotto diverso da questo baseline.
     /// </summary>
-    public const string CodeBaseline = "184bed5";
+    public const string CodeBaseline = "d63e7cb";
+
+    /// <summary>Baseline del codice di prodotto del manifesto v5 (Run 4): la v9 era completa.</summary>
+    public const string Run4CodeBaseline = "184bed5";
 
     /// <summary>Baseline del codice di prodotto del manifesto v4 (Run 3): la v8 e il prompt v4 erano completi.</summary>
     public const string Run3CodeBaseline = "65cdcc8";
@@ -238,13 +271,13 @@ internal static class RetrievalGapCampaign
         + "il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni configurazione risolta o identita del prodotto diversa, compresa una modalita di output strutturato diversa da JsonSchema. "
         + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra e parametri di estrazione non cambiano.";
 
-    /// <summary>Motivo del ri-congelamento (versione 5), dopo il Run 3 non superato (work_output_invalid sulla chiamata 026: descriptor null ammesso dallo schema v8 e vietato dal validatore). Nessun adattamento di corpus, gold, domande, attese, soglie, politica, modelli, parametri di estrazione o prompt.</summary>
+    /// <summary>Motivo del ri-congelamento (versione 6), dopo il Run 4 non superato (chiamate 034–036: enumerazione quadratica dei candidati in un'espansione, finish=length). Nessun adattamento di corpus, gold, domande, attese, soglie, politica, modelli, finestra, budget o parametri di estrazione.</summary>
     public const string FreezeReason =
-        "Dopo il Run 3 (foglia della vista B: descriptor null, chiamata 026, discrepanza fra schema e validatore; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v8 a v9 "
-        + "con il profilo degli schemi per batch reconcile-alias-schema-by-batch-2 a sei varianti (decisione del committente 2026-11-11); il prompt document-reconcile-v4 e invariato. I vincoli strutturali della v9 (descriptor, estremi dei candidati) "
-        + "sono stati verificati realmente su llama.cpp b10703 il 2026-11-11 (sei vincoli Honored, rapporto SHA-256 309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE; esiti NotExercised dichiarati in M3-real.md). "
-        + "Il manifesto registra definizione, profilo e hash delle sei varianti; il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni identita del prodotto diversa e ogni codice di prodotto diverso dal baseline. "
-        + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra, parametri di estrazione, output strutturato e prompt non cambiano.";
+        "Dopo il Run 4 (riconciliazione, espansione dei candidati: enumerazione quadratica, finish=length alle chiamate 034-036; diagnosi offline in M3-real.md) la definizione dell'analisi e passata da project-analysis-documents-v9 a v10 "
+        + "(decisione del committente 2026-11-12): prompt document-reconcile-v5 (membership esplicita), profilo degli schemi reconcile-alias-schema-by-batch-3 (solo l'espansione con candidates.maxItems = 16, verificato realmente su llama.cpp b10703 "
+        + "il 2026-11-13: sonda a due richieste, rapporto SHA-256 4D42A6CFF39FDD343B1474D5CA29D957B673B7CE1BA2C0B3C6FA545EFF992816, esito Honored) e algoritmo di espansione expansion-grid-1 (griglia deterministica di blocchi, saturazione fail-closed, precheck del budget). "
+        + "Il manifesto registra definizione, prompt con SHA-256, profilo, hash delle sei varianti, algoritmo, limite di 512 chiamate e i rischi noti (candidati Cross, limite globale); il preflight rifiuta (NO-GO, prima di ogni inferenza) ogni identita del prodotto diversa, "
+        + "un limite di chiamate diverso e ogni codice di prodotto diverso dal baseline. Corpus, gold, domande, attese, soglie, politica, modelli, finestra, budget, parametri di estrazione e output strutturato non cambiano.";
 
     /// <summary>Caratteristiche del modello che richiedono una verifica REALE (non verificabili offline) e che la campagna registra senza dichiararle verificate.</summary>
     public static readonly string[] LlmUnverifiedCharacteristics = ["pesi effettivamente caricati", "quantizzazione", "artefatto/file del modello", "finestra di contesto effettiva (misurata dal profilo di runtime)", "comportamento del ragionamento (thinking=0 richiesto)"];
@@ -290,7 +323,7 @@ internal static class RetrievalGapCampaign
                 latency = new { perGap = LatencyReport.PerGapPhases, shared = LatencyReport.SharedPhases, attribution = "per Gap: search e rerank; fasi condivise e composizione del pacchetto riportate a parte, mai divise per Gap" },
                 reconcile = new
                 {
-                    prompt = new { version = ReconcilePromptVersion, sha256 = ReconcilePromptSha256, previousVersion = Run2ReconcilePromptVersion, previousSha256 = Run2ReconcilePromptSha256, note = "il v3 resta invariato e in uso per le definizioni v4-v7" },
+                    prompt = new { version = ReconcilePromptVersion, sha256 = ReconcilePromptSha256, previousVersion = Run4ReconcilePromptVersion, previousSha256 = Run4ReconcilePromptSha256, note = "il v4 resta invariato e in uso per le definizioni v8-v9; il v5 differisce dal v4 in sole tre righe (Input e candidates: membership esplicita e tetto di 16 candidati)" },
                     schemaProfile = new
                     {
                         key = DocumentAnalysisWorkflow.ReconcileSchemaProfileKey, value = ReconcileSchemaProfile, variantHashes = ReconcileSchemaVariantHashes,
@@ -300,13 +333,42 @@ internal static class RetrievalGapCampaign
                             "descriptor type:string+minLength:1 (LeafA, LeafB, Reduce) e type:null (Cross, Expand, Compare)",
                             "estremi dei candidati pattern ^E (LeafA, LeafB, Expand, Compare) e ^N (Reduce, Cross)",
                             "maxItems:0 su items (tutte salvo LeafA) e su patches (LeafA, LeafB, Reduce, Cross); type:null su focus (LeafA, LeafB, Reduce, Cross); enum ridotto di focus.outcome (Expand, Compare)",
+                            "candidates.maxItems:16 accanto a items, solo nell'espansione (Expand): protezione contro l'enumerazione quadratica, non selezione",
                         },
                         providerSupport = "Verificato realmente su llama.cpp b10703 (ReconcileSchemaV9SupportRealTests, 2026-11-11, quattro richieste, rapporto SHA-256 309D0C8A1E63C9D8569A769471FBD2E7EA5590EBEB6B9740DC8E1C8F6C0D25EE): sei vincoli Honored "
-                            + "(descriptor minLength:1 su LeafB e Reduce, descriptor null su Cross, estremi ^E su LeafB, estremi ^N su Reduce e Cross). NotExercised, inferiti e NON provati: descriptor type:string non null, LeafA, Expand e Compare "
-                            + "(sottoschemi identici a quelli esercitati); maxItems:0 su items e patches e focus null misurati sulla v8, non ripetuti. Compatibilita dello schema, non validazione end-to-end: il validatore della gerarchia resta l'unica garanzia "
+                            + "(descriptor minLength:1 su LeafB e Reduce, descriptor null su Cross, estremi ^E su LeafB, estremi ^N su Reduce e Cross). NotExercised, inferiti e NON provati: descriptor type:string non null, LeafA, Compare "
+                            + "(sottoschemi identici a quelli esercitati); maxItems:0 su items e patches e focus null misurati sulla v8, non ripetuti. "
+                            + "candidates.maxItems:16 (Expand) verificato realmente il 2026-11-13 (ReconcileExpandCapSupportRealTests, due richieste, rapporto SHA-256 4D42A6CFF39FDD343B1474D5CA29D957B673B7CE1BA2C0B3C6FA545EFF992816): Honored (controllo senza tetto 20 candidati, variante con tetto 16, finish=stop, schema accettato). "
+                            + "Non provato: il comportamento con il prompt document-reconcile-v5, la membership e voci reali (figli per blocco, blocchi saturi). Compatibilita dello schema, non validazione end-to-end: il validatore della gerarchia resta l'unica garanzia "
                             + "sulle regole che la grammatica non esprime (D9-D12, soli spazi, lunghezza del descriptor)",
                     },
-                    freezeKeys = new { reconcile = ReconcilePromptVersion, reconcileSchemaProfile = ReconcileSchemaProfile },
+                    expansion = new
+                    {
+                        key = DocumentAnalysisWorkflow.ReconcileExpansionKey, algorithm = ExpansionAlgorithm,
+                        membership = "membership-1: ogni voce dell'espansione porta gruppo=N1|N2|N1,N2 (tag sugli insiemi interi, mai sul solo blocco)",
+                        grid = "bisezione deterministica del prodotto S1xS2 misurata sul payload completo; copertura esatta verificata su bitmap; nessun pruning, top-k o troncamento",
+                        candidateCap = ReconcileAliasContracts.ExpansionCandidateCap,
+                        saturation = "blocco con almeno 16 candidati => genitore NotProcessed expansion_saturated (figli validi conservati, mai Expanded ne Compared)",
+                        callLimit = new
+                        {
+                            maxAiCallsPerRun = MaxAiCallsPerRun,
+                            option = "Documents:MaxAiCallsPerRun",
+                            stageReserve = 1,
+                            precheck = "blocchi x (1 + 16) contro MaxAiCallsPerRun - riserva(1, stadio Gap) - (batch di gerarchia + chiamate del motore gia impiegate) - confronti gia dovuti; solo quantita deterministiche, candidato per candidato, non cumulato",
+                            preflight = "il valore risolto di Documents:MaxAiCallsPerRun deve essere 512, altrimenti NO-GO prima di ogni inferenza",
+                        },
+                        knownRisks = new[]
+                        {
+                            "CROSS: l'espansione dei candidati Cross (radici A x B, ordine di 282 x 282, tutte in entrambi i gruppi) ha costo quadratico: ~20 blocchi da ~14,4k token ciascuno nella proiezione offline sul Run 4; e l'ultimo e il piu oneroso candidato e il primo a essere rifiutato dal precheck",
+                            "LIMITE GLOBALE DI 512 CHIAMATE: la riserva conservativa del Cross e blocchi x 17 = 340 chiamate; con A e B in sequenza (48 blocchi, 53 chiamate gia impiegate piu 48 x figli per blocco) il precheck del Cross passa solo se i figli per blocco sono in media <= ~2,3 (3 figli => servono 340, restano 307); oltre, il Cross termina NotProcessed expansion_budget_exceeded senza spendere chiamate, e con ~15 figli per blocco anche tre riduzioni B",
+                            "il numero di figli per blocco e il comportamento del modello con prompt v5 e membership non sono mai stati osservati su un'espansione completa (034/035 avevano risposto Unresolved senza membership)",
+                            "il precheck non copre il lavoro futuro non prevedibile (round finale, candidati successivi): il port rifiuta con CallLimitExceeded, sempre fail-closed",
+                            "lo stesso insieme di membri puo essere espanso piu volte per candidati diversi (7 candidati su due sole partizioni): costo ripetuto",
+                            "un blocco saturo o Unresolved produce coverage_incomplete: la v10 puo terminare NotProcessed anche senza errori tecnici; un arresto per candidato (expansion_budget_exceeded) non e un guasto dell'infrastruttura ma un esito del gate",
+                        },
+                        projectionRun4 = "68 blocchi (A 8+8, B 8+8+8+8, Cross 20), ~10,8 minuti, ~0,95 M token di prompt; proiezione offline, nessuna inferenza",
+                    },
+                    freezeKeys = new { reconcile = ReconcilePromptVersion, reconcileSchemaProfile = ReconcileSchemaProfile, reconcileExpansion = ExpansionAlgorithm },
                     preflight = "definizione, prompt (versione e SHA-256), profilo, hash delle varianti dello schema e chiavi di freeze del prodotto devono coincidere con questi valori, altrimenti NO-GO prima di ogni inferenza",
                 },
                 structuredOutput = new
@@ -325,8 +387,8 @@ internal static class RetrievalGapCampaign
             },
             freeze = new
             {
-                version = 5,
-                supersedes = Run3ManifestSha256,
+                version = 6,
+                supersedes = Run4ManifestSha256,
                 codeBaseline = CodeBaseline,
                 launchCommit = LaunchCommitRule,
                 history = new object[]
@@ -335,11 +397,13 @@ internal static class RetrievalGapCampaign
                     new { version = 2, sha256 = Run1ManifestSha256, usedByRun = "Run 1 (2026-11-10): non superato in estrazione, risultati invariati in M3-real.md; copia in T040-campaign-manifest-v2-run1.json" },
                     new { version = 3, sha256 = Run2ManifestSha256, usedByRun = "Run 2 (2026-11-10): non superato (work_output_invalid sulla riconciliazione, definizione v7), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v3-run2.json" },
                     new { version = 4, sha256 = Run3ManifestSha256, usedByRun = "Run 3 (2026-11-11): non superato (work_output_invalid sulla riconciliazione, descriptor null alla chiamata 026, definizione v8), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v4-run3.json" },
+                    new { version = 5, sha256 = Run4ManifestSha256, usedByRun = "Run 4 (2026-11-12): non superato (riconciliazione, espansione dei candidati: enumerazione quadratica, finish=length alle chiamate 034-036, definizione v9), risultati invariati in M3-real.md; copia in T040-campaign-manifest-v5-run4.json" },
                 },
                 reason = FreezeReason,
-                configDifferenceFromRun3 = "differenze rispetto al manifesto v4 (Run 3), uniche: definition project-analysis-documents-v8 -> project-analysis-documents-v9; config.reconcile.schemaProfile (profilo reconcile-alias-schema-by-batch-1 -> reconcile-alias-schema-by-batch-2, "
-                    + "hash delle varianti: tre -> sei, providerFeatures e providerSupport con l'esito della verifica reale) e config.reconcile.freezeKeys.reconcileSchemaProfile; freeze v5 (version, supersedes, codeBaseline, launchCommit, history, reason, differenza). "
-                    + "Corpus, gold, domande, attese, soglie, politica, modelli, finestra, parametri di estrazione (ExtractionOutputExpansion 16.0), output strutturato e prompt document-reconcile-v4 (stesso SHA-256) invariati.",
+                configDifferenceFromRun4 = "differenze rispetto al manifesto v5 (Run 4), uniche: definition project-analysis-documents-v9 -> project-analysis-documents-v10; config.reconcile.prompt (document-reconcile-v4 -> document-reconcile-v5 con il suo SHA-256, previousVersion/previousSha256 e nota); "
+                    + "config.reconcile.schemaProfile (profilo reconcile-alias-schema-by-batch-2 -> reconcile-alias-schema-by-batch-3: solo l'hash della variante Expand cambia, quarta voce di providerFeatures, providerSupport con l'esito della sonda reale del 2026-11-13); "
+                    + "config.reconcile.freezeKeys.reconcile, .reconcileSchemaProfile e .reconcileExpansion (nuova); config.reconcile.expansion (nuova: algoritmo, membership, griglia, tetto, saturazione, limite di 512 chiamate, rischi noti, proiezione); "
+                    + "freeze v6 (version, supersedes, codeBaseline, history, reason, differenza). Corpus, gold, domande, attese, soglie, politica, modelli, finestra, budget (15360), parametri di estrazione (ExtractionOutputExpansion 16.0), output strutturato e launchCommit (regola) invariati.",
             },
             seed = LargeDocumentCorpus.Seed,
             extension = ExtensionDocuments.Select(d => new { d.Key, d.FileName, d.ExcludedByPm, textSha256 = Sha(d.Text) }).ToArray(),
@@ -447,7 +511,7 @@ internal static class RetrievalGapCampaign
     /// </summary>
     internal sealed record AnalysisIdentity(
         string Definition, int? Contract, string FrozenReconcilePrompt, string DispatchedReconcilePrompt, string ReconcilePromptSha256, string? FrozenSchemaProfile,
-        IReadOnlyDictionary<string, string> SchemaVariantHashes)
+        IReadOnlyDictionary<string, string> SchemaVariantHashes, string? FrozenExpansionAlgorithm = null)
     {
         /// <summary>
         /// Identità del prodotto per una NUOVA richiesta di Analizza con il recupero, letta dallo stesso freeze dell'endpoint (<see cref="SourceSnapshotStore.DocumentaryAnalysisFreeze"/>), mai da costanti
@@ -471,7 +535,8 @@ internal static class RetrievalGapCampaign
                 ? ReconcileAliasContracts.ProfileVariants(profile).ToDictionary(v => v.Name, v => CanonicalJson.HashText(CanonicalJson.Canonicalize(v.Schema.GetRawText())), StringComparer.Ordinal)
                 : new Dictionary<string, string>(StringComparer.Ordinal);
             return new(
-                definition, DocumentAnalysisWorkflow.ContractOf(run), frozenPrompt, DocumentAnalysisWorkflow.ReconcilePromptOf(definition), EmbeddedPromptSha256(frozenPrompt), profile, variants);
+                definition, DocumentAnalysisWorkflow.ContractOf(run), frozenPrompt, DocumentAnalysisWorkflow.ReconcilePromptOf(definition), EmbeddedPromptSha256(frozenPrompt), profile, variants,
+                keys.GetValueOrDefault(DocumentAnalysisWorkflow.ReconcileExpansionKey));
         }
 
         /// <summary>
@@ -485,6 +550,15 @@ internal static class RetrievalGapCampaign
         public static AnalysisIdentity V8(RetrievalOptions? retrieval = null) =>
             ForFreeze(SourceSnapshotStore.AnalysisDefinitionV8, SourceSnapshotStore.AnalysisPromptVersionsV8(retrieval ?? new RetrievalOptions { PolicyVersion = RetrievalPolicy.Version1 }));
     }
+
+    /// <summary>
+    /// Verifica del limite persistito delle chiamate AI di un run RISOLTO dall'applicazione in prova (<see cref="DocumentOptions.MaxAiCallsPerRun"/>): il precheck del budget dell'espansione v10 e i rischi registrati nel manifesto
+    /// (candidati Cross, limite globale) sono calcolati su <see cref="MaxAiCallsPerRun"/>; qualunque altro valore è NO-GO PRIMA di ogni upload e inferenza.
+    /// </summary>
+    public static string? RejectDocumentOptions(DocumentOptions options) =>
+        options.MaxAiCallsPerRun == MaxAiCallsPerRun
+            ? null
+            : $"MaxAiCallsPerRun risolto {options.MaxAiCallsPerRun.ToString(CultureInfo.InvariantCulture)} invece di {MaxAiCallsPerRun.ToString(CultureInfo.InvariantCulture)}: il precheck del budget dell'espansione e i rischi del manifesto non descriverebbero il run";
 
     /// <summary>
     /// Verifica delle <see cref="RetrievalOptions"/> RISOLTE dall'applicazione in prova: il recupero deve essere abilitato (altrimenti una nuova richiesta congelerebbe la v6, senza recupero), con la politica, i modelli e
@@ -549,10 +623,12 @@ internal static class RetrievalGapCampaign
         Same("prompt di riconciliazione realmente instradato per la definizione", actual.DispatchedReconcilePrompt, ReconcilePromptVersion);
         Same($"SHA-256 della risorsa incorporata {ReconcilePromptVersion}", actual.ReconcilePromptSha256, ReconcilePromptSha256);
         Same("chiave di freeze reconcileSchemaProfile", actual.FrozenSchemaProfile, ReconcileSchemaProfile);
-        Same("profilo degli schemi supportato dal prodotto", ReconcileAliasContracts.SchemaProfileByBatchV2, ReconcileSchemaProfile);
-        if (actual.Contract != 9)
+        Same("profilo degli schemi supportato dal prodotto", ReconcileAliasContracts.SchemaProfileByBatchV3, ReconcileSchemaProfile);
+        Same("chiave di freeze reconcileExpansion (algoritmo di espansione)", actual.FrozenExpansionAlgorithm, ExpansionAlgorithm);
+        Same("algoritmo di espansione supportato dal prodotto", ReconcileAliasContracts.ExpansionAlgorithm, ExpansionAlgorithm);
+        if (actual.Contract != 10)
         {
-            problems.Add($"contratto riconosciuto da ContractOf per il freeze v9: {actual.Contract?.ToString(CultureInfo.InvariantCulture) ?? "nessuno (workflow_incompatible)"} invece di 9");
+            problems.Add($"contratto riconosciuto da ContractOf per il freeze v10: {actual.Contract?.ToString(CultureInfo.InvariantCulture) ?? "nessuno (workflow_incompatible)"} invece di 10");
         }
 
         foreach (var (variant, expected) in ReconcileSchemaVariantHashes)
