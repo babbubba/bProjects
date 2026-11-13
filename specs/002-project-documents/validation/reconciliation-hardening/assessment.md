@@ -199,7 +199,7 @@ Meccanismi valutati:
 - `PackNextAsync` misura ogni prefisso: *k*+1 misure per una foglia di *k* voci.
 - Le pagine del catalogo (`ChainAsync`, misuratore `PageMeasurer` senza schema, `DocumentReconcilePlan.cs:1148-1150`) passano dallo stesso Pack, voce per voce. Le pagine però non compaiono in nessun messaggio alias (`ReconcileAliasMessages.Build`, `:25-106`).
 
-**Scomposizione inferita: ipotesi, non dimostrata (da confermare con RH-004).** La quota «Keys/Relations ≈ 711» è un residuo per differenza, quindi la coincidenza sui `/apply-template` vale per costruzione; sui `/tokenize` restano 3 richieste di scarto. La prova isolata (stessa v10, W=32768, 283 evidenze) registra prima della gerarchia solo 577 `/apply-template` e 865 `/tokenize`. È incompatibile con ≥ 567 misure di foglia più ≥ 564 misure di pagine per voce, salvo differenze di ledger (per esempio `DirectoryFacts` vuoti) o di confine delle fasi del router. **Non riconciliata.**
+**Scomposizione inferita: ipotesi, non dimostrata (da confermare con RH-004).** La quota «Keys/Relations ≈ 711» è un residuo per differenza, quindi la coincidenza sui `/apply-template` vale per costruzione; sui `/tokenize` restano 3 richieste di scarto. La prova isolata (stessa v10, W=32768, 283 evidenze) registra prima della gerarchia solo 577 `/apply-template` e 865 `/tokenize`. È incompatibile con ≥ 567 misure di foglia più ≥ 564 misure di pagine per voce, salvo differenze di ledger (per esempio `DirectoryFacts` vuoti) o di confine delle fasi del router. **Non riconciliata.** *Aggiornamento M0 (2026-11-14): RH-004 ha riconciliato i conteggi con un residuo di 2 coppie di richieste e ha corretto le uguaglianze «per vista» (cache per contenuto senza la vista): vedi «Evidenze M0», C-1…C-3.*
 
 | Misuratore | Misure | `/apply-template` | `/tokenize` |
 |---|---|---|---|
@@ -323,3 +323,87 @@ Revisione in sola lettura di un agente architetto, 25 rilievi verificati sul cod
 | I-3 genera anche conflitti duplicati | **Accolto.** I-3 e RH-002 estesi |
 | Incoerenze interne (ID, «port invariato», numero dei punti) e caso v10 del test di `ContractOf` | **Accolto.** Testi riallineati; il ramo v10 non si tocca |
 | «Una sola citazione per voce» in tutti i run | Già corretto prima della revisione (1.127/1.128) |
+
+## 12. Evidenze
+
+Sezione prevista dalla regola di STOP generale di [tasks.md](tasks.md). Le evidenze di M1–M4 saranno aggiunte solo se quelle milestone verranno autorizzate.
+
+### Evidenze M0 (2026-11-13/14; T154–T159; solo offline, nessuna modifica di `backend/src`, nessuna inferenza)
+
+Commit locali: RH-001 `5deb3ed`, RH-006 `1192ef6`, RH-002 `371eeb4`, RH-003 `80da706`, RH-004 `bafa8a4`, RH-005 `1fd9e4d`. Test mirati: 80 (RH-001/006), 30 (RH-002/003), 45 (RH-004/005), tutti verdi, riesaminati dal coordinatore.
+
+**Correzioni alla diagnosi imposte dai test** (la diagnosi è stata corretta, non il codice):
+
+| # | Affermazione | Esito | Correzione |
+|---|---|---|---|
+| C-1 | §7: `apply-template(foglia)` = Σ(*k*+1) − 1 **per vista** e `apply-template(pagina)` = Σ(voci + interruzioni) **per vista** | **Falsa come formulata** | Valgono sui **prefissi distinti**: la cache `_measures` del piano è per contenuto del prefisso e non contiene la vista, e il Pack misura sempre con «Vista: A». Con `DirectoryFacts` vuoti A e B hanno lo stesso ordine (per GUID), quindi la vista B costa zero (283 misure invece di 566 per le foglie, 282 invece di 564 per i Members). Con fatti deterministici le foglie tornano a Σ(*k*+1)−1 per vista (566) ma i Members coincidono in parte (521 invece di 564) |
+| C-2 | §7: la prova isolata (577/865) è incompatibile con 567 + 564 misure, «salvo differenze di ledger (per esempio `DirectoryFacts` vuoti)» | **Ipotesi confermata** | Con fatti vuoti il piano da solo dà 567 `/apply-template` e 851 `/tokenize`. 865 − 577 = 288 = misure con schema = 284 di Pack (3 foglie A 138/143/1, come nel Run 5) + 1 rimisura + 3 fuori dal piano. Le richieste senza schema (289) = 282 pagine Members + 5 sonde del monitor, con **un residuo di 2 coppie** (0,3%), **non dimostrato** (i corpi non sono registrati) |
+| C-3 | §7: «567 misure di foglia» e «≈ 1.275 di pagine» nel Run 5 | **Parzialmente corretta** | Identità del Run 5: 2.414 − 1.843 = 571 = 567 (Pack) + 1 (rimisura) + 3 (fuori dal piano). Le pagine sono ≈ 1.260 (1.272 meno le sonde); il «≈ 1.275» è un residuo che le include. Il meccanismo regge; la stima assoluta non è riproducibile offline senza i fatti reali dell'estrazione |
+| C-4 | RH-013, tabella: «`value` incoerente con `op`» ⇒ `PatchShape` (`ReconcileAliasComposer.cs:457-459`) | **Sbagliata nel percorso alias** | `AiPatchConverter` (`AnalysisAliasContracts.cs:376-382`) deserializza `value` secondo `op`: un `value` incoerente fallisce in decodifica (`JsonException`) e dà **`Undecodable`**. Il ramo del compositore e quello di `CheckPatch` non sono mai raggiunti dal percorso alias (0 occorrenze) |
+| C-5 | RH-016: `Undecodable` non compare mai per la grammatica `by-stage-1` | **Non garantita** | Lo `anyOf` del `value` nel profilo `-3` è indipendente da `op` e produce il rifiuto in decodifica nel 59–61% delle istanze di Expand e Compare. RH-016 passa solo se la grammatica `by-stage-1` lega `value` a `op` (`anyOf` di coppie `op` `enum` + `value`), costrutto da verificare dentro `ReconcileSchemaSubset.Keywords` |
+| C-6 | Ledger «283 evidenze» | **Precisazione** | Nello snapshot del piano entrano 282 evidenze (277 non-Gap + 5 Gap): la 283ª è del documento escluso dal PM |
+
+**RH-001/RH-006 (T154/T155).** 34 fixture (17 foglie, 6 riduzioni, 2 cross, 3 espansioni, 6 confronti), estratte dal solo corpo delle richieste; il messaggio utente riscritto dai campi estratti coincide **byte per byte** con l'archivio su tutte e 34; `assistantSha256` verificati; nessun segreto, header, percorso HTTP o indirizzo IPv4 nelle fixture. Tutte e 34 le richieste sono ricostruibili con il compositore di produzione (nessuno STOP): righe `<<<VOCE` e messaggio intero uguali all'originale, compresa la 025 del Run 3 (foglia B da 142 voci, senza item già proposti: nessuna eccezione). Osservazioni: nessun archivio contiene membership (`gruppo=`) né relazioni note (l'espansione con membership v10 è esercitata solo su una variante sintetica della 036); le espansioni 034–036 del Run 4 portano quasi un item già proposto per voce (109, 110 e 62 item per 109, 110 e 63 voci). Il compositore accetta gli output archiviati salvo Run 2 026 (item nelle foglie B) e Run 4 036 (JSON troncato); accetta anche Run 3 026 e Run 5 030: i loro rifiuti stanno più a valle (descriptor nullo alla gerarchia; `noFindings` a `CheckResult`), coerente con la classe «schema ≠ validatore». Il rifiuto di `CheckResult` sull'output archiviato della 030 non è ancora stato eseguito (è materia di RH-017, non autorizzato); RH-002 caso 1 lo prova su un'istanza equivalente.
+
+**RH-002 (T156): i nove casi coincidono con l'assessment, identici in v10 e v6** (lo schema inviato ammette il DTO in tutti i casi).
+
+| Caso | Esito osservato |
+|---|---|
+| 1 | Confronto `Open` con motivo, 0 candidati, `noFindings` null: compositore accetta, validatore rifiuta con `noFindingsReason: obbligatorio quando non ci sono proposte, candidati né patch.` (I-1). Anche un confronto `Compared` senza candidati è rifiutato: la regola conta i campi, non gli esiti |
+| 2 | `Open` con `reason` null o di soli spazi: il compositore rifiuta con `focus.reason: obbligatorio e non vuoto quando l'esito è Open.` (I-2) |
+| 3 | `Contradicts` sulla stessa coppia con `focus Compared`: accettato; il figlio diventa `Compared` per cache con gli stessi hash, **una sola chiamata**, 0 disposizioni `Open`, 0 conflitti all'assembly: il conflitto dichiarato dal modello non arriva al PM (I-3) |
+| 4 | `DependsOn` invertito con `focus Open`: il figlio eredita `Open` senza chiamate (1 sola), 2 disposizioni `Open`, **2 conflitti** con id diversi e stesse alternative (I-3, forma 029) |
+| 5 | Blocco di espansione vuoto: compositore accetta, validatore rifiuta con lo stesso messaggio (I-1 latente) |
+| 6 | Foglia B senza candidati e `noFindings` null: rifiutata dal validatore |
+| 7 | Forma dei confronti del Run 4: accettata; dettaglio nuovo: il motore scarta il figlio con identità uguale al padre, resta un solo conflitto |
+| 8 | Foglia A con una Gap come `requirements`: accettata dal compositore e dal validatore (I-4). Il compositore non vede il tipo di evidenza: `ReconcileCatalogEntry` porta alias, id, hash e origine |
+| 9 | Foglia A con `openQuestions` senza evidenze (finisce in `Ungrounded`) e una voce mai citata: accettata (I-5) |
+
+**RH-003 (T157): 2.500 istanze per variante del profilo `-3`**, seed 20261113, 0 istanze fuori schema per costruzione, golden pinnato e riverificato in processi separati. Conteggi (K = rifiuto del compositore, V = rifiuto di `CheckResult`/validatore; un'istanza può cadere in più categorie):
+
+| Categoria | LeafA | LeafB | Reduce | Cross | Expand | Compare |
+|---|---|---|---|---|---|---|
+| accettate / rifiutate da K / rifiutate da V | 120 / 2224 / 156 | 373 / 1637 / 490 | 341 / 1700 / 459 | 462 / 1744 / 294 | 138 / 2276 / 86 | 81 / 2359 / 60 |
+| K estremi coincidenti (candidati) | 609 | 610 | 850 | 902 | 248 | 336 |
+| K candidato duplicato | 225 | 205 | 155 | 166 | 97 | 81 |
+| K testo di soli spazi, `rationale` | 615 | 585 | 585 | 582 | 253 | 228 |
+| K I-2 (`Open` senza motivo) | – | – | – | – | – | 254 |
+| V I-1 | 64 | 248 | 248 | 213 | 49 | 38 |
+| V descriptor oltre 512 o di soli spazi | 86 | 220 | 201 | – | – | – |
+| K decodifica del `value` incoerente con `op` | – | – | – | – | 1484 | 1514 |
+
+Altre categorie osservate (alias sconosciuto o fuori batch su candidati, item, patch; chiave e alias duplicati; patch incoerente; testi di soli spazi nelle patch) sono nel golden di `ReconcileSchemaPropertyTests`. Classi **fuori dall'elenco del task**, documentate come nuove incoerenze di caratterizzazione: `ItemShape` in LeafA (Declared senza Message 326, Documented senza Document 170, `assumptions` non Assumed 225, item senza evidenze 655), patch duplicata (37 Expand, 31 Compare) e la decodifica del `value` (C-4/C-5). `StageShape` non compare mai nel golden. Il tetto di 16 candidati nel profilo `-3` è imposto dalla grammatica; il compositore lo ripete solo con la membership (solo v10); in v6 17 candidati sono accettati.
+
+**RH-004 (T158): conteggi fino al primo batch (`PrepareAsync(0)`), W=32768, O=16384, M=1024, ledger da 282 evidenze nello snapshot.** La v6 dà gli stessi totali per tipo (cambiano solo i confini delle foglie: v6 vuoti [154,128], v10 vuoti [150,132]).
+
+| `DirectoryFacts` | Tipo | `/apply-template` | `/tokenize` | Totale | Quota |
+|---|---|---:|---:|---:|---:|
+| vuoti | foglia (Pack + 1 rimisura) | 284 | 568 | 852 | 60,1% |
+| vuoti | pagina (Members 282, Keys 0) | 282 | 282 | 564 | **39,8%** |
+| vuoti | altro (sonda del monitor) | 1 | 1 | 2 | 0,1% |
+| vuoti | **totale** | **567** | **851** | **1.418** | 100% |
+| deterministici | foglia (Pack + 1 rimisura) | 567 | 1.134 | 1.701 | 51,8% |
+| deterministici | pagina (Members 521, Keys 269) | 790 | 790 | 1.580 | **48,1%** |
+| deterministici | altro (sonda del monitor) | 1 | 1 | 2 | 0,1% |
+| deterministici | **totale** | **1.358** | **1.925** | **3.283** | 100% |
+
+Uguaglianza `tokenize` = 2·foglie + pagine + 2·rimisure: **vera** in tutte e quattro le configurazioni, sonda compresa. Le altre due: C-1. **Limiti:** tokenizer finto a 3,5 caratteri/token (foglie diverse da quelle reali: 138/143 contro 150/132) e fatti deterministici scritti come proxy per regex dalle tre forme di `LargeDocumentCorpus.BulkRule` (269 voci di chiave contro ≈ 700 reali): la quota delle pagine è quindi un minimo, con fatti reali ≈ 59% (Run 5). **Criterio O3** ([plan.md](plan.md) §12): quota ≥ 30% **soddisfatta** in entrambe le configurazioni; riconciliazione con la prova isolata entro 2 coppie di richieste, residuo non dimostrato. L'adozione di O3 resta una decisione fuori da M0.
+
+**RH-005 (T159): costo dell'espansione**, motore puro di produzione (`ExpansionPolicy(16, 512, 1)`), ledger RH-004 con fatti deterministici, `MaxAiCallsPerRun` = 512. Struttura: foglie 151+131, 7 chiamate di gerarchia (4 foglie, 2 riduzioni, 1 cross), **5 candidati di gruppo** (due Set, due Node 151×131 con 8 blocchi ciascuno, un Cross 282×282 con 20 blocchi) = **52 blocchi**, indipendenti da *c*. Item delle foglie A con testo nei messaggi (v10 reale). Due politiche dei figli: *condivisi* (stesse coppie, la cache le riusa) e *disgiunti* (nessun riuso, costo massimo).
+
+| *c* | Chiamate totali (condivisi) | `NotProcessed` (condivisi) | Esito (condivisi) | Chiamate totali (disgiunti) | `NotProcessed` (disgiunti) | Esito (disgiunti) |
+|---:|---:|---|---|---:|---|---|
+| 0 | 63 | 0 | Complete | 63 | 0 | Complete |
+| 1 | 97 | 0 | Complete | 115 | 0 | Complete |
+| 2 | 132 | 0 | Complete | 167 | 0 | Complete |
+| 3 | 167 | 0 | Complete | 219 | 0 | Complete |
+| 5 | 237 | 0 | Complete | 203 | 1 (`expansion_budget_exceeded`) | CoverageIncomplete |
+| 16 | 275 | 5 (`expansion_budget_exceeded` 1, `expansion_saturated` 4) | CoverageIncomplete | 419 | 5 (`expansion_budget_exceeded` 2, `expansion_saturated` 3) | CoverageIncomplete |
+
+Sensibilità senza item nei messaggi (`items-ref-1`): **22 blocchi** (4+4+4+4+6) invece di 52 (**×2,4**), nessun precheck rifiutato per nessun *c*; a *c* = 16 tutti e 5 i candidati saturano (`CoverageIncomplete`). Il precheck stima sempre blocchi × (1 + 16), indipendentemente da *c*: con *c* = 2 disgiunti la spesa effettiva è 160 contro 884 richieste preventivate (sovrastima ×5,5). Quattro candidati espandono lo stesso spazio di coppie 151×131. Inferenza dal codice, non misurata: un Cross con ≥ 30 blocchi non supererebbe il precheck neanche a *c* = 0. **Criterio O5** (precheck violato con ≤ 2 figli per blocco): **non soddisfatto** (rifiuti = 0 per *c* ≤ 3, con entrambe le politiche, con e senza item). Limiti: modello finto con selezione delle coppie scritta dal test; completezza = esito del round finale con zero candidati non terminali, senza assembly.
+
+**Riesame di D2, D2b, O3 e O5 (Checkpoint C0).**
+- **D2 (item delle foglie A dal server):** RH-002 casi 8–9 confermano I-4 e I-5 sul codice attuale. Il dato di RH-005 (blocchi di espansione ×2,4 con gli item testuali nei messaggi) è un motivo aggiuntivo, a favore del formato `items-ref-1`. Resta da verificare con RH-022 (M2, non autorizzato) che le fixture reali 022 (Run 4) e 024 (Run 5) mostrino i due blocchi latenti.
+- **D2b:** nessuna evidenza M0 la smentisce; il rischio R-D2b ([plan.md](plan.md) §8) resta aperto e vincola la decisione. M0 non ha prodotto la disposizione `Open` per i candidati Gap↔evidenza degli archivi (RH-022(c)).
+- **O3:** criterio d'ingresso soddisfatto numericamente (C-2, C-3). **O5:** non soddisfatto.
+- **M1:** vanno corretti prima di RH-013 e RH-016 i punti C-4 e C-5.

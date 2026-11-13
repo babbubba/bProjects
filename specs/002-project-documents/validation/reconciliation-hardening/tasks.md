@@ -237,7 +237,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
     | focus fuori stadio | 326-329 | StageShape |
     | patch fuori stadio o base assente | 339-349 | StageShape |
     | chiave di patch ripetuta | 356-359 | Duplicate |
-    | `target` non esclusivo, evidenze mancanti per `AddSupport`/`ProposeAlternative`, `AddRelation` su relazione, evidenze diverse dagli estremi, `value` incoerente con `op`, bersaglio assente dalla base | 366-369, 399-402, 407-410, 432-435, 446-449, 457-459, 477-480 | PatchShape |
+    | `target` non esclusivo, evidenze mancanti per `AddSupport`/`ProposeAlternative`, `AddRelation` su relazione, evidenze diverse dagli estremi, `value` incoerente con `op`, bersaglio assente dalla base | 366-369, 399-402, 407-410, 432-435, 446-449, 457-459, 477-480 | PatchShape. **Correzione M0 (assessment «Evidenze M0», C-4):** `value` incoerente con `op` non raggiunge il compositore nel percorso alias, perché `AiPatchConverter` lo rifiuta in decodifica (`AnalysisAliasContracts.cs:376-382`): è `Undecodable`; il ramo 457-459 è difesa in profondità non raggiungibile |
     | patch duplicata | 489-492 | Duplicate |
 
   - Solo con `options.StageContract`:
@@ -293,7 +293,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Test:**
   - ≥ 2.000 istanze per variante del profilo `by-stage-1`, composte con le opzioni v11 e validate con V2, `References` e gerarchia;
   - ogni istanza ammessa dalla grammatica è accettata, oppure rifiutata solo con le **classi residue dichiarate** `UnknownAlias`, `CoincidentEndpoints`, `Duplicate`, `DuplicateCandidate`, `InvalidText`, `PatchShape`;
-  - `StageShape`, `ItemShape` e `Undecodable` non compaiono mai;
+  - `StageShape`, `ItemShape` e `Undecodable` non compaiono mai. **Correzione M0 (C-4, C-5):** nel profilo `-3` `Undecodable` compare nel 59–61% delle istanze di Expand e Compare perché lo `anyOf` del `value` non è legato a `op`; la condizione vale solo se il profilo `by-stage-1` lega `value` a `op` (coppie `op` `enum` + `value` in `anyOf`), da verificare contro `ReconcileSchemaSubset.Keywords` prima di RH-011;
   - nessun rifiuto proviene da `CheckResult`, `References` o gerarchia su un'istanza accettata dal compositore;
   - casi espliciti:
     - confronto `Open` con motivo, 0 candidati, `noFindings` null ⇒ accettato;
