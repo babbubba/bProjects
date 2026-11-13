@@ -193,6 +193,16 @@ public sealed class RetrievalIsolatedFixtureTests
     }
 
     [Fact]
+    public void The_simulated_hierarchy_descriptor_stays_within_the_production_limit_at_real_batch_sizes()
+    {
+        var long_ = "{\"contract\":\"reconcile-alias-1\",\"descriptor\":\"" + string.Join('-', Enumerable.Range(1, 300).Select(i => "E" + i)) + "\",\"items\":[]}";
+        Assert.True(JsonDocument.Parse(long_).RootElement.GetProperty("descriptor").GetString()!.Length > 512);
+        var clamped = JsonDocument.Parse(RetrievalGapIsolatedBase.ClampDescriptor(long_)).RootElement.GetProperty("descriptor").GetString()!;
+        Assert.InRange(clamped.EnumerateRunes().Count(), 1, 512);
+        Assert.Contains("\"descriptor\":null", RetrievalGapIsolatedBase.ClampDescriptor("{\"descriptor\":null}"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_production_client_warm_up_request_is_accepted_by_the_router()
     {
         // Il corpo REALE prodotto dal client di produzione (nessuna rete: il modello a monte e finto) deve rispettare il tetto di 16 token.

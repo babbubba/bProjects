@@ -288,7 +288,19 @@ public abstract class RetrievalGapIsolatedBase : ReconcileRig
     private static string Fold(string text) => DocumentSmallFlowMafRealTests.Fold(text);
 
     /// <summary>Gerarchia simulata: risposte valide deterministiche (le stesse di <c>RetrievalGapFlowTests</c>); mai inoltrata al DGX.</summary>
-    internal static string SimulatedHierarchy(string text) => RetrievalGapFlowTests.Hierarchy(new DocumentChatWorkflowTests.ChatRequest(string.Empty, [("user", text)]));
+    internal static string SimulatedHierarchy(string text) => ClampDescriptor(RetrievalGapFlowTests.Hierarchy(new DocumentChatWorkflowTests.ChatRequest(string.Empty, [("user", text)])));
+
+    /// <summary>Il validatore di produzione limita il <c>descriptor</c> a 512 caratteri Unicode: con batch di taglia reale (centinaia di voci) il descriptor elencativo dello stub lo supera. Lo si abbrevia in modo deterministico.</summary>
+    internal static string ClampDescriptor(string json)
+    {
+        var node = JsonNode.Parse(json)!.AsObject();
+        if (node["descriptor"]?.GetValue<string>() is { } descriptor && descriptor.EnumerateRunes().Count() > 512)
+        {
+            node["descriptor"] = string.Concat(descriptor.EnumerateRunes().Take(480).Select(r => r.ToString())) + " …";
+        }
+
+        return node.ToJsonString();
+    }
 
     /// <summary>
     /// Stadio Gap FINTO (solo offline): legge SOLO i candidati ricevuti e risponde secondo le attese annotate (nessuna attesa nuova). Il conflitto resta Open su openItem (la gerarchia simulata non offre conflitti).
