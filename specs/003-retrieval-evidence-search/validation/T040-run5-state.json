@@ -1,0 +1,15 @@
+{
+  "campaign": "T040-retrieval-gap-1",
+  "steps": [
+    {
+      "Name": "T040-single",
+      "status": "Blocked",
+      "Detail": "TrueException: T040-single: 1 verifiche fallite: [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) \u2014 Failed work_output_invalid: Output del batch 51571354d62e8a02f1ee7ada208fdc2edfb894da4ee8a1cc35e730bfbb16b519 non valido: noFindingsReason: obbligatorio quando non ci sono proposte, candidati n\u00E9 patch."
+    },
+    {
+      "Name": "T040-multi",
+      "status": "NotRun",
+      "Detail": "non eseguito: T040-single ha incontrato un blocco, nessun rilancio automatico n\u00E9 altro corpus"
+    }
+  ]
+}

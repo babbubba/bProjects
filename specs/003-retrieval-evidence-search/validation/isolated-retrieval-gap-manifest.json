@@ -1,0 +1,160 @@
+{
+  "manifest": "isolated-retrieval-gap-1",
+  "notEquivalentToT040": "Verifica complementare: un esito favorevole NON e un PASS di T040, non chiude M3 e non sostituisce la pipeline end-to-end.",
+  "plan": "specs/003-retrieval-evidence-search/validation/isolated-retrieval-gap-plan.md",
+  "hierarchy": "SIMULATA: risposte deterministiche (stub) della gerarchia di riconciliazione; nessuna chiamata generativa al DGX per l\u0027estrazione o la riconciliazione.",
+  "realComponents": [
+    "PostgreSQL \u002B pgvector",
+    "endpoint di analisi",
+    "workflow v10 e checkpoint",
+    "indicizzazione e embedding",
+    "ricerca ibrida",
+    "riordino",
+    "registro dei candidati",
+    "messaggio e schema dello stadio Gap",
+    "validatore",
+    "coverage-3 e API",
+    "LLM dello stadio Gap (una sola chiamata)"
+  ],
+  "ledger": "idealizzato: una evidenza per frase di ogni paragrafo (blocco), titoli senza evidenza; le domande del PM come evidenze Gap; documento d\u0027estensione parziale incluso, documento d\u0027estensione escluso dal PM (nell\u0027indice, fuori dallo snapshot)",
+  "t040ManifestSha256": "871e884c75d7a88640fa0c5632cd3074c5bd31b2ef3abbe943781564a5c50599",
+  "definition": "project-analysis-documents-v10",
+  "codeBaseline": "d63e7cb",
+  "retrievalPolicy": "retrieval-policy-1",
+  "models": {
+    "llm": "Qwen3.6-35B-Smart",
+    "embedding": "bge-m3-Q5",
+    "reranker": "bge-reranker-v2-m3"
+  },
+  "window": {
+    "tokens": 32768,
+    "output": 16384,
+    "margin": 1024,
+    "inputBudget": 15360
+  },
+  "contract": "una sola chiamata LLM reale per scenario (lo stadio Gap); routing fail-closed",
+  "notVerifiable": [
+    "estrazione LLM dei Gap e dei fatti",
+    "gerarchia di riconciliazione reale (conflitti Open e openConflict: NotVerified con la gerarchia deterministica)",
+    "espansione v10, rischio Cross e limite di 512 chiamate",
+    "SC-001 nel suo insieme"
+  ],
+  "scenarios": [
+    {
+      "label": "T040-single",
+      "origin": "T082 (documento singolo)",
+      "goldSha256FromT040Manifest": "b784f55051fb7c3d89376d2265b69c05a22e9d86c337eff52ad460a87ee9d0dc",
+      "ledgerSha256": "56d3e166d7acac1b74c2030d44e5f1725fa160646dd883fa28361acf5abf2c77",
+      "blocks": 126,
+      "evidences": 283,
+      "includedNonGapEvidences": 277,
+      "documents": [
+        {
+          "Key": "cap",
+          "Name": "capitolato-aurora.txt",
+          "ExcludedByPm": false,
+          "blocks": 117,
+          "evidences": 276,
+          "gaps": 0
+        },
+        {
+          "Key": "t040-parziale",
+          "Name": "t040-formazione-operatori.txt",
+          "ExcludedByPm": false,
+          "blocks": 2,
+          "evidences": 1,
+          "gaps": 0
+        },
+        {
+          "Key": "t040-escluso",
+          "Name": "t040-addendum-garanzie-reali.txt",
+          "ExcludedByPm": true,
+          "blocks": 2,
+          "evidences": 1,
+          "gaps": 0
+        },
+        {
+          "Key": "pm-domande",
+          "Name": "pm-domande.txt",
+          "ExcludedByPm": false,
+          "blocks": 5,
+          "evidences": 5,
+          "gaps": 5
+        }
+      ],
+      "questions": [
+        "Per quanti mesi il portale Aurora conserva i documenti di trasporto?",
+        "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+        "Qual \u00E8 il numero di telefono dell\u0027assistenza clienti?",
+        "Il termine di pagamento delle fatture \u00E8 di 30 o di 60 giorni?",
+        "Qual \u00E8 il limite del pegno sulle attrezzature?"
+      ]
+    },
+    {
+      "label": "T040-multi",
+      "origin": "T083 (tre documenti)",
+      "goldSha256FromT040Manifest": "be6691d6657d964882d7e81a4e42eeb1be48b63c74c757f3fbadf28b872b4052",
+      "ledgerSha256": "195fdc7b36c4abd97c25a1662134fdffacdd81bf7fb2dc60562369b5fb2029a8",
+      "blocks": 173,
+      "evidences": 294,
+      "includedNonGapEvidences": 288,
+      "documents": [
+        {
+          "Key": "d1",
+          "Name": "contratto-quadro-zefiro.txt",
+          "ExcludedByPm": false,
+          "blocks": 56,
+          "evidences": 97,
+          "gaps": 0
+        },
+        {
+          "Key": "d2",
+          "Name": "allegato-tecnico-zefiro.md",
+          "ExcludedByPm": false,
+          "blocks": 54,
+          "evidences": 95,
+          "gaps": 0
+        },
+        {
+          "Key": "d3",
+          "Name": "verbale-collaudo-zefiro.docx",
+          "ExcludedByPm": false,
+          "blocks": 54,
+          "evidences": 95,
+          "gaps": 0
+        },
+        {
+          "Key": "t040-parziale",
+          "Name": "t040-formazione-operatori.txt",
+          "ExcludedByPm": false,
+          "blocks": 2,
+          "evidences": 1,
+          "gaps": 0
+        },
+        {
+          "Key": "t040-escluso",
+          "Name": "t040-addendum-garanzie-reali.txt",
+          "ExcludedByPm": true,
+          "blocks": 2,
+          "evidences": 1,
+          "gaps": 0
+        },
+        {
+          "Key": "pm-domande",
+          "Name": "pm-domande.txt",
+          "ExcludedByPm": false,
+          "blocks": 5,
+          "evidences": 5,
+          "gaps": 5
+        }
+      ],
+      "questions": [
+        "Qual \u00E8 la durata del contratto quadro Zefiro?",
+        "Quali sono la durata e il costo della formazione degli operatori del cliente?",
+        "Qual \u00E8 il numero di telefono dell\u0027assistenza clienti?",
+        "Qual \u00E8 la durata della garanzia sui ricambi?",
+        "Qual \u00E8 il limite del pegno sulle attrezzature?"
+      ]
+    }
+  ]
+}

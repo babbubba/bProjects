@@ -1,0 +1,113 @@
+# start=2026-11-13T09:33:53.3279701Z head=07c1110559d17d5063503c61e9c78a9d942f9a3b
+# exit=2 end=2026-11-13T10:20:54.8387452Z
+# Estratto delle prime 110 righe di run5.log (verifiche e riepilogo); il log completo (5 MB, include i log SQL) resta nell'archivio locale non versionato. SHA-256 run5.log 93e40b0910f92d3def905b83b2559bc18846a5effb30d7fdc47c5b33fbff74af; rapporto diagnostico diagnostic-report-20261113-093355-T040-single.json 6305bdcd6f274bc19dede7c573f0fcab6eefd37f1650bd5cd7a096e419207494; SHA256SUMS.txt (131 file) f9a0daa6...fabfa
+Esecuzione di test da C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\bin\Debug\net10.0\bProjects.IntegrationTests.dll (net10.0|x64)
+operazione non riuscita bProjects.IntegrationTests.RetrievalGapStageMafRealTests+Campaign.T040_retrieval_feeds_the_gap_stage_over_the_single_then_the_multi_document_ledger (46m 57s 779ms)
+  da C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\bin\Debug\net10.0\bProjects.IntegrationTests.dll (net10.0|x64)
+  T040: campagna non superata. T040-single: Blocked ÔÇö TrueException: T040-single: 1 verifiche fallite: [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) ÔÇö Failed work_output_invalid: Output del batch 51571354d62e8a02f1ee7ada208fdc2edfb894da4ee8a1cc35e730bfbb16b519 non valido: noFindingsReason: obbligatorio quando non ci sono proposte, candidati n├® patch. ## T040-multi: NotRun ÔÇö non eseguito: T040-single ha incontrato un blocco, nessun rilancio automatico n├® altro corpus
+  ---- T040-single: 1 verifiche fallite: [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) ÔÇö Failed work_output_invalid: Output del batch 51571354d62e8a02f1ee7ada208fdc2edfb894da4ee8a1cc35e730bfbb16b519 non valido: noFindingsReason: obbligatorio quando non ci sono proposte, candidati n├® patch.
+    a bProjects.IntegrationTests.CampaignSequencer.RunAsync(IReadOnlyList`1 steps, Action`1 persist) in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\CampaignSequencer.cs:89
+    a bProjects.IntegrationTests.RetrievalGapStageMafRealTests.RunCampaignAsync() in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\RetrievalGapStageMafRealTests.cs:222
+    a bProjects.IntegrationTests.RetrievalGapStageMafRealTests.Campaign.T040_retrieval_feeds_the_gap_stage_over_the_single_then_the_multi_document_ledger() in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\RetrievalGapStageMafRealTests.cs:609
+    --- End of stack trace from previous location ---
+    ----- Inner Stack Trace -----
+    a bProjects.IntegrationTests.LargeDocumentRealFlow.Verdicts.Flush() in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\LargeDocumentRealFlow.cs:872
+    a bProjects.IntegrationTests.LargeDocumentRealFlow.RunScenarioCoreAsync(String label, Func`2 build) in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\LargeDocumentRealFlow.cs:448
+    a bProjects.IntegrationTests.LargeDocumentRealFlow.RunScenarioAsync(String label, Func`2 build) in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\LargeDocumentRealFlow.cs:270
+    a bProjects.IntegrationTests.LargeDocumentRealFlow.RunScenarioAsync(String label, Func`2 build) in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\LargeDocumentRealFlow.cs:285
+    a bProjects.IntegrationTests.CampaignSequencer.RunAsync(IReadOnlyList`1 steps, Action`1 persist) in C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\CampaignSequencer.cs:52
+  Output standard
+    == T040-single FAIL (40 PASS / 1 FAIL) ==
+      NOTE configurazione: finestra misurata W=32768 output O=16384 margine M=1024 ragionamento=False => budget di input Analysis B=W-O-M=15360 token; modello=Qwen3.6-35B-Smart
+      NOTE corpus generato (seed 20261106) in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\T040-single-20261113093406: 1 documenti, 21505 caratteri, 5570 token misurati = 0,36x B; hash in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\T040-single-20261113093406\hashes.txt
+      NOTE   capitolato-aurora.txt sha256=fb2fafe4ad61b11f168de998efc3334ffc988eced44bdb8411c660675027777b testo-sha256=fb2fafe4ad61b11f168de998efc3334ffc988eced44bdb8411c660675027777b byte=21708 regole-secondarie=260
+      NOTE [MISURA] il testo generato (tokenizer reale, prima dell'upload): 5570 token = 0,36x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 ÔÇö 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) ÔÇö Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 ÔÇö 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) ÔÇö Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 ÔÇö 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) ÔÇö Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 ÔÇö 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) ÔÇö Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 ÔÇö 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) ÔÇö Completed
+      PASS [STRUTTURALE] capitolato-aurora.txt: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] capitolato-aurora.txt: upload 201 ÔÇö 201
+      PASS [COMPLETAMENTO] capitolato-aurora.txt: preparazione Ready (parser reale + estrazione reale su tutte le porzioni) ÔÇö Ready
+      PASS [COPERTURA] capitolato-aurora.txt: tutte le 8 porzioni di estrazione sono Completed (nessuna omessa o fallita) ÔÇö 0 non completate
+      PASS [COPERTURA] capitolato-aurora.txt: il testo estratto copre il testo generato (nessun blocco perso dal parser) ÔÇö 21506 contro 21505 caratteri
+      NOTE testo estratto dal parser: 5570 token = 0,36x B
+      NOTE [MISURA] il testo REALMENTE estratto dal parser (nessuna riduzione, finestra non aumentata): 5570 token = 0,36x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      PASS [PROVENIENZA] S01: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S02: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S03: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S04: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S05: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S06: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S07: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S08: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S09: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S10: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S11: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S12: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S13: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S14: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S15: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [PROVENIENZA] S16: il fatto gold e nel testo estratto dal documento cap (il parser non lo ha alterato)
+      PASS [T040/PREPARAZIONE] t040-formazione-operatori.txt: upload 201 ÔÇö 201
+      PASS [T040/PREPARAZIONE] t040-addendum-garanzie-reali.txt: upload 201 ÔÇö 201
+      PASS [COMPLETAMENTO] t040-formazione-operatori.txt: preparazione Ready (parser reale + estrazione reale) ÔÇö Ready
+      PASS [COMPLETAMENTO] t040-addendum-garanzie-reali.txt: preparazione Ready (parser reale + estrazione reale) ÔÇö Ready
+      NOTE [T040/PREPARAZIONE] readiness prima-dell-indicizzazione/embedding bge-m3-Q5@192.168.253.18:8080/v1/: stato ModelUnloaded; artefatto atteso bge-m3-Q5_K_M.gguf, osservato n/d; dimensione n/d
+      NOTE [T040/PREPARAZIONE] readiness prima-dell-indicizzazione/reranker bge-reranker-v2-m3@192.168.253.18:8080/v1/: stato ModelUnloaded; artefatto atteso bge-reranker-v2-m3-Q5_K_M.gguf, osservato n/d; dimensione n/d
+      NOTE [T040/PREPARAZIONE] indice di recupero: preparazioni=3 Ready=3 Failed=0 in 10,5 s (embedding reali); stati Ready del progetto=3; diagnostica in C:\Users\fcavallari\AppData\Local\Temp\bprojects-t040-campaign\diagnostic-report-20261113-093355-T040-single.json
+      NOTE [T040/PREPARAZIONE] indice, versione 123697f0-fa6b-4c66-80e6-3fab41a606b4: Ready, blocchi=117 voci=117 embedding nuovi=117 ErrorCode=-
+      NOTE [T040/PREPARAZIONE] indice, versione 5769d29d-e0c6-4119-9535-ac22017317d7: Ready, blocchi=2 voci=2 embedding nuovi=2 ErrorCode=-
+      NOTE [T040/PREPARAZIONE] indice, versione 04bdc54c-0804-4fa5-98d6-4ce788766740: Ready, blocchi=2 voci=2 embedding nuovi=2 ErrorCode=-
+      PASS [COMPLETAMENTO] [T040/PREPARAZIONE] indice costruito per ogni preparazione Ready del progetto, nessun fallimento (nessuna analisi LLM se fallisce) ÔÇö preparazioni Ready=3 indici Ready=3 falliti=0 codici=-,-,-
+      PASS [T040/PREPARAZIONE] selezione fonti leggibile con ETag ÔÇö 200
+      PASS [T040/PREPARAZIONE] documento d'estensione escluso dal PM (PUT selezione 200) ÔÇö 200
+      PASS [COMPLETAMENTO] POST Analizza 202 ÔÇö 202 {"id":"eaf2e959-11e0-494c-84ec-9c8cbe1ec460","kind":"Analysis","analysisId":null,"sourceCutoffSequence":9,"inputRevisionId":null,"status":"Queued","requestedAt":"2026-11-13T10:00:49.589443+00:00","startedAt":null,"completedAt":null,"deadlineAt":"2026-11-13T11:00:49.589443+00:00","attemptCount":0,"maÔÇª
+      FAIL [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) ÔÇö Failed work_output_invalid: Output del batch 51571354d62e8a02f1ee7ada208fdc2edfb894da4ee8a1cc35e730bfbb16b519 non valido: noFindingsReason: obbligatorio quando non ci sono proposte, candidati n├® patch.
+      NOTE [CAUSA] STADIO GAP o RICONCILIAZIONE (output del modello non valido o troncato: le risposte grezze NNN-assistant.txt sono nell'archivio MafDiagnostics, cartella `analysisCallsSession` del rapporto diagnostico; la cartella texts del recorder di estrazione NON le contiene)
+      NOTE chiamate al modello fase=Analysis: n=9 durata totale=404s finish=length=0
+      NOTE chiamate al modello fase=Chat: n=5 durata totale=5s finish=length=0
+      NOTE chiamate al modello fase=Extraction: n=15 durata totale=1383s finish=length=0
+      PASS [COMPLETAMENTO] nessuna chiamata troncata (finish=length) ÔÇö 0 troncate
+    
+    
+  Output errori
+C:\source\repos\babbubba\bProjects\backend\tests\bProjects.IntegrationTests\bin\Debug\net10.0\bProjects.IntegrationTests.dll (net10.0|x64) non riuscito con 1 errori (46m 59s 065ms)
+Codice di uscita: 2
+  Output standard: info: bProjects.App[0]
+        Modello interno configurato: host 192.168.253.18, modello Qwen3.6-35B-Smart, finestra 32768, budget input chat/analisi/documento/compattazione 27648/15360/27648/27648, output strutturato JsonSchema
+  info: bProjects.App[0]
+        Fase AI Chat: modello Qwen3.6-35B-Smart, enable_thinking False, max_completion_tokens 4096, timeout richiesta 150 s
+  info: bProjects.App[0]
+        Fase AI Analysis: modello Qwen3.6-35B-Smart, enable_thinking False, max_completion_tokens 16384, timeout richiesta 900 s
+  info: bProjects.App[0]
+        Fase AI Document: modello Qwen3.6-35B-Smart, enable_thinking False, max_completion_tokens 4096, timeout richiesta 150 s
+  info: bProjects.App[0]
+        Fase AI Compaction: modello Qwen3.6-35B-Smart, enable_thinking False, max_completion_tokens 4096, timeout richiesta 150 s
+  info: bProjects.App[0]
+        Fase AI Extraction: modello Qwen3.6-35B-Smart, enable_thinking False, max_completion_tokens 16384, timeout richiesta 600 s
+  info: Microsoft.Hosting.Lifetime[0]
+        Application started. Press Ctrl+C to shut down.
+  info: Microsoft.Hosting.Lifetime[0]
+        Hosting environment: Development
+  info: Microsoft.Hosting.Lifetime[0]
+        Content root path: C:\source\repos\babbubba\bProjects\backend\src\bProjects.App
+  fail: Microsoft.EntityFrameworkCore.Database.Command[20102]
+        Failed executing DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+        SELECT "MigrationId", "ProductVersion"
+        FROM "__EFMigrationsHistory"
+        ORDER BY "MigrationId";
+  warn: bProjects.App.AI.AiDispatchService[0]
+        Sweep delle scadenze non riuscito: PostgresException
+  fail: bProjects.App.Documents.DocumentParseWorker[0]
+        Ciclo di parsing fallito: PostgresException
+  warn: bProjects.App.AI.AiDispatchService[0]
+        Sweep delle scadenze non riuscito: PostgresException
+  fail: Microsoft.EntityFrameworkCore.Database.Command[20102]
+        Failed executing DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']

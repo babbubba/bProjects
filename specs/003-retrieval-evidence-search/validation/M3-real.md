@@ -563,3 +563,39 @@ Verdetti: **`Honored`** per «schema accettato dal provider (nessun 400/422)» e
 Proiezione offline sul Run 4: 68 blocchi, ≈10,8 minuti, ≈0,95 M token di prompt (senza i confronti dei figli).
 
 **Test offline.** Build 0 avvisi / 0 errori. Classi mirate: `RetrievalGapCampaignTests` 70 superati, `ReconcileSchema*` 172 (2 ignorati: le verifiche reali), `ReconcileDefinitionV*` 68, `ReconcileExpandCap*` 13 (1 ignorato). Suite completa con PostgreSQL di test e parser reale, senza `BPROJECTS_TEST_DGX_ALLOW` (prima delle ultime due correzioni ai soli test): 4518 test, 0 falliti, 75 ignorati (DGX, traccia V7, benchmark, symlink), 20 min; dopo le correzioni rilanciate le classi mirate (campagna 70, schema 172). Review ECC csharp-reviewer: nessun CRITICAL o HIGH; MEDIUM non applicato: il preflight legge `DocumentOptions.MaxAiCallsPerRun` mentre il run usa il limite congelato dalla riga singleton di policy, creata dalle opzioni solo se assente: condizione operativa = database di campagna nuovo (ogni scenario ne usa uno) e `MaxAiCallsPerRun=512`; LOW applicati: cablaggio del controllo verificato anche sull aggiunta ai problemi, costante inutilizzata rimossa. **Nessuna inferenza DGX, nessun Run 5.**
+
+## Esito del Run 5 (2026-11-13; manifesto T040 v6, definizione v10; una esecuzione, nessun retry; T040 resta APERTO e formalmente SOSPESO)
+
+**Esecuzione.**
+- Commit `07c1110559d17d5063503c61e9c78a9d942f9a3b`, avvio 09:33:53 UTC, fine 10:20:54 UTC (46 min 57 s), uscita 2; modello `Qwen3.6-35B-Smart`, finestra 32768, `BPROJECTS_TEST_DGX_ALLOW=1` solo nel processo del test.
+- Preflight completo superato: HEAD esatto e albero tracciato pulito, manifesto v6 (`871e884c…0599`) invariato, codice di prodotto identico al baseline `d63e7cb`, un solo test selezionato, nessuna variabile d'ambiente alterante, nessun testhost concorrente, `Documents:MaxAiCallsPerRun=512` nella configurazione risolta, database di campagna nuovo.
+- **NotVerified:** il valore di `MaxAiCallsPerRun` effettivamente congelato nella policy del run (l'osservatore in lettura non ha scritto nulla e il database è stato poi eliminato); nessun indizio di una policy diversa.
+- `T040-single` **FAIL** (40 PASS / 1 FAIL); `T040-multi` **NotRun** (arresto su blocco, nessun rilancio).
+- Fallimento: run di analisi `Failed work_output_invalid` — «Output del batch 51571354d62e…b519 non valido: noFindingsReason: obbligatorio quando non ci sono proposte, candidati né patch.»
+
+**Fasi.**
+- Chiamate al modello: estrazione 15 (1383 s), Chat 5 (5 s), Analysis 9 (404 s); 0 `finish=length`.
+- Estrazione completa (8/8 porzioni). Indicizzazione: 3 preparazioni su 3 `Ready` in 10,5 s (117 + 2 + 2 blocchi, embedding reali).
+- Riconciliazione v10, chiamate 022–030: foglie A 3 (138/143/1 voci), riduzione A, foglie B 2 (140/142 voci, 16 candidati ciascuna), riduzione B, cross, confronto (2 voci, 0 candidati).
+- **Espansione v10 mai esercitata:** nessuna chiamata Expand, quindi zero blocchi, figli, saturazioni, `Unresolved` ed `expansion_budget_exceeded`; il rischio dei candidati Cross e del limite di 512 chiamate non è né osservato né smentito.
+- **Recupero e stadio Gap non raggiunti:** nessuna metrica dei gate T040 (conflitti persi, falsi `AnsweredInSnapshot`, citazioni, latenza del recupero): tutte **NotVerified**.
+
+**Primo blocco: chiamata 030** (confronto, vista A, E165 ed E262). Risposta: `focus.outcome="Open"` con motivo, `items`/`candidates`/`patches` vuoti, `noFindings: null`. Lo schema la ammette, il compositore ne ricava una disposizione `Open`, il validatore (`ReconciliationContracts.cs:699`) la rifiuta perché la clausola non conta le disposizioni; il prompt v5 prescrive `noFindings` quando i tre elenchi sono vuoti. Registrato come difetto separato nel backlog tecnico della 002 (`docs/roadmap/slice-002-technical-closure.md` §17) e in `isolated-retrieval-gap-plan.md` (Appendice A); **nessuna correzione**.
+
+**Osservazione prestazionale (non un blocco).** Tra l'avvio del run (10:00:50) e la prima chiamata generativa della riconciliazione (022, 10:13:42) passano ≈ 12 min 52 s; in quella finestra il DGX riceve **2.414 richieste `/tokenize`** (≈ 0,32 s ciascuna, in sequenza; 3.315 nell'intero run). Non è stata ottimizzata né analizzata nel codice (vedi §17 del backlog 002).
+
+**Evidenze (SHA-256).**
+- Versionati: `T040-run5-summary.txt` (estratto di `run5.log`) `e2d0b7b8…35f1` e `T040-run5-state.json` `d9a9b95e…d9a9`.
+- Archivio locale non versionato (copia con `SHA256SUMS.txt`, 131 file, `f9a0daa6…fabfa`): `run5.log` (5 MB) `93e40b09…74af`; `diagnostic-report-20261113-093355-T040-single.json` `6305bdcd…7494`; sessione MafDiagnostics (125 file, risposta grezza della 030 in `030-assistant.txt`); corpus Single. Originali in `%TEMP%projects-t040-campaign` e `%TEMP%projects-diag61113-093355-…`.
+
+**Valutazione.** T040 **non superato**, **aperto e formalmente sospeso**; M3 **non chiuso**. Come da vincolo: nessuna v11, nessuna modifica a schema, prompt, algoritmo o validatore, nessun Run 6. Recupero e stadio Gap restano **NotVerified**; la verifica indipendente è in `isolated-retrieval-gap-plan.md` (non equivale a T040).
+
+## Verifica isolata Retrieval → Gap Stage: implementazione OFFLINE (2026-11-13; nessuna inferenza DGX; T040 resta APERTO e sospeso)
+
+Piano: `isolated-retrieval-gap-plan.md`; manifesto del ledger: `isolated-retrieval-gap-manifest.json` (NON è una versione del manifesto T040, che resta `871e884c…0599`). **Non equivale a T040**: ledger controllato e idealizzato (283 evidenze nel Single, una per frase), gerarchia di riconciliazione SIMULATA (risposte deterministiche valide); reali PostgreSQL + pgvector, endpoint, workflow v10 e checkpoint, indicizzazione, embedding, ricerca ibrida, riordino, registro, messaggio e schema dello stadio Gap, validatore, coverage-3 e API.
+
+- **Test:** `RetrievalGapIsolatedBase+Offline` (5, fornitori HTTP finti), `RealSingle` e `RealMulti` (indipendenti, opt-in DGX, ignorati senza `BPROJECTS_TEST_DGX_ALLOW=1`: **NON eseguiti**), `RetrievalIsolatedFixtureTests` (10).
+- **Contratto:** una sola richiesta generativa al modello a monte (lo stadio Gap); routing fail-closed (`StageOnlyModelRouter`): richiesta non riconosciuta, seconda richiesta di stadio, stadio senza `searchBasis: retrieval`, percorso o metodo non ammessi ⇒ violazione ed eccezione, nulla inoltrato. Conta le richieste inoltrate per percorso e fase (inclusi `/tokenize`: numero e durata).
+- **Conflitti `Open`:** NotVerified (la gerarchia deterministica non li offre); è verificata solo la parte di recupero (entrambi i lati nel pacchetto).
+- **Esito offline:** build 0 avvisi / 0 errori; test mirati 17 (15 superati, 2 reali ignorati); suite completa senza opt-in DGX 4535 test, 0 falliti, 98 ignorati, 21 min (eseguita prima delle correzioni del review, poi rilanciati i mirati). Review ECC csharp-reviewer: nessun CRITICAL; applicati HIGH e MEDIUM (verificatore robusto alle eccezioni, `finish_reason=stop` richiesto, messaggio realmente inviato verificato, `absenceProven` richiesto presente, metodi HTTP ammessi, servizi di fondo rimossi, test negativo sul falso `AnsweredInSnapshot` con run completato).
+- **Prova DGX:** non eseguita; richiede autorizzazione separata (solo Single).

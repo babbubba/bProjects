@@ -180,3 +180,15 @@ Branch `feature/002-implementation`. Stato ufficiale: **NOT ACCEPTED**.
 **Limiti dichiarati:** ledger oltre il budget di input (o Gap oltre il budget di output) di una chiamata ⇒ fail-fast tipizzato, perimetro NON coperto dalla 002 (non trasferito automaticamente alla 003); costanti di budget dello stadio Gap (1000+150·Gap; ceil((100+260·Gap)·1,25)) da ricalibrare al primo run DGX; il Gap deve avere una domanda canonica nella gerarchia (`gap_reference_missing` altrimenti); `document-analysis-v6.md` afferma ancora che il nome del documento non compare nelle evidenze (tensione con `documento=`, D4: nessun v7 senza fallimento dimostrato).
 
 **Non fatto/da decidere:** aggiornare `CLAUDE.md` riga 13 (T126, T138, T142, T150 tra gli aperti) richiede approvazione esplicita; D6 (modalità di prova T126 su DGX).
+
+## 17. Backlog tecnico emerso dal T040 Run 5 (2026-11-13) — registrato, NON corretto
+
+Voci della riconciliazione 002 individuate dal Run 5 di T040 (003). Nessuna è stata corretta né autorizzata: richiedono una decisione separata del committente. Il ciclo di correzione della riconciliazione per T040 è chiuso (nessuna v11, nessun nuovo prompt o schema).
+
+1. **Chiamata 030 — incoerenza fra schema, compositore e validatore (confronto).** Risposta del modello: `focus.outcome="Open"` con motivo, `items`/`candidates`/`patches` vuoti, `noFindings: null` (batch `51571354d62e…b519`, vista A, E165/E262; `030-assistant.txt` nell'archivio del Run 5).
+   - Schema del confronto (`ReconcileAliasContracts.cs`): ammette la risposta; nessun vincolo condizionale fra `noFindings` e gli altri campi.
+   - Prompt `document-reconcile-v5`, riga 18: `noFindings` obbligatorio se `items`, `candidates` e `patches` sono tutti vuoti (la risposta lo disattende; l'istruzione non cita `focus`).
+   - Compositore (`ReconcileAliasComposer.Focus`): accetta e produce una `CandidateDisposition` `Open` con motivo.
+   - Validatore (`ReconciliationContracts.cs:699`): rifiuta; la clausola conta `ItemProposals`, `Candidates` e `Patches`, non `Dispositions`.
+   - Esito: `work_output_invalid` al primo tentativo. Quale strato cambiare (schema, validatore o prompt) è una decisione di contratto, non presa. Non è noto se altri batch di confronto di altri run incontrerebbero lo stesso caso.
+2. **Osservazione prestazionale — 2.414 richieste `/tokenize` prima della prima chiamata generativa.** Nel Run 5, tra l'avvio del run (10:00:50) e la chiamata 022 (10:13:42) passano ≈ 12 min 52 s con 2.414 richieste `/tokenize` al DGX (≈ 0,32 s ciascuna, in sequenza; 3.315 nell'intero run; circa 17 per ciascuna delle ~140 voci della foglia A). Ipotesi supportata dai dati, non verificata nel codice: conteggio dei token voce per voce nella pianificazione dei batch della gerarchia (`DocumentReconcilePlan`/`PayloadPreflight.MeasureAsync`/packing). Non ottimizzata né analizzata: da approfondire separatamente.
