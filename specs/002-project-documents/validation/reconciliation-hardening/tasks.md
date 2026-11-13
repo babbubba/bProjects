@@ -81,7 +81,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** nessuna. **Effort:** 1 gg.
 - **STOP:** un esito diverso dall'assessment va documentato e la diagnosi corretta.
 
-### [ ] RH-003 — Generatore di istanze dello schema e test di proprietà (v10)
+### [x] RH-003 — Generatore di istanze dello schema e test di proprietà (v10)
 - **Scopo:** enumerare in modo sistematico le classi «ammesso dalla grammatica, rifiutato dalla validazione».
 - **File:**
   - nuovo `ReconcileSchemaInstanceGenerator.cs`: generatore deterministico (seed 20261113) per lo stesso sottoinsieme di `ReconcileSchemaSubset.Keywords` (`type` anche array, `enum`, `pattern` degli alias, `minLength`, `minItems`/`maxItems`, `anyOf`, `properties`/`required`/`additionalProperties`);
