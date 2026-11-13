@@ -108,6 +108,7 @@ Decisione del committente (livelli 1 e 2): v9 = v8 **identica** (stesse chiavi, 
 - Le **nuove** richieste con recupero congelano la v9 (`SourceSnapshotStore.DocumentaryAnalysisFreeze`, unica fonte per l'endpoint e per le verifiche).
 - Le run v8 (Run 3, manifesto T040 v4) restano v8: schemi, hash delle varianti e `configHash` invariati, fissati da test golden scritti prima del refactoring.
 - Il manifesto T040 v5 (Run 4, non eseguito) congela la v9: definizione, profilo `-2`, hash delle sei varianti e prompt `document-reconcile-v4`. Il manifesto v4 è conservato invariato in `validation/T040-campaign-manifest-v4-run3.json`.
+- Il manifesto T040 v6 (Run 5, non eseguito; SHA-256 canonico `871e884c75d7a88640fa0c5632cd3074c5bd31b2ef3abbe943781564a5c50599`) congela la v10: definizione, prompt `document-reconcile-v5`, profilo `-3`, algoritmo `expansion-grid-1` e limite di 512 chiamate, con i rischi dei candidati Cross e del limite globale. Il manifesto v5 (Run 4) è conservato invariato in `validation/T040-campaign-manifest-v5-run4.json`.
 
 ## 5. Modalità degradata e errori tipizzati (D-3)
 
