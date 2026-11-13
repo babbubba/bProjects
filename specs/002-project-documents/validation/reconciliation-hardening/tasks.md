@@ -116,7 +116,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** nessuna. **Effort:** 0,75 gg.
 - **STOP:** se le uguaglianze non valgono, correggere il §7 dell'assessment prima di M3.
 
-### [ ] RH-005 — Simulazione offline del costo dell'espansione v10
+### [x] RH-005 — Simulazione offline del costo dell'espansione v10
 - **Scopo:** misurare blocchi, chiamate ed esiti del precheck al variare dei figli per blocco. Criterio d'ingresso dell'opzione O5.
 - **File:** nuovo `ReconcileExpansionCostSimulationTests.cs` (motore puro con `ReconcileInvoker` finto).
 - **Modifiche precise:**
