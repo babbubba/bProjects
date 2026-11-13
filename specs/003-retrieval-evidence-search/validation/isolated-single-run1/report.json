@@ -1,0 +1,205 @@
+{
+  "header": "[ISOLATO: gerarchia SIMULATA; recupero e stadio Gap REALI; NON equivale a T040]",
+  "manifest": "isolated-retrieval-gap-1",
+  "scenario": "T040-single",
+  "mode": "real-services",
+  "hierarchy": "SIMULATED (deterministic stub; no generative call to the DGX)",
+  "retrievalAndGapStage": "REAL (production components, real embedding/reranker/LLM)",
+  "notEquivalentToT040": true,
+  "ledgerSha256": "56d3e166d7acac1b74c2030d44e5f1725fa160646dd883fa28361acf5abf2c77",
+  "ledger": {
+    "documents": 4,
+    "blocks": 126,
+    "evidences": 283,
+    "includedNonGap": 277
+  },
+  "timingsSeconds": {
+    "indexing": 8.58,
+    "retrievalPipelineTotal": 5.898,
+    "retrievalSearch": 0.886,
+    "retrievalRerank": 2.745,
+    "gapStageCall": 14.636,
+    "hierarchySimulatedSpan": 14.5
+  },
+  "modelRequests": {
+    "generativeForwardedToUpstream": 1,
+    "hierarchySimulatedLocal": 9,
+    "violations": [],
+    "forwardedByEndpointAndPhase": [
+      {
+        "path": "/apply-template",
+        "phase": "hierarchy",
+        "requests": 24,
+        "totalMs": 3698.9,
+        "maxMs": 206.3,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/apply-template",
+        "phase": "pre-hierarchy",
+        "requests": 577,
+        "totalMs": 97986.3,
+        "maxMs": 1217.1,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/apply-template",
+        "phase": "retrieval-and-measure",
+        "requests": 282,
+        "totalMs": 40658.5,
+        "maxMs": 195.3,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/props",
+        "phase": "pre-hierarchy",
+        "requests": 5,
+        "totalMs": 303.4,
+        "maxMs": 61.8,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/props",
+        "phase": "retrieval-and-measure",
+        "requests": 2,
+        "totalMs": 121.7,
+        "maxMs": 61.8,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/slots",
+        "phase": "pre-hierarchy",
+        "requests": 5,
+        "totalMs": 717.8,
+        "maxMs": 150.3,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/slots",
+        "phase": "retrieval-and-measure",
+        "requests": 2,
+        "totalMs": 264.7,
+        "maxMs": 139,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/tokenize",
+        "phase": "hierarchy",
+        "requests": 48,
+        "totalMs": 7186.5,
+        "maxMs": 214.2,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/tokenize",
+        "phase": "pre-hierarchy",
+        "requests": 865,
+        "totalMs": 145777.9,
+        "maxMs": 1167.1,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/tokenize",
+        "phase": "retrieval-and-measure",
+        "requests": 562,
+        "totalMs": 81679.7,
+        "maxMs": 245.2,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/v1/chat/completions",
+        "phase": "pre-hierarchy",
+        "requests": 1,
+        "totalMs": 346.2,
+        "maxMs": 346.2,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/v1/chat/completions",
+        "phase": "stage",
+        "requests": 1,
+        "totalMs": 14635.8,
+        "maxMs": 14635.8,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/v1/models",
+        "phase": "pre-hierarchy",
+        "requests": 5,
+        "totalMs": 719,
+        "maxMs": 155.5,
+        "nonSuccess": 0
+      },
+      {
+        "path": "/v1/models",
+        "phase": "retrieval-and-measure",
+        "requests": 2,
+        "totalMs": 273.6,
+        "maxMs": 139.8,
+        "nonSuccess": 0
+      }
+    ]
+  },
+  "retrievalServiceRequests": [
+    {
+      "kind": "other",
+      "phase": "index",
+      "requests": 1,
+      "totalMs": 183.9
+    },
+    {
+      "kind": "embedding",
+      "phase": "index",
+      "requests": 35,
+      "totalMs": 5364.4
+    },
+    {
+      "kind": "embedding",
+      "phase": "run",
+      "requests": 5,
+      "totalMs": 696.6
+    },
+    {
+      "kind": "other",
+      "phase": "run",
+      "requests": 2,
+      "totalMs": 194.3
+    },
+    {
+      "kind": "rerank",
+      "phase": "run",
+      "requests": 7,
+      "totalMs": 4665.9
+    }
+  ],
+  "verdicts": [
+    {
+      "status": "Pass",
+      "label": "[ISOLATO] violazioni di instradamento: nessuna (una richiesta non riconosciuta o una seconda generativa farebbe fallire)",
+      "detail": ""
+    },
+    {
+      "status": "Fail",
+      "label": "[ISOLATO] run terminale Completed (un errore gestito non e un PASS)",
+      "detail": "Failed work_output_invalid: Output dello stadio Gap non valido (1 violazioni): JSON non conforme a gap-stage-alias-1: gapAssessments non valide: gapAssessments[E5]: Open richiede esattamente uno fra openItem e openConflict."
+    },
+    {
+      "status": "Pass",
+      "label": "[ISOLATO] una sola richiesta di contenuto inoltrata al modello a monte (lo stadio Gap), piu il solo riscaldamento da 16 token nella prova reale, e la gerarchia solo simulata",
+      "detail": "stadio inoltrato=1 chat totali=10"
+    },
+    {
+      "status": "NotVerified",
+      "label": "[ISOLATO] criteri successivi (registro, stadio, citazioni, conflitti, latenza)",
+      "detail": "il run non e terminato Completed: nessun esito dello stadio da giudicare"
+    }
+  ],
+  "counts": {
+    "pass": 2,
+    "fail": 1,
+    "notVerified": 1,
+    "notApplicable": 0
+  },
+  "notes": [],
+  "exception": null
+}

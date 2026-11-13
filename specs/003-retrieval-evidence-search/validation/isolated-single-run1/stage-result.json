@@ -1,0 +1,17 @@
+{
+  "id": "002",
+  "outcome": "completed",
+  "httpStatus": 200,
+  "totalMs": 14495,
+  "bytes": 2514,
+  "finishReason": "stop",
+  "usage": {
+    "completion_tokens": 515,
+    "prompt_tokens": 14077,
+    "total_tokens": 14592,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "assistantChars": 1681
+}

@@ -1,0 +1,57 @@
+{
+  "contract": "gap-stage-1",
+  "gapAssessments": [
+    {
+      "gap": "E2",
+      "outcome": "AnsweredInSnapshot",
+      "reason": "Answered",
+      "rationale": "L'evidenza E13 specifica che il portale Aurora conserva i documenti di trasporto per 84 mesi.",
+      "supportingEvidence": [
+        "E13"
+      ],
+      "openItem": null,
+      "openConflict": null
+    },
+    {
+      "gap": "E3",
+      "outcome": "Open",
+      "reason": "Partial",
+      "rationale": "L'evidenza E135 fornisce la durata della formazione (tre giornate), ma non vi è alcuna evidenza che specifichi il costo della formazione.",
+      "supportingEvidence": [
+        "E1"
+      ],
+      "openItem": "i5",
+      "openConflict": null
+    },
+    {
+      "gap": "E4",
+      "outcome": "Open",
+      "reason": "NoAnswer",
+      "rationale": "Nessuna delle evidenze fornite contiene il numero di telefono dell'assistenza clienti.",
+      "supportingEvidence": [],
+      "openItem": "i1",
+      "openConflict": null
+    },
+    {
+      "gap": "E5",
+      "outcome": "Open",
+      "reason": "Ambiguous",
+      "rationale": "Le evidenze E255 e E43 forniscono termini di pagamento contrastanti (60 giorni vs 30 giorni) senza chiarire quale sia quello prevalente o applicabile al contesto generale richiesto.",
+      "supportingEvidence": [
+        "E255",
+        "E43"
+      ],
+      "openItem": null,
+      "openConflict": null
+    },
+    {
+      "gap": "E6",
+      "outcome": "Open",
+      "reason": "NoAnswer",
+      "rationale": "Nessuna delle evidenze fornite specifica il limite del pegno sulle attrezzature.",
+      "supportingEvidence": [],
+      "openItem": "i2",
+      "openConflict": null
+    }
+  ]
+}

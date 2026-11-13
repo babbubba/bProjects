@@ -598,4 +598,26 @@ Piano: `isolated-retrieval-gap-plan.md`; manifesto del ledger: `isolated-retriev
 - **Contratto:** una sola richiesta generativa al modello a monte (lo stadio Gap); routing fail-closed (`StageOnlyModelRouter`): richiesta non riconosciuta, seconda richiesta di stadio, stadio senza `searchBasis: retrieval`, percorso o metodo non ammessi ⇒ violazione ed eccezione, nulla inoltrato. Conta le richieste inoltrate per percorso e fase (inclusi `/tokenize`: numero e durata).
 - **Conflitti `Open`:** NotVerified (la gerarchia deterministica non li offre); è verificata solo la parte di recupero (entrambi i lati nel pacchetto).
 - **Esito offline:** build 0 avvisi / 0 errori; test mirati 17 (15 superati, 2 reali ignorati); suite completa senza opt-in DGX 4535 test, 0 falliti, 98 ignorati, 21 min (eseguita prima delle correzioni del review, poi rilanciati i mirati). Review ECC csharp-reviewer: nessun CRITICAL; applicati HIGH e MEDIUM (verificatore robusto alle eccezioni, `finish_reason=stop` richiesto, messaggio realmente inviato verificato, `absenceProven` richiesto presente, metodi HTTP ammessi, servizi di fondo rimossi, test negativo sul falso `AnsweredInSnapshot` con run completato).
-- **Prova DGX:** non eseguita; richiede autorizzazione separata (solo Single).
+- **Prova DGX:** vedi la sezione successiva (solo Single, autorizzata).
+
+## Esito della prova DGX isolata Single (2026-11-13; autorizzata; commit `6d0180a`; gerarchia SIMULATA; NON equivale a T040; T040 resta APERTO e sospeso)
+
+**Esito: FAIL** — stadio Gap raggiunto, risposta rifiutata dal validatore di produzione (`work_output_invalid`, nessun retry): «gapAssessments[E5]: Open richiede esattamente uno fra openItem e openConflict». Multi non eseguito.
+
+**Tentativi.** Il 1°–3° tentativo si sono fermati PRIMA dello stadio per difetti dell'harness, scoperti dal fail-closed (zero richieste di stadio inoltrate): runtime del modello non verificabile senza riscaldamento (modello scaricato) → riscaldamento da 16 token autorizzato dal committente; tetto di token del riscaldamento letto da `max_tokens` invece di `max_completion_tokens`; `descriptor` dello stub oltre 512 caratteri con batch di taglia reale. Richieste generative complessive ai DGX: 2 riscaldamenti (16 token) e 1 stadio; nessuna per estrazione o riconciliazione.
+
+**Ultimo tentativo (7 min 42 s, avvio 18:14:10 UTC).**
+- Ledger: 4 documenti, 126 blocchi, 283 evidenze (277 non-Gap incluse); indicizzazione reale 8,6 s (35 richieste di embedding, 5,4 s).
+- Recupero reale: 5,9 s totali (ricerca 0,9 s; riordino 2,7 s); 5 richieste di embedding di query (0,7 s), 7 di riordino (4,7 s); `retrievalComplete: false` (pacchetto limitato dal budget).
+- Stadio Gap reale: UNA richiesta, 14,6 s, `finish=stop`, 14077 token di prompt (budget 15360), 515 di completamento; messaggio con 112 voci (5 Gap + 107 candidati), sorgente `retrieval`.
+- Richieste inoltrate al DGX (non generative, per percorso): `/tokenize` 1475 (865 prima della gerarchia, 48 nella gerarchia, 562 nel recupero e misura; ≈ 234 s), `/apply-template` 883 (≈ 142 s), `/props` 7, `/slots` 7, `/v1/models` 7; generative: riscaldamento 1 (0,3 s), stadio 1. Gerarchia simulata: 9 risposte locali in 14,5 s.
+- Violazioni di instradamento: nessuna.
+
+**Risposta del modello (letta offline; il run è `Failed`, nulla è stato committato, quindi nessun criterio T040 è PASS).**
+- E2 «conservazione documenti di trasporto» → `AnsweredInSnapshot`/`Answered`, supporto E13 (84 mesi); E3 «formazione» → `Open`/`Partial`, supporto E1 («tre giornate»), `openItem i5`; E4 «telefono» e E6 «pegno» → `Open`/`NoAnswer`, nessun supporto, `openItem i1`/`i2`.
+- E5 «30 o 60 giorni» → `Open`/`Ambiguous` con supporti E255 ed E43 (60 e 30 giorni: entrambi i lati recuperati), ma `openItem: null` e `openConflict: null`. Il messaggio offriva `[i3] (E5)` come domanda canonica e «Conflitti aperti canonici: (nessuno)», perché la gerarchia simulata non offre conflitti.
+- Lettura: il modello non ha seguito l'istruzione di valorizzare `openItem` quando non esiste un conflitto da riferire (probabilmente cercava un `openConflict` inesistente). Il fail-closed ha funzionato; l'esito sul caso conflitto con gerarchia reale resta NotVerified. Nessuna correzione di prompt, schema o validatore.
+
+**Criteri.** NotVerified: tutti quelli valutati sul run committato (falsi `AnsweredInSnapshot`, citazioni, isolamento dei documenti esclusi sul registro persistito, record valido per Gap, conflitti), perché il run non è `Completed`; per lo stesso motivo non sono stati eseguiti replay e verifiche del registro persistito. Il registro non è consultabile (database di prova eliminato).
+
+**Evidenze versionate** (`isolated-single-run1/`): `report.json` `fde35dcc…`, `stage-response.json` `760738b4…`, `stage-result.json` `c522c93e…`. Sessione diagnostica completa (richiesta dello stadio con i 112 candidati) nell'archivio locale `%TEMP%projects-diag61113-181418-…RealSing-89ae35fa`.
