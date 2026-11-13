@@ -558,3 +558,28 @@ Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, ness
 - [x] T153 [US2] DOC — Emendamenti documentali D2–D5 senza riscrivere testi storici: AI §7.3 (nota datata sul formato 2), nuovo AI §13.8, `data-model.md` (nessuna tabella; formato messaggio e chiave di freeze), `plan.md` (nota), `spec.md` FR-007/008/015 (proiezione derivata del finding di ripetizione e dei metadati di provenienza nel contesto LLM), transition §C (stato D2–D5) con nota di numerazione su §D/§G (T144–T150 storici, T151–T153 effettivi), righe T082/T083/T090 (D5). **Dip.**: T151, T152. **Verifica**: lettura incrociata dei riferimenti; nessuna contraddizione con `CLAUDE.md` e costituzione; nessun test. 
 
 **Ordine del delta D2/D3.** T148 → T151; T147 → T152; (T151,T152) → T153. Nessuno di T151–T153 è nelle Dip. di un task preesistente e nessuno chiude T138, FR-013 o SC-004. Controllo statico delle Dip. (tutte esistenti, nessun ciclo): non è una verifica runtime.
+
+
+---
+
+### Delta Reconciliation Hardening M0 — mandato del 2026-11-13, T154–T159
+
+Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, nessun `[x]` preesistente toccato, T001–T153 invariati, T138/T149/T150 non spuntati). Sono **soltanto** i sei task della milestone **M0** del piano [Reconciliation Hardening](validation/reconciliation-hardening/plan.md) (diagnosi: [assessment.md](validation/reconciliation-hardening/assessment.md); dettaglio tecnico, file, test e condizioni di STOP: [tasks.md](validation/reconciliation-hardening/tasks.md), allegato di riferimento). M1–M6 **non sono autorizzate** e non sono riportate qui. M0 non modifica `backend/src`, prompt, JSON Schema, golden né manifesti; non esegue inferenze DGX. Non riapre né supera T040, T027, T138, T149, T150.
+
+| Txxx | RH | Contenuto (sintesi) |
+|---|---|---|
+| T154 | RH-001 | Fixture di replay dagli archivi dei Run 2–5 (34 file) e `PROVENANCE.json` |
+| T155 | RH-006 | Costruttore di fixture → richiesta, catalogo e snapshot |
+| T156 | RH-002 | Matrice di contratto eseguibile (caratterizzazione v10 e v6) |
+| T157 | RH-003 | Generatore di istanze dello schema e test di proprietà (v10) |
+| T158 | RH-004 | Contatore delle richieste di misura e scomposizione per misuratore |
+| T159 | RH-005 | Simulazione offline del costo dell'espansione v10 |
+
+- [ ] T154 [US2] DET+TEST — RH-001: fixture `Reconciliation/Replay/run{R}-{NNN}.json`, `PROVENANCE.json` e `Extract-ReplayFixtures.ps1` in `backend/tests/bProjects.IntegrationTests/`, test `ReconcileReplayFixturesTests.Fixtures_are_complete_and_untampered`. Dip.: nessuna. Dettaglio: RH-001 in `validation/reconciliation-hardening/tasks.md`.
+- [ ] T155 [US2] DET+TEST — RH-006: `Reconciliation/Replay/ReplayFixtureBuilder.cs` e `ReplayFixtureBuilderTests`. Dip.: T154. Dettaglio: RH-006.
+- [ ] T156 [US2] DET+TEST — RH-002: `ReconcileContractMatrixTests.cs` (nove casi di caratterizzazione, esito attuale, incoerenze comprese). Dip.: nessuna. Dettaglio: RH-002.
+- [ ] T157 [US2] DET+TEST — RH-003: `ReconcileSchemaInstanceGenerator.cs` (seed 20261113) e `ReconcileSchemaPropertyTests.cs`. Dip.: T156. Dettaglio: RH-003.
+- [ ] T158 [US2] DET+TEST — RH-004: `CountingLlamaRuntime.cs` e `ReconcileMeasurementBudgetTests.cs`, tabella «Evidenze M0». Dip.: nessuna. Dettaglio: RH-004.
+- [ ] T159 [US2] DET+TEST — RH-005: `ReconcileExpansionCostSimulationTests.cs`, tabella «Evidenze M0». Dip.: T158. Dettaglio: RH-005.
+
+**Ordine del delta M0.** T154 → T155; T156 → T157; T158 → T159; le tre catene sono indipendenti. Checkpoint C0 (assessment/plan/tasks della cartella `reconciliation-hardening`): M0 verde, suite completa invariata, `git diff --stat backend/src` vuoto, evidenze M0 registrate, riesame di D2/D2b/O3/O5. La mappatura Txxx ↔ RH-xxx qui sopra è l'unica fra i due registri.
