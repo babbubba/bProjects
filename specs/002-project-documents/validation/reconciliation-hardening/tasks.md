@@ -96,7 +96,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** RH-002. **Effort:** 1,5 gg.
 - **STOP:** una categoria non prevista è una nuova incoerenza da documentare.
 
-### [ ] RH-004 — Contatore delle richieste di misura e scomposizione per misuratore
+### [x] RH-004 — Contatore delle richieste di misura e scomposizione per misuratore
 - **Scopo:** verificare offline il meccanismo del §7 dell'assessment e riconciliarlo con la prova isolata (577 `/apply-template` e 865 `/tokenize` prima della gerarchia). Fornisce il criterio d'ingresso dell'opzione O3.
 - **File:**
   - nuovo helper `CountingLlamaRuntime.cs` (`HttpMessageHandler`):

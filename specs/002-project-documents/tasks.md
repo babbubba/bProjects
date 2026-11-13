@@ -579,7 +579,7 @@ Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, ness
 - [x] T155 [US2] DET+TEST — RH-006: `Reconciliation/Replay/ReplayFixtureBuilder.cs` e `ReplayFixtureBuilderTests`. Dip.: T154. Dettaglio: RH-006.
 - [x] T156 [US2] DET+TEST — RH-002: `ReconcileContractMatrixTests.cs` (nove casi di caratterizzazione, esito attuale, incoerenze comprese). Dip.: nessuna. Dettaglio: RH-002.
 - [x] T157 [US2] DET+TEST — RH-003: `ReconcileSchemaInstanceGenerator.cs` (seed 20261113) e `ReconcileSchemaPropertyTests.cs`. Dip.: T156. Dettaglio: RH-003.
-- [ ] T158 [US2] DET+TEST — RH-004: `CountingLlamaRuntime.cs` e `ReconcileMeasurementBudgetTests.cs`, tabella «Evidenze M0». Dip.: nessuna. Dettaglio: RH-004.
+- [x] T158 [US2] DET+TEST — RH-004: `CountingLlamaRuntime.cs` e `ReconcileMeasurementBudgetTests.cs`, tabella «Evidenze M0». Dip.: nessuna. Dettaglio: RH-004.
 - [ ] T159 [US2] DET+TEST — RH-005: `ReconcileExpansionCostSimulationTests.cs`, tabella «Evidenze M0». Dip.: T158. Dettaglio: RH-005.
 
 **Ordine del delta M0.** T154 → T155; T156 → T157; T158 → T159; le tre catene sono indipendenti. Checkpoint C0 (assessment/plan/tasks della cartella `reconciliation-hardening`): M0 verde, suite completa invariata, `git diff --stat backend/src` vuoto, evidenze M0 registrate, riesame di D2/D2b/O3/O5. La mappatura Txxx ↔ RH-xxx qui sopra è l'unica fra i due registri.
