@@ -135,9 +135,9 @@ internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<str
                     throw Violation($"richiesta di riscaldamento non prevista (massimo {maxWarmupCalls}): nulla inoltrato");
                 }
 
-                if (!(JsonDocument.Parse(body).RootElement.TryGetProperty("max_tokens", out var limit) && limit.TryGetInt32(out var tokens) && tokens is > 0 and <= 16))
+                if (!CapIsAtMost(body, 16))
                 {
-                    throw Violation("la richiesta di riscaldamento deve avere max_tokens ≤ 16: nulla inoltrato");
+                    throw Violation("la richiesta di riscaldamento deve avere un tetto di token (max_tokens o max_completion_tokens) ≤ 16: nulla inoltrato");
                 }
 
                 return await ForwardAsync(request, PhaseWarmup, path, cancellationToken);
@@ -204,6 +204,21 @@ internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<str
             Record(new Call(path, kind, true, started, watch.Elapsed.TotalMilliseconds, 0));
             throw;
         }
+    }
+
+    /// <summary>Tetto di token della richiesta (<c>max_tokens</c> oppure <c>max_completion_tokens</c>, come invia il client) presente e nell'intervallo 1..<paramref name="max"/>.</summary>
+    internal static bool CapIsAtMost(string body, int max)
+    {
+        using var doc = JsonDocument.Parse(body);
+        foreach (var name in new[] { "max_completion_tokens", "max_tokens" })
+        {
+            if (doc.RootElement.TryGetProperty(name, out var limit) && limit.TryGetInt32(out var tokens))
+            {
+                return tokens > 0 && tokens <= max;
+            }
+        }
+
+        return false;
     }
 
     private static (int? Prompt, int? Completion, string? Finish) UsageOf(string body)

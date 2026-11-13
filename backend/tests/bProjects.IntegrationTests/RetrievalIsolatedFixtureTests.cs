@@ -171,7 +171,7 @@ public sealed class RetrievalIsolatedFixtureTests
         var ct = TestContext.Current.CancellationToken;
         HttpRequestMessage Warm(int tokens) => new(HttpMethod.Post, "http://dgx.internal/v1/chat/completions")
         {
-            Content = new StringContent(JsonSerializer.Serialize(new { max_tokens = tokens, messages = new[] { new { role = "user", content = StageOnlyModelRouter.WarmupText } } }), Encoding.UTF8, "application/json"),
+            Content = new StringContent(JsonSerializer.Serialize(new { max_completion_tokens = tokens, messages = new[] { new { role = "user", content = StageOnlyModelRouter.WarmupText } } }), Encoding.UTF8, "application/json"),
         };
 
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Warm(16), ct)).StatusCode);
@@ -179,6 +179,8 @@ public sealed class RetrievalIsolatedFixtureTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.SendAsync(Warm(16), ct));      // secondo riscaldamento: non ammesso
         Assert.Single(upstream.Paths);
         Assert.Equal(1, router.ForwardedWarmups);
+        Assert.True(StageOnlyModelRouter.CapIsAtMost("{\"max_tokens\":16}", 16));
+        Assert.False(StageOnlyModelRouter.CapIsAtMost("{\"messages\":[]}", 16));
 
         var capped = new Upstream();
         using var cappedClient = new HttpClient(new StageOnlyModelRouter(capped, _ => "{}", maxWarmupCalls: 1));
@@ -188,6 +190,23 @@ public sealed class RetrievalIsolatedFixtureTests
         var strict = new StageOnlyModelRouter(new Upstream(), _ => "{}");                               // default: nessun riscaldamento
         using var strictClient = new HttpClient(strict);
         await Assert.ThrowsAsync<InvalidOperationException>(() => strictClient.SendAsync(Warm(16), ct));
+    }
+
+    [Fact]
+    public async Task The_production_client_warm_up_request_is_accepted_by_the_router()
+    {
+        // Il corpo REALE prodotto dal client di produzione (nessuna rete: il modello a monte e finto) deve rispettare il tetto di 16 token.
+        var upstream = new Upstream();
+        var router = new StageOnlyModelRouter(upstream, _ => "{}", maxWarmupCalls: 1);
+        var options = new bProjects.App.AI.AiOptions { Endpoint = "http://dgx.internal:8080/v1/", ModelId = "m", ApiKey = "k", ContextWindowTokens = 4000, MaxOutputTokens = 1500, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60 };
+        using var client = new bProjects.App.AI.InternalModelClient(options, new NonOwningHandler(router));
+        var warm = client.CreateChatOptions(temperature: 0, phase: bProjects.App.AI.AiPhase.Extraction);
+        warm.MaxOutputTokens = 16;
+
+        await Record.ExceptionAsync(() => client.ChatClient.GetResponseAsync([new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, StageOnlyModelRouter.WarmupText)], warm, TestContext.Current.CancellationToken));   // la risposta finta non e una chat valida: conta solo l'ammissione
+
+        Assert.Empty(router.Violations);
+        Assert.Equal(1, router.ForwardedWarmups);
     }
 
     [Fact]
