@@ -5,3 +5,5 @@ backend/tests/bProjects.IntegrationTests/Retrieval/Gold/** -text
 # Fixture di valutazione della 003 (T017/T018): copia byte-identica del laboratorio e sottoinsieme derivato; hash in Retrieval/Evaluation/PROVENANCE.json.
 backend/tests/bProjects.IntegrationTests/Retrieval/Evaluation/** -text
 backend/tests/bProjects.IntegrationTests/Retrieval/Baseline/** -text
+# Fixture di replay della riconciliazione (002 reconciliation-hardening RH-001): gli hash di PROVENANCE.json sono sui byte.
+backend/tests/bProjects.IntegrationTests/Reconciliation/Replay/** -text

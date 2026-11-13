@@ -21,7 +21,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M0 — Baseline offline e strumenti di verifica (nessuna modifica del codice di produzione)
 
-### [ ] RH-001 — Fixture di replay dagli archivi dei Run 2–5
+### [x] RH-001 — Fixture di replay dagli archivi dei Run 2–5
 - **Scopo:** rendere versionati, e indipendenti da `%TEMP%`, gli output reali della gerarchia.
 - **File:**
   - nuovo `backend/tests/bProjects.IntegrationTests/Reconciliation/Replay/Extract-ReplayFixtures.ps1`, strumento ripetibile versionato;

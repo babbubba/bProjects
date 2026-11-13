@@ -25,6 +25,8 @@
     <!-- Fixture di valutazione e baseline offline (T017/T018). -->
     <None Include="Retrieval/Evaluation/**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Retrieval/Baseline/**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Riconciliazione gerarchica, hardening (002 RH-001): fixture di replay dagli archivi dei Run 2-5; hash in Reconciliation/Replay/PROVENANCE.json. -->
+    <None Include="Reconciliation/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Corpus sintetico dei documenti (T002): copiato accanto ai test, così il percorso non dipende dalla cartella di lavoro. -->
