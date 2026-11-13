@@ -17,12 +17,17 @@ namespace bProjects.IntegrationTests;
 /// </list>
 /// Una violazione è registrata in <see cref="Violations"/> E fa fallire la richiesta (eccezione): il test deve asserire che l'elenco sia vuoto. Nessun retry, nessuna riparazione.
 /// </summary>
-internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<string, string> hierarchy, int maxStageCalls = 1, bool ownsUpstream = false) : HttpMessageHandler
+internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<string, string> hierarchy, int maxStageCalls = 1, bool ownsUpstream = false, int maxWarmupCalls = 0) : HttpMessageHandler
 {
     public const string StageMarker = "Formato: gap-stage-message-1";
     public const string RetrievalBasisMarker = "searchBasis: retrieval";
 
     public const string PhaseStage = "stage";
+
+    /// <summary>Richiesta di riscaldamento ammessa (come la campagna T040): carica il modello perche il runtime sia verificabile. Testo esatto, al massimo <c>maxWarmupCalls</c> volte (default 0), con <c>max_tokens</c> ≤ 16.</summary>
+    public const string WarmupText = "Rispondi solo: ok";
+
+    public const string PhaseWarmup = "warm-up";
     public const string PhaseHierarchyStub = "hierarchy-stub";
 
     /// <summary>Una richiesta vista dal router: <see cref="Forwarded"/> = arrivata al modello a monte (DGX in prova reale).</summary>
@@ -41,6 +46,7 @@ internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<str
     private readonly List<string> _violations = [];
     private readonly List<string> _stageTexts = [];
     private int _stageCalls;
+    private int _warmupCalls;
 
     public int MaxStageCalls { get; } = maxStageCalls;
 
@@ -82,6 +88,8 @@ internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<str
     public int ChatRequests => Calls.Count(c => c.Kind is PhaseStage or PhaseHierarchyStub);
 
     /// <summary>Richieste generative inoltrate al modello a monte: il contratto dell'esperimento ne prevede UNA per scenario.</summary>
+    public int ForwardedWarmups => Calls.Count(c => c.Kind == PhaseWarmup && c.Forwarded);
+
     public int ForwardedStageCalls => Calls.Count(c => c.Kind == PhaseStage && c.Forwarded);
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -118,6 +126,21 @@ internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<str
                 }
 
                 return await ForwardAsync(request, PhaseStage, path, cancellationToken);
+            }
+
+            if (text.Trim() == WarmupText)
+            {
+                if (Interlocked.Increment(ref _warmupCalls) > maxWarmupCalls)
+                {
+                    throw Violation($"richiesta di riscaldamento non prevista (massimo {maxWarmupCalls}): nulla inoltrato");
+                }
+
+                if (!(JsonDocument.Parse(body).RootElement.TryGetProperty("max_tokens", out var limit) && limit.TryGetInt32(out var tokens) && tokens is > 0 and <= 16))
+                {
+                    throw Violation("la richiesta di riscaldamento deve avere max_tokens ≤ 16: nulla inoltrato");
+                }
+
+                return await ForwardAsync(request, PhaseWarmup, path, cancellationToken);
             }
 
             if (HierarchyBatch.IsMatch(text))
@@ -279,4 +302,12 @@ internal sealed class StageOnlyModelRouter(HttpMessageHandler upstream, Func<str
             .OrderBy(g => g.Key.Path, StringComparer.Ordinal).ThenBy(g => g.Key.Phase, StringComparer.Ordinal)
             .Select(g => new PhaseLine(g.Key.Path, g.Key.Phase, g.Count(), g.Sum(c => c.Milliseconds), g.Max(c => c.Milliseconds), g.Count(c => c.Status is < 200 or >= 300)))];
     }
+}
+
+/// <summary>Passa le richieste a un gestore che non possiede: il client di riscaldamento non deve smaltire il router condiviso.</summary>
+internal sealed class NonOwningHandler(HttpMessageHandler inner) : HttpMessageHandler
+{
+    private readonly HttpMessageInvoker _inner = new(inner, disposeHandler: false);
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => _inner.SendAsync(request, cancellationToken);
 }

@@ -338,6 +338,16 @@ public abstract class RetrievalGapIsolatedBase : ReconcileRig
         MaxOutputTokens = 2000, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60,
     };
 
+    /// <summary>Riscaldamento (come la campagna T040): UNA richiesta da 16 token che carica il modello, perche il runtime sia verificabile. Passa dal router (contata, al massimo una); nessun contenuto del progetto.</summary>
+    private async Task WarmUpAsync(StageOnlyModelRouter router)
+    {
+        var options = RealOptions();
+        using var client = new InternalModelClient(options, new NonOwningHandler(router));
+        var warm = client.CreateChatOptions(temperature: 0, phase: AiPhase.Extraction);
+        warm.MaxOutputTokens = 16;
+        await client.ChatClient.GetResponseAsync([new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, StageOnlyModelRouter.WarmupText)], warm, Ct);
+    }
+
     /// <summary>Workflow di produzione sul run, con il client di produzione davanti al router fail-closed. Offline: opzioni di test; reale: opzioni della campagna e <see cref="DocumentOptions"/> risolte dall'applicazione.</summary>
     internal async Task<AnalysisRunResult> ExecuteAsync(AnalysisRunClaim claim, StageOnlyModelRouter router)
     {
@@ -391,7 +401,7 @@ public abstract class RetrievalGapIsolatedBase : ReconcileRig
 
         v.Check($"{l} violazioni di instradamento: nessuna (una richiesta non riconosciuta o una seconda generativa farebbe fallire)", router.Violations.Count == 0, string.Join(" | ", router.Violations));
         v.Check($"{l} run terminale Completed (un errore gestito non e un PASS)", result.Status == ProcessingRunStatus.Completed, $"{row.Status} {row.Code}: {Short(row.Message, 200)}");
-        v.Check($"{l} una sola richiesta generativa inoltrata al modello a monte (lo stadio Gap) e la gerarchia solo simulata", router.ForwardedStageCalls == 1 && router.ChatRequests > 1,
+        v.Check($"{l} una sola richiesta di contenuto inoltrata al modello a monte (lo stadio Gap), piu il solo riscaldamento da 16 token nella prova reale, e la gerarchia solo simulata", router.ForwardedStageCalls == 1 && router.ChatRequests > 1 && router.ForwardedWarmups == (IsReal ? 1 : 0),
             $"stadio inoltrato={router.ForwardedStageCalls} chat totali={router.ChatRequests}");
         if (result.Status != ProcessingRunStatus.Completed)
         {
@@ -652,8 +662,13 @@ public abstract class RetrievalGapIsolatedBase : ReconcileRig
             }
 
             arranged = await ArrangeAsync(scenario);
-            StageOnlyModelRouter New() => routerFactory?.Invoke() ?? (IsReal ? new StageOnlyModelRouter(MafDiagnostics.Wrap(), SimulatedHierarchy, ownsUpstream: true) : OfflineRouter(scenario));
+            StageOnlyModelRouter New() => routerFactory?.Invoke() ?? (IsReal ? new StageOnlyModelRouter(MafDiagnostics.Wrap(), SimulatedHierarchy, ownsUpstream: true, maxWarmupCalls: 1) : OfflineRouter(scenario));
             router = New();
+            if (IsReal)
+            {
+                await WarmUpAsync(router);
+            }
+
             var result = await ExecuteAsync(arranged.Claim, router);
             try
             {

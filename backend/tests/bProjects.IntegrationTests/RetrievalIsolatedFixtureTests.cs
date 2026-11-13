@@ -163,6 +163,34 @@ public sealed class RetrievalIsolatedFixtureTests
     }
 
     [Fact]
+    public async Task The_warm_up_request_is_admitted_once_with_a_16_token_cap_and_never_otherwise()
+    {
+        var upstream = new Upstream();
+        var router = new StageOnlyModelRouter(upstream, _ => "{}", maxWarmupCalls: 1);
+        using var client = new HttpClient(router);
+        var ct = TestContext.Current.CancellationToken;
+        HttpRequestMessage Warm(int tokens) => new(HttpMethod.Post, "http://dgx.internal/v1/chat/completions")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { max_tokens = tokens, messages = new[] { new { role = "user", content = StageOnlyModelRouter.WarmupText } } }), Encoding.UTF8, "application/json"),
+        };
+
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Warm(16), ct)).StatusCode);
+        Assert.Single(upstream.Paths);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SendAsync(Warm(16), ct));      // secondo riscaldamento: non ammesso
+        Assert.Single(upstream.Paths);
+        Assert.Equal(1, router.ForwardedWarmups);
+
+        var capped = new Upstream();
+        using var cappedClient = new HttpClient(new StageOnlyModelRouter(capped, _ => "{}", maxWarmupCalls: 1));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cappedClient.SendAsync(Warm(4000), ct));   // tetto di token superato: non inoltrato
+        Assert.Empty(capped.Paths);
+
+        var strict = new StageOnlyModelRouter(new Upstream(), _ => "{}");                               // default: nessun riscaldamento
+        using var strictClient = new HttpClient(strict);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => strictClient.SendAsync(Warm(16), ct));
+    }
+
+    [Fact]
     public async Task Non_generative_requests_are_forwarded_counted_and_attributed_to_the_phase_of_the_run()
     {
         var upstream = new Upstream();
