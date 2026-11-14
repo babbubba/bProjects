@@ -453,3 +453,41 @@ Il generatore è casuale e non rappresenta la frequenza reale (0 occorrenze real
 4. Il piano v11 usa la validazione V2 e il compositore con opzioni; la v11 reale non può completare finché mancano le foglie A (copertura incompleta, fallimento chiuso). Nessun percorso la congela in una nuova richiesta.
 5. Grammatica reale non provata (`anyOf`/`enum` a un valore, ordine delle proprietà): sonda RH-050 in M5. I due test PostgreSQL di RH-010 vanno eseguiti con un database di test.
 6. Decisione aperta sul prompt (punti 1 e 2 sopra) prima di RH-050.
+
+### Chiusura M1 e gate M2 (2026-11-14; nessuna inferenza, nessuna modifica del codice di produzione)
+
+**RH-010 / T160 chiuso.** Ambiente: container di test esistente `bprojects-test-pg` (immagine `pgvector/pgvector:pg18`, volume anonimo proprio, porta host 15432), avviato dopo Docker Desktop. Non è lo stack `bprojects`: i volumi `bprojects_pgdata` e `bprojects_documents` non sono stati toccati. Ogni classe di test crea un database `bprojects_test_<guid>` e lo elimina; i 7 database dello stesso tipo preesistenti sono rimasti (7 prima, 7 dopo, nessuna eliminazione). `BPROJECTS_TEST_DGX_ALLOW` e `BPROJECTS_TEST_PARSER_ENDPOINT` non impostate: nessuna inferenza, nessun parser reale. Al termine il container è stato fermato (stato iniziale); Docker Desktop è rimasto in esecuzione.
+- `ReconcileDefinitionV11WorkflowTests`: **2 su 2 superati** (anche dopo l'asserzione aggiunta sul default). Single-call v11 uguale alla v6 (messaggi, istruzioni, schema di risposta; nessun batch derivato); oltre budget entrambe entrano in gerarchia con una foglia A, la v11 con le istruzioni v6 e lo schema LeafA di `by-stage-1` (`items.maxItems` 0); la definizione v11 è persistita nel run e riconosciuta dal workflow; la richiesta nativa dell'endpoint persiste la **v6** (default invariato).
+- Suite completa con PostgreSQL: **4.819 test, 4.721 superati, 98 ignorati, 0 falliti** (22 min 27 s). Ignorati per motivo: 72 opt-in DGX mancante, 21 parser documentale non configurato, 2 traccia di accettazione V7 assente, 1 benchmark diagnostico (`BPROJECTS_BENCH`), 1 `BPROJECTS_REVIEW_OUT`, 1 symlink non consentito all'utente Windows. Nessun test v11 o di riconciliazione ignorato. **Non eseguiti**: i test con parser reale e con DGX. La suite è integrata completa per PostgreSQL e modello finto, **non** per parser reale né inferenza.
+
+**`IntegrityMismatch`: confermato, nessuna modifica di codice.**
+1. *Solo violazione effettiva dell'integrità canonica:* è costruito in un solo punto (`ReconcileAliasComposer.cs:149`), solo se `expectedCanonicalHash` è valorizzato e diverso dal canonico ricomposto. L'unico chiamante con un hash atteso è la ripresa di un WorkOutput Committed (`DocumentReconcilePlan.cs:559`); la composizione di una risposta nuova passa `null` (`:492`): non è raggiungibile da un output del modello.
+2. *Non correggibile dal modello:* nel replay non c'è inferenza; il piano di riconciliazione non implementa `IGuidedRetryPlan` né `IInformedRetryPlan` e lancia `DocumentWorkException` semplici (non `GuidedRetryTrigger`), quindi il retry guidato del port non le intercetta; nessun codice di produzione legge `TypedViolations` o `ReconcileViolationKind` (diagnostica per i test). Vincolo per il futuro registrato in plan §12, O1 (h).
+3. *Fail-closed:* `A_stored_output_whose_verified_hash_does_not_match_is_rejected_on_replay_without_a_new_inference` (PostgreSQL, superato): run `Failed`, codice `integrity_conflict`, nessuna richiesta al modello, nessuna revisione creata.
+4. *v2–v10 invariate:* senza opzioni il compositore dà codice e messaggio storici (`ReconcileAliasComposerTests`, rifiuto per hash diverso, superato); l'unica aggiunta è l'etichetta tipizzata. Nessun nuovo retry, nessuna modifica di policy.
+
+**Prompt v6.** Nessun difetto dimostrato ⇒ nessun rilievo applicato, in coerenza col mandato di chiusura («nessuna modifica di schemi o prompt della v11 senza un difetto dimostrato»). Il testo resta quello pinnato (SHA `2e68e7f2…`). I sette rilievi importanti restano ipotesi da verificare in RH-050; se compare contaminazione fra stadi si adotta l'opzione O2.
+
+**D2b preparata, non implementata.** Regola candidata R-D2b-1: «Un'evidenza di tipo Gap deve conservare la propria domanda canonica in `openQuestions`, anche quando partecipa a un candidato con disposizione `Open`.» Piano (§2, §3, §8, §9, §11) e task (RH-020, RH-021, RH-041, RH-043) aggiornati; nessun file di `backend/src`, nessuna tabella di proiezione, nessuno schema e nessun prompt modificati. Mappa fra le condizioni richieste e i test di RH-021(b), da scrivere **prima** della modifica dell'assembly:
+
+| Condizione richiesta | Test |
+|---|---|
+| Gap in un conflitto `Open` | (b)1, (b)2 |
+| Gap in più conflitti | (b)3 |
+| `MissingGaps` vuoto | asserito in (b)1–(b)4 e (b)11 |
+| Provenienza conservata | (b)9 |
+| Nessuna duplicazione non consentita da `EvidenceCoverage` | (b)8, (b)5 |
+| Nessuna decisione contestata presentata come acquisita | (b)10, (b)5 |
+| Coesistenza con patch accettate | (b)4 (`Applied`, `Duplicate`, `PreservedAsConflict`) |
+| Compatibilità col contratto dello stadio Gap | (b)11, (b)12 |
+| Difetto che l'eccezione evita (caratterizzazione) | (b)7, RH-022(c) |
+
+**Incompatibilità architetturali (nessuna bloccante, tre da decidere o già corrette nei testi).**
+1. *D2b nella forma originaria contro la precondizione dello stadio Gap:* senza eccezione un Gap estremo di un conflitto `Open` perde la domanda e `GapStageReferences.From` (che non legge le alternative, `GapStageInput.cs:92-110`) lo dichiara mancante ⇒ `gap_reference_missing` (`DocumentReconcilePlan.cs:864`). Risolta dall'eccezione R-D2b-1.
+2. *L'eccezione crea una coppia identica:* per ogni Gap estremo esistono un item `openQuestions` e un'alternativa con testo, classificazione ed evidenze uguali. La `Coherence` di alias-2 (`AnalysisAliasComposer.cs:355-364`, §13.4) li rifiuterebbe nella single-call, ma non si applica alla gerarchia (`DocumentReconcileAssembly` e `DocumentAnalysisContent.Check` non la eseguono). L'avviso D3 `item_repeats_conflict_alternative` scatta quindi **sempre** per quel Gap (una volta per alternativa identica), come `SemanticRisk` non bloccante (`EvidenceCoverage.cs:827-830`). Il piano diceva «può restare»: corretto in «compare sempre». È una **deviazione consapevole** dal principio di §13.4, limitata ai Gap nella gerarchia v11. **Decisione D2b-3 dell'autore:** accettare l'avviso come informativo (raccomandato) oppure sopprimerlo con una modifica esplicita di `EvidenceCoverage` (non fatta).
+3. *Incoerenze nei testi, corrette:* il piano §8 escludeva dalla D2b anche gli item `ToClarify` di `openQuestions`, mentre RH-021(b)6 li escludeva dalle sezioni ⇒ ora è la decisione **D2b-2** (raccomandato: esclusi; l'evidenza resta visibile come alternativa di un conflitto non risolto). Il criterio di accettazione 6 e RH-041 dicevano «avvisi D3 = 0» senza qualifica ⇒ ora valgono solo per le evidenze non Gap.
+Il token `open-endpoints-as-alternatives-1` del `configHash` v11 identifica già la regola con l'eccezione (nessuna versione senza eccezione è mai stata implementata): nessun golden cambia; si congela in RH-044.
+
+**Vincolo di intento.** Aggiunto a plan §1 e all'intestazione di M2: M2 non è un esercizio per rendere verdi i test di copertura; la proiezione è una rappresentazione intermedia e la sua completezza non dimostra la qualità della documentazione finale (livelli 7–8). `leaf-projection-1` non si modifica senza decisione esplicita e nuova versione.
+
+**Condizioni per avviare M2.** (1) Conferma dell'autore di D2b-1, D2b-2 e D2b-3. (2) Test (b)1–(b)12 scritti per primi. (3) Mandato esplicito per RH-020…RH-022 (D11 vale solo per M0 e M1). (4) Resta il rischio della grammatica reale (sonda RH-050) e la decisione sul prompt prima di RH-050.

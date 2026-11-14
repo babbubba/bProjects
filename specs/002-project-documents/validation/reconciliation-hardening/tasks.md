@@ -4,6 +4,8 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 **Stato:** allegato tecnico di un mandato. Il `CLAUDE.md` del progetto fa di `specs/002-project-documents/tasks.md` l'unica baseline operativa. **D11 è approvata soltanto per i mandati M0 (2026-11-13) e M1 (2026-11-14)**: RH-001…RH-006 sono riportati nel `tasks.md` ufficiale come **T154–T159** (RH-001→T154, RH-006→T155, RH-002→T156, RH-003→T157, RH-004→T158, RH-005→T159; sezione «Delta Reconciliation Hardening M0») e RH-010…RH-017 come **T160–T167** (RH-010→T160, RH-011→T161, RH-012→T162, RH-013→T163, RH-014→T164, RH-015→T165, RH-016→T166, RH-017→T167; sezione «Delta Reconciliation Hardening M1»). M2–M6 **non sono autorizzati** e non sono riportati nel registro ufficiale. Questo file non va usato come pianificazione parallela. Spuntare una casella solo a task completato e verificato (lo stato qui e nel registro ufficiale va tenuto allineato).
 
+**Chiusura M1 (2026-11-14, mandato «Chiusura M1 e preparazione del gate M2»).** (1) RH-010/T160 chiuso: i due test PostgreSQL sono stati eseguiti e superati; la suite completa con PostgreSQL di test (senza DGX né parser reale) dà 4.819 test, 4.721 superati, 98 ignorati, 0 falliti. (2) `IntegrityMismatch` confermato senza modifiche di codice ([assessment.md](assessment.md) §12, «Chiusura M1»). (3) D2b **preparata, non implementata**: regola candidata R-D2b-1, sotto-decisioni D2b-1…D2b-3 ([plan.md](plan.md) §11) e test (b)1–(b)12 di RH-021 descritti da scrivere per primi. RH-020, RH-021, RH-022 e M2–M6 **non sono avviati né autorizzati**.
+
 **Mandato M1 (2026-11-14), perimetro e decisioni.** Autorizzati soltanto RH-010…RH-017. D1 approvata **solo** per l'introduzione della definizione v11, che resta **inattiva** per le nuove richieste ordinarie (nessuna promozione a default: `DocumentaryAnalysisFreeze` invariata). D2 approvata **come principio**: in M1 si preparano schema e contratti secondo cui il modello non produce item nelle foglie A; la proiezione (RH-020), la mappatura semantica, l'assembly e il formato `items-ref-1` (RH-021) **non** sono autorizzati. D3 (`noFindingsReason` informativo) e D4 (confronto senza candidati) approvate, limitate alla v11. **D2b è rinviata a M2** (nessuna modifica dell'assembly né dello stadio Gap); prima di M2 servono una regola esplicita e i test elencati in [assessment.md](assessment.md) §12 («Evidenze M1», rischi per M2). Conseguenza dichiarata: **in M1 la v11 non è funzionante end-to-end** (le foglie A non producono item e nulla li proietta ancora): una gerarchia v11 si ferma a fine corsa con la copertura incompleta già prevista (`evidence_not_mapped`), che è un fallimento chiuso, non un successo parziale; nessun percorso congela una v11 in una nuova richiesta.
 
 ## Regole valide per tutti i task
@@ -141,7 +143,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M1 — Definizione v11 e contratto per stadio (D1 per l'identità, D3, D4)
 
-### [ ] RH-010 — Identità della definizione v11 (non default) — T160. **Stato M1:** implementata e verificata offline; i test PostgreSQL «single-call v11 = v6» e «instradamento v11 = v6» (`ReconcileDefinitionV11WorkflowTests`) sono scritti ma **non eseguiti** (database assente): la casella resta aperta finché non girano con `BPROJECTS_TEST_POSTGRES`.
+### [x] RH-010 — Identità della definizione v11 (non default) — T160. **Stato:** implementata e verificata offline in M1; i due test PostgreSQL «single-call v11 = v6» e «instradamento v11 = v6» (`ReconcileDefinitionV11WorkflowTests`) sono **eseguiti e superati** il 2026-11-14 (chiusura M1) con il PostgreSQL di test esistente, modello finto, nessun DGX. Il test verifica anche che la richiesta nativa dell'endpoint persista la v6 (default invariato).
 - **File e modifiche:**
   - `AI/DocumentAnalysisWorkflow.cs`:
     - `DefinitionVersionV11 = "project-analysis-documents-v11"`, `ReconcileContractKey = "reconcileContract"`;
@@ -346,6 +348,10 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M2 — Item delle foglie composti dal server (D2, D2b)
 
+> **M2 non è autorizzato.** Gate di avvio (2026-11-14, preparato senza codice): (1) l'autore conferma D2b-1, D2b-2 e D2b-3 ([plan.md](plan.md) §11); (2) i test (b)1–(b)12 di RH-021 sono scritti **per primi**, col negativo (b)7 osservato come dichiarato, prima di toccare l'assembly; (3) `leaf-projection-1` non si modifica senza una decisione esplicita e una nuova versione.
+>
+> **Vincolo di intento** ([plan.md](plan.md) §1). M2 elimina la rigenerazione strutturale superflua del modello **senza** perdere la distinzione fra fatti documentati, requisiti, decisioni, ipotesi, alternative, conflitti e domande aperte. La proiezione è una rappresentazione intermedia: la copertura completa (`evidence_not_mapped` assente, `MissingGaps` vuoto) è necessaria ma **non dimostra** la qualità della documentazione finale (livelli 7–8, con gold annotato prima). Nessun task di M2 può essere chiuso solo perché i test di copertura sono verdi.
+
 ### [ ] RH-020 — `ReconcileLeafProjection` e tabella `leaf-projection-1`
 - **File:** nuovo `AI/ReconcileLeafProjection.cs`:
   - `Version = "leaf-projection-1"`;
@@ -356,32 +362,38 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
   - testo byte per byte uguale all'enunciato;
   - determinismo;
   - `DocumentAnalysisContentRules.Check` senza violazioni sugli item proiettati;
-  - nessuna `Alternative` e nessuna certezza `Hypothesized` o `ToClarify` in una sezione strutturale.
+  - nessuna `Alternative` e nessuna certezza `Hypothesized` o `ToClarify` in una sezione strutturale;
+  - **distinzioni del prodotto preservate**: con un'evidenza per ciascuna categoria (fatto documentato, requisito, decisione, ipotesi, assunzione, alternativa, certezza `ToClarify`, Gap) la proiezione dà sezione e classificazione come da tabella e nessuna categoria collassa in un'altra (ipotesi mai `Documented`; Gap mai in una sezione strutturale; decisione solo dove la tabella la mette). Il test non usa la copertura come criterio di qualità.
 - **Dipendenze:** C1. **Effort:** 0,75 gg.
 - **Decisioni risolte:** D2 e tabella con la certezza.
+- **STOP:** la tabella `leaf-projection-1` non si cambia per far passare un test di copertura: ogni modifica è una nuova versione e richiede una decisione esplicita dell'autore.
 
 ### [ ] RH-021 — Integrazione nel compositore, nell'assembly (D2b) e nei messaggi (`items-ref-1`)
 - **File e modifiche:**
   - `ReconcileAliasComposer`: con `options.StageContract`, stadio `leaf` e vista A, proposte e sezioni da `ReconcileLeafProjection.Project`; `Ungrounded` vuoti; `items` del modello diversi da `[]` ⇒ `StageShape`. `ReconcileComposeOptions` porta il dizionario delle evidenze. `DocumentReconcilePlan` lo passa in `AbsorbCandidate` e `CommittedAliasTextAsync`.
   - `ReconcileAliasMessages.Build`: parametro `ReconcileMessageFormat format` (`Legacy` | `ItemsRef1`). Con `ItemsRef1` le righe degli item già proposti diventano `[{handle}] ({alias, …})` senza testo; con `Legacy` il messaggio è byte per byte invariato.
-  - `DocumentReconcileAssembly.Assemble` (ramo v11, opzione passata dal piano): prima di comporre le sezioni, escludere gli item proiettati che hanno **un'unica** evidenza estremo di almeno un candidato con disposizione `Open`, **e** che non sono bersaglio di patch con disposizione `Applied`, `Duplicate` o `PreservedAsConflict`. L'evidenza resta nella mappa tramite l'alternativa (`:101-107`). Ramo v4–v10 invariato.
+  - `DocumentReconcileAssembly.Assemble` (ramo v11, opzione passata dal piano): prima di comporre le sezioni, escludere gli item proiettati che hanno **un'unica** evidenza estremo di almeno un candidato con disposizione `Open`, **e** che non sono bersaglio di patch con disposizione `Applied`, `Duplicate` o `PreservedAsConflict`. L'evidenza resta nella mappa tramite l'alternativa (`:101-107`). Ramo v4–v10 invariato. **Eccezione R-D2b-1 (candidata, [plan.md](plan.md) §8): l'item proiettato di un'evidenza di tipo `Gap` non è mai escluso** («un'evidenza di tipo Gap deve conservare la propria domanda canonica in `openQuestions`, anche quando partecipa a un candidato con disposizione `Open`»). Nessuna modifica di `GapStageReferences`, dello stadio Gap, di `EvidenceCoverage` né del validatore del contenuto. Il token `open-endpoints-as-alternatives-1` del bundle identifica la regola **con** l'eccezione (nessuna versione senza eccezione è mai stata implementata: non serve rinominarlo); si congela in RH-044.
 - **Test** (PostgreSQL e MAF 1.26.0 reali, modello finto; nuovo `DocumentReconcileAliasWorkflowV11Tests`):
   - profilo W=8192, O=2048, M=1024 e ledger di circa 20 evidenze (con una Gap del PM, una Gap di documento, un'Assumption, una `Hypothesized`, una Decision, un'Alternative e una coppia in conflitto). Il test asserisce che `DocumentAnalysisWorkflow` instradi in gerarchia con stadio Gap;
   - un item `openQuestions` per ogni Gap, con testo uguale all'enunciato; `GapState` non nullo e `MissingGaps` vuoto;
   - la coppia in conflitto compare solo come alternative e `EvidenceCoverage` non produce `item_repeats_conflict_alternative`;
   - ripresa in un processo nuovo a metà gerarchia: stesso `canonicalHash`, nessuna inferenza per i batch Committed;
   - i messaggi di espansione e confronto portano item senza testo;
-  - **(b) rischio R-D2b** ([plan.md](plan.md) §8, registrato prima di M1), nell'assembly v11 con `GapStageReferences.From` sull'analisi risultante:
+  - **(b) rischio R-D2b** ([plan.md](plan.md) §8, registrato prima di M1; regola candidata R-D2b-1). **I test (b)1–(b)12 si scrivono PRIMA di modificare l'assembly**: quelli che dipendono dall'eccezione partono rossi. Nell'assembly v11, con `GapStageReferences.From` e `EvidenceCoverage` sull'analisi risultante:
     1. Gap del PM estremo di un conflitto `Open` con un'evidenza non Gap: la domanda del Gap resta in `openQuestions`, `MissingGaps` vuoto, il conflitto resta con entrambe le alternative;
     2. Gap contro Gap: entrambe le domande restano;
-    3. Gap estremo di due conflitti `Open`: la domanda resta, una sola volta;
-    4. Gap estremo di un conflitto `Open` e bersaglio di una patch `Applied`: la domanda resta;
+    3. Gap estremo di due conflitti `Open`: la domanda resta, una sola volta (un solo item proiettato per voce);
+    4. Gap estremo di un conflitto `Open` e bersaglio di una patch `Applied`: la domanda resta; stessa asserzione con patch `Duplicate` e `PreservedAsConflict` (coesistenza con patch accettate: nessuna patch altera la domanda né le alternative);
     5. evidenza non Gap, unica evidenza dell'item, estremo di un conflitto `Open`: l'item è escluso (regola D2b), l'evidenza resta mappata tramite l'alternativa, nessun `evidence_not_mapped`, nessun `item_repeats_conflict_alternative`;
-    6. item `openQuestions` di tipo Alternative o certezza `ToClarify` estremo di un conflitto `Open`: comportamento dichiarato e testato (esclusione, con riferimenti `i<n>` rinumerati in modo deterministico: stessi riferimenti a ogni replay);
+    6. item `openQuestions` **non Gap** di tipo Alternative o certezza `ToClarify` estremo di un conflitto `Open`: comportamento dichiarato dalla decisione D2b-2 e testato (raccomandato: esclusione, con riferimenti `i<n>` rinumerati in modo deterministico: stessi riferimenti a ogni replay; l'evidenza resta visibile come alternativa di un conflitto non risolto);
     7. **negativo di caratterizzazione**: con D2b applicata senza l'eccezione per i Gap, lo stesso caso 1 produce `MissingGaps` = [Gap] e `gap_reference_missing`. Il test documenta il difetto che l'eccezione evita; se l'eccezione fosse respinta, questo diventa il comportamento v11 e va dichiarato in `ai-workflow.md` (RH-043);
-    8. D3: per un Gap estremo, l'avviso `item_repeats_conflict_alternative` può comparire ed è non bloccante: il test asserisce che non è bloccante e che l'asserzione «avvisi D3 = 0» di RH-041 vale solo per le evidenze non Gap.
-- **Dipendenze:** RH-020. **Effort:** 1,75 gg.
-- **STOP:** se il ramo atteso non si raggiunge con il profilo indicato, segnalare senza modificare le policy di instradamento.
+    8. D3 (decisione D2b-3): per un Gap estremo l'avviso `item_repeats_conflict_alternative` **compare sempre** (la domanda e l'alternativa hanno testo, classificazione ed evidenze identici), una volta per ciascuna alternativa identica (due conflitti ⇒ due avvisi), con categoria `SemanticRisk` e `Blocking` falso; nessun altro finding bloccante; `DocumentAnalysisContent.Check` non rifiuta la coppia (la `Coherence` di alias-2 non si applica alla gerarchia); `evidence_not_mapped` assente. L'asserzione «avvisi D3 = 0» di RH-041 vale solo per le evidenze non Gap;
+    9. **provenienza conservata**: per il Gap estremo l'item `openQuestions` ha `evidenceRefs` uguali alle fonti della voce nello snapshot (stesso ordine di `SortedSourceIds`) e una voce di `EvidenceMap` con quella sola evidenza; le alternative del conflitto portano le stesse fonti; nessuna fonte aggiunta o persa rispetto al percorso v10 sullo stesso candidato; gli id canonici degli item sono quelli attesi (`IdOf`) e identici a ogni replay;
+    10. **nessuna decisione contestata presentata come acquisita**: (i) una Decision estremo di un conflitto `Open` con un Gap non compare in nessuna sezione strutturale (`requirements`), solo come alternativa, mentre il Gap resta in `openQuestions`; (ii) per ogni conflitto `Open` nessuna alternativa coincide con un item di una sezione strutturale; (iii) il conflitto resta `Open` con `Resolution` nulla, nessuna scelta automatica;
+    11. **compatibilità con il contratto dello stadio Gap**: sull'analisi risultante `GapStageReferences.From` offre la domanda del Gap come `i<n>` (`GapQuestion[gap]` valorizzato) e il conflitto come `c<m>`; `GapStageReferences.Hash()` è identico a ogni replay; `DocumentReconcileGapStage.Verify` risolve un record con `openItem=i<n>` e uno con `openConflict=c<m>` senza `coverage_incomplete` né `work_output_invalid`; item, conflitti, `EvidenceMap` ed `EvidenceRefs` restano invariati dopo lo stadio Gap;
+    12. **ripresa**: con un Gap estremo di un conflitto `Open`, una ripresa a metà gerarchia dà lo stesso `canonicalHash` e la stessa analisi assemblata, senza WorkOutput duplicati né inferenza per i batch Committed.
+- **Dipendenze:** RH-020. **Effort:** 1,75 gg (+0,5 gg per i test (b)8–(b)12).
+- **STOP:** se il ramo atteso non si raggiunge con il profilo indicato, segnalare senza modificare le policy di instradamento. **Se (b)8 mostra un finding bloccante o (b)11 un `coverage_incomplete`, la regola R-D2b-1 è incompatibile con un invariante: fermarsi, documentare il problema e la decisione necessaria in «Evidenze M2». Non correggere in silenzio il validatore, `EvidenceCoverage`, `GapStageReferences` né lo stadio Gap.**
 
 ### [ ] RH-022 — Replay per batch delle foglie A reali e precondizione dello stadio Gap
 - **Test** (`ReconcileReplayFixturesTests`, con `ReplayFixtureBuilder`):
@@ -466,8 +478,8 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Modello finto:** foglie, riduzione, cross ed espansione (≤ 2 figli per blocco) secondo uno script; confronti `Open` per le coppie in conflitto dello script, `Compared` altrimenti; stadio Gap con output valido.
 - **Asserzioni:**
   - A e B `Completed`;
-  - ogni evidenza produce esattamente un item proiettato oppure compare solo come alternativa (D2b);
-  - ogni Gap ha la sua domanda canonica; avvisi D3 = 0;
+  - ogni evidenza produce esattamente un item proiettato oppure compare solo come alternativa (D2b); un Gap estremo di un conflitto `Open` compare come domanda **e** come alternativa (R-D2b-1);
+  - ogni Gap ha la sua domanda canonica; avvisi D3 = 0 **per le evidenze non Gap** (per ogni Gap estremo l'avviso è atteso, non bloccante: numero asserito esattamente);
   - nessun WorkOutput duplicato;
   - ripresa da zero in un processo nuovo senza inferenza, con la stessa revisione;
   - C termina `Completed` oppure con un limite tipizzato (`coverage_incomplete` o `call_limit_exceeded`), mai con un successo parziale; le chiamate restano ≤ 512.
@@ -488,7 +500,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 ### [ ] RH-043 — Emendamento dei contratti della 002
 - **File:** `specs/002-project-documents/contracts/ai-workflow.md`, nuovo paragrafo «Emendamento v11 (`project-analysis-documents-v11`, `reconcile-stage-contract-1`)» in §4.1, §4.3, §11 e §13.7. Elenca:
   - item delle foglie A composti dal server (tabella con la certezza);
-  - estremi dei conflitti `Open` solo come alternative;
+  - estremi non Gap dei conflitti `Open` solo come alternative; i Gap restano anche domanda canonica (R-D2b-1), con avviso D3 informativo: deviazione dichiarata dal principio di §13.4 (single-call), limitata alla gerarchia v11;
   - `noFindingsReason` informativo;
   - confronto senza candidati, con `Open` ⇒ motivo;
   - validazione v2; formato `items-ref-1`;
