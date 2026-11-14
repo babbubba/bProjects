@@ -492,7 +492,7 @@ public sealed class ReconciliationCandidates
             context.PromptVersion);
         ordinal++;
         Calls.Add();
-        var outcome = await ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct, groups);
+        var outcome = await ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct, groups, context.Rules);
         Calls.Add(0, System.Text.Encoding.UTF8.GetByteCount(ReconciliationCodec.Canonical(outcome.Result)));
         outcomes.Add(outcome);
         return outcome;

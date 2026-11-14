@@ -14,7 +14,7 @@ public sealed record DirectoryFacts(EvidenceStructure Structure, IReadOnlyList<s
 /// <summary>Identità congelata, limiti e versioni condivisi da directory, livelli e round finale.</summary>
 public sealed record ReconciliationContext(
     string Owner, string ManifestIdentity, string Definition, PlannerLimits Limits, string SchemaVersion = "reconcile-1", string PromptVersion = "document-reconcile-v2",
-    int MaxLevels = 32);
+    int MaxLevels = 32, ReconcileValidationRules Rules = ReconcileValidationRules.V1);
 
 /// <summary>Misuratori del payload completo per il Pack di foglie e di pagine (token non additivi: ogni prefisso è misurato).</summary>
 public sealed record ReconciliationMeasurers(PackMeasurer<CatalogEntry> Leaf, PackMeasurer<PageEntry> Page);

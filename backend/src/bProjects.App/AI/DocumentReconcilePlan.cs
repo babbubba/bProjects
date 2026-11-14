@@ -53,6 +53,10 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 {
     public const string AlgorithmVersion = "global-reconcile-v1";
     public const string ValidationVersion = "reconcile-validation-v1";
+
+    /// <summary>Validazione della definizione v11 (D3: <c>noFindingsReason</c> informativo, <see cref="ReconcileValidationRules.V2"/>): attesa del lookup e versione dei WorkOutput dei batch della gerarchia.</summary>
+    public const string ValidationVersionV2 = "reconcile-validation-v2";
+
     public const string SchemaVersion = "reconcile-1";
     public const string NodeStage = "reconcile";
 
@@ -74,6 +78,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private readonly ReconcileAliasMode? _alias;
     private readonly string? _schemaJson;
     private readonly string _schemaVersion;
+    private readonly string _validationVersion;
+    private readonly ReconcileValidationRules _rules;
     private readonly Dictionary<string, UnitMeasure> _measures = new(StringComparer.Ordinal);
     private readonly Dictionary<int, (string BatchId, string Text)> _texts = [];
     private readonly Dictionary<int, AliasEntry> _aliasEntries = [];
@@ -119,6 +125,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
         _instructions = alias is null ? ReconciliationHierarchy.Instructions : ReconcileAliasContracts.InstructionsFor(alias.PromptVersion);
         _schemaVersion = alias is null ? SchemaVersion : ReconcileAliasContracts.SchemaVersion;
+        // Contratto per stadio (solo v11): validazione v2 (D3) per ogni batch della gerarchia; ogni altra definizione conserva la v1.
+        (_rules, _validationVersion) = alias?.StageContract is null ? (ReconcileValidationRules.V1, ValidationVersion) : (ReconcileValidationRules.V2, ValidationVersionV2);
         _schemaJson = alias is { Structured: true } ? alias.Schema.GetRawText() : null;
         var definition = alias?.Definition ?? DocumentAnalysisWorkflow.DefinitionVersion;
         var promptVersion = alias is null ? ReconciliationHierarchy.PromptVersion : alias.PromptVersion;
@@ -240,7 +248,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         }));
         _context = new ReconciliationContext(
             $"ProcessingRun|{claim.RunId:N}", _manifestIdentity, definition,
-            new PlannerLimits(Math.Max(1, profile.InputBudgetTokens - HeaderReserveTokens), profile.OutputTokens, OutputExpansion: 1.0), _schemaVersion, promptVersion, _maxLevels);
+            new PlannerLimits(Math.Max(1, profile.InputBudgetTokens - HeaderReserveTokens), profile.OutputTokens, OutputExpansion: 1.0), _schemaVersion, promptVersion, _maxLevels, _rules);
     }
 
     private readonly int _maxLevels;
@@ -252,7 +260,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     public WorkManifestInput Manifest { get; }
 
-    public WorkLookupExpectation Expectation => new(_schemaVersion, ValidationVersion);
+    public WorkLookupExpectation Expectation => new(_schemaVersion, _validationVersion);
 
     /// <summary>Il batch dello stadio Gap (v6) ha schema e validazione propri; i batch della gerarchia conservano quelli del piano.</summary>
     public async ValueTask<WorkLookupExpectation> ExpectationForAsync(BatchRef batch, IBatchOutputs prior, CancellationToken ct) =>
@@ -688,7 +696,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         var covered = JsonSerializer.Serialize<string[]>(
             [.. request.Entries.Select(e => e.EntryId), .. request.Nodes.Select(n => n.NodeId)]);
         var output = new WorkOutputInput(
-            batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, null, null, _schemaVersion, ValidationVersion, null);
+            batch.BatchId, DocumentBatchWorkflow.InvokeId, batch.InputHash, CanonicalJson.Sha256Hex(payload), payload, null, null, covered, null, null, _schemaVersion, _validationVersion, null);
         return new ValidatedBatch(output);
     }
 

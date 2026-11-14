@@ -389,7 +389,7 @@ public sealed class ReconcileSchemaProfileV9Tests
         // Espansione e confronto passano dallo stesso InvokeAsync con buildsNode=false (descriptor obbligatoriamente null), come il cross; la variante v9 lo dichiara con type null.
         var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "bProjects.App", "AI", "ReconciliationCandidates.cs"));
         // Dalla v10 la stessa chiamata riceve in coda la membership opzionale (`groups`, null per v4–v9): resto invariato.
-        Assert.Contains("ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct, groups)", source, StringComparison.Ordinal);
+        Assert.Contains("ReconciliationHierarchy.InvokeAsync(derived, view, 0, batch.Members, [], snapshot, catalog, invoke, false, [candidate], ct, groups, context.Rules)", source, StringComparison.Ordinal);   // RH-012: stessa chiamata, più le regole di validazione del contesto
         Assert.All(new[] { ReconcileBatchSchema.Expand, ReconcileBatchSchema.Compare }, v =>
             Assert.NotEmpty(ReconcileSchemaSubset.Violations(SchemaOf(v), Mutated(v, o => o["descriptor"] = "gruppo").ToJsonString())));
     }

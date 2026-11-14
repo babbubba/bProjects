@@ -9,8 +9,11 @@ using bProjects.App.Evidence;
 
 namespace bProjects.IntegrationTests;
 
-/// <summary>Contratto sotto esame: v10 = profilo degli schemi <c>reconcile-alias-schema-by-batch-3</c> (uno schema per stadio); v6 = schema unico <c>reconcile-alias-1</c> senza profilo né membership.</summary>
-public enum ContractProfile { V10, V6 }
+/// <summary>
+/// Contratto sotto esame: v10 = profilo degli schemi <c>reconcile-alias-schema-by-batch-3</c> (uno schema per stadio); v6 = schema unico <c>reconcile-alias-1</c> senza profilo né membership;
+/// v11 (RH-012, M1) = profilo <c>reconcile-alias-schema-by-stage-1</c> con validazione <c>reconcile-validation-v2</c> e membership come la v10.
+/// </summary>
+public enum ContractProfile { V10, V6, V11 }
 
 /// <summary>
 /// Esito di UN batch attraverso tutta la catena di produzione, senza database né modello: ammissione dello schema inviato (<see cref="ReconcileSchemaSubset"/>), compositore alias, validatore canonico
@@ -49,7 +52,15 @@ internal sealed class ReconcileBatchWorld
     /// <summary>Come <c>ReconciliationHierarchy.BuildAsync</c>: i batch di foglia e riduzione costruiscono nodi (descriptor obbligatorio), gli altri no.</summary>
     public bool BuildsNode => Request.Batch.Stage is "leaf" or "reduce";
 
-    public JsonElement Schema => Profile == ContractProfile.V10 ? ReconcileAliasContracts.SchemaOfV3(Variant) : ReconcileAliasContracts.JsonSchema();
+    public JsonElement Schema => Profile switch
+    {
+        ContractProfile.V10 => ReconcileAliasContracts.SchemaOfV3(Variant),
+        ContractProfile.V11 => ReconcileAliasContracts.SchemaOfByStage(Variant),
+        _ => ReconcileAliasContracts.JsonSchema(),
+    };
+
+    /// <summary>Regole del validatore canonico della definizione: v2 solo per la v11 (D3), altrimenti v1.</summary>
+    public ReconcileValidationRules Rules => Profile == ContractProfile.V11 ? ReconcileValidationRules.V2 : ReconcileValidationRules.V1;
 
     public static DocumentAnalysisInput DefaultInput() => AliasFixtures.Input(relations: [AliasFixtures.Relation(3, 5, EvidenceRelationType.Contradicts)]);
 
@@ -149,7 +160,7 @@ internal sealed class ReconcileBatchWorld
         var request = new ReconcileBatchRequest(
             new DerivedBatchInput(BatchId, stage, view.ToString(), null, level, 0, [], "{}", 10, "measured", InputHash, "reconcile-alias-1", "document-reconcile-v3"),
             view, level, [.. numbers.Select(n => EntryOf(input, n))], nodes, focusList,
-            profile == ContractProfile.V10 && variant == ReconcileBatchSchema.Expand ? new ExpansionGroups(new Dictionary<Guid, ExpansionTag>()) : null);
+            profile != ContractProfile.V6 && variant == ReconcileBatchSchema.Expand ? new ExpansionGroups(new Dictionary<Guid, ExpansionTag>()) : null);
 
         var candidateStage = variant is ReconcileBatchSchema.Expand or ReconcileBatchSchema.Compare;
         var proposals = candidateStage && input.Evidence.Count >= 5 ? PriorProposals(input) : [];
@@ -187,7 +198,7 @@ internal sealed class ReconcileBatchWorld
         var snapshot = Input.Snapshot;
         var result = ReconciliationCodec.DecodeResult(ReconciliationCodec.Encode(composed));
         var v = new List<string>();
-        v.AddRange(ReconciliationContractRules.CheckResult(result, snapshot.SourceHash));
+        v.AddRange(ReconciliationContractRules.CheckResult(result, snapshot.SourceHash, Rules));
         v.AddRange(ReconciliationReferences.CheckResult(result, snapshot, ValidationCatalog));
         if (!result.VisitedEntryIds.SequenceEqual(Request.Entries.Select(e => e.EntryId).Order(StringComparer.Ordinal), StringComparer.Ordinal))
         {
@@ -217,7 +228,7 @@ internal sealed class ReconcileBatchWorld
         var text = ReconciliationCodec.Encode(composed);
         ReconcileInvoker invoker = (_, _) => new ValueTask<string>(text);
         var task = (ValueTask<BatchOutcome>)InvokeAsyncMethod.Invoke(
-            null, [Request.Batch, Request.View, Request.Level, Request.Entries, Request.Nodes, Input.Snapshot, ValidationCatalog, invoker, BuildsNode, Request.Focus, CancellationToken.None, Request.Groups])!;
+            null, [Request.Batch, Request.View, Request.Level, Request.Entries, Request.Nodes, Input.Snapshot, ValidationCatalog, invoker, BuildsNode, Request.Focus, CancellationToken.None, Request.Groups, Rules])!;
         try
         {
             _ = task.AsTask().GetAwaiter().GetResult();

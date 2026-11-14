@@ -22,6 +22,12 @@ public enum PatchTargetKind { Item, Relation }
 
 public enum PatchOperation { AddSupport, AddRelation, ProposeAlternative }
 
+/// <summary>
+/// Regole di validazione di un batch di riconciliazione (<see cref="ReconciliationContractRules.CheckResult"/>): <c>V1</c> = <c>reconcile-validation-v1</c> (v2–v10, invariata);
+/// <c>V2</c> = <c>reconcile-validation-v2</c> (v11, D3): nessuna regola su <c>noFindingsReason</c>.
+/// </summary>
+public enum ReconcileValidationRules { V1, V2 }
+
 /// <summary>relation.type di §2, oppure Alias (solo per un candidato di kind Alias).</summary>
 public enum ReconcileProposedType { Qualifies, Confirms, Contradicts, Corrects, Supersedes, DependsOn, AlternativeTo, SameRule, Alias }
 
@@ -666,7 +672,12 @@ public static class ReconciliationContractRules
             .SelectMany(s => s).Select(i => i.Id)
             .Concat(a.Conflicts.SelectMany(c => c.Alternatives.Select(x => x.Id)));
 
-    public static IReadOnlyList<string> CheckResult(ReconcileResult r, string sourceHash)
+    /// <summary>
+    /// Validazione del risultato di un batch. <see cref="ReconcileValidationRules.V1"/> (predefinita, <c>reconcile-validation-v1</c>): comportamento di sempre, <c>noFindingsReason</c> compreso.
+    /// <see cref="ReconcileValidationRules.V2"/> (<c>reconcile-validation-v2</c>, solo definizione v11, D3): <c>noFindingsReason</c> è una spiegazione informativa del modello e NON condiziona la validità,
+    /// né quando manca né quando è di soli spazi; la traccia dell'esito di un batch è del server (voci e nodi visitati, hash dell'output, disposizioni), mai del testo del modello. Ogni altra regola è identica.
+    /// </summary>
+    public static IReadOnlyList<string> CheckResult(ReconcileResult r, string sourceHash, ReconcileValidationRules rules = ReconcileValidationRules.V1)
     {
         var v = new List<string>();
         if (string.IsNullOrWhiteSpace(r.BatchId))
@@ -691,14 +702,17 @@ public static class ReconciliationContractRules
             v.Add("descriptor: non vuoto e al massimo 512 caratteri Unicode.");
         }
 
-        if (r.NoFindingsReason is not null && string.IsNullOrWhiteSpace(r.NoFindingsReason))
+        if (rules == ReconcileValidationRules.V1)
         {
-            v.Add("noFindingsReason: non vuoto quando valorizzato.");
-        }
+            if (r.NoFindingsReason is not null && string.IsNullOrWhiteSpace(r.NoFindingsReason))
+            {
+                v.Add("noFindingsReason: non vuoto quando valorizzato.");
+            }
 
-        if (r.ItemProposals.Count == 0 && r.Candidates.Count == 0 && r.Patches.Count == 0 && r.NoFindingsReason is null)
-        {
-            v.Add("noFindingsReason: obbligatorio quando non ci sono proposte, candidati né patch.");
+            if (r.ItemProposals.Count == 0 && r.Candidates.Count == 0 && r.Patches.Count == 0 && r.NoFindingsReason is null)
+            {
+                v.Add("noFindingsReason: obbligatorio quando non ci sono proposte, candidati né patch.");
+            }
         }
 
         Unique(v, "candidates", r.Candidates.Select(c => c.CandidateId));

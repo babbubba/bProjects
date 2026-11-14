@@ -49,7 +49,7 @@ public static class ReconciliationHierarchy
 
         async ValueTask<BatchOutcome> Run(DerivedBatchInput batch, ReconcileView view, int level, IReadOnlyList<CatalogEntry> entries, IReadOnlyList<CatalogNode> inputNodes)
         {
-            var outcome = await InvokeAsync(batch, view, level, entries, inputNodes, snapshot, catalog, invoke, view != ReconcileView.Cross, null, ct);
+            var outcome = await InvokeAsync(batch, view, level, entries, inputNodes, snapshot, catalog, invoke, view != ReconcileView.Cross, null, ct, rules: context.Rules);
             outcomes.Add(outcome);
             return outcome;
         }
@@ -153,7 +153,8 @@ public static class ReconciliationHierarchy
 
     internal static async ValueTask<BatchOutcome> InvokeAsync(
         DerivedBatchInput batch, ReconcileView view, int level, IReadOnlyList<CatalogEntry> entries, IReadOnlyList<CatalogNode> inputNodes, ReconciliationSnapshot snapshot,
-        ReconciliationCatalog catalog, ReconcileInvoker invoke, bool buildsNode, IReadOnlyList<ReconcileCandidate>? focus, CancellationToken ct, ExpansionGroups? groups = null)
+        ReconciliationCatalog catalog, ReconcileInvoker invoke, bool buildsNode, IReadOnlyList<ReconcileCandidate>? focus, CancellationToken ct, ExpansionGroups? groups = null,
+        ReconcileValidationRules rules = ReconcileValidationRules.V1)
     {
         var text = await invoke(new ReconcileBatchRequest(batch, view, level, entries, inputNodes, focus, groups), ct);
         ReconcileResult result;
@@ -172,7 +173,7 @@ public static class ReconciliationHierarchy
             violations.Add("batchId/inputHash/view/level: diversi dal batch ricevuto.");
         }
 
-        violations.AddRange(ReconciliationContractRules.CheckResult(result, snapshot.SourceHash));
+        violations.AddRange(ReconciliationContractRules.CheckResult(result, snapshot.SourceHash, rules));
         violations.AddRange(ReconciliationReferences.CheckResult(result, snapshot, catalog));
         if (!result.VisitedEntryIds.SequenceEqual(entries.Select(e => e.EntryId).Order(StringComparer.Ordinal), StringComparer.Ordinal))
         {
