@@ -5,6 +5,16 @@ using Microsoft.Extensions.AI;
 namespace bProjects.App.AI;
 
 /// <summary>
+/// Formato delle righe degli item già proposti: <see cref="Legacy"/> (v4–v10) = <c>[i3] (E3, E4) testo</c>; <see cref="ItemsRef1"/> (v11, <c>items-ref-1</c>, RH-021) = <c>[i3] (E3)</c>, senza il testo: nella v11 il
+/// testo dell'item è l'enunciato letterale della sua evidenza, già presente integrale nella voce. Ogni altra riga del messaggio è identica nei due formati.
+/// </summary>
+public enum ReconcileMessageFormat
+{
+    Legacy,
+    ItemsRef1,
+}
+
+/// <summary>
 /// Messaggio unico di un batch alias (contracts/ai-workflow.md §11, T131): intestazione (tipo di batch e vista), voci integrali <c>[E&lt;n&gt;]</c> con enunciato e fonti
 /// <c>[S&lt;n&gt;]</c>, nodi <c>[N&lt;n&gt;]</c> con il solo descriptor, candidato in esame, item già proposti <c>[i&lt;n&gt;]</c> e relazioni note <c>[R&lt;n&gt;]</c>.
 /// MAI UUID, hash, entryId, batchId, inputHash, id di progetto/analisi/run, offset, blocchi o conteggi. Funzione pura: la stessa che misura il Pack e che invia il batch,
@@ -22,7 +32,9 @@ public static class ReconcileAliasMessages
         _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Stadio di riconciliazione sconosciuto."),
     };
 
-    public static IReadOnlyList<ChatMessage> Build(AnalysisAliasCatalog run, ReconcileAliasCatalog catalog, ReconcileBatchRequest request, IReadOnlyDictionary<Guid, DocumentAnalysisEvidence> evidence)
+    public static IReadOnlyList<ChatMessage> Build(
+        AnalysisAliasCatalog run, ReconcileAliasCatalog catalog, ReconcileBatchRequest request, IReadOnlyDictionary<Guid, DocumentAnalysisEvidence> evidence,
+        ReconcileMessageFormat format = ReconcileMessageFormat.Legacy)
     {
         var text = new StringBuilder();
         text.Append("Tipo di batch: ").Append(StageLabel(request.Batch.Stage)).Append('\n').Append("Vista: ").Append(request.View).Append('\n');
@@ -81,7 +93,13 @@ public static class ReconcileAliasMessages
             foreach (var item in catalog.Data.Items)
             {
                 var cited = string.Join(", ", EvidenceAliases(run, catalog, item.Handle));
-                text.Append($"[{item.Handle}] ({cited}) {catalog.ItemTexts[item.Handle]}\n");
+                text.Append($"[{item.Handle}] ({cited})");
+                if (format == ReconcileMessageFormat.Legacy)
+                {
+                    text.Append(' ').Append(catalog.ItemTexts[item.Handle]);
+                }
+
+                text.Append('\n');
             }
         }
 

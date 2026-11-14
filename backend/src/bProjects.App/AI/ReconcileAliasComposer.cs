@@ -40,9 +40,10 @@ public sealed record ReconcileViolation(ReconcileViolationKind Kind, string Path
 /// <summary>
 /// Opzioni del compositore. <see cref="StageContract"/> (solo definizione v11, <see cref="ReconcileAliasContracts.StageContract"/>): contratto per stadio, che aggiunge tre controlli di difesa in profondità
 /// rispetto alla grammatica dello schema — candidati nel confronto (<c>StageShape</c>), <c>descriptor</c> di soli spazi o oltre 512 caratteri e testi di soli spazi nelle patch (<c>InvalidText</c>). Senza opzioni
-/// (v4–v10) il compositore è quello di sempre, con gli stessi messaggi.
+/// (v4–v10) il compositore è quello di sempre, con gli stessi messaggi. <see cref="Evidence"/> (RH-021, M2): le evidenze del ledger del run per id, da cui la foglia della vista A compone gli item
+/// (<see cref="ReconcileLeafProjection"/>); obbligatorie con il contratto per stadio nella foglia A (nessun ripiego: senza, la composizione è un errore di configurazione), ignorate dagli altri stadi.
 /// </summary>
-public sealed record ReconcileComposeOptions(string? StageContract = null);
+public sealed record ReconcileComposeOptions(string? StageContract = null, IReadOnlyDictionary<Guid, DocumentAnalysisEvidence>? Evidence = null);
 
 /// <summary>
 /// Esito della composizione di un batch. <see cref="Result"/> è valorizzato solo se l'output è composto; un rifiuto porta le violazioni (alias e percorso) e il codice permanente.
@@ -81,6 +82,11 @@ public static class ReconcileAliasComposer
             throw new ArgumentOutOfRangeException(nameof(options), contract, "Contratto per stadio non supportato dal compositore.");
         }
 
+        if (options?.StageContract is not null && options.Evidence is null && request.Batch.Stage == "leaf" && request.View == ReconcileView.A)
+        {
+            throw new ArgumentException("Il contratto per stadio compone gli item della foglia A dalle evidenze del ledger: le evidenze del run sono obbligatorie nelle opzioni del compositore.", nameof(options));
+        }
+
         AiReconcileOutput dto;
         try
         {
@@ -91,7 +97,7 @@ public static class ReconcileAliasComposer
             return Reject(catalog, null, DocumentWorkException.WorkOutputInvalid, [new(ReconcileViolationKind.Undecodable, "$", $"JSON non conforme a {ReconcileAliasContracts.SchemaVersion}: {e.Message}")]);
         }
 
-        return new Builder(dto, catalog, request, snapshot, baseState, options?.StageContract is not null).Run(expectedCanonicalHash);
+        return new Builder(dto, catalog, request, snapshot, baseState, options?.StageContract is not null, options?.Evidence).Run(expectedCanonicalHash);
     }
 
     private static ReconcileAliasComposition Reject(ReconcileAliasCatalog catalog, string? aiHash, string code, IReadOnlyList<ReconcileViolation> violations)
@@ -102,7 +108,8 @@ public static class ReconcileAliasComposer
     }
 
     private sealed class Builder(
-        AiReconcileOutput dto, ReconcileAliasCatalog catalog, ReconcileBatchRequest request, ReconciliationSnapshot snapshot, ReconciliationBase? baseState, bool stageContract)
+        AiReconcileOutput dto, ReconcileAliasCatalog catalog, ReconcileBatchRequest request, ReconciliationSnapshot snapshot, ReconciliationBase? baseState, bool stageContract,
+        IReadOnlyDictionary<Guid, DocumentAnalysisEvidence>? ledger)
     {
         private readonly List<ReconcileViolation> _errors = [];
         private readonly string _stage = request.Batch.Stage;
@@ -192,6 +199,26 @@ public static class ReconcileAliasComposer
             if (dto.Items.Count > 0 && !LeafA)
             {
                 Fail(ReconcileViolationKind.StageShape, "items", $"items: ammessi solo nelle foglie della vista A (stadio {_stage}, vista {request.View}); le altre viste e gli altri stadi non propongono item.");
+                return (proposals, sections, ungrounded);
+            }
+
+            if (stageContract && LeafA)
+            {
+                // v11 (D2): gli item della foglia A li compone il server dall'evidenza (leaf-projection-1); il modello non ne produce. La grammatica lo impone già (`items.maxItems = 0`): qui lo si ripete come
+                // difesa in profondità (output senza schema o provider che lo ignora). Le domande canoniche dei Gap sono item proiettati, mai domande del modello senza evidenze.
+                if (dto.Items.Count > 0)
+                {
+                    Fail(ReconcileViolationKind.StageShape, "items", $"items: nella foglia A gli item li compone il server dalle evidenze: il modello non ne produce ({dto.Items.Count} ricevuti).");
+                    return (proposals, sections, ungrounded);
+                }
+
+                var (projected, projectedSections) = ReconcileLeafProjection.Project(request, ledger ?? throw new InvalidOperationException("Le evidenze del ledger sono obbligatorie nella foglia A del contratto per stadio."));
+                foreach (var proposal in projected)
+                {
+                    proposals.Add(proposal);
+                    sections[proposal.LocalKey] = projectedSections[proposal.LocalKey];
+                }
+
                 return (proposals, sections, ungrounded);
             }
 

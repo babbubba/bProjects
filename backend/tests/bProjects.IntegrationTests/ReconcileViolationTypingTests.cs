@@ -108,13 +108,16 @@ public sealed class ReconcileViolationTypingTests
         var problems = new List<string>();
         foreach (var c in TableCases())
         {
-            // Nel profilo v11 i controlli aggiuntivi non cambiano le righe della tabella storica: stesso tipo, stesso messaggio.
+            // Nel profilo v11 i controlli aggiuntivi non cambiano le righe della tabella storica: stesso tipo, stesso messaggio. UNICA eccezione (RH-021, M2): nella foglia A della v11 gli item li compone
+            // il server, quindi gli `items` del modello sono rifiutati in blocco (StageShape) prima di ogni controllo sul singolo item; le righe sugli item restano verificate nel profilo v10.
             var world = ReconcileBatchWorld.Create(c.Variant, profile);
             var composition = c.Compose?.Invoke(world) ?? world.ComposeOnly(c.Json);
-            var hit = composition.TypedViolations.FirstOrDefault(v => v.Kind == c.Kind && v.Message.Contains(c.Fragment, StringComparison.Ordinal));
+            var itemRowUnderV11 = profile == ContractProfile.V11 && c.Variant == ReconcileBatchSchema.LeafA;
+            var (kind, fragment) = itemRowUnderV11 ? (ReconcileViolationKind.StageShape, "gli item li compone il server dalle evidenze") : (c.Kind, c.Fragment);
+            var hit = composition.TypedViolations.FirstOrDefault(v => v.Kind == kind && v.Message.Contains(fragment, StringComparison.Ordinal));
             if (hit is null)
             {
-                problems.Add($"{c.Label}: atteso {c.Kind} con «{c.Fragment}», ottenuto [{string.Join(" | ", composition.TypedViolations.Select(v => $"{v.Kind}: {v.Message}"))}]");
+                problems.Add($"{c.Label}: atteso {kind} con «{fragment}», ottenuto [{string.Join(" | ", composition.TypedViolations.Select(v => $"{v.Kind}: {v.Message}"))}]");
             }
             else if (!composition.Violations.Contains(hit.Message))
             {
@@ -163,7 +166,8 @@ public sealed class ReconcileViolationTypingTests
         };
         foreach (var (variant, json, path) in checks)
         {
-            var violations = ReconcileBatchWorld.Create(variant, ContractProfile.V11).ComposeOnly(json).TypedViolations;
+            // La foglia A porta item del modello solo nella v10: nella v11 (RH-021) li compone il server e gli `items` del modello sono rifiutati in blocco, quindi il percorso dell'item si prova sulla v10.
+            var violations = ReconcileBatchWorld.Create(variant, variant == ReconcileBatchSchema.LeafA ? ContractProfile.V10 : ContractProfile.V11).ComposeOnly(json).TypedViolations;
             var violation = Assert.Single(violations, v => v.Path == path);   // altre violazioni dello stesso DTO (es. la classificazione dell'item) hanno il proprio percorso
             Assert.StartsWith(path, violation.Message, StringComparison.Ordinal);
         }

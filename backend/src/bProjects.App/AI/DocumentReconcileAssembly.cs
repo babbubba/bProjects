@@ -9,9 +9,10 @@ internal sealed record ReconcileEngineResult(ReconciliationDirectoryResult Direc
 /// <summary>
 /// Sezioni dichiarate dal modello per gli item dei batch alias (T131, AI §11): il canonico <c>reconcile-1</c> non ha sezioni, quindi le porta la mappa (chiave locale canonica →
 /// sezione) ricostruita dagli output Committed; <see cref="Ungrounded"/> sono le domande aperte senza evidenze (non proposte del motore, fuori dalla mappa delle evidenze).
-/// Con <c>null</c> (percorso v2) vale la regola storica: requirements e assumptions.
+/// Con <c>null</c> (percorso v2) vale la regola storica: requirements e assumptions. <see cref="OpenEndpoints"/> (solo definizione v11, <see cref="ReconcileAliasContracts.StageOpenEndpointsPolicy"/>, RH-021):
+/// attiva la regola D2b sugli estremi dei conflitti Open; <c>null</c> in ogni altra definizione (assembly invariato).
 /// </summary>
-internal sealed record HierarchicalItemSections(IReadOnlyDictionary<string, AiSection> SectionOf, IReadOnlyList<UngroundedAliasItem> Ungrounded);
+internal sealed record HierarchicalItemSections(IReadOnlyDictionary<string, AiSection> SectionOf, IReadOnlyList<UngroundedAliasItem> Ungrounded, string? OpenEndpoints = null);
 
 /// <summary>Risultato dell'assemblaggio server: tutto ciò che serve a calcolare la copertura e a committare revisione, mappa, relazioni e proiezioni in un'unica transazione.</summary>
 internal sealed record ReconcileAssembly(
@@ -71,7 +72,9 @@ internal static class DocumentReconcileAssembly
             return new DocumentAnalysisItem { Id = id, Text = text, Classification = classification, EvidenceRefs = sources };
         }
 
-        var items = proposals.Select(p => (Proposal: p, Item: MakeItem(IdOf("item", p.LocalKey), p.Text, p.Classification, p.SourceIds, p.EvidenceIds))).ToList();
+        // D2b (solo v11): gli item proiettati degli estremi dei conflitti Open non entrano nelle sezioni; l'evidenza resta mappata tramite l'alternativa del conflitto (più sotto).
+        var excluded = OpenEndpointItems(engine, patches, outcomes, sections, proposals, evidence);
+        var items = proposals.Where(p => !excluded.Contains(p.LocalKey)).Select(p => (Proposal: p, Item: MakeItem(IdOf("item", p.LocalKey), p.Text, p.Classification, p.SourceIds, p.EvidenceIds))).ToList();
 
         var conflicts = new List<DocumentAnalysisConflict>();
         var patchById = outcomes.SelectMany(o => o.Result.Patches).GroupBy(p => p.PatchId).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
@@ -95,6 +98,7 @@ internal static class DocumentReconcileAssembly
             });
         }
 
+        var openEndpointsPolicy = sections?.OpenEndpoints == ReconcileAliasContracts.StageOpenEndpointsPolicy;
         foreach (var open in engine.Candidates.Dispositions.Where(d => d.State == CandidateState.Open).OrderBy(d => d.CandidateId, StringComparer.Ordinal))
         {
             var candidate = engine.Candidates.Candidates.Single(c => c.CandidateId == open.CandidateId);
@@ -102,7 +106,11 @@ internal static class DocumentReconcileAssembly
             {
                 var e = evidence[Guid.Parse(side.Item2.Id)];
                 var sources = snapshot.Evidence.Single(x => x.EvidenceId == e.EvidenceId).Sources.Select(s => s.SourceId).ToList();
-                var classification = e.Origin == EvidenceOriginKind.Document ? DocumentAnalysisClassification.Documented : DocumentAnalysisClassification.Declared;
+                // v4–v10: classificazione PER ORIGINE (invariata). v11: la stessa dell'item proiettato (tabella leaf-projection-1), così un'ipotesi o una deduzione contestata resta Assumed/Inferred anche come alternativa
+                // (contratto ai-workflow §1: «ipotesi e deduzioni restano Assumed/Inferred anche se documentate»); per le altre evidenze la tabella dà la classificazione per origine, quindi nulla cambia.
+                var classification = openEndpointsPolicy
+                    ? ReconcileLeafProjection.Rule(e.Kind, e.Origin, e.Certainty).Classification
+                    : e.Origin == EvidenceOriginKind.Document ? DocumentAnalysisClassification.Documented : DocumentAnalysisClassification.Declared;
                 return MakeItem(IdOf("item", $"open:{candidate.CandidateId}:{side.Item1}"), e.Statement, classification, sources, [e.EvidenceId]);
             }).ToList();
             conflicts.Add(new DocumentAnalysisConflict
@@ -158,6 +166,46 @@ internal static class DocumentReconcileAssembly
         }
 
         return new(run, analysis, map, relations, outcomes);
+    }
+
+    /// <summary>
+    /// Regola D2b (definizione v11, <see cref="ReconcileAliasContracts.StageOpenEndpointsPolicy"/>): chiavi locali degli item proiettati che NON entrano nelle sezioni perché la loro UNICA evidenza è estremo di
+    /// almeno un candidato con disposizione <c>Open</c> e non sono bersaglio di patch accettate (<c>Applied</c>, <c>Duplicate</c>, <c>PreservedAsConflict</c>): l'evidenza resta nella mappa tramite l'alternativa del
+    /// conflitto, quindi non si perde né si ripete. Vuoto senza la politica (v4–v10: assembly invariato).
+    /// <para>
+    /// ECCEZIONI (decisione definitiva dell'autore, 2026-11-14; regola R-D2b-1): (1) un'evidenza di tipo <c>Gap</c> conserva SEMPRE la propria domanda canonica in <c>openQuestions</c>, anche se estremo di un conflitto
+    /// Open (senza, <see cref="GapStageReferences.From"/> la dichiarerebbe mancante prima dello stadio Gap: <c>gap_reference_missing</c>); (2) un'evidenza con certezza <c>ToClarify</c> conserva la rappresentazione
+    /// dell'elemento ancora da chiarire in <c>openQuestions</c> (né eliminato, né trasformato in requisito acquisito, né considerato risolto perché compare fra le alternative). Nessun'altra eccezione: un'<c>Alternative</c>
+    /// estremo Open è rappresentata soltanto come alternativa del conflitto (salvo sia anche <c>ToClarify</c> o <c>Gap</c>) e un'<c>Alternative</c> con certezza <c>Hypothesized</c>, proiettata in <c>assumptions</c>, è
+    /// esclusa dalla sezione come ogni assunzione contestata. La conseguenza per Gap e ToClarify, accettata solo come comportamento TRANSITORIO (D2b-3), è una ripetizione strutturale fra la domanda e l'alternativa:
+    /// l'avviso D3 <c>item_repeats_conflict_alternative</c> la segnala come finding atteso e non bloccante, riconoscibile perché riguarda sempre una domanda di <c>openQuestions</c> di un Gap o ToClarify. Nessuna
+    /// deduplicazione silenziosa.
+    /// </para>
+    /// </summary>
+    private static HashSet<string> OpenEndpointItems(
+        ReconcileEngineResult engine, HierarchicalPatchComposition patches, IReadOnlyList<BatchOutcome> outcomes, HierarchicalItemSections? sections, IReadOnlyList<ItemProposal> proposals,
+        IReadOnlyDictionary<Guid, DocumentAnalysisEvidence> evidence)
+    {
+        var excluded = new HashSet<string>(StringComparer.Ordinal);
+        if (sections?.OpenEndpoints != ReconcileAliasContracts.StageOpenEndpointsPolicy)
+        {
+            return excluded;
+        }
+
+        var endpoints = engine.Candidates.Dispositions.Where(d => d.State == CandidateState.Open)
+            .Select(d => engine.Candidates.Candidates.Single(c => c.CandidateId == d.CandidateId))
+            .SelectMany(c => new[] { c.Left, c.Right }).Where(e => e.Kind == CandidateEndpointKind.Evidence).Select(e => Guid.Parse(e.Id)).ToHashSet();
+        var accepted = patches.RunDispositions.Where(d => d.Kind is RunPatchDispositionKind.Applied or RunPatchDispositionKind.Duplicate or RunPatchDispositionKind.PreservedAsConflict)
+            .Select(d => d.PatchId).ToHashSet(StringComparer.Ordinal);
+        var patched = outcomes.SelectMany(o => o.Result.Patches).Where(p => accepted.Contains(p.PatchId) && p.Target.Kind == PatchTargetKind.Item).Select(p => p.Target.Id).ToHashSet(StringComparer.Ordinal);
+        bool KeepsOpenQuestion(ItemProposal p) => evidence.GetValueOrDefault(p.EvidenceIds[0]) is { Kind: EvidenceKind.Gap } or { Certainty: EvidenceCertainty.ToClarify };
+
+        foreach (var proposal in proposals.Where(p => p.EvidenceIds.Count == 1 && endpoints.Contains(p.EvidenceIds[0]) && !patched.Contains(p.LocalKey) && !KeepsOpenQuestion(p)))
+        {
+            excluded.Add(proposal.LocalKey);
+        }
+
+        return excluded;
     }
 
     private static DocumentAnalysisSource Source(DocumentAnalysisInput input, PersistedSource s) => s.Kind == EvidenceSourceKind.Message

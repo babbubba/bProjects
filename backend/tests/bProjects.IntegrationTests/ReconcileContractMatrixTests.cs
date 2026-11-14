@@ -173,7 +173,7 @@ internal sealed class ReconcileBatchWorld
     }
 
     /// <summary>Opzioni del compositore della definizione: il contratto per stadio solo per la v11 (RH-013), altrimenti nessuna (compositore storico).</summary>
-    public ReconcileComposeOptions? ComposeOptions => Profile == ContractProfile.V11 ? new ReconcileComposeOptions(ReconcileAliasContracts.StageContract) : null;
+    public ReconcileComposeOptions? ComposeOptions => Profile == ContractProfile.V11 ? new ReconcileComposeOptions(ReconcileAliasContracts.StageContract, Input.Evidence.ToDictionary(e => e.EvidenceId)) : null;
 
     /// <summary>Solo il compositore, con le opzioni della definizione, la base e lo snapshot del mondo (oppure una base diversa, per i casi di patch).</summary>
     public ReconcileAliasComposition ComposeOnly(string json, ReconciliationBase? baseOverride = null, bool useBaseOverride = false) =>

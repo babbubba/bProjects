@@ -271,9 +271,10 @@ public sealed class ReconcileStageContractV11Tests
         var leafB = ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafB, ContractProfile.V11).Evaluate(Dto(descriptor: "gruppo"));
         Assert.True(leafB.SchemaAdmits && leafB.Accepted, leafB.Report);
 
-        // Una foglia A senza item (come produce il modello nella v11) è accettata dal compositore: la proiezione è di M2, quindi qui nessun item.
-        var leafA = ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafA, ContractProfile.V11).Evaluate(Dto(descriptor: "gruppo"));
+        // Una foglia A senza item (come produce il modello nella v11) è accettata dal compositore; dalla M2 (RH-021) gli item li compone il server: una proposta per voce, mai dal modello.
+        var leafAWorld = ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafA, ContractProfile.V11);
+        var leafA = leafAWorld.Evaluate(Dto(descriptor: "gruppo"));
         Assert.True(leafA.SchemaAdmits && leafA.Accepted, leafA.Report);
-        Assert.Empty(leafA.Composition.Result!.ItemProposals);
+        Assert.Equal(leafAWorld.Request.Entries.Count, leafA.Composition.Result!.ItemProposals.Count);
     }
 }

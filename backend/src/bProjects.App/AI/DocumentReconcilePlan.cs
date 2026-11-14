@@ -148,7 +148,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 throw new ArgumentException("Il contratto per stadio richiede il profilo di schema by-stage-1, l'espansione con membership, il prompt v6 e i limiti del run.", nameof(alias));
             }
 
-            _composeOptions = new ReconcileComposeOptions(alias.StageContract);
+            _composeOptions = new ReconcileComposeOptions(alias.StageContract, _evidence);
         }
 
         if (alias?.Expansion is not null)
@@ -344,6 +344,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         _variants[request.Batch.BatchId] = name;
         return schema.GetRawText();
     }
+
+    /// <summary>Politica degli estremi dei conflitti Open per l'assembly: solo la v11 (contratto per stadio) esclude dalle sezioni gli item proiettati degli estremi (D2b); ogni altra definizione assembla come sempre.</summary>
+    private string? OpenEndpointsPolicy => _composeOptions is null ? null : ReconcileAliasContracts.StageOpenEndpointsPolicy;
 
     private bool IsGapBatch(BatchRef batch) => _gap is not null && _finishedBatches >= 0 && batch.Ordinal == GapOrdinal;
 
@@ -852,7 +855,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             return _gapState;
         }
 
-        var sections = new HierarchicalItemSections(replay.State.Sections, replay.State.Ungrounded);
+        var sections = new HierarchicalItemSections(replay.State.Sections, replay.State.Ungrounded, OpenEndpointsPolicy);
         var assembled = DocumentReconcileAssembly.Assemble(_input, replay.Finished!, sections);
         if (!ReconciliationCompletion.EvaluateHierarchical(assembled.Run, assembled.Analysis, assembled.Map).IsComplete
             || DocumentAnalysisContentRules.Check(assembled.Analysis, _input.Facts).Count > 0)
@@ -1110,7 +1113,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             throw new DocumentWorkException(DocumentWorkException.CoverageIncomplete, "Assemble prima del termine della riconciliazione: restano batch da elaborare.");
         }
 
-        var sections = _alias is null ? null : new HierarchicalItemSections(replay.State.Sections, replay.State.Ungrounded);
+        var sections = _alias is null ? null : new HierarchicalItemSections(replay.State.Sections, replay.State.Ungrounded, OpenEndpointsPolicy);
         _assembled = DocumentReconcileAssembly.Assemble(_input, finished, sections);
         var coverage = ReconciliationCompletion.EvaluateHierarchical(_assembled.Run, _assembled.Analysis, _assembled.Map);
         if (!coverage.IsComplete)
@@ -1237,7 +1240,8 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     /// <summary>Messaggio alias del batch (§11): soli alias, nessun UUID né hash. Stessa funzione per il Pack, per la misura finale e per l'invio.</summary>
     private IReadOnlyList<ChatMessage> ComposeAlias(ReconcileBatchRequest request, ReplayState state) =>
-        ReconcileAliasMessages.Build(_alias!.RunCatalog, CatalogOf(request, state), request, _evidence);
+        ReconcileAliasMessages.Build(
+            _alias!.RunCatalog, CatalogOf(request, state), request, _evidence, _composeOptions is null ? ReconcileMessageFormat.Legacy : ReconcileMessageFormat.ItemsRef1);
 
     /// <summary>Messaggio unico del batch: dati del server, voci integrali (enunciato e fonti) o descriptor dei nodi e il candidato in esame. Nessun testo di altri batch.</summary>
     internal IReadOnlyList<ChatMessage> Compose(ReconcileBatchRequest request)
