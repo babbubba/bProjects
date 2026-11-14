@@ -793,7 +793,7 @@ public sealed class DocumentAnalysisWorkflow(
         // v8/v9: schemi per stadio e vista del profilo congelato e prompt document-reconcile-v4 (verificati da ContractOf sulle chiavi congelate); v4–v7: schema unico e prompt v3, invariati.
         var alias = aliasCatalog is null ? null : new ReconcileAliasMode(
             aliasCatalog, factory.Options.StructuredOutputMode == StructuredOutputMode.JsonSchema, ReconcileAliasContracts.JsonSchema(), definition,
-            PromptVersion: ReconcilePromptOf(definition), SchemaProfile: ReconcileSchemaProfileOf(definition), Expansion: ReconcileExpansionOf(definition));
+            PromptVersion: ReconcilePromptOf(definition), SchemaProfile: ReconcileSchemaProfileOf(definition), Expansion: ReconcileExpansionOf(definition), StageContract: ReconcileContractOf(definition));
         var plan = new DocumentReconcilePlan(claim, input, facts, factory.Preflight, profile, factory.Options, client, scopes, policy, frozenLimits, alias, gapStage);
         var maxCalls = alias is null ? documents.Value.MaxAiCallsPerRun : frozenLimits.MaxAiCallsPerRun;
         var port = new DocumentBatchPort(store, planDb, writer, factory, plan, new RunCallReservation(planDb, writer, maxCalls));

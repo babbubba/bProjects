@@ -80,6 +80,9 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private readonly string _schemaVersion;
     private readonly string _validationVersion;
     private readonly ReconcileValidationRules _rules;
+
+    /// <summary>Opzioni del compositore del contratto per stadio (solo v11); <c>null</c> per ogni definizione storica, che compone come sempre.</summary>
+    private readonly ReconcileComposeOptions? _composeOptions;
     private readonly Dictionary<string, UnitMeasure> _measures = new(StringComparer.Ordinal);
     private readonly Dictionary<int, (string BatchId, string Text)> _texts = [];
     private readonly Dictionary<int, AliasEntry> _aliasEntries = [];
@@ -136,10 +139,23 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
         // Tetti della policy congelata del root (AI §4.5): senza limiti espliciti restano i default del motore.
         _maxLevels = limits?.MaxReconciliationLevels ?? 32;
         _limits = limits is null ? new ReconciliationLimits() : new ReconciliationLimits(MaxCandidates: limits.MaxCandidatesPerRun, MaxDerivedBytes: limits.MaxDerivedBytes);
+        if (alias is not null && (alias.StageContract is not null || alias.SchemaProfile == ReconcileAliasContracts.SchemaProfileByStage))
+        {
+            // v11: il contratto per stadio, il profilo by-stage-1, l'espansione con membership, il prompt v6 e i limiti del run vanno insieme; ogni altra combinazione è un errore, mai un ripiego.
+            if (alias.StageContract != ReconcileAliasContracts.StageContract || alias.SchemaProfile != ReconcileAliasContracts.SchemaProfileByStage
+                || alias.Expansion != ReconcileAliasContracts.ExpansionAlgorithm || alias.PromptVersion != ReconcileAliasContracts.PromptVersionV6 || limits is null)
+            {
+                throw new ArgumentException("Il contratto per stadio richiede il profilo di schema by-stage-1, l'espansione con membership, il prompt v6 e i limiti del run.", nameof(alias));
+            }
+
+            _composeOptions = new ReconcileComposeOptions(alias.StageContract);
+        }
+
         if (alias?.Expansion is not null)
         {
             // v10: espansione con membership. Richiede il profilo -3 (schema dell'espansione con il tetto) e i limiti congelati del run: il limite PERSISTITO di chiamate è l'unica autorità del precheck.
-            if (alias.SchemaProfile != ReconcileAliasContracts.SchemaProfileByBatchV3 || alias.Expansion != ReconcileAliasContracts.ExpansionAlgorithm || limits is null)
+            // v11: stessa espansione con il profilo by-stage-1 (verificato sopra).
+            if ((alias.StageContract is null && alias.SchemaProfile != ReconcileAliasContracts.SchemaProfileByBatchV3) || alias.Expansion != ReconcileAliasContracts.ExpansionAlgorithm || limits is null)
             {
                 throw new ArgumentException("L'espansione con membership richiede il profilo di schema -3, l'algoritmo congelato e i limiti del run.", nameof(alias));
             }
@@ -164,6 +180,26 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
                 canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, model = settings.ModelId, maxOutput = settings.MaxOutputTokens,
                 thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
+            }),
+            // v11: profilo by-stage-1, prompt v6, espansione come la v10 e il bundle del contratto per stadio (validazione v2, item, estremi dei conflitti, confronto, messaggi). Ramo proprio e PRIMO:
+            // la forma (e l'hash) di v8, v9 e v10 restano byte per byte quelli di prima.
+            { StageContract: { } stageContractName, Expansion: { } expansionV11, SchemaProfile: { } byStage } => JsonSerializer.Serialize(new
+            {
+                prompt = promptVersion, instructions = DocumentAnalysisWorkflow.Sha(_instructions), schema = _schemaVersion, catalog = ReconcileAliasContracts.CatalogVersion,
+                canonIds = AnalysisAliasCatalog.CanonIdsVersion, structured = alias.Structured, schemaProfile = byStage,
+                schemaProfileHashes = ReconcileAliasContracts.ProfileHashes(byStage),
+                expansion = new
+                {
+                    algorithm = expansionV11, cap = ReconcileAliasContracts.ExpansionCandidateCap, messageFormat = ReconcileAliasContracts.MembershipFormat,
+                    childCompares = ReconcileAliasContracts.ExpansionCandidateCap, reservedCalls = ExpansionReservedCalls,
+                    reasons = new[] { ReconciliationCandidates.ExpansionSaturated, ReconciliationCandidates.ExpansionBudgetExceeded, ReconciliationCandidates.ExpansionCoverageIncomplete },
+                },
+                stageContract = new
+                {
+                    name = stageContractName, validation = ValidationVersionV2, items = ReconcileAliasContracts.StageItemsPolicy, openEndpoints = ReconcileAliasContracts.StageOpenEndpointsPolicy,
+                    compare = ReconcileAliasContracts.StageComparePolicy, messages = new[] { ReconcileAliasContracts.StageMessageFormat },
+                },
+                model = settings.ModelId, maxOutput = settings.MaxOutputTokens, thinking = settings.EnableThinking, inputBudget = profile.InputBudgetTokens,
             }),
             // v10: profilo -3, prompt v5 e algoritmo di espansione con membership; chiavi AGGIUNTE in un ramo proprio, così la forma (e l'hash) di v8 e v9 restano byte per byte quelli di prima.
             { Expansion: { } expansionAlgorithm, SchemaProfile: { } byBatchV10 } => JsonSerializer.Serialize(new
@@ -229,6 +265,11 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
                 {
                     ["algorithm"] = frozenExpansion, ["cap"] = ReconcileAliasContracts.ExpansionCandidateCap, ["messageFormat"] = ReconcileAliasContracts.MembershipFormat,
                 };
+            }
+
+            if (alias.StageContract is { } frozenContract)
+            {
+                plan["reconcileContract"] = frozenContract;   // solo v11: v4–v10 conservano il piano di sempre (nessuna chiave aggiunta)
             }
         }
 
@@ -448,7 +489,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private string AbsorbCandidate(int k, ReconcileBatchRequest request, string text, ReplayState state)
     {
         var catalog = CatalogOf(request, state);
-        var composition = ReconcileAliasComposer.Compose(text, catalog, request, _input.Snapshot, BaseOf(request, state));
+        var composition = ReconcileAliasComposer.Compose(text, catalog, request, _input.Snapshot, BaseOf(request, state), null, _composeOptions);
         if (!composition.IsValid)
         {
             throw new DocumentWorkException(
@@ -515,7 +556,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, $"Il catalogo ricostruito del batch {ordinal} ha un hash diverso da quello congelato.");
         }
 
-        var composition = ReconcileAliasComposer.Compose(aiJson, catalog, request, _input.Snapshot, BaseOf(request, state), canonicalHash);
+        var composition = ReconcileAliasComposer.Compose(aiJson, catalog, request, _input.Snapshot, BaseOf(request, state), canonicalHash, _composeOptions);
         if (!composition.IsValid)
         {
             throw new DocumentWorkException(composition.ErrorCode ?? DocumentWorkException.WorkOutputInvalid, $"WorkOutput del batch {ordinal} non verificabile: " + string.Join(" | ", composition.Violations.Take(5)));

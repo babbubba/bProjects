@@ -213,6 +213,13 @@ public static class ReconcileAliasContracts
     /// </summary>
     public const string StageContract = "reconcile-stage-contract-1";
 
+    // Componenti dichiarati del bundle `reconcile-stage-contract-1` (entrano nel configHash della v11, plan §4). La validazione v2 e il confronto senza candidati sono implementati in M1; la proiezione degli item delle
+    // foglie A, la regola degli estremi dei conflitti Open e il formato dei messaggi sono di M2 (RH-020/RH-021, non autorizzato): i nomi sono dichiarati ora, l'identità della v11 si congela solo in RH-044.
+    public const string StageItemsPolicy = "leaf-projection-1";
+    public const string StageOpenEndpointsPolicy = "open-endpoints-as-alternatives-1";
+    public const string StageComparePolicy = "no-candidates";
+    public const string StageMessageFormat = "items-ref-1";
+
     /// <summary>Tetto di candidati per risposta dell'espansione nel profilo -3 (protezione contro l'enumerazione quadratica, mai criterio di selezione): oltre, il server non dichiara la copertura.</summary>
     public const int ExpansionCandidateCap = 16;
 
