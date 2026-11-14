@@ -23,9 +23,10 @@ namespace bProjects.App.AI;
 /// inviato resta esatta e fail-closed (<c>document_limit_exceeded</c>).
 /// <c>PromptVersion</c>: prompt congelato della gerarchia (<see cref="ReconcileAliasContracts.PromptVersion"/> per v4–v7, <see cref="ReconcileAliasContracts.PromptVersionV4"/> per v8 e v9); entra
 /// nel <c>configHash</c> con lo SHA delle istruzioni e nella versione del prompt di ogni batch derivato. Obbligatorio: nessun valore predefinito che possa far ricadere una v8/v9 sul v3.
+/// <c>StageContract</c> (solo v11): contratto per stadio congelato (<see cref="ReconcileAliasContracts.StageContract"/>); <c>null</c> per ogni definizione storica, che conserva validazione, composizione e messaggi di sempre.
 /// </remarks>
 internal sealed record ReconcileAliasMode(
-    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, string? SchemaProfile, string? Expansion = null);
+    AnalysisAliasCatalog RunCatalog, bool Structured, JsonElement Schema, string Definition, string PromptVersion, string? SchemaProfile, string? Expansion = null, string? StageContract = null);
 
 /// <summary>
 /// Stadio Gap dedicato della definizione v6 (D1, AI §13.7): metadati documentali dello snapshot (mappa laterale) per il formato <c>gap-stage-message-1</c>. Presente solo se l'analisi ha almeno un Gap

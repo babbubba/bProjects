@@ -31,6 +31,12 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     /// <summary>Definizione congelata dalle NUOVE richieste di Analizza con il recupero abilitato (003, T040 dopo il Run 4): v10 = v9 con prompt document-reconcile-v5, profilo -3 e l'espansione con membership. Le analisi v9 già congelate restano v9.</summary>
     public const string AnalysisDefinitionV10 = DocumentAnalysisWorkflow.DefinitionVersionV10;
 
+    /// <summary>
+    /// Definizione v11 (reconciliation-hardening RH-010): v6 con prompt <c>document-reconcile-v6</c> e contratto per stadio. <b>Non è congelata da nessuna nuova richiesta</b>: <see cref="DocumentaryAnalysisFreeze"/> restituisce
+    /// v6 o v10. Esiste per il riconoscimento (<see cref="DocumentAnalysisWorkflow.ContractOf"/>), per i test e per una futura attivazione deliberata (RH-060).
+    /// </summary>
+    public const string AnalysisDefinitionV11 = DocumentAnalysisWorkflow.DefinitionVersionV11;
+
     public const string AnalysisDefinition = DocumentAnalysisWorkflow.DefinitionVersionV5;
     public const string DocumentDefinition = DocumentSourceDraftWorkflow.DefinitionVersionV3;
     public const string AnalysisPromptVersion = DocumentAnalysisWorkflow.PromptVersionV6;
@@ -257,6 +263,21 @@ public sealed class SourceSnapshotStore(AppDbContext db)
     /// </summary>
     public static (string Definition, string PromptVersions) DocumentaryAnalysisFreeze(bool useRetrieval, bProjects.App.Retrieval.RetrievalOptions retrieval) =>
         useRetrieval ? (AnalysisDefinitionV10, AnalysisPromptVersionsV10(retrieval)) : (AnalysisDefinitionV6, AnalysisPromptVersionsV6());
+
+    /// <summary>
+    /// Versioni della definizione v11 (RH-010): le chiavi della v6 (<see cref="AnalysisPromptVersionsV6"/>, nessuna chiave <c>retrieval*</c>) con <c>reconcile</c> = <see cref="ReconcileAliasContracts.PromptVersionV6"/>,
+    /// più <c>reconcileSchemaProfile</c> = <see cref="ReconcileAliasContracts.SchemaProfileByStage"/>, <c>reconcileExpansion</c> = <see cref="ReconcileAliasContracts.ExpansionAlgorithm"/> e
+    /// <c>reconcileContract</c> = <see cref="ReconcileAliasContracts.StageContract"/>. Nessun chiamante di produzione la usa: il freeze v6 non cambia.
+    /// </summary>
+    public static string AnalysisPromptVersionsV11()
+    {
+        var keys = JsonSerializer.Deserialize<Dictionary<string, string>>(AnalysisPromptVersionsV6())!;
+        keys["reconcile"] = ReconcileAliasContracts.PromptVersionV6;
+        keys[DocumentAnalysisWorkflow.ReconcileSchemaProfileKey] = ReconcileAliasContracts.SchemaProfileByStage;
+        keys[DocumentAnalysisWorkflow.ReconcileExpansionKey] = ReconcileAliasContracts.ExpansionAlgorithm;
+        keys[DocumentAnalysisWorkflow.ReconcileContractKey] = ReconcileAliasContracts.StageContract;
+        return JsonSerializer.Serialize(keys);
+    }
 
     /// <summary>
     /// Versioni congelate di una nuova richiesta di Analizza v10: le chiavi della v9 (<see cref="AnalysisPromptVersionsV9"/>) con <c>reconcile</c> = <see cref="ReconcileAliasContracts.PromptVersionV5"/>,

@@ -198,6 +198,21 @@ public static class ReconcileAliasContracts
     /// </summary>
     public const string PromptVersionV5 = "document-reconcile-v5";
 
+    /// <summary>
+    /// Prompt della gerarchia della definizione v11 (reconciliation-hardening RH-014): unico, organizzato per stadio. Non descrive gli item delle foglie (nella v11 non li produce il modello), il tetto di
+    /// <see cref="ExpansionCandidateCap"/> compare solo nella sezione dell'espansione e il confronto non ha candidati. v3, v4 e v5 restano intatti per le definizioni v4–v10.
+    /// </summary>
+    public const string PromptVersionV6 = "document-reconcile-v6";
+
+    /// <summary>Profilo degli schemi per batch della definizione v11 (chiave <c>reconcileSchemaProfile</c>): sei varianti, una per stadio, derivate dalla tabella di stadio (RH-011).</summary>
+    public const string SchemaProfileByStage = "reconcile-alias-schema-by-stage-1";
+
+    /// <summary>
+    /// Identificativo del contratto per stadio della definizione v11 (chiave di freeze <c>reconcileContract</c>): validazione <c>reconcile-validation-v2</c>, item delle foglie A composti dal server, estremi dei conflitti
+    /// <c>Open</c> come sole alternative, confronto senza candidati e formato dei messaggi <c>items-ref-1</c>. I comportamenti del server citati (item, assembly, messaggi) sono di M2 e non sono ancora implementati.
+    /// </summary>
+    public const string StageContract = "reconcile-stage-contract-1";
+
     /// <summary>Tetto di candidati per risposta dell'espansione nel profilo -3 (protezione contro l'enumerazione quadratica, mai criterio di selezione): oltre, il server non dichiara la copertura.</summary>
     public const int ExpansionCandidateCap = 16;
 

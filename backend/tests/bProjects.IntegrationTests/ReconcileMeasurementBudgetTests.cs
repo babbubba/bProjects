@@ -82,7 +82,7 @@ public sealed class ReconcileMeasurementBudgetTests
         var mode = assembly.GetType("bProjects.App.AI.ReconcileAliasMode", throwOnError: true)!;
         var alias = Activator.CreateInstance(
             mode, catalog, true, ReconcileAliasContracts.JsonSchema(), definition, DocumentAnalysisWorkflow.ReconcilePromptOf(definition),
-            DocumentAnalysisWorkflow.ReconcileSchemaProfileOf(definition), DocumentAnalysisWorkflow.ReconcileExpansionOf(definition));
+            DocumentAnalysisWorkflow.ReconcileSchemaProfileOf(definition), DocumentAnalysisWorkflow.ReconcileExpansionOf(definition), DocumentAnalysisWorkflow.ReconcileContractOf(definition));   // RH-010: ottavo parametro (StageContract, null per v6 e v10)
         var planType = assembly.GetType("bProjects.App.AI.DocumentReconcilePlan", throwOnError: true)!;
         var constructor = planType.GetConstructors().Single();
         var claim = new AnalysisRunClaim(MeasurementLedger.Id("run"), "owner", 1, 1);
