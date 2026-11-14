@@ -524,3 +524,21 @@ Il token `open-endpoints-as-alternatives-1` del `configHash` v11 identifica già
 **Limiti dichiarati.** Il modello finto è scritto dal test: prova strutturale, **non** di conservazione semantica; la qualità degli item proiettati, dei descriptor e dei candidati si valuta solo ai livelli 7–8 con gold annotato prima. Nessuna sonda della grammatica reale (RH-050, M5), nessun task RH-041/RH-042/RH-043/RH-044 e nessuna promozione a default (RH-060). Il bundle `reconcile-stage-contract-1` nomina ora comportamenti implementati (`leaf-projection-1`, `open-endpoints-as-alternatives-1`, `items-ref-1`) ma l'identità della v11 si congela solo in RH-044; nessun golden è cambiato.
 
 **Checkpoint C2.** Build verde; suite completa con 0 falliti (4.865 / 4.767 / 98 ignorati); nessuna `evidence_not_mapped` né `gap_reference_missing` sui ledger di test della v11 (offline e PostgreSQL); golden v2–v10 e profili `-1/-2/-3` invariati; v11 non default; 003 e DGX non toccati. **Decisioni aperte per l'autore:** (i) lettura di D2b-2 per il tipo `Alternative` e per l'estensione dell'avviso D3 a `ToClarify`/`Alternative`; (ii) classificazione delle alternative di evidenze `Hypothesized`/`Inferred` esclusi; (iii) avvio di M3 e/o dei task RH-041…RH-044 (non avviati).
+
+### Evidenze M3 (2026-11-14; T171–T172; solo offline, modello finto, nessuna inferenza, nessun PostgreSQL necessario)
+
+**RH-030 (P-1).** `ExtraTokenMemo` (chiave = impronta del profilo, modello, SHA-256 UTF-8 del testo) memoizza **solo** `ResponseSchemaJson` e `ToolsJson` nei due rami che li tokenizzano; il messaggio reso e i messaggi non si memoizzano mai; un conteggio fallito non entra nel memo. Il memo ha la vita del piano (`DocumentReconcilePlan._extraTokens`), mai globale. Gli altri chiamanti del preflight non lo passano e, senza memo, il comportamento è quello storico (`Without_a_memo_the_behaviour_is_the_historical_one`).
+Equivalenza: 100 misure con 3 schemi ⇒ `Tokens`, `PayloadHash` e qualità identici con e senza memo; `/tokenize` 200 → 103 (−97 = misure − 3). Impronta diversa ⇒ nessun riuso. Sul ledger Single (v6 e v10, DirectoryFacts vuoti e deterministici) primo batch (`BatchId`, `InputHash`, `MeasuredTokens`, `InputIdsJson`), sequenze di Pack, `/apply-template` e `/tokenize` del testo reso e delle pagine sono identici; i `/tokenize` di schema si riducono agli schemi distinti. I golden di RH-004 restano la baseline «prima di P-1» (`MeasureAsync(..., memo: false)`, che rimuove il memo per riflessione) e non sono cambiati.
+
+**RH-031 — richieste fino al primo batch (ledger Single, W=32768, O=16384, M=1024, DirectoryFacts vuoti).**
+
+| Scenario | Def. | P-1 | `/apply-template` | `/tokenize` | Totale | `/tokenize` di schema |
+|---|---|---|---:|---:|---:|---:|
+| primo avvio | v10 | no | 567 | 851 | 1.418 | 284 |
+| primo avvio | v10 | sì | 567 | 569 | 1.136 | 2 |
+| primo avvio | v11 | sì | 567 | 569 | 1.136 | 2 |
+| processo nuovo | v10 | no | 567 | 851 | 1.418 | 284 |
+| processo nuovo | v10 | sì | 567 | 569 | 1.136 | 2 |
+| processo nuovo | v11 | sì | 567 | 569 | 1.136 | 2 |
+
+Riduzione −282 `/tokenize` (−19,9 % delle richieste di misura) = 284 misure con schema − 2 schemi distinti, come previsto dal criterio; v11 con P-1 (1.136) ≤ v10 senza P-1 (1.418). Nota onesta: «processo nuovo» ricostruisce rig, runtime e piano da zero, quindi costa come il primo avvio: il memo non è persistito (scelta di RH-030) e la ripresa non ne beneficia più di quanto faccia la prima misura. Le 567 `/apply-template` restano il costo dominante (O3, differita, non implementata).

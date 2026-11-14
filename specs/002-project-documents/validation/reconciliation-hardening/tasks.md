@@ -430,7 +430,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M3 — Prestazioni a risultato identico (D6)
 
-### [ ] RH-030 — P-1: memo dei token degli extra (tutte le definizioni)
+### [x] RH-030 — P-1: memo dei token degli extra (tutte le definizioni)
 - **File e modifiche:**
   - `AI/ContextBudget.cs`:
     - `public sealed class ExtraTokenMemo` con `ConcurrentDictionary<(string Fingerprint, string ModelId, string Sha256), int>`;
@@ -445,7 +445,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Decisioni risolte:** memo con la vita del piano, mai globale.
 - **STOP:** se un solo `Tokens` differisce.
 
-### [ ] RH-031 — Misura della v11 e della v10 con P-1
+### [x] RH-031 — Misura della v11 e della v10 con P-1
 - **Test:** con `CountingLlamaRuntime` sul ledger di RH-004, contare le richieste fino al primo batch di v10 (senza e con P-1) e di v11 (con P-1), sia nel primo avvio sia a processo nuovo.
 - **Criterio:**
   - v11 con P-1 ≤ v10 senza P-1;

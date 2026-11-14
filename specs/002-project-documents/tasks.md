@@ -629,3 +629,17 @@ Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, ness
 - [x] T170 [US2] DET+TEST — RH-022: replay per batch delle foglie A reali (Run 5 024, Run 4 022) con precondizione dello stadio Gap, e caratterizzazione del rischio R-D2b (Run 5 027, Run 4 029). Dip.: T155, T169. Dettaglio: RH-022.
 
 **Ordine del delta M2.** T168 → T169 → T170. T170 è l'ultimo task del delta; nessun task di M3 è avviato. **Checkpoint C2 (2026-11-14):** build verde; suite completa con PostgreSQL di test 4.865 test, 4.767 superati, 98 ignorati (invariati: DGX/parser/traccia non configurati), 0 falliti; golden v2–v10 invariati; la v11 non è default; 003 e DGX non toccati; modifiche non committate; decisioni aperte e dettagli in «Evidenze M2». La mappatura Txxx ↔ RH-xxx qui sopra è l'unica fra i due registri.
+
+---
+
+### Delta Reconciliation Hardening M3 — mandato del 2026-11-14, T171–T172
+
+Task aggiunti **manualmente in coda** (T001–T170 invariati, nessuna rigenerazione, nessun `[x]` preesistente toccato). Sono i due task della milestone **M3** (P-1, a risultato identico); dettaglio: [tasks.md RH](validation/reconciliation-hardening/tasks.md), evidenze: «Evidenze M3» in [assessment.md](validation/reconciliation-hardening/assessment.md) §12.
+
+| Txxx | RH | Contenuto (sintesi) |
+|---|---|---|
+| T171 | RH-030 | `ExtraTokenMemo` (token di schema e strumenti, vita del piano) e `DocumentPreflightMemoTests` |
+| T172 | RH-031 | Misura prima/dopo di v10 e v11 con P-1 (tabella in «Evidenze M3») |
+
+- [x] T171 [US2] DET+TEST — RH-030: `AI/ContextBudget.cs` (`ExtraTokenMemo`, parametro opzionale `memo` di `DocumentPreflight.MeasureAsync`), campo `_extraTokens` e cinque chiamate in `DocumentReconcilePlan`; `DocumentPreflightMemoTests`. Stessi `Tokens` e `PayloadHash`; messaggio reso mai memoizzato. Dip.: C0. Dettaglio: RH-030.
+- [x] T172 [US2] DET+TEST — RH-031: misura con `CountingLlamaRuntime` sul ledger Single fino al primo batch, primo avvio e processo nuovo; v11 con P-1 ≤ v10 senza P-1; riduzione dei `/tokenize` = misure con schema − schemi distinti. Dip.: T171, T165. Dettaglio: RH-031.
