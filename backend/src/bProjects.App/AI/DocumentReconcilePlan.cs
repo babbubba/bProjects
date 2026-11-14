@@ -69,6 +69,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private readonly DocumentAnalysisInput _input;
     private readonly IReadOnlyDictionary<Guid, DirectoryFacts> _facts;
     private readonly DocumentPreflight _preflight;
+    private readonly ExtraTokenMemo _extraTokens = new(); // P-1 (RH-030): vita del piano, mai globale
     private readonly DocumentRuntimeProfile _profile;
     private readonly string _instructions;
     private readonly string _promptVersion;
@@ -625,7 +626,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     private async ValueTask<DerivedBatchInput> RemeasureAsync(DerivedBatchInput batch, ReconcileBatchRequest request, ReplayState state, CancellationToken ct)
     {
         var messages = ComposeAlias(request, state);
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages, SchemaJsonFor(request)), ct, _profile.Fingerprint);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages, SchemaJsonFor(request)), ct, _profile.Fingerprint, _extraTokens);
         if (measured.Quality == TokenCountQuality.Unavailable)
         {
             throw new RuntimeUnverifiedException("conteggio del payload del batch non disponibile (nessun tokenizer o calibrazione identificata)");
@@ -886,7 +887,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
     {
         var state = GapState(replay) ?? throw new DocumentWorkException(DocumentWorkException.CheckpointIncompatible, "Lo stadio Gap richiede una gerarchia completa.");
         var registry = _gap!.Retrieval is null ? null : await CommittedRegistryAsync(prior, ct);
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, await GapMessagesAsync(state, prior, ct), _gapSchemaJson), ct, _profile.Fingerprint);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, await GapMessagesAsync(state, prior, ct), _gapSchemaJson), ct, _profile.Fingerprint, _extraTokens);
         if (measured.Quality == TokenCountQuality.Unavailable)
         {
             throw new RuntimeUnverifiedException("conteggio del payload dello stadio Gap non disponibile (nessun tokenizer o calibrazione identificata)");
@@ -1040,7 +1041,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
 
     private async ValueTask<PayloadPreflight> MeasureStageAsync(IReadOnlyList<ChatMessage> messages, CancellationToken ct)
     {
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, messages, _gapSchemaJson), ct, _profile.Fingerprint);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, GapStage.Instructions, messages, _gapSchemaJson), ct, _profile.Fingerprint, _extraTokens);
         return measured.Quality == TokenCountQuality.Unavailable
             ? throw new RuntimeUnverifiedException("conteggio del payload dello stadio Gap non disponibile (nessun tokenizer o calibrazione identificata)")
             : measured;
@@ -1191,7 +1192,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             return known;
         }
 
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages(), schemaJson), ct, _profile.Fingerprint);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages(), schemaJson), ct, _profile.Fingerprint, _extraTokens);
         return _measures[key] = new UnitMeasure(measured.Tokens, measured.Quality, measured.PayloadHash, measured.Tokens);
     }
 
@@ -1228,7 +1229,7 @@ internal sealed class DocumentReconcilePlan : IDocumentBatchPlan
             return known;
         }
 
-        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages(), schema ? _schemaJson : null), ct, _profile.Fingerprint);
+        var measured = await _preflight.MeasureAsync(new DocumentPayload(AiPhase.Analysis, _instructions, messages(), schema ? _schemaJson : null), ct, _profile.Fingerprint, _extraTokens);
         return _measures[key] = new UnitMeasure(measured.Tokens, measured.Quality, measured.PayloadHash, measured.Tokens);
     }
 

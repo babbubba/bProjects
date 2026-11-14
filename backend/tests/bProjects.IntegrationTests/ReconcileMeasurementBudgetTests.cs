@@ -89,7 +89,14 @@ public sealed class ReconcileMeasurementBudgetTests
         return (IDocumentBatchPlan)constructor.Invoke([claim, input, facts, rig.Preflight, rig.Profile, rig.Options, rig.Client, scopes, null, limits, alias, null]);
     }
 
-    internal static async Task<Measured> MeasureAsync(string definition, bool facts, CancellationToken ct)
+    /// <summary>
+    /// Con <paramref name="memo"/> = false (baseline M0, «prima di P-1») il memo dei token degli extra del piano è rimosso per riflessione: i golden di RH-004 restano quelli osservati prima di RH-030.
+    /// Con true è il piano di produzione (P-1 attivo).
+    /// </summary>
+    internal static void WithoutExtraMemo(IDocumentBatchPlan plan) =>
+        plan.GetType().GetField("_extraTokens", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(plan, null);
+
+    internal static async Task<Measured> MeasureAsync(string definition, bool facts, CancellationToken ct, bool memo = false)
     {
         var input = SingleInput();
         using var rig = await MeasurementRig.CreateAsync(ct);
@@ -98,6 +105,11 @@ public sealed class ReconcileMeasurementBudgetTests
         var limits = new DocumentOptions().ToLimits();
         var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
         var plan = NewPlan(rig, input, directoryFacts, catalog, definition, limits, scopes);
+        if (!memo)
+        {
+            WithoutExtraMemo(plan);
+        }
+
         var first = await plan.PrepareAsync(0, new NoOutputs(), ct);
         return new Measured(definition, facts, rig.Runtime.Log, first);
     }

@@ -349,6 +349,31 @@ public sealed record PayloadPreflight(DocumentRuntimeProfile Profile, int Tokens
 }
 
 /// <summary>
+/// P-1 (RH-030): memo dei token di schema e strumenti, con la vita di un piano (mai globale). Chiave = impronta del profilo, modello e SHA-256
+/// UTF-8 del testo: impronta diversa ⇒ nessun riuso. Non memoizza il messaggio reso né un conteggio fallito (l'eccezione propaga).
+/// </summary>
+public sealed class ExtraTokenMemo
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Fingerprint, string ModelId, string Sha256), int> _counts = new();
+
+    /// <summary>Numero di conteggi memorizzati (diagnostica e test).</summary>
+    public int Entries => _counts.Count;
+
+    internal async ValueTask<int> CountAsync(DocumentRuntimeProfile profile, string text, IPayloadMeter meter, CancellationToken ct)
+    {
+        var key = (profile.Fingerprint, profile.ModelId, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text))));
+        if (_counts.TryGetValue(key, out var known))
+        {
+            return known;
+        }
+
+        var tokens = await meter.CountTokensAsync(profile.ModelId, text, ct);
+        _counts.TryAdd(key, tokens);
+        return tokens;
+    }
+}
+
+/// <summary>
 /// Preflight del ramo documentale (T039): risolve il profilo per modello/fase dal monitor (finestra misurata, tokenizer, template),
 /// conta il payload effettivo completo e rifiuta l'invio se il runtime non è verificato o il payload eccede il budget. Il ramo
 /// legacy (<see cref="ContextBudget.From"/>) resta invariato: usa la finestra configurata.
@@ -440,7 +465,7 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
     /// Conta il payload completo (template, schema e strumenti compresi) senza lanciare per overflow: chi suddivide il lavoro legge
     /// <see cref="PayloadPreflight.Fits"/>. Con <paramref name="expectedFingerprint"/> il runtime deve coincidere con quello congelato.
     /// </summary>
-    public async ValueTask<PayloadPreflight> MeasureAsync(DocumentPayload payload, CancellationToken cancellationToken, string? expectedFingerprint = null)
+    public async ValueTask<PayloadPreflight> MeasureAsync(DocumentPayload payload, CancellationToken cancellationToken, string? expectedFingerprint = null, ExtraTokenMemo? memo = null)
     {
         var profile = await ResolveProfileAsync(payload.Phase, cancellationToken);
         if (expectedFingerprint is not null && !string.Equals(expectedFingerprint, profile.Fingerprint, StringComparison.Ordinal))
@@ -448,7 +473,7 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
             throw new RuntimeFingerprintMismatchException(expectedFingerprint, profile.Fingerprint);
         }
 
-        var (tokens, quality) = await CountAsync(profile, payload, cancellationToken);
+        var (tokens, quality) = await CountAsync(profile, payload, memo, cancellationToken);
         return new PayloadPreflight(profile, tokens, quality, PayloadHash(profile, payload));
     }
 
@@ -469,8 +494,11 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
         return result;
     }
 
-    private async ValueTask<(int Tokens, TokenCountQuality Quality)> CountAsync(DocumentRuntimeProfile profile, DocumentPayload payload, CancellationToken ct)
+    private async ValueTask<(int Tokens, TokenCountQuality Quality)> CountAsync(DocumentRuntimeProfile profile, DocumentPayload payload, ExtraTokenMemo? memo, CancellationToken ct)
     {
+        async ValueTask<int> CountExtra(string text) =>
+            memo is null ? await meter!.CountTokensAsync(profile.ModelId, text, ct) : await memo.CountAsync(profile, text, meter!, ct);
+
         var messages = new List<(string Role, string Text)>();
         if (!string.IsNullOrEmpty(payload.Instructions))
         {
@@ -488,7 +516,7 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
                 var total = await meter.CountTokensAsync(profile.ModelId, rendered, ct);
                 foreach (var extra in extras)
                 {
-                    total += await meter.CountTokensAsync(profile.ModelId, extra, ct);
+                    total += await CountExtra(extra);
                 }
 
                 return (total, TokenCountQuality.Measured);
@@ -500,11 +528,17 @@ public sealed class DocumentPreflight(AiOptions options, ModelRuntimeMonitor? ru
             }
 
             var bound = calibration.FixedOverheadTokens + calibration.PerMessageFramingTokens * messages.Count;
-            foreach (var text in messages.Select(m => m.Text).Concat(extras))
+            var extraCount = extras.Count;
+            var texts = messages.Select(m => m.Text).Concat(extras).ToList();
+            for (var i = 0; i < texts.Count; i++)
             {
+                var text = texts[i];
                 if (caps.TokenizerVerified)
                 {
-                    bound += await meter!.CountTokensAsync(profile.ModelId, text, ct);
+                    // Solo schema e strumenti (gli ultimi extraCount testi) si memoizzano; il messaggio reso e i messaggi mai.
+                    bound += i >= texts.Count - extraCount
+                        ? await CountExtra(text)
+                        : await meter!.CountTokensAsync(profile.ModelId, text, ct);
                 }
                 else if (calibration.MinCharsPerToken is { } min and > 0)
                 {
