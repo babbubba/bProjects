@@ -38,6 +38,11 @@ public sealed class ReconcileDefinitionV11WorkflowTests : ReconcileRig
     private async Task<(Guid Run, AnalysisRunClaim Claim)> StartAsync(HttpClient client, Guid project, bool v11)
     {
         var run = await StartNativeAsync(client, project);
+
+        // Default invariato: la richiesta nativa dell'endpoint congela la v6 (nessuna nuova richiesta congela la v11), persistita come tale prima di ogni congelamento esplicito.
+        var frozen = await Scalar<string>("SELECT \"WorkflowDefinitionVersion\" FROM \"ProcessingRuns\" WHERE \"Id\" = @r", ("r", run));
+        Assert.Equal(SourceSnapshotStore.AnalysisDefinitionV6, frozen);
+        Assert.NotEqual(DocumentAnalysisWorkflow.DefinitionVersionV11, frozen);
         if (v11)
         {
             await FreezeV11(run);
