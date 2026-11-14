@@ -171,7 +171,7 @@ internal sealed class ReconcileSchemaInstanceGenerator(ulong seed, ReconcileAlia
             {
                 elements.Add(elements[Next(i)]?.DeepClone());   // gemello esatto: stessa chiave, stessa identità
             }
-            else if (i > 0 && roll < 30 && elements[Next(i)] is JsonObject twin && twin["key"] is not null && items.TryGetProperty("properties", out var props) && props.TryGetProperty("key", out var keySchema))
+            else if (i > 0 && roll < 30 && elements[Next(i)] is JsonObject twin && twin["key"] is not null && TryKeySchema(items, out var keySchema))
             {
                 var copy = (JsonObject)twin.DeepClone();
                 copy["key"] = Gen(keySchema, path + "[].key");   // gemello con un'altra chiave: stessa identità canonica, chiave diversa
@@ -184,6 +184,22 @@ internal sealed class ReconcileSchemaInstanceGenerator(ulong seed, ReconcileAlia
         }
 
         return new JsonArray([.. elements]);
+    }
+
+    /// <summary>
+    /// Schema della chiave locale degli elementi di un array: da <c>items.properties.key</c> oppure, se gli elementi sono un <c>anyOf</c> di oggetti (patch legate a <c>op</c>, RH-011), dal primo ramo (tutti i rami
+    /// hanno la stessa chiave). Per gli schemi storici (items con <c>properties</c>) il comportamento e la sequenza di estrazioni sono quelli di RH-003.
+    /// </summary>
+    private static bool TryKeySchema(JsonElement items, out JsonElement keySchema)
+    {
+        keySchema = default;
+        var holder = items;
+        if (!holder.TryGetProperty("properties", out _) && items.TryGetProperty("anyOf", out var branches) && branches.GetArrayLength() > 0)
+        {
+            holder = branches[0];
+        }
+
+        return holder.TryGetProperty("properties", out var props) && props.TryGetProperty("key", out keySchema);
     }
 
     private JsonObject GenObject(JsonElement s, string path)
