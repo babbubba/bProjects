@@ -70,12 +70,16 @@ public sealed class ReconcileValidationRulesTests
             Assert.True(ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafB, profile).Evaluate(withReason).Accepted);
         }
 
-        // Il descriptor di soli spazi è rifiutato dal validatore anche in V2, con lo stesso messaggio.
+        // Il descriptor di soli spazi è rifiutato anche in V2, con lo stesso messaggio: in v10 dal validatore; in v11 già dal compositore (RH-013, difesa in profondità) e, se lo si salta,
+        // dal validatore canonico (CheckResult con V2, verificato direttamente più sotto).
         var blankDescriptor = Json(noFindings: "x", descriptor: " ");
         var v1 = ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafB, ContractProfile.V10).Evaluate(blankDescriptor);
         var v2 = ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafB, ContractProfile.V11).Evaluate(blankDescriptor);
         Assert.Equal([DescriptorRule], v1.ValidatorViolations);
-        Assert.Equal([DescriptorRule], v2.ValidatorViolations);
+        Assert.Equal([DescriptorRule], v2.ComposerViolations);
+        Assert.False(v2.Accepted);
+        var composed = ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafB, ContractProfile.V10).Evaluate(Json(noFindings: "x", descriptor: "gruppo")).Composition.Result!;
+        Assert.Equal([DescriptorRule], ReconciliationContractRules.CheckResult(composed with { Descriptor = " " }, ReconcileBatchWorld.Create(ReconcileBatchSchema.LeafB).Input.Snapshot.SourceHash, ReconcileValidationRules.V2));
 
         // Un descriptor nei batch che non costruiscono nodi e il descriptor assente nelle foglie sono rifiutati in V2 come in V1 (regola della gerarchia, non di CheckResult).
         Assert.NotNull(ReconcileBatchWorld.Create(ReconcileBatchSchema.Expand, ContractProfile.V11).Evaluate(Json(descriptor: "gruppo")).HierarchyError);

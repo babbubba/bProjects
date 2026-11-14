@@ -172,11 +172,18 @@ internal sealed class ReconcileBatchWorld
         };
     }
 
+    /// <summary>Opzioni del compositore della definizione: il contratto per stadio solo per la v11 (RH-013), altrimenti nessuna (compositore storico).</summary>
+    public ReconcileComposeOptions? ComposeOptions => Profile == ContractProfile.V11 ? new ReconcileComposeOptions(ReconcileAliasContracts.StageContract) : null;
+
+    /// <summary>Solo il compositore, con le opzioni della definizione, la base e lo snapshot del mondo (oppure una base diversa, per i casi di patch).</summary>
+    public ReconcileAliasComposition ComposeOnly(string json, ReconciliationBase? baseOverride = null, bool useBaseOverride = false) =>
+        ReconcileAliasComposer.Compose(json, Catalog, Request, Input.Snapshot, useBaseOverride ? baseOverride : Base, null, ComposeOptions);
+
     /// <summary>Schema → compositore → validatore canonico → <c>InvokeAsync</c>. La catena si ferma al primo rifiuto del compositore (come l'invoker del piano).</summary>
     public ContractVerdict Evaluate(string json)
     {
         var schemaViolations = ReconcileSchemaSubset.Violations(Schema, json);
-        var composition = ReconcileAliasComposer.Compose(json, Catalog, Request, Input.Snapshot, Base);
+        var composition = ComposeOnly(json);
         if (!composition.IsValid)
         {
             return new ContractVerdict(schemaViolations, composition, [], null);
