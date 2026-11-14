@@ -326,7 +326,7 @@ Revisione in sola lettura di un agente architetto, 25 rilievi verificati sul cod
 
 ## 12. Evidenze
 
-Sezione prevista dalla regola di STOP generale di [tasks.md](tasks.md). Le evidenze di M1–M4 saranno aggiunte solo se quelle milestone verranno autorizzate.
+Sezione prevista dalla regola di STOP generale di [tasks.md](tasks.md). Le evidenze di M0 e M1 sono qui sotto; quelle di M2–M4 saranno aggiunte solo se quelle milestone verranno autorizzate.
 
 ### Evidenze M0 (2026-11-13/14; T154–T159; solo offline, nessuna modifica di `backend/src`, nessuna inferenza)
 
@@ -407,3 +407,49 @@ Sensibilità senza item nei messaggi (`items-ref-1`): **22 blocchi** (4+4+4+4+6)
 - **D2b:** nessuna evidenza M0 la smentisce; il rischio R-D2b ([plan.md](plan.md) §8) resta aperto e vincola la decisione. M0 non ha prodotto la disposizione `Open` per i candidati Gap↔evidenza degli archivi (RH-022(c)).
 - **O3:** criterio d'ingresso soddisfatto numericamente (C-2, C-3). **O5:** non soddisfatto.
 - **M1:** vanno corretti prima di RH-013 e RH-016 i punti C-4 e C-5.
+
+### Evidenze M1 (2026-11-14; T160–T167; solo offline, nessuna inferenza, PostgreSQL non usato)
+
+Commit locali (tutti senza coautori): annex `2a2666d` (C-4/C-5 in RH-011/013/016, prima dell'implementazione); RH-010 `c42e08d`, RH-011 `60bcb7f`, RH-012 `06453a9`, RH-013 `8512b30`, RH-014 `f93f0d3`, RH-015 `fe882ca`, RH-016 `ebff05e`, RH-017 `7527034`. La v11 è **inattiva** (`DocumentaryAnalysisFreeze` invariata) e in M1 **non è funzionante end-to-end**: le foglie A non producono item e la proiezione è di M2.
+
+**Esito dei test** (suite completa, senza `BPROJECTS_TEST_POSTGRES`): prima di M1 4.700 test, 2.771 superati, 1.929 ignorati; dopo M1 **4.819 test, 2.888 superati, 1.931 ignorati, 0 falliti**. I 119 test nuovi sono 117 superati e 2 ignorati (`ReconcileDefinitionV11WorkflowTests`, richiedono PostgreSQL: **scritti, non eseguiti**; RH-010 resta aperto per questi). Nessun test di integrazione con database né con parser reale è stato eseguito: la suite **non** è dichiarata integrata completa.
+
+**Revisione di RH-013 e RH-016 (C-4, C-5).**
+- *C-4 recepita:* `Undecodable` = solo errore di deserializzazione (anche `op`/`value` incoerenti, rifiutati da `AiPatchConverter`); `PatchShape` = solo violazioni semantiche. Il ramo `default` del compositore resta difesa in profondità non raggiungibile da JSON (nessun test dedicato). Deviazione: decimo membro diagnostico `IntegrityMismatch` per il controllo di `canonicalHash` al replay (giudicato corretto dal revisore).
+- *C-5 recepita:* nel profilo `by-stage-1` l'elemento di `patches` è un `anyOf` di tre rami con `op` = `enum` a un valore e `value` dell'operazione; solo keyword del sottoinsieme (`ProviderProblems` vuoto, nessun `const`). Non si lega `target` (item xor relation) né `minItems` dell'`evidence`: restano `PatchShape`. Le sei coppie `op`/`value` incrociate sono rifiutate dallo schema.
+- *Baseline del 59–61% (RH-016):* spiegata e confrontata. Il `value` del `-3` ha tre rami indipendenti da `op`, quindi 1/3 di coerenza per patch; con 0–3 patch equiprobabili l'attesa teorica di almeno una patch incoerente è 63,0%; osservato 59,4% (Expand, 1.484/2.500) e 60,6% (Compare, 1.514/2.500), poco sotto per le repliche esatte e le proprietà facoltative. Con lo stesso seme il profilo `by-stage-1` dà **0** `Undecodable` in tutte le varianti.
+- *Limite dichiarato:* i test provano l'equivalenza con lo schema valutato da `ReconcileSchemaSubset`, **non** con la grammatica reale di llama.cpp b10703 (ordine delle proprietà imposto dalla grammatica ma non dal test; resa dell'`anyOf` con `enum` a un valore). Resta la sonda RH-050 (M5) e il rischio di plan §8.
+
+**Classi residue (RH-016, 2.500 istanze per variante, seed 20261113, istanze con la classe).** 0 rifiuti a valle del compositore (CheckResult V2, riferimenti, gerarchia) in tutte le varianti; `StageShape`, `ItemShape`, `Undecodable`, `IntegrityMismatch` mai presenti.
+
+| Classe | LeafA | LeafB | Reduce | Cross | Expand | Compare |
+|---|---:|---:|---:|---:|---:|---:|
+| istanze accettate / rifiutate dal compositore | 643 / 1.857 | 643 / 1.857 | 599 / 1.901 | 756 / 1.744 | 235 / 2.265 | 621 / 1.879 |
+| `UnknownAlias` | 1.038 | 1.038 | 1.038 | 1.028 | 1.632 | 1.062 |
+| `CoincidentEndpoints` | 610 | 610 | 850 | 902 | 784 | 317 |
+| `Duplicate` | 649 | 649 | 649 | 690 | 1.446 | 1.180 |
+| `DuplicateCandidate` | 205 | 205 | 155 | 166 | 206 | – |
+| `InvalidText` | 1.080 | 1.080 | 1.080 | 582 | 926 | 574 |
+| `PatchShape` | – | – | – | – | 1.568 | 1.569 |
+
+Il generatore è casuale e non rappresenta la frequenza reale (0 occorrenze reali di queste classi nelle 34 chiamate, 0 patch reali): dato per l'opzione O1, non un tasso. `PatchShape` è la classe più frequente nelle patch (target non esclusivo, evidenza mancante o diversa dagli estremi): legare `target` all'`op` ridurrebbe il residuo ma allarga la grammatica prima della sonda reale.
+
+**Replay per batch (RH-017, 25 fixture non foglia A).**
+- *v10 (caratterizzazione, coincide con l'assessment §3):* Run 5 030 rifiutata dalla validazione V1 (I-1); Run 4 029–033 e 034–035 accettate; Run 4 036 non decodificabile; Run 2 026 rifiutata dal compositore (item nelle foglie B, `StageShape`); Run 3 026 rifiutata dalla gerarchia (descriptor nullo); le altre 14 accettate (21 accettate in tutto).
+- *v11 (output archiviati così come sono):* accettata **Run 5 030** e tutte le fixture ammesse dallo schema `by-stage-1` (17 su 25: Run 2 024–025, Run 3 024–025, Run 4 024–028 e 034–035, Run 5 025–030); **non generabili sotto v11** (8): Run 4 029–033 (candidati nel confronto), Run 4 036 (JSON troncato), Run 2 026 e Run 3 026 (item e descriptor nullo). Nessun output è stato trasformato.
+
+**Correzioni a testi di M0 emerse in M1.**
+- RH-012: l'attesa del lookup delle definizioni con alias è (`reconcile-alias-1`, validazione), non (`reconcile-1`, validazione) come scritto nel task; la v11 differisce dalla v10 solo per la versione di validazione (`reconcile-validation-v2`).
+- Test M0 e storici adeguati solo meccanicamente (nessuna asserzione indebolita, nessun golden toccato): `ReconcileMeasurementBudgetTests` (ottavo argomento di `ReconcileAliasMode`), `ReconcileContractMatrixTests` (profilo `V11`, argomento `rules`, opzioni del compositore), `ReconcileSchemaProfileV9Tests` (stringa sorgente attesa della chiamata `InvokeAsync`), `ReconcileDefinitionV8Tests` e `ReconcileDefinitionV10Tests` (l'esempio di prompt ignoto passa da `document-reconcile-v6` a `-v7`, perché il v6 ora è supportato), `ReconcileSchemaInstanceGenerator` (gemelli con altra chiave per elementi in `anyOf`, sequenza storica invariata).
+
+**Revisione indipendente del prompt v6 (RH-014).** Nessun rilievo bloccante; la struttura (sezione per stadio, tetto di 16 solo nell'Espansione, nessuna istruzione sugli item, Confronto senza candidati) e la sicurezza (materiale non fidato) sono confermate. Rilievi **non applicati** perché toccano righe che il task dichiara letterali dal v5 o aggiungono differenze oltre le sei approvate: richiedono una decisione e, se adottati, l'aggiornamento dello SHA pinnato e del test di diff (il testo si congela solo in RH-044).
+1. *Importanti:* (a) il ruolo generale della riga 1 («individui collegamenti da verificare») contraddice il Confronto, che non individua collegamenti; (b) manca l'istruzione di applicare solo la sezione del tipo di batch ricevuto; (c) nelle foglie manca la protezione contro candidati deboli («solo plausibili, mai le coppie scartate») e «il compito è soltanto individuare candidati» contraddice il `descriptor`; (d) nel Confronto `Compared` («relazione già chiara») e `Open` («alternative incompatibili») si sovrappongono e `Open` è l'unico canale verso il PM; (e) il `reason` di `Open` è mostrato al PM ma il prompt impone etichette `E<n>`; (f) il tetto di 16 non dice cosa fare con più di 16 collegamenti plausibili; (g) le patch (riga letterale dal v5) non dicono che `AddRelation` vuole `target.item` e che l'`evidence` non è vuota per `AddSupport`/`ProposeAlternative`, né definiscono `classification` ora che il bullet `items` è sparito.
+2. *Minori:* `noFindings` «facoltativo» vs sette proprietà; `[i3] (E3, E4)` vs una sola voce per item; paragrafo finale senza intestazione; `basis` non definito; terminologia (livello/tipo di batch/stadio, foglia/foglie, dubbio/conflitto/contrasto); ignorare richieste anche nel motivo del candidato in esame.
+
+**Rischi residui e condizioni per M2.**
+1. **D2b (regola da scrivere prima di M2):** serve una regola esplicita e test che provino, per una Gap estremo di un conflitto `Open`: domanda canonica ancora in `openQuestions`, provenienza conservata, nessuna decisione contestata presentata come acquisita, assenza di `gap_reference_missing`. Nessuna modifica di assembly o stadio Gap è stata fatta.
+2. **RH-021 deve aggiungere** la regola «`items` non vuoti nella foglia A ⇒ `StageShape`» (qui non implementata, fuori da RH-013) e il formato `items-ref-1`: oggi `ReconcileAliasMessages.Build` stampa ancora il testo degli item mentre il prompt v6 dichiara «senza testo».
+3. Il bundle `reconcile-stage-contract-1` del `configHash` nomina comportamenti di M2 (`leaf-projection-1`, `open-endpoints-as-alternatives-1`, `items-ref-1`) non ancora implementati: l'identità della v11 si congela solo in RH-044.
+4. Il piano v11 usa la validazione V2 e il compositore con opzioni; la v11 reale non può completare finché mancano le foglie A (copertura incompleta, fallimento chiuso). Nessun percorso la congela in una nuova richiesta.
+5. Grammatica reale non provata (`anyOf`/`enum` a un valore, ordine delle proprietà): sonda RH-050 in M5. I due test PostgreSQL di RH-010 vanno eseguiti con un database di test.
+6. Decisione aperta sul prompt (punti 1 e 2 sopra) prima di RH-050.

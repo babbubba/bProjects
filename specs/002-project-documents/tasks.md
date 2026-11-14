@@ -583,3 +583,31 @@ Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, ness
 - [x] T159 [US2] DET+TEST — RH-005: `ReconcileExpansionCostSimulationTests.cs`, tabella «Evidenze M0». Dip.: T158. Dettaglio: RH-005.
 
 **Ordine del delta M0.** T154 → T155; T156 → T157; T158 → T159; le tre catene sono indipendenti. Checkpoint C0 (assessment/plan/tasks della cartella `reconciliation-hardening`): M0 verde, suite completa invariata, `git diff --stat backend/src` vuoto, evidenze M0 registrate, riesame di D2/D2b/O3/O5. La mappatura Txxx ↔ RH-xxx qui sopra è l'unica fra i due registri.
+
+---
+
+### Delta Reconciliation Hardening M1 — mandato del 2026-11-14, T160–T167
+
+Task aggiunti **manualmente in coda** (nessuna rigenerazione Specify/Tasks, nessun `[x]` preesistente toccato, T001–T159 invariati, T138/T149/T150 non spuntati). Sono **soltanto** gli otto task della milestone **M1** del piano [Reconciliation Hardening](validation/reconciliation-hardening/plan.md) (dettaglio tecnico, file, test e STOP: [tasks.md](validation/reconciliation-hardening/tasks.md); evidenze: «Evidenze M1» in [assessment.md](validation/reconciliation-hardening/assessment.md) §12). M2–M6 **non sono autorizzate**. D1 è approvata **solo** per l'introduzione della definizione `project-analysis-documents-v11`, **inattiva** (nessuna nuova richiesta la congela; `DocumentaryAnalysisFreeze` invariata); D2 come principio (la proiezione degli item è di M2, non implementata); D2b rinviata a M2. Nessuna inferenza DGX, nessun task storico aperto eseguito, v2–v10 e golden invariati. La v11 **non è funzionante end-to-end** in M1. Non riapre né supera T040, T027, T138, T149, T150.
+
+| Txxx | RH | Contenuto (sintesi) |
+|---|---|---|
+| T160 | RH-010 | Identità della definizione v11 (inattiva, non default) |
+| T161 | RH-011 | Tabella di stadio e profilo di schemi `reconcile-alias-schema-by-stage-1` |
+| T162 | RH-012 | Regole di validazione V1/V2 (`noFindingsReason` informativo nella v11) |
+| T163 | RH-013 | Compositore v11: violazioni tipizzate e confronto senza candidati |
+| T164 | RH-014 | Prompt unico `document-reconcile-v6` organizzato per stadio |
+| T165 | RH-015 | Piano di riconciliazione: ramo v11 |
+| T166 | RH-016 | Equivalenza schema ⇔ compositore ⇔ validazione per la v11 |
+| T167 | RH-017 | Replay v11 per batch delle fixture reali diverse dalla foglia A |
+
+- [ ] T160 [US2] DET+TEST — RH-010: `DocumentAnalysisWorkflow` (`DefinitionVersionV11`, ramo 11 di `ContractOf`, elenchi e instradamenti), `SourceSnapshotStore.AnalysisPromptVersionsV11`, `ReconcileDefinitionV11Tests` (offline, verdi) e `ReconcileDefinitionV11WorkflowTests` (single-call e instradamento v11 = v6, richiedono PostgreSQL: **scritti, non eseguiti** per assenza del database; da eseguire con `BPROJECTS_TEST_POSTGRES` **prima di spuntare**). Dip.: C0. Dettaglio: RH-010.
+- [x] T161 [US2] DET+TEST — RH-011: `AI/ReconcileStageContracts.cs`, profilo `by-stage-1` in `ReconcileAliasContracts` (patch legate a `op`, C-4/C-5), `ReconcileSchemaProfileByStageTests`. Dip.: T160. Dettaglio: RH-011.
+- [x] T162 [US2] DET+TEST — RH-012: `ReconcileValidationRules` V1/V2, `ReconciliationContext.Rules`, `ReconcileValidationRulesTests`. Dip.: T160. Dettaglio: RH-012.
+- [x] T163 [US2] DET+TEST — RH-013: `ReconcileViolationKind`/`TypedViolations`/`ReconcileComposeOptions` in `ReconcileAliasComposer`, `ReconcileViolationTypingTests`. Dip.: T161, T162. Dettaglio: RH-013.
+- [x] T164 [US2] DET+TEST — RH-014: `AI/Prompts/document-reconcile-v6.md`, `InstructionsFor`, `ReconcilePromptV6Tests`; revisione del testo eseguita da un agente revisore (rilievi da decidere: «Evidenze M1»). Dip.: T161. Dettaglio: RH-014.
+- [x] T165 [US2] DET+TEST — RH-015: ramo v11 di `DocumentReconcilePlan` (`configHash`, `reconcileContract`, validazione v2, opzioni del compositore), `ReconcileDefinitionV11PlanTests`. Dip.: T162, T163, T164. Dettaglio: RH-015.
+- [x] T166 [US2] DET+TEST — RH-016: `ReconcileStageContractV11Tests` (2.500 istanze per variante, classi residue pinnate). Dip.: T157, T165. Dettaglio: RH-016.
+- [x] T167 [US2] DET+TEST — RH-017: `ReconcileReplayFixturesV11Tests` (replay per batch, v10 caratterizzata, v11 solo su output già validi). Dip.: T155, T166. Dettaglio: RH-017.
+
+**Ordine del delta M1.** T160 → T161 → T162 → T163 → T164 → T165 → T166 → T167 (catena eseguita in quest'ordine). Checkpoint C1: build verde; suite completa con 0 falliti **senza PostgreSQL** (4.819 test, 2.888 superati, 1.931 ignorati: i 1.929 preesistenti più i 2 nuovi test PostgreSQL di T160); golden v2–v10 invariati; la v11 non è default. La mappatura Txxx ↔ RH-xxx qui sopra è l'unica fra i due registri.

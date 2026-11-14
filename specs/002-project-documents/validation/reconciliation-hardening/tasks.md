@@ -141,7 +141,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M1 — Definizione v11 e contratto per stadio (D1 per l'identità, D3, D4)
 
-### [ ] RH-010 — Identità della definizione v11 (non default)
+### [ ] RH-010 — Identità della definizione v11 (non default) — T160. **Stato M1:** implementata e verificata offline; i test PostgreSQL «single-call v11 = v6» e «instradamento v11 = v6» (`ReconcileDefinitionV11WorkflowTests`) sono scritti ma **non eseguiti** (database assente): la casella resta aperta finché non girano con `BPROJECTS_TEST_POSTGRES`.
 - **File e modifiche:**
   - `AI/DocumentAnalysisWorkflow.cs`:
     - `DefinitionVersionV11 = "project-analysis-documents-v11"`, `ReconcileContractKey = "reconcileContract"`;
@@ -165,7 +165,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Decisioni risolte:** il ramo v10 di `ContractOf` non si tocca (nessun controllo nuovo di assenza di chiavi).
 - **STOP:** se serve toccare un golden v6–v10 o il ramo v10.
 
-### [ ] RH-011 — Tabella di stadio e profilo `reconcile-alias-schema-by-stage-1`
+### [x] RH-011 — Tabella di stadio e profilo `reconcile-alias-schema-by-stage-1` — T161
 - **File e modifiche:**
   - nuovo `AI/ReconcileStageContracts.cs` con `record ReconcileStageContract(string Stage, ReconcileBatchSchema Variant, bool DescriptorRequired, bool ModelItems, char? EndpointPrefix, int? CandidateCap, ReconcileFocusRule Focus, bool Patches, bool ServerItems)`, `enum ReconcileFocusRule { None, NullOrUnresolved, ComparedOrOpen }` e la tabella statica:
 
@@ -201,7 +201,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
   `patches` mantiene `type: array`, `items` (ora l'`anyOf`) e, per gli stadi senza patch, `maxItems: 0` accanto a `items` (come il `-2`). Costrutti usati: solo `type`, `enum`, `properties`, `required`, `additionalProperties`, `items`, `anyOf`, `maxItems`, tutti in `ReconcileSchemaSubset.Keywords`; `ProviderProblems` deve restare vuoto. **Non** si lega il `target` (item xor relation) né si impone `minItems` all'`evidence`: restano classi residue `PatchShape` dichiarate (nessun ampliamento della grammatica oltre quanto richiesto da C-5, per ridurre il rischio del convertitore reale). **Limite dichiarato:** `ReconcileSchemaSubset` è un valutatore di test; **non** è dimostrato che coincida con la grammatica effettiva di llama.cpp b10703 (ordine delle proprietà imposto dalla grammatica ma non dal test, resa dell'`anyOf` con `enum` a un valore). La verifica sul runtime reale è la sonda RH-050 (M5, non autorizzata); fino ad allora il rischio resta in plan §8 («`anyOf` con `enum` non applicato»). LeafA = LeafB(`-2`), Reduce, Cross e LeafB = `-2`; Expand = `-3` con le patch legate; Compare = `-2` con `candidates.maxItems = 0`, `focus` in `anyOf` e le patch legate. Test aggiuntivo: ogni ramo ammette solo la propria coppia `op`/`value` (le sei coppie incrociate sono rifiutate dallo schema).
 
-### [ ] RH-012 — Regole di validazione V1/V2
+### [x] RH-012 — Regole di validazione V1/V2 — T162
 - **File e modifiche:**
   - `AI/ReconciliationContracts.cs`: `public enum ReconcileValidationRules { V1, V2 }` e `CheckResult(ReconcileResult r, string sourceHash, ReconcileValidationRules rules = ReconcileValidationRules.V1)`. In V2 **nessuna** regola su `NoFindingsReason` (`:694-702`): il campo è informativo e persistito così com'è. `CheckSingleCall` invariato.
   - `ReconciliationContext`: parametro finale `ReconcileValidationRules Rules = V1`.
@@ -215,7 +215,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** RH-010. **Effort:** 0,5 gg.
 - **Decisioni risolte:** D3 (la traccia dell'esito è del server: visite, hash, disposizioni).
 
-### [ ] RH-013 — Compositore v11: violazioni tipizzate e confronto senza candidati
+### [x] RH-013 — Compositore v11: violazioni tipizzate e confronto senza candidati — T163
 - **File e modifiche:**
   - `AI/ReconcileAliasComposer.cs`:
     - `enum ReconcileViolationKind { Undecodable, UnknownAlias, CoincidentEndpoints, Duplicate, DuplicateCandidate, InvalidText, PatchShape, ItemShape, StageShape }`;
@@ -266,7 +266,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
   - **Deviazione dichiarata dall'enum del task: `IntegrityMismatch`.** Il controllo di `canonicalHash` al replay (`integrity_conflict`, messaggio storico invariato) non ha una riga nella tabella e non è né una decodifica né una violazione del modello: etichettarlo `Undecodable` o `StageShape` sarebbe falso, lasciarlo senza tipo romperebbe l'invariante «`TypedViolations` non vuota se e solo se `Violations` lo è». Si aggiunge un decimo membro, in coda all'enum (gli ordinali 0–8 non cambiano), solo diagnostico, non usato da RH-016 (il replay non ricompone con un hash atteso). Esaminato dal revisore indipendente: giudicato corretto.
   - **Nessun ampliamento del perimetro.** Con `StageContract` si aggiungono **solo** i tre controlli già elencati (candidati nel confronto; `descriptor` di soli spazi o oltre 512; testi delle patch). Non si aggiunge la regola «`items` non vuoti ⇒ `StageShape`» nella foglia A: appartiene a RH-021 (M2, non autorizzato) ed è registrata fra i rischi per M2.
 
-### [ ] RH-014 — Prompt unico `document-reconcile-v6`, organizzato per stadio
+### [x] RH-014 — Prompt unico `document-reconcile-v6`, organizzato per stadio — T164
 - **File e modifiche:**
   - nuovo `AI/Prompts/document-reconcile-v6.md`, derivato dal v5 con queste sole differenze:
     1. sezione «Output» divisa in un elenco comune (contract, etichette, formato) e in sottosezioni «Foglie», «Riduzione», «Cross», «Espansione», «Confronto»;
@@ -286,7 +286,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** RH-011. **Effort:** 0,75 gg.
 - **Decisioni risolte:** prompt unico, nessuna istruzione nel messaggio utente (separazione dal materiale non fidato). Istruzioni di sistema per stadio = opzione O2.
 
-### [ ] RH-015 — Piano di riconciliazione: ramo v11
+### [x] RH-015 — Piano di riconciliazione: ramo v11 — T165
 - **File e modifiche:**
   - `AI/DocumentReconcilePlan.cs`:
     - il controllo di `:133` accetta, per la v11, il profilo `by-stage-1` con `expansion-grid-1`;
@@ -302,7 +302,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** RH-012, RH-013, RH-014. **Effort:** 0,75 gg.
 - **STOP:** se un golden storico cambia.
 
-### [ ] RH-016 — Equivalenza schema ⇔ compositore ⇔ validazione per la v11
+### [x] RH-016 — Equivalenza schema ⇔ compositore ⇔ validazione per la v11 — T166
 - **File:** nuovo `ReconcileStageContractV11Tests.cs`, con il generatore di RH-003.
 - **Test:**
   - ≥ 2.000 istanze per variante del profilo `by-stage-1`, composte con le opzioni v11 e validate con V2, `References` e gerarchia;
@@ -325,7 +325,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
   - **Generatore.** Per le patch in `anyOf` il generatore di RH-003 non produceva «gemelli con un'altra chiave» (leggeva `items.properties.key`): si estende per leggere la chiave dal primo ramo, **senza** alterare la sequenza per gli schemi già coperti (golden RH-003 invariato).
   - **Limite dichiarato.** Il test certifica l'equivalenza fra lo schema **valutato da `ReconcileSchemaSubset`**, il compositore e la validazione; non quella con la grammatica di llama.cpp (vedi RH-011, aggiornamento M1).
 
-### [ ] RH-017 — Replay v11 per batch delle fixture reali (stadi diversi dalla foglia A)
+### [x] RH-017 — Replay v11 per batch delle fixture reali (stadi diversi dalla foglia A) — T167
 - **Test** (`ReconcileReplayFixturesTests`, con `ReplayFixtureBuilder`):
   - per ogni fixture di confronto, espansione, foglia B, riduzione e cross:
     - (a) caratterizzazione v10 secondo l'assessment §3: Run 5 030 rifiutata (I-1); Run 4 029–033 accettate; 034/035 accettate come `candidate_unresolved`; 036 non decodificabile; Run 2 026 rifiutata (item); Run 3 026 rifiutata (descriptor);
@@ -339,6 +339,8 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - suite completa con 0 falliti;
 - golden v2–v10 invariati;
 - la v11 non è default.
+
+**Stato C1 (2026-11-14):** build verde; suite completa **senza PostgreSQL** 4.819 test, 2.888 superati, 1.931 ignorati (i 1.929 preesistenti, invariati, più i 2 nuovi test `ReconcileDefinitionV11WorkflowTests` che richiedono il database), 0 falliti; golden v2–v10 e profili -1/-2/-3 invariati; v11 non default. **Nessuna dichiarazione di suite integrata completa**: PostgreSQL non è stato usato. RH-010 resta aperto per i due test PostgreSQL. Evidenze e rischi per M2: «Evidenze M1» in [assessment.md](assessment.md) §12.
 
 ---
 
