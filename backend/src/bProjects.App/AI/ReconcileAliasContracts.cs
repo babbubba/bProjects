@@ -415,6 +415,86 @@ public static class ReconcileAliasContracts
     public static string SchemaProfileV3Hashes() => string.Join(
         ',', Enum.GetValues<ReconcileBatchSchema>().Select(v => $"{v}={CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOfV3(v).GetRawText()))}"));
 
+    // Profilo by-stage-1 (v11, RH-011): dizionario SEPARATO. LeafA = copia esatta di LeafB del -2 (nessun item del modello); Reduce, Cross e LeafB = -2; Expand = -3 (tetto di 16) e Compare = -2 con
+    // `candidates.maxItems = 0` e `focus` in `anyOf` (esito prima del motivo); le patch di Expand e Compare sono un `anyOf` di tre rami, uno per `op`, che lega `op` a `value` (assessment C-4/C-5).
+    // Solo keyword di `ReconcileSchemaSubset.Keywords`; `const` e `oneOf` non si usano. Profili -1, -2 e -3 invariati.
+    private static readonly Lazy<IReadOnlyDictionary<ReconcileBatchSchema, JsonElement>> BatchSchemasByStage = new(() =>
+        Enum.GetValues<ReconcileBatchSchema>().ToDictionary(s => s, BuildByStage));
+
+    /// <summary>Schema del batch nel profilo <see cref="SchemaProfileByStage"/> (v11); derivato dalle righe di <see cref="ReconcileStageContracts.Table"/>.</summary>
+    public static JsonElement SchemaOfByStage(ReconcileBatchSchema variant) =>
+        BatchSchemasByStage.Value.TryGetValue(variant, out var schema) ? schema : throw new ArgumentOutOfRangeException(nameof(variant), variant, "Variante dello schema v11 sconosciuta.");
+
+    /// <summary>Hash canonici delle varianti del profilo by-stage-1, in ordine fisso: entrano nel <c>configHash</c> della v11.</summary>
+    public static string SchemaProfileByStageHashes() => string.Join(
+        ',', Enum.GetValues<ReconcileBatchSchema>().Select(v => $"{v}={CanonicalJson.HashText(CanonicalJson.Canonicalize(SchemaOfByStage(v).GetRawText()))}"));
+
+    private static JsonElement BuildByStage(ReconcileBatchSchema variant)
+    {
+        switch (variant)
+        {
+            case ReconcileBatchSchema.Expand:
+            {
+                var node = JsonNode.Parse(SchemaOfV3(variant).GetRawText())!.AsObject();
+                BindPatchOperations(node);
+                return ToElement(node);
+            }
+
+            case ReconcileBatchSchema.Compare:
+            {
+                var node = JsonNode.Parse(SchemaOf(variant).GetRawText())!.AsObject();
+                var properties = node["properties"]!.AsObject();
+                properties["candidates"]!["maxItems"] = 0;
+                var compared = AnalysisAliasContracts.ObjectSchema(
+                    ("outcome", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(nameof(AiFocusOutcome.Compared)) }), ("reason", AnalysisAliasContracts.NullableTextSchema()));
+                var open = AnalysisAliasContracts.ObjectSchema(
+                    ("outcome", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(nameof(AiFocusOutcome.Open)) }), ("reason", new JsonObject { ["type"] = "string", ["minLength"] = 1 }));
+                properties["focus"] = new JsonObject { ["anyOf"] = new JsonArray(compared, open) };
+                BindPatchOperations(node);
+                return ToElement(node);
+            }
+
+            case ReconcileBatchSchema.LeafA:
+                return SchemaOf(ReconcileBatchSchema.LeafB);
+            default:
+                return SchemaOf(variant);
+        }
+    }
+
+    /// <summary>
+    /// Sostituisce l'elemento di <c>patches</c> con un <c>anyOf</c> di tre rami (uno per <see cref="PatchOperation"/>, nell'ordine dell'enum): in ciascuno <c>op</c> è un <c>enum</c> a un valore e <c>value</c>
+    /// è lo schema di quella operazione (i tre rami dell'<c>anyOf</c> di <c>value</c> del profilo di partenza, nello stesso ordine). Ordine delle proprietà e <c>required</c> invariati.
+    /// </summary>
+    private static void BindPatchOperations(JsonObject schema)
+    {
+        var patches = schema["properties"]!["patches"]!.AsObject();
+        var item = patches["items"]!.AsObject();
+        var values = item["properties"]!["value"]!["anyOf"]!.AsArray();
+        var operations = Enum.GetNames<PatchOperation>();
+        if (values.Count != operations.Length)
+        {
+            throw new InvalidOperationException($"Lo schema delle patch ha {values.Count} rami di value per {operations.Length} operazioni: il legame fra op e value non è costruibile.");
+        }
+
+        var branches = new JsonArray();
+        for (var i = 0; i < operations.Length; i++)
+        {
+            var branch = item.DeepClone().AsObject();
+            var properties = branch["properties"]!.AsObject();
+            properties["op"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(operations[i]) };
+            properties["value"] = values[i]!.DeepClone();
+            branches.Add(branch);
+        }
+
+        patches["items"] = new JsonObject { ["anyOf"] = branches };
+    }
+
+    private static JsonElement ToElement(JsonObject schema)
+    {
+        using var document = JsonDocument.Parse(schema.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
     private static JsonElement WithCandidateCap(JsonElement schema, int cap)
     {
         var node = JsonNode.Parse(schema.GetRawText())!.AsObject();
@@ -436,6 +516,7 @@ public static class ReconcileAliasContracts
         SchemaProfileByBatch => Named(SchemaVariantOf(stage, view)),
         SchemaProfileByBatchV2 => Named(BatchSchemaOf(stage, view)),
         SchemaProfileByBatchV3 => NamedV3(BatchSchemaOf(stage, view)),
+        SchemaProfileByStage => NamedByStage(BatchSchemaOf(stage, view)),
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
     };
 
@@ -445,6 +526,7 @@ public static class ReconcileAliasContracts
         SchemaProfileByBatch => [.. Enum.GetValues<ReconcileSchemaVariant>().Select(Named)],
         SchemaProfileByBatchV2 => [.. Enum.GetValues<ReconcileBatchSchema>().Select(Named)],
         SchemaProfileByBatchV3 => [.. Enum.GetValues<ReconcileBatchSchema>().Select(NamedV3)],
+        SchemaProfileByStage => [.. Enum.GetValues<ReconcileBatchSchema>().Select(NamedByStage)],
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
     };
 
@@ -454,12 +536,15 @@ public static class ReconcileAliasContracts
 
     private static (string Name, JsonElement Schema) NamedV3(ReconcileBatchSchema variant) => (variant.ToString(), SchemaOfV3(variant));
 
+    private static (string Name, JsonElement Schema) NamedByStage(ReconcileBatchSchema variant) => (variant.ToString(), SchemaOfByStage(variant));
+
     /// <summary>Hash delle varianti del profilo congelato che entrano nel <c>configHash</c> (per la v8 la stessa stringa di sempre, <see cref="SchemaProfileHashes"/>).</summary>
     public static string ProfileHashes(string profile) => profile switch
     {
         SchemaProfileByBatch => SchemaProfileHashes(),
         SchemaProfileByBatchV2 => SchemaProfileV2Hashes(),
         SchemaProfileByBatchV3 => SchemaProfileV3Hashes(),
+        SchemaProfileByStage => SchemaProfileByStageHashes(),
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Profilo degli schemi per batch non supportato."),
     };
 
