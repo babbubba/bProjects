@@ -170,6 +170,6 @@ public sealed class ReconcileDefinitionV10Tests
         Assert.All(changed, i => Assert.True(v4[i].StartsWith("- Evidenze:", StringComparison.Ordinal) || v4[i].StartsWith("- `Candidato in esame:`", StringComparison.Ordinal) || v4[i].StartsWith("- `candidates`:", StringComparison.Ordinal)));
         Assert.Contains("gruppo=N1", ReconcileAliasContracts.InstructionsFor(ReconcileAliasContracts.PromptVersionV5), StringComparison.Ordinal);
         Assert.Contains("al massimo 16", ReconcileAliasContracts.InstructionsFor(ReconcileAliasContracts.PromptVersionV5), StringComparison.Ordinal);
-        Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.InstructionsFor("document-reconcile-v6"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ReconcileAliasContracts.InstructionsFor("document-reconcile-v7"));   // RH-014: il v6 è ora supportato (definizione v11); una versione ignota resta un errore, mai un ripiego
     }
 }

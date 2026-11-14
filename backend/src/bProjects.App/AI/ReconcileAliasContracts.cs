@@ -225,6 +225,7 @@ public static class ReconcileAliasContracts
     private static readonly Lazy<string> Prompt = new(() => LoadPrompt(PromptVersion + ".md"));
     private static readonly Lazy<string> PromptV4 = new(() => LoadPrompt(PromptVersionV4 + ".md"));
     private static readonly Lazy<string> PromptV5 = new(() => LoadPrompt(PromptVersionV5 + ".md"));
+    private static readonly Lazy<string> PromptV6 = new(() => LoadPrompt(PromptVersionV6 + ".md"));
 
     /// <summary>Istruzioni di sistema dei batch alias (AI/Prompts/document-reconcile-v3.md, risorsa incorporata); il v2 resta congelato.</summary>
     public static string Instructions => Prompt.Value;
@@ -235,6 +236,7 @@ public static class ReconcileAliasContracts
         PromptVersion => Prompt.Value,
         PromptVersionV4 => PromptV4.Value,
         PromptVersionV5 => PromptV5.Value,
+        PromptVersionV6 => PromptV6.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(promptVersion), promptVersion, "Prompt della riconciliazione con alias non supportato."),
     };
 
