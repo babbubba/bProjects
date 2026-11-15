@@ -459,7 +459,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M4 — Verifica integrata offline, contratti e congelamento
 
-### [ ] RH-040 — Fixture rappresentativa ERP/EDI (sintetica, scritta da zero)
+### [x] RH-040 — Fixture rappresentativa ERP/EDI (sintetica, scritta da zero)
 - **File:** `backend/tests/bProjects.IntegrationTests/Reconciliation/Representative/`:
   - `af-integrazione-edi.md`: analisi funzionale fra ERP «Gestionale Alfa» e hub EDI «Hub Beta», con
     - flussi ORDERS, DESADV e INVOIC;
@@ -478,7 +478,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** nessuna. **Effort:** 1,5 gg.
 - **STOP:** mai copiare o parafrasare documenti cliente.
 
-### [ ] RH-041 — Workflow v11 completo con modello finto (prova strutturale)
+### [x] RH-041 — Workflow v11 completo con modello finto (prova strutturale)
 - **File:** nuovo `DocumentReconcileV11FlowTests.cs`.
 - **Scenari** (il test asserisce il ramo di instradamento scelto da `DocumentAnalysisWorkflow`):
   - A: ledger rappresentativo, W=32768, O=16384, M=1024, ramo «gerarchia + stadio Gap»; **almeno una coppia in conflitto ha come estremo una Gap** (rischio R-D2b, RH-021(b)): il modello finto la dichiara `Open` e il test asserisce `MissingGaps` vuoto e domanda canonica presente;
@@ -496,7 +496,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Dipendenze:** C3, RH-040. **Effort:** 2 gg.
 - **STOP:** se un ramo atteso non si raggiunge con la configurazione indicata, segnalare senza cambiare budget né policy.
 
-### [ ] RH-042 — Fault injection
+### [x] RH-042 — Fault injection
 - **Test** (estensione di RH-041):
   - crash dopo il commit di una foglia A, a metà espansione, prima del commit di un confronto;
   - takeover con nuovo lease;
@@ -506,7 +506,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
   - nessun effetto duplicato (WorkOutput = batch).
 - **Dipendenze:** RH-041. **Effort:** 1 gg.
 
-### [ ] RH-043 — Emendamento dei contratti della 002
+### [x] RH-043 — Emendamento dei contratti della 002
 - **File:** `specs/002-project-documents/contracts/ai-workflow.md`, nuovo paragrafo «Emendamento v11 (`project-analysis-documents-v11`, `reconcile-stage-contract-1`)» in §4.1, §4.3, §11 e §13.7. Elenca:
   - item delle foglie A composti dal server (tabella con la certezza);
   - estremi non Gap dei conflitti `Open` solo come alternative; i Gap restano anche domanda canonica (R-D2b-1), con avviso D3 informativo: deviazione dichiarata dal principio di §13.4 (single-call), limitata alla gerarchia v11;
@@ -519,7 +519,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Completamento:** coerenza verificata fra emendamento, codice e golden.
 - **Dipendenze:** C3. **Effort:** 0,5 gg.
 
-### [ ] RH-044 — Congelamento della v11
+### [x] RH-044 — Congelamento della v11
 - **Modifiche:** pinnare i golden di `configHash` v11 (con il rig di `RetrievalGapFlowTests`), degli hash del profilo `by-stage-1`, dello SHA del prompt v6, della tabella `leaf-projection-1` (JSON canonico) e del JSON canonico di `stageContract`.
 - **Test:** suite completa con PostgreSQL e parser reale: 0 falliti; ignorati invariati salvo i nuovi test reali opt-in.
 - **Completamento:** risultati in «Evidenze M4».

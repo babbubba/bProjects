@@ -643,3 +643,23 @@ Task aggiunti **manualmente in coda** (T001–T170 invariati, nessuna rigenerazi
 
 - [x] T171 [US2] DET+TEST — RH-030: `AI/ContextBudget.cs` (`ExtraTokenMemo`, parametro opzionale `memo` di `DocumentPreflight.MeasureAsync`), campo `_extraTokens` e cinque chiamate in `DocumentReconcilePlan`; `DocumentPreflightMemoTests`. Stessi `Tokens` e `PayloadHash`; messaggio reso mai memoizzato. Dip.: C0. Dettaglio: RH-030.
 - [x] T172 [US2] DET+TEST — RH-031: misura con `CountingLlamaRuntime` sul ledger Single fino al primo batch, primo avvio e processo nuovo; v11 con P-1 ≤ v10 senza P-1; riduzione dei `/tokenize` = misure con schema − schemi distinti. Dip.: T171, T165. Dettaglio: RH-031.
+
+---
+
+### Delta Reconciliation Hardening M4 — mandato del 2026-11-14, T173–T177
+
+Task aggiunti **manualmente in coda** (T001–T172 invariati, nessuna rigenerazione, nessun `[x]` preesistente toccato). Sono i cinque task della milestone **M4** (verifica integrata offline, contratti e congelamento); dettaglio: [tasks.md RH](validation/reconciliation-hardening/tasks.md), evidenze: «Evidenze M4» in [assessment.md](validation/reconciliation-hardening/assessment.md) §12. M5 e M6 **non sono avviate**. Il modello è FINTO: un workflow `Completed` dimostra affidabilità **strutturale**, non correttezza semantica del ragionamento generativo.
+
+| Txxx | RH | Contenuto (sintesi) |
+|---|---|---|
+| T173 | RH-040 | Fixture sintetica ERP/EDI (documenti, verbale, messaggi PM, gold annotato prima, ledger, provenienza) |
+| T174 | RH-041 | Workflow v11 completo con PostgreSQL e modello finto (scenari A, B, C) |
+| T175 | RH-042 | Fault injection: crash, takeover, scadenza, limite chiamate |
+| T176 | RH-043 | Emendamento dei contratti 002 (`ai-workflow.md`, §4.1, §4.3, §11, §13.7) |
+| T177 | RH-044 | Congelamento della v11 (`ReconcileV11FreezeTests`) |
+
+- [x] T173 [US2] DET+TEST — RH-040: `backend/tests/bProjects.IntegrationTests/Reconciliation/Representative/` (`af-integrazione-edi.md`, `verbale-riunione-2.md`, `pm-messages.json`, `gold.json`, `PROVENANCE.json`, `RepresentativeLedger.cs`) e `RepresentativeFixtureTests`. Dip.: nessuna. Dettaglio: RH-040.
+- [x] T174 [US2] DET+TEST — RH-041: `DocumentReconcileV11FlowTests` (A gerarchia + stadio Gap con un Gap estremo di un conflitto Open, B gerarchia senza Gap, C inflazione a 30 candidati per batch). Dip.: T173, T172. Dettaglio: RH-041.
+- [x] T175 [US2] DET+TEST — RH-042: fault injection nella stessa classe (crash a cinque confini, takeover con nuovo lease, scadenza a metà gerarchia, limite chiamate). Dip.: T174. Dettaglio: RH-042.
+- [x] T176 [US2] DOC — RH-043: paragrafi «Emendamento v11» in `contracts/ai-workflow.md` §4.1, §4.3, §11, §13.7; il testo v2–v10 non è cambiato (solo aggiunte). Dip.: T172. Dettaglio: RH-043.
+- [x] T177 [US2] DET+TEST — RH-044: `ReconcileV11FreezeTests` (`configHash`, piano, sei schemi `by-stage-1`, prompt v6, `leaf-projection-1`, `stageContract`). Dip.: T174–T176. Dettaglio: RH-044.
