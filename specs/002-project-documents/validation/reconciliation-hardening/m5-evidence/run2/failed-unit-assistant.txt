@@ -1,0 +1,1628 @@
+{
+  "schemaVersion": "evidence-1.1.0",
+  "evidences": [
+    {
+      "key": "e1",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-01 | numeroOrdineCliente | testo | 20 | sì | identifica l'ordine presso il cliente |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg1",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg1",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo numeroOrdineCliente è di tipo testo con lunghezza massima 20 ed è obbligatorio.",
+      "subject": "numeroOrdineCliente",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": "identifica l'ordine presso il cliente",
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "20"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e2",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-02 | dataOrdine | data | 10 | sì | formato AAAA-MM-GG |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg2",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg2",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo dataOrdine è di tipo data con lunghezza 10 ed è obbligatorio.",
+      "subject": "dataOrdine",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo data"
+        },
+        {
+          "type": "Quantity",
+          "text": "10"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e3",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-02 | dataOrdine | data | 10 | sì | formato AAAA-MM-GG |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg3",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg3",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo dataOrdine deve rispettare il formato AAAA-MM-GG.",
+      "subject": "dataOrdine",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "formato AAAA-MM-GG"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e4",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-03 | codiceCliente | testo | 12 | sì | codice assegnato da Gestionale Alfa |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg4",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg4",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo codiceCliente è di tipo testo con lunghezza massima 12 ed è obbligatorio.",
+      "subject": "codiceCliente",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": "codice assegnato da Gestionale Alfa",
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "12"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e5",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-04 | partitaIvaCliente | testo | 16 | sì | senza prefisso del paese |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg5",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg5",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo partitaIvaCliente è di tipo testo con lunghezza massima 16 ed è obbligatorio.",
+      "subject": "partitaIvaCliente",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "16"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e6",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-04 | partitaIvaCliente | testo | 16 | sì | senza prefisso del paese |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg6",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg6",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo partitaIvaCliente non deve contenere il prefisso del paese.",
+      "subject": "partitaIvaCliente",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "senza prefisso del paese"
+        }
+      ],
+      "polarity": "Prohibited",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e7",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-05 | codiceDestinazione | testo | 8 | no | facoltativo, se vuoto vale la sede legale |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg7",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg7",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo codiceDestinazione è di tipo testo con lunghezza massima 8 ed è facoltativo.",
+      "subject": "codiceDestinazione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "8"
+        },
+        {
+          "type": "Optionality",
+          "text": "no"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e8",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-05 | codiceDestinazione | testo | 8 | no | facoltativo, se vuoto vale la sede legale |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg8",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg8",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Se il campo codiceDestinazione è vuoto, vale la sede legale.",
+      "subject": "codiceDestinazione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Condition",
+          "text": "se vuoto vale la sede legale"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e9",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-06 | dataConsegnaRichiesta | data | 10 | no | se assente si applica il calendario del magazzino |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg9",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg9",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo dataConsegnaRichiesta è di tipo data con lunghezza 10 ed è facoltativo.",
+      "subject": "dataConsegnaRichiesta",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo data"
+        },
+        {
+          "type": "Quantity",
+          "text": "10"
+        },
+        {
+          "type": "Optionality",
+          "text": "no"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e10",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-06 | dataConsegnaRichiesta | data | 10 | no | se assente si applica il calendario del magazzino |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg10",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg10",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Se il campo dataConsegnaRichiesta è assente, si applica il calendario del magazzino.",
+      "subject": "dataConsegnaRichiesta",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Condition",
+          "text": "se assente si applica il calendario del magazzino"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e11",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-07 | divisa | testo | 3 | sì | codice ISO 4217 |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg11",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg11",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo divisa è di tipo testo con lunghezza massima 3 ed è obbligatorio.",
+      "subject": "divisa",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "3"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e12",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-07 | divisa | testo | 3 | sì | codice ISO 4217 |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg12",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg12",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo divisa deve essere un codice ISO 4217.",
+      "subject": "divisa",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "codice ISO 4217"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e13",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-08 | condizioniPagamento | testo | 6 | no | codice delle condizioni concordate |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg13",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg13",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo condizioniPagamento è di tipo testo con lunghezza massima 6 ed è facoltativo.",
+      "subject": "condizioniPagamento",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "6"
+        },
+        {
+          "type": "Optionality",
+          "text": "no"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e14",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-08 | condizioniPagamento | testo | 6 | no | codice delle condizioni concordate |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg14",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg14",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo condizioniPagamento è il codice delle condizioni concordate.",
+      "subject": "condizioniPagamento",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "codice delle condizioni concordate"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e15",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-09 | noteOrdine | testo | 200 | no | testo libero senza vincoli di formato |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg15",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg15",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo noteOrdine è di tipo testo con lunghezza massima 200 ed è facoltativo.",
+      "subject": "noteOrdine",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "200"
+        },
+        {
+          "type": "Optionality",
+          "text": "no"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e16",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-09 | noteOrdine | testo | 200 | no | testo libero senza vincoli di formato |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg16",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg16",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo noteOrdine è testo libero senza vincoli di formato.",
+      "subject": "noteOrdine",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "testo libero senza vincoli di formato"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e17",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-10 | numeroRighe | numero | 3 | sì | non superiore a cinquecento |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg17",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg17",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo numeroRighe è di tipo numero con lunghezza 3 ed è obbligatorio.",
+      "subject": "numeroRighe",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo numero"
+        },
+        {
+          "type": "Quantity",
+          "text": "3"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e18",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ORD-10 | numeroRighe | numero | 3 | sì | non superiore a cinquecento |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg18",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c7:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg18",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo numeroRighe non deve essere superiore a cinquecento.",
+      "subject": "numeroRighe",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Maximum",
+          "text": "cinquecento"
+        }
+      ],
+      "polarity": "Prohibited",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e19",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-01 | numeroSpedizione | testo | 15 | sì | numero interno di Gestionale Alfa |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg19",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg19",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo numeroSpedizione è di tipo testo con lunghezza massima 15 ed è obbligatorio.",
+      "subject": "numeroSpedizione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": "numero interno di Gestionale Alfa",
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "15"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e20",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-02 | numeroOrdineCliente | testo | 20 | sì | ripetuto dall'ordine originale |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg20",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg20",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo numeroOrdineCliente è di tipo testo con lunghezza massima 20 ed è obbligatorio.",
+      "subject": "numeroOrdineCliente",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": "ripetuto dall'ordine originale",
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "20"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e21",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-03 | dataSpedizione | data | 10 | sì | data di chiusura della spedizione |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg21",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg21",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo dataSpedizione è di tipo data con lunghezza 10 ed è obbligatorio.",
+      "subject": "dataSpedizione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": "data di chiusura della spedizione",
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo data"
+        },
+        {
+          "type": "Quantity",
+          "text": "10"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e22",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-04 | codiceDestinazione | testo | 8 | sì | destinazione fisica della merce |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg22",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg22",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo codiceDestinazione è di tipo testo con lunghezza massima 8 ed è obbligatorio.",
+      "subject": "codiceDestinazione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": "destinazione fisica della merce",
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "8"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e23",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-05 | vettore | testo | 30 | no | ragione sociale del vettore |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg23",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg23",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo vettore è di tipo testo con lunghezza massima 30 ed è facoltativo.",
+      "subject": "vettore",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "30"
+        },
+        {
+          "type": "Optionality",
+          "text": "no"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e24",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-05 | vettore | testo | 30 | no | ragione sociale del vettore |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg24",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg24",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo vettore è la ragione sociale del vettore.",
+      "subject": "vettore",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "ragione sociale del vettore"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e25",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-06 | numeroColli | numero | 4 | sì | somma dei colli della spedizione |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg25",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg25",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo numeroColli è di tipo numero con lunghezza 4 ed è obbligatorio.",
+      "subject": "numeroColli",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo numero"
+        },
+        {
+          "type": "Quantity",
+          "text": "4"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e26",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-06 | numeroColli | numero | 4 | sì | somma dei colli della spedizione |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg26",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg26",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo numeroColli è la somma dei colli della spedizione.",
+      "subject": "numeroColli",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "somma dei colli della spedizione"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e27",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-07 | pesoLordoKg | decimale | 9 | sì | peso lordo complessivo in chilogrammi |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg27",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg27",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo pesoLordoKg è di tipo decimale con lunghezza 9 ed è obbligatorio.",
+      "subject": "pesoLordoKg",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo decimale"
+        },
+        {
+          "type": "Quantity",
+          "text": "9"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e28",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-07 | pesoLordoKg | decimale | 9 | sì | peso lordo complessivo in chilogrammi |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg28",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg28",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo pesoLordoKg è il peso lordo complessivo in chilogrammi.",
+      "subject": "pesoLordoKg",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "peso lordo complessivo in chilogrammi"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e29",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-08 | codiceSSCC | testo | 18 | sì | un codice per ogni collo |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg29",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg29",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo codiceSSCC è di tipo testo con lunghezza massima 18 ed è obbligatorio.",
+      "subject": "codiceSSCC",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "18"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e30",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-08 | codiceSSCC | testo | 18 | sì | un codice per ogni collo |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg30",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg30",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo codiceSSCC è un codice per ogni collo.",
+      "subject": "codiceSSCC",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "un codice per ogni collo"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e31",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-09 | tipoSpedizione | testo | 1 | sì | T totale oppure P parziale |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg31",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg31",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo tipoSpedizione è di tipo testo con lunghezza massima 1 ed è obbligatorio.",
+      "subject": "tipoSpedizione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "1"
+        },
+        {
+          "type": "Obligation",
+          "text": "sì"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e32",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-09 | tipoSpedizione | testo | 1 | sì | T totale oppure P parziale |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg32",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg32",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo tipoSpedizione può essere T totale oppure P parziale.",
+      "subject": "tipoSpedizione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "T totale oppure P parziale"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e33",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-10 | noteSpedizione | testo | 100 | no | testo libero per il cliente |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg33",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg33",
+          "part": 0
+        }
+      ],
+      "kind": "Requirement",
+      "kindRationale": null,
+      "statement": "Il campo noteSpedizione è di tipo testo con lunghezza massima 100 ed è facoltativo.",
+      "subject": "noteSpedizione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "tipo testo"
+        },
+        {
+          "type": "Maximum",
+          "text": "100"
+        },
+        {
+          "type": "Optionality",
+          "text": "no"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    },
+    {
+      "key": "e34",
+      "sources": [
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| DES-10 | noteSpedizione | testo | 100 | no | testo libero per il cliente |",
+          "occurrence": 1,
+          "role": "Primary",
+          "citationGroupKey": "cg34",
+          "part": 1
+        },
+        {
+          "kind": "DocumentPassage",
+          "rangeKey": "c8:1",
+          "quote": "| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |",
+          "occurrence": 1,
+          "role": "Context",
+          "citationGroupKey": "cg34",
+          "part": 0
+        }
+      ],
+      "kind": "Constraint",
+      "kindRationale": null,
+      "statement": "Il campo noteSpedizione è testo libero per il cliente.",
+      "subject": "noteSpedizione",
+      "action": null,
+      "object": null,
+      "scope": null,
+      "purpose": null,
+      "instrument": null,
+      "channel": null,
+      "recipient": null,
+      "qualifiers": [
+        {
+          "type": "Other",
+          "text": "testo libero per il cliente"
+        }
+      ],
+      "polarity": "Affirmed",
+      "certainty": "Declared",
+      "relations": []
+    }
+  ],
+  "noEvidenceReason": null
+}

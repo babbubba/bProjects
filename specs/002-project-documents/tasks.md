@@ -676,4 +676,4 @@ Task aggiunti **manualmente in coda** (T001–T177 invariati). Verifiche reali s
 | T179 | RH-051 | Prova integrata reale: **non completata**, bloccata nell'estrazione (output troncato) prima della v11 |
 
 - [x] T178 [US2] TEST — RH-050: `ReconcileV11RealProbeTests` (sonda `anyOf`/`enum`/`maxItems` e 10 batch reali, 0 retry). Dip.: T177. Dettaglio: RH-050.
-- [ ] T179 [US2] TEST — RH-051: `ReconcileV11RealFlowTests` (una run reale, gold fissato prima). **Non superata**: la preparazione del documento AF è fallita in estrazione (finish=length); gerarchia v11 e Gap non raggiunti. Dip.: T178. Dettaglio: RH-051.
+- [ ] T179 [US2] TEST — RH-051: `ReconcileV11RealFlowTests` (una run reale, gold fissato prima). **Non superata**, due esecuzioni: 1ª troncamento dell'estrazione (fattore 16); 2ª con fattore 24 e W=65536 `work_output_invalid` per fonti fuori ordine di `part` (34 violazioni). Gerarchia v11 e Gap non raggiunti; nessuna terza run senza decisione. Dip.: T178. Dettaglio: RH-051.

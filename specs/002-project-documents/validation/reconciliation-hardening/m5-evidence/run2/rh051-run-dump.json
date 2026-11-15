@@ -1,0 +1,161 @@
+{
+  "generativeCalls": 12,
+  "generativeBlocked": 0,
+  "generativeCap": 200,
+  "window": 65536,
+  "output": 8192,
+  "margin": 1024,
+  "runError": "InvalidCastException",
+  "runRow": [],
+  "inferenceCalls": [
+    {
+      "ms": 1527,
+      "phase": "Chat",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 4096,
+      "startedAt": "2026-11-15T09:08:16.491629+00:00",
+      "promptTokens": 660,
+      "completionTokens": 58
+    },
+    {
+      "ms": 10108,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:08:18.786479+00:00",
+      "promptTokens": 1943,
+      "completionTokens": 540
+    },
+    {
+      "ms": 1244,
+      "phase": "Chat",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 4096,
+      "startedAt": "2026-11-15T09:08:29.787109+00:00",
+      "promptTokens": 737,
+      "completionTokens": 49
+    },
+    {
+      "ms": 4893,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:08:31.628729+00:00",
+      "promptTokens": 2259,
+      "completionTokens": 257
+    },
+    {
+      "ms": 1226,
+      "phase": "Chat",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 4096,
+      "startedAt": "2026-11-15T09:08:37.420547+00:00",
+      "promptTokens": 811,
+      "completionTokens": 48
+    },
+    {
+      "ms": 5627,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:08:39.176229+00:00",
+      "promptTokens": 2326,
+      "completionTokens": 303
+    },
+    {
+      "ms": 157691,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:09:35.806186+00:00",
+      "promptTokens": 3671,
+      "completionTokens": 9361
+    },
+    {
+      "ms": 18445,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:12:14.934904+00:00",
+      "promptTokens": 2451,
+      "completionTokens": 1109
+    },
+    {
+      "ms": 111077,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:13:52.563422+00:00",
+      "promptTokens": 3689,
+      "completionTokens": 6501
+    },
+    {
+      "ms": 128891,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:15:44.883867+00:00",
+      "promptTokens": 3640,
+      "completionTokens": 7659
+    },
+    {
+      "ms": 19553,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:17:55.053314+00:00",
+      "promptTokens": 2413,
+      "completionTokens": 1153
+    },
+    {
+      "ms": 228606,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:19:03.984182+00:00",
+      "promptTokens": 2997,
+      "completionTokens": 13488
+    }
+  ],
+  "derivedBatches": [],
+  "workOutputs": [],
+  "ledger": [
+    {
+      "kind": "Requirement",
+      "origin": "Message",
+      "certainty": "Declared",
+      "statement": "Il Gestionale Alfa è il sistema di riferimento per le anagrafiche dei clienti."
+    },
+    {
+      "kind": "Gap",
+      "origin": "Message",
+      "certainty": "ToClarify",
+      "statement": "Chi gestisce gli scarti della DESADV?"
+    },
+    {
+      "kind": "Gap",
+      "origin": "Message",
+      "certainty": "ToClarify",
+      "statement": "Il PM chiede se la fattura debba essere inviata entro 24 o 48 ore."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Message",
+      "certainty": "Declared",
+      "statement": "Il go-live della prima fase è fissato a marzo."
+    }
+  ],
+  "analysisRevision": []
+}
