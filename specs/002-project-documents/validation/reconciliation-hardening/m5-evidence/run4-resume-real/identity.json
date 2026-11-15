@@ -1,0 +1,17 @@
+{
+  "scratchDatabase": "rh051_resume_real",
+  "testId": "rh051-run4-resume-real-20261115T235416",
+  "gitHead": "60b5815280012307bf6528598ddc58820c332408",
+  "worktreeStatus": [
+    "?? benchmarks/\r",
+    "?? docs/roadmap/slice-002-003-transition-HANDOFF.md\r",
+    "?? docs/roadmap/t040-harness-corrections-HANDOFF.md\r",
+    "?? docs/roadmap/t040-v8-prompt-v4-HANDOFF.md\r",
+    "?? docs/roadmap/t040-v9-schema-profile-HANDOFF.md\r",
+    "?? rh051-analisi.zip"
+  ],
+  "dotnet": "10.0.403",
+  "startedUtc": "2026-11-15T22:54:16.2233228Z",
+  "budgetExperiment": 200,
+  "branch": "feature/003-retrieval-evidence-search"
+}

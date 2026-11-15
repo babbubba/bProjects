@@ -1,0 +1,27 @@
+-- run
+Status | CallCount | AttemptCount | FencingToken | ErrorCode
+Running | 140 | 2 | 2 | 
+(1 row)
+-- batch per stadio (totali / con output Committed)
+Stage | batch | committed
+compare | 93 | 92
+cross | 1 | 1
+expand | 36 | 36
+extract | 9 | 9
+leaf | 8 | 8
+reduce | 2 | 2
+(6 rows)
+-- expand ordinale 30
+Ordinal | Stage | Status
+29 | expand | Committed
+30 | expand | Committed
+31 | compare | Committed
+(3 rows)
+-- inferenze per attempt
+Attempt | State | count
+1 | Completed | 46
+(1 row)
+-- estrazione
+count
+5
+(1 row)

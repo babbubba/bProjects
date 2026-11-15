@@ -1,0 +1,1070 @@
+{
+  "test": "rh051-run4-resume-real",
+  "generatedUtc": "2026-11-15T23:18:51.6270188Z",
+  "durableRoot": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real",
+  "recovery": "pg_restore dei dump in un database nuovo; i ledger JSONL sono autosufficienti per la diagnosi",
+  "artifacts": [
+    {
+      "name": "batch-ledger.jsonl",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\batch-ledger.jsonl",
+      "bytes": 61975,
+      "sha256": "B05A91CD427EB19014CF2D4CEAF900B3840EAD95BC03AFB1132FF59560551E40",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "checkpoint-recovery.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\checkpoint-recovery.md",
+      "bytes": 3110,
+      "sha256": "AF9E8D4716A948723D349C16AF019B3716B7D0444F1B141E17BDFFC69B47ACF9",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "execution-summary.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\execution-summary.md",
+      "bytes": 3886,
+      "sha256": "9DA8509E0F85A1F2A9359A96C315FED45AF648108DF49267DEDA6596F31143B5",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "gold-assessment.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\gold-assessment.md",
+      "bytes": 1404,
+      "sha256": "0C2F562DAA9D610B17745633BA5A97120CD48E79B62BD7C5BDA30E8019E40668",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "identity.json",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\identity.json",
+      "bytes": 638,
+      "sha256": "8585C8F8BDA0848E417C5D97D71667309B5B5A0E18BDFE3F40AA854308245ABB",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "inference-ledger.jsonl",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\inference-ledger.jsonl",
+      "bytes": 38419,
+      "sha256": "3AB91811A86E2BAFA2AEAB1B3A8592819ECEFADCA91BD21FC74A2E8EEA0F8062",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "lessons-learned.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\lessons-learned.md",
+      "bytes": 2539,
+      "sha256": "0C59A5B7CC54A82AC864C3A7E8E30EBF12186C65A251255B9EBCEA9490CCF93A",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "manifest.json",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\manifest.json",
+      "bytes": 403,
+      "sha256": "78FDE01B3B3923B9F70D7E7C6419B83DA6A159D8D6000CA4F9D88992414659B0",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "performance.json",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\performance.json",
+      "bytes": 3568,
+      "sha256": "8B6745139016F3E2A2956F35F6D681AD8CE8F7B98AF17F22601C43C01E11C3D8",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "performance.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\performance.md",
+      "bytes": 2205,
+      "sha256": "B493DCA14E88BA9CEA04C8A7F00F1F37789C40EA07DE430E3BD2F55580222FC8",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "preflight.txt",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\preflight.txt",
+      "bytes": 2999,
+      "sha256": "5F48F37D3D5FFCEBEA530F284F859A935CD853494FFA100BCB48111F8CDA4D25",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "probe-db-state-at-stop.txt",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\probe-db-state-at-stop.txt",
+      "bytes": 543,
+      "sha256": "14015BFDD3270D9B2F93B3D679CACEC1C170E4842871B97F26E605174C626818",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "README.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\README.md",
+      "bytes": 3862,
+      "sha256": "5AF5F21E317D1A41753BE7E577EDA142747324A698B2262B56D26D79484C1FE5",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "reopen-operation.sql",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\reopen-operation.sql",
+      "bytes": 413,
+      "sha256": "C8F01C5FEC9C6C6EA18A4ED6E696D39EB9D38A4A11C31DF52D7FCC8ABD6127BA",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "run-report.json",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\run-report.json",
+      "bytes": 766,
+      "sha256": "57D0AAE4FCDDED0AF1FAFFAC0FD461F11CEFE7C671AD99E8B6CAC70CEF55354E",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "run-row.json",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\run-row.json",
+      "bytes": 1592,
+      "sha256": "D9B6B4EA4DDA04DDE46BAB790C30F65A7440634DB2917E16399AB459DC2C0A25",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "run-script.log",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\run-script.log",
+      "bytes": 433,
+      "sha256": "4ACA709B2F4B3A74EDA9C4535804978647E42DA1B40FB2898B1F5F89C1923E82",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "timeline.jsonl",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\timeline.jsonl",
+      "bytes": 138218,
+      "sha256": "FB814205F1A6D0088E128AAA6078A5030812F313D3F942E07072E5D438583E8C",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "validation-report.md",
+      "location": "repository (versionato)",
+      "path": "C:\\source\\repos\\babbubba\\bProjects\\specs\\002-project-documents\\validation\\reconciliation-hardening\\m5-evidence\\run4-resume-real\\validation-report.md",
+      "bytes": 2105,
+      "sha256": "17037E0FB51E26A3ED77152BC9D8EDC1C549CB698DF05782D33572B9AD8B0E7D",
+      "provenance": "prodotto dalla prosecuzione reale o dalla preparazione",
+      "note": "dati strutturali senza contenuti dei documenti"
+    },
+    {
+      "name": "work-outputs.jsonl",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\final\\work-outputs.jsonl",
+      "bytes": 1374614,
+      "sha256": "71CE8D45C9378E855B7605FEEB851F1B793FE1E5B009D91ED4AF5338A230B63B",
+      "provenance": "prosecuzione reale",
+      "note": "contiene payload/risposte del modello o configurazione del runtime: non versionato"
+    },
+    {
+      "name": "inference-calls-db.jsonl",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\final\\inference-calls-db.jsonl",
+      "bytes": 87886,
+      "sha256": "07E5D90D2C30333ED1048792A1672699B8682DBA7D66BEBF6E5F9D71D6133E9B",
+      "provenance": "prosecuzione reale",
+      "note": "contiene payload/risposte del modello o configurazione del runtime: non versionato"
+    },
+    {
+      "name": "app-log.txt",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\app-log.txt",
+      "bytes": 777,
+      "sha256": "7678CEE0538DCC9DFFF71D979EA1F5E90EE85D8D9DD453B8E1F78643961E3BA4",
+      "provenance": "prosecuzione reale",
+      "note": "contiene payload/risposte del modello o configurazione del runtime: non versionato"
+    },
+    {
+      "name": "dgx-props-start.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\dgx-props-start.json",
+      "bytes": 306,
+      "sha256": "FD33D88FFB2EB23D5CEAB7C26428B8C15033FE05BB2ED4A2820823EB4E92DD70",
+      "provenance": "prosecuzione reale",
+      "note": "contiene payload/risposte del modello o configurazione del runtime: non versionato"
+    },
+    {
+      "name": "dgx-props-end.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\dgx-props-end.json",
+      "bytes": 306,
+      "sha256": "FD33D88FFB2EB23D5CEAB7C26428B8C15033FE05BB2ED4A2820823EB4E92DD70",
+      "provenance": "prosecuzione reale",
+      "note": "contiene payload/risposte del modello o configurazione del runtime: non versionato"
+    },
+    {
+      "name": "dgx-props.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\preflight\\dgx-props.json",
+      "bytes": 306,
+      "sha256": "FD33D88FFB2EB23D5CEAB7C26428B8C15033FE05BB2ED4A2820823EB4E92DD70",
+      "provenance": "prosecuzione reale",
+      "note": "contiene payload/risposte del modello o configurazione del runtime: non versionato"
+    },
+    {
+      "name": "rh051-run4-resume-real-POST-20261116T001046.dump",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\final\\rh051-run4-resume-real-POST-20261116T001046.dump",
+      "bytes": 910983,
+      "sha256": "0BD120245D1B22A071A1965E82C1F508D1C548C81BE934F2282E8513EB873E4C",
+      "provenance": "dump PostgreSQL (pg_dump -Fc)",
+      "note": "ripristino: createdb + pg_restore --no-owner nel container bprojects-test-pg"
+    },
+    {
+      "name": "rh051-finale-20261115T190111.dump",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\preflight\\rh051-finale-20261115T190111.dump",
+      "bytes": 689925,
+      "sha256": "524623E70BBEC58B67E91A5C9E69FD2466838042E8AEF27AD1188CFCA17B9CDD",
+      "provenance": "dump PostgreSQL (pg_dump -Fc)",
+      "note": "ripristino: createdb + pg_restore --no-owner nel container bprojects-test-pg"
+    },
+    {
+      "name": "rh051-pre-analizza-20261115T184412.dump",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\preflight\\rh051-pre-analizza-20261115T184412.dump",
+      "bytes": 472295,
+      "sha256": "FD8E025FC7F3D7B7C9F666983F982D3DD6941E713354C3A80970A387BD379174",
+      "provenance": "dump PostgreSQL (pg_dump -Fc)",
+      "note": "ripristino: createdb + pg_restore --no-owner nel container bprojects-test-pg"
+    },
+    {
+      "name": "rh051-run4-resume-real-PRE-20261115T234751.dump",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\preflight\\rh051-run4-resume-real-PRE-20261115T234751.dump",
+      "bytes": 690167,
+      "sha256": "AC41CCA9CDA130EEDB7A78B21987D65A0E3C8468824FF854DE96B51AF3ACE208",
+      "provenance": "dump PostgreSQL (pg_dump -Fc)",
+      "note": "ripristino: createdb + pg_restore --no-owner nel container bprojects-test-pg"
+    },
+    {
+      "name": "probe-scratch-after.dump",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\probe\\probe-scratch-after.dump",
+      "bytes": 950045,
+      "sha256": "74F6DA51C6122B3EF03F500C73CAE1D7E1BAF4507392119EB247DEBD13A4779A",
+      "provenance": "dump PostgreSQL (pg_dump -Fc)",
+      "note": "ripristino: createdb + pg_restore --no-owner nel container bprojects-test-pg"
+    },
+    {
+      "name": "0001-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0001-compare-request.json",
+      "bytes": 12501,
+      "sha256": "CFC4D1B8106256AE9566CC6A45B53B07460A51701388C7B6D4CE41107A2FF67F",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0001-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0001-compare-response.json",
+      "bytes": 1420,
+      "sha256": "F333A507FA2B105042E975F2D7730278090C16ADE3DC34CE1E7D1174C0CC4498",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0002-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0002-expand-request.json",
+      "bytes": 27076,
+      "sha256": "E8A49D35A150069EA928603B2EE3C1C2EDB5D7CC5E2198DF43034A06DBDE369F",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0002-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0002-expand-response.json",
+      "bytes": 6843,
+      "sha256": "E3B31EE6972F1EF69DD3FD7B52395C812E5D781E609129CEA1ABF99067789A2A",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0003-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0003-expand-request.json",
+      "bytes": 26732,
+      "sha256": "F193D928F1356A9979B15E817CC43DEDB3417E54C43DFE06D907A44C298710ED",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0003-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0003-expand-response.json",
+      "bytes": 6307,
+      "sha256": "2F2DC928AB0D7419A7DFC64D82DE08B84499DD1148ECC5F4AA4F4C4929F0E66A",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0004-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0004-expand-request.json",
+      "bytes": 26296,
+      "sha256": "5E5066AC8F1652D936292C82E2674646E5C92D9285F8354A69213AEFAE8B8212",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0004-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0004-expand-response.json",
+      "bytes": 7283,
+      "sha256": "0F7A12EB2F5A2CC1AF78687D6EFC2B4BD20A990659743060E3FCA23FFFE7ECE6",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0005-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0005-expand-request.json",
+      "bytes": 25952,
+      "sha256": "0770E7AB27E7A5CA05A0F26F68215AC86A8E063E6234B0D0CDC6A18039F7E33F",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0005-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0005-expand-response.json",
+      "bytes": 7448,
+      "sha256": "5FAF9109FD8853A503C3D85A481AEAF1EE5FC58326299AC1E360C0BF1D65AE53",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0006-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0006-expand-request.json",
+      "bytes": 26741,
+      "sha256": "2B8BA9676A4413C5AABF95572103A284EA0BEBE4D71B227A5A479BEF00678B9A",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0006-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0006-expand-response.json",
+      "bytes": 6869,
+      "sha256": "88A945296D216FEDFAB5B17A5350526555E0F0AC165FA928E3AB97FCFB10744B",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0007-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0007-expand-request.json",
+      "bytes": 26676,
+      "sha256": "408D37E84D88EF115EB0044229B3A986FB402BCF68A14F52F25DDD4883C3002F",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0007-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0007-expand-response.json",
+      "bytes": 6674,
+      "sha256": "E745F2F0ECC525D87D7C153F96DF2BE0A48A3694D3469BB9F7C09310A4A52B39",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0008-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0008-expand-request.json",
+      "bytes": 25961,
+      "sha256": "E820B431BD3E6471A1C72BEFA98B056D91285B77714E5CD1DF7F399B3E573DCC",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0008-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0008-expand-response.json",
+      "bytes": 7165,
+      "sha256": "DE8995DEA95649A4F17F6D9188D1B99D863B7D8AB42D00DEAC3E460C3D1C07B7",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0009-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0009-expand-request.json",
+      "bytes": 25896,
+      "sha256": "008D51A57FC06169B4D65E0C16B6A07706F4C72404BF1F21041D716A93FCD915",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0009-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0009-expand-response.json",
+      "bytes": 6847,
+      "sha256": "EFD652A54BFB054B8446455BE638430A23AFD9E73072EE4EC296CF9AD967E827",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0010-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0010-compare-request.json",
+      "bytes": 12309,
+      "sha256": "F29141AE13626B334E5F360FA82BE88846BD90E206E8F35DE991CCD004DC6670",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0010-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0010-compare-response.json",
+      "bytes": 1041,
+      "sha256": "79B819AD1609CE921177D68A9332EE28B1C862572175101C6F192CF942A205DC",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0011-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0011-compare-request.json",
+      "bytes": 12453,
+      "sha256": "0CEDEDCEA3743E4674028AE56A897DA77F3CD085070728101D79B87593FC3236",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0011-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0011-compare-response.json",
+      "bytes": 1233,
+      "sha256": "1D8F20DAEF56EE173E3B0DAD761AC76F678F51EB71DE51E5B67F19B59E8DCF5C",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0012-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0012-compare-request.json",
+      "bytes": 12415,
+      "sha256": "B2B13E8E9ECB2DFA4ADB7BF24E989E473EC5CC1F93C147D6A85A2970576FCEC2",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0012-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0012-compare-response.json",
+      "bytes": 1413,
+      "sha256": "1C7A9E4C7757EBE56674799C9C3514FF4A18171C48F20DDA6363EE84851D551F",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0013-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0013-expand-request.json",
+      "bytes": 26572,
+      "sha256": "C922903402132CCF9A54A4A8D24C2413E57E916829F29184C153C7AE24D3C6DC",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0013-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0013-expand-response.json",
+      "bytes": 6584,
+      "sha256": "1606E7EE64289171D34747656E7E11B2863D4A09711A3B682FB7793DC0DA4B69",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0014-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0014-expand-request.json",
+      "bytes": 26350,
+      "sha256": "7D04B326FB4385E3C1CA208496A3ACE7464A59AD5193CD5379B08BEB340C8242",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0014-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0014-expand-response.json",
+      "bytes": 5919,
+      "sha256": "1EA29802021F587ECF4B8C717FB0A218F8E2F69ECDA33F37484650389BC585C4",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0015-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0015-expand-request.json",
+      "bytes": 25934,
+      "sha256": "8B5C45E9C6D18EE22F5512AC8882AAF62DF77166C6D9E6E02C0FEFDF3F19A05E",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0015-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0015-expand-response.json",
+      "bytes": 6274,
+      "sha256": "A97295DF315D9DC130D37B31DFB98434311A9B8CFD9049C578874FD6415C464A",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0016-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0016-expand-request.json",
+      "bytes": 25545,
+      "sha256": "566591AEA6AC844F6C112713D366100A86E7FC66875D08E358CADF6B954E9941",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0016-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0016-expand-response.json",
+      "bytes": 7020,
+      "sha256": "37B4A96F1D08603115E959F7FE7F31565C33F8ED9788BAD83400A3F18707A9D5",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0017-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0017-compare-request.json",
+      "bytes": 12598,
+      "sha256": "DBCFF726BEEAEFCD92969DA137B49974AF431EEBDD8A15035D02C45AB0DE9C06",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0017-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0017-compare-response.json",
+      "bytes": 1212,
+      "sha256": "AD12E1D3EF22285CD8CD5B4A3341419C635C0C3DA375BB5081AF2D46E581170E",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0018-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0018-compare-request.json",
+      "bytes": 12451,
+      "sha256": "28E12EC39549236CB6F5369106D99D5AD5405CEBF55367846D62981AD5B53C3D",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0018-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0018-compare-response.json",
+      "bytes": 1416,
+      "sha256": "1385679F62B2882E0CE2A3319C4F20D9B1F4A421FF0D1044220E3526CB09F108",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0019-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0019-compare-request.json",
+      "bytes": 12480,
+      "sha256": "0FC2373B084C3AED46A98C5FAC2AF0F61AADA49DF2A44D4F9C43C93BD5C39C56",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0019-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0019-compare-response.json",
+      "bytes": 880,
+      "sha256": "D76B8B352F528FFBF489875CAA1296791EF9FFBF5117C00534F60ACAD8D56DCF",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0020-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0020-compare-request.json",
+      "bytes": 12607,
+      "sha256": "4CF5F0E4C557ABCFFC6754D6592E443DB667084D46FB653612834372D5C9EA39",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0020-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0020-compare-response.json",
+      "bytes": 1238,
+      "sha256": "D567BF934265A872C5598CAF813DA1959086884254AF95804E822CAD73DFEE5E",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0021-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0021-compare-request.json",
+      "bytes": 12459,
+      "sha256": "0C33890D4CFAAA7AC1EF80F298C36C9F8E01AB00F7F50BBCACC01C66B62841F8",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0021-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0021-compare-response.json",
+      "bytes": 1449,
+      "sha256": "6F94C53822944E2E6A60F2C4C297F0A1B349D9BB74AC208939D1C572EFA7FAC7",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0022-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0022-compare-request.json",
+      "bytes": 12469,
+      "sha256": "CA3F30287CC420B8EAA8EAB6C27782CCF4B237E99FB62505C88C7A6313E022BC",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0022-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0022-compare-response.json",
+      "bytes": 1487,
+      "sha256": "0FEDF3A2CD48D34158C1E29E0EE709FD3EDC79BE333C74AC8AAF440CE22705CE",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0023-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0023-compare-request.json",
+      "bytes": 12568,
+      "sha256": "E89F6AE592C65B7A5C14DD297527FB7E9BB58043D1AA6C064BB7BC95F87D022C",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0023-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0023-compare-response.json",
+      "bytes": 1103,
+      "sha256": "98D883D26B2D05835625F33F223A25EA36E156CBC3767BE1EAF2F35FAC94A9FC",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0024-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0024-compare-request.json",
+      "bytes": 12565,
+      "sha256": "6478A514C09CAA2C612DBC7F32A98673D8BA2602363788410ECB69E751F3CB75",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0024-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0024-compare-response.json",
+      "bytes": 880,
+      "sha256": "0B9F1F9A05ECF7048BE00788F7D7FC6980A41717EAC9AC883F0486A848AC9893",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0025-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0025-compare-request.json",
+      "bytes": 12423,
+      "sha256": "14F179FFF961F87C76573AAF873AE8FA615354621F87F6F5FFBD74675BBB5A9C",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0025-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0025-compare-response.json",
+      "bytes": 1354,
+      "sha256": "43B0F981D80F866B8F59E59107622497B4114F2C02BEFC85D3A813E7D50C3E68",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0026-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0026-compare-request.json",
+      "bytes": 12576,
+      "sha256": "12BD20C47A2BD309066712C9A31BA3BEF432E4AFACB63B3BC39BD0DB50783E40",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0026-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0026-compare-response.json",
+      "bytes": 1145,
+      "sha256": "9DC275AA8637E773CE0FE619F6AA030FDF4457DA5293B19EC048CBD11CA2A4CF",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0027-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0027-compare-request.json",
+      "bytes": 12509,
+      "sha256": "75175D1C035512B0F355D80A7D1E76D1BC314FBF4182748CB353CC394910C556",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0027-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0027-compare-response.json",
+      "bytes": 1384,
+      "sha256": "EE3EC83D721726F529AFF93CACEFCE6816BCC7994C1AEF80318A0E8347787AD3",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0028-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0028-compare-request.json",
+      "bytes": 12688,
+      "sha256": "949FDB89F97F93ACA5CC4FC533E845818675C89E6CA673358FE1F9D854C57E63",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0028-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0028-compare-response.json",
+      "bytes": 1130,
+      "sha256": "D5C7D92E5785771D34D4BA157D6DBFE0381D02DE1159ADD21F02BC846CD41FA9",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0029-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0029-compare-request.json",
+      "bytes": 12420,
+      "sha256": "8C26258990EC2838DE037DE32E5B7E5DB0A4AC06CEBD31F2E02EBE56E52B595B",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0029-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0029-compare-response.json",
+      "bytes": 1406,
+      "sha256": "661B013301FD8BF3E32928DBF1E9EA963BD2915F2790B7D86EF1F3ABE3A3E717",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0030-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0030-compare-request.json",
+      "bytes": 12578,
+      "sha256": "5930A8000A218DEBFAC54B40EF9B0088E96DE563426FD94085FC9E37C52FEA7A",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0030-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0030-compare-response.json",
+      "bytes": 1089,
+      "sha256": "E1B430284354ACA68B10E8F1AF83ADA0B8CD696A2C5610D976402F37A3B9097D",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0031-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0031-compare-request.json",
+      "bytes": 12630,
+      "sha256": "F113EE2834952C09AF3B5618648100A40568CFC25665669ECDAC9A365B41427D",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0031-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0031-compare-response.json",
+      "bytes": 1208,
+      "sha256": "B4941C048C8CD744066FFFAFDBCDDE8FBD80C011602D57B81B8AE10D952EC7A8",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0032-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0032-compare-request.json",
+      "bytes": 12450,
+      "sha256": "FBA64E56157D809D457FD7871D08CFB64582EE778EF1A87D84D260583F8E976E",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0032-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0032-compare-response.json",
+      "bytes": 1416,
+      "sha256": "3F548CB934D1A04F0CFC274B11AC80792CDA5235EBDBACC35E395782FA95441B",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0033-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0033-compare-request.json",
+      "bytes": 12603,
+      "sha256": "341E6CFA0857394B26DBF4EAF26BF258FD400449B103A85B260FFA964B69AE89",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0033-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0033-compare-response.json",
+      "bytes": 1440,
+      "sha256": "79F12E5EF9E230285E25FA6E884368A537A15F6975439D115481EBC96A5F7A8F",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0034-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0034-compare-request.json",
+      "bytes": 12631,
+      "sha256": "D872B719A2252FF5232F335780B75F2CEA0656DC96E72F77F13F3EBE8A3F67C4",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0034-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0034-compare-response.json",
+      "bytes": 1193,
+      "sha256": "1A3F0AB5E28E27662B4E73220D88FBF378B60DC8867A9D6AE0EB90C73A779320",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0035-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0035-compare-request.json",
+      "bytes": 12540,
+      "sha256": "237A489F8C81A62DEE0DC18CB4204948C383500AD422A4BD5477FF6276BFDBB2",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0035-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0035-compare-response.json",
+      "bytes": 1146,
+      "sha256": "EE351EAA7A7977AA5CE5AFC6321197B0278DFF9A00A616469E5D04027069E3BB",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0036-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0036-compare-request.json",
+      "bytes": 12617,
+      "sha256": "6BBFEF3123827ADF69D3EE72A0AE59F79E7D08310C601817E95CBB830854655C",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0036-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0036-compare-response.json",
+      "bytes": 1153,
+      "sha256": "533198BF3E1E025CD8F82D9EC4B9B1433C5B83487AA0BF735372BB896442C14A",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0037-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0037-compare-request.json",
+      "bytes": 12407,
+      "sha256": "12AE7457EDC644682EAC65E713D46F87BBEB0C8C7B043A8383966687819D5CD6",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0037-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0037-compare-response.json",
+      "bytes": 1188,
+      "sha256": "8FAA505522DDC7F6DAC8C602CCDEA1A9F3EA64C6AA5D0019E7761E4D36EB98B9",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0038-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0038-compare-request.json",
+      "bytes": 12422,
+      "sha256": "88B2DB734D77A8C15BA66AD638EF432B31418A170689D45AD4B9D62CAD245FD0",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0038-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0038-compare-response.json",
+      "bytes": 1239,
+      "sha256": "253D6296207EC5F0F24336A4F1D49CA243C2CA4818395BB5119A07BE50244D34",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0039-compare-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0039-compare-request.json",
+      "bytes": 12460,
+      "sha256": "F94353C2A34D6995910B0505B6BE9B7B8034BB697248DBA3FFFAA0B4AD3D89B6",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0039-compare-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0039-compare-response.json",
+      "bytes": 1164,
+      "sha256": "3FAF78F4372723415900F398005BA6439594CC7AD087AD48E6C1665E1828D020",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0040-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0040-expand-request.json",
+      "bytes": 26768,
+      "sha256": "D5D642AE1C8D724C080D203093336C6347DB1663ABA7A08D0E19D95F3709CAE0",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0040-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0040-expand-response.json",
+      "bytes": 7505,
+      "sha256": "5605E36CC48760A6343C929AACCCBF231D4EB4418324609D4C0DB3A910618139",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0041-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0041-expand-request.json",
+      "bytes": 26424,
+      "sha256": "6384A8F87F58B790ABCBD575D4B8FD33CA95CB513CD8118C36F3E421A60D460D",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0041-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0041-expand-response.json",
+      "bytes": 6672,
+      "sha256": "5918DE2473F64573C4235FC0C844602D17FDC0D182214D128CA94D99971E690B",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0042-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0042-expand-request.json",
+      "bytes": 26786,
+      "sha256": "2D5C24F29239E96DDE28DA5EDF8A359479BE267994C5008DE89EE88C3E4D9CC5",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0042-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0042-expand-response.json",
+      "bytes": 7468,
+      "sha256": "FEBEDB1E71832FF655BAF1A65D7EEDDD1D5512045D81BA2F7D8D784AF674DBA9",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0043-expand-request.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0043-expand-request.json",
+      "bytes": 26530,
+      "sha256": "524C8F139508EF5B2ECEC66A1F9A33546150F6AC52EA6C354CF0333C37168DB9",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "0043-expand-response.json",
+      "location": "archivio durevole fuori da Git",
+      "path": "C:\\Users\\fcavallari\\bprojects-rh051-evidence\\run4-resume-real\\run\\raw\\0043-expand-response.json",
+      "bytes": 6805,
+      "sha256": "A85051B7F801F42666285B634588B5EE81D03994B0249220A452651A28742660",
+      "provenance": "richiesta/risposta grezza di una chiamata reale (cartella run\\raw)",
+      "note": "contiene testo di documenti e risposte del modello"
+    },
+    {
+      "name": "rh051-finale-20261115T190111.dump",
+      "location": "originale della run 4 (TEMP, non modificato)",
+      "path": "C:\\Users\\fcavallari\\AppData\\Local\\Temp\\bprojects-rh051-backup\\rh051-finale-20261115T190111.dump",
+      "bytes": 689925,
+      "sha256": "524623E70BBEC58B67E91A5C9E69FD2466838042E8AEF27AD1188CFCA17B9CDD",
+      "provenance": "dump della run 4",
+      "note": "copia durevole in preflight\\"
+    },
+    {
+      "name": "rh051-pre-analizza-20261115T184412.dump",
+      "location": "originale della run 4 (TEMP, non modificato)",
+      "path": "C:\\Users\\fcavallari\\AppData\\Local\\Temp\\bprojects-rh051-backup\\rh051-pre-analizza-20261115T184412.dump",
+      "bytes": 472295,
+      "sha256": "FD8E025FC7F3D7B7C9F666983F982D3DD6941E713354C3A80970A387BD379174",
+      "provenance": "dump della run 4",
+      "note": "copia durevole in preflight\\"
+    }
+  ]
+}

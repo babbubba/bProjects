@@ -1,0 +1,73 @@
+PREFLIGHT 2026-11-15T23:47:42.8107292+01:00
+dump originale finale: rh051-finale-20261115T190111.dump 689925 byte SHA-256=524623E70BBEC58B67E91A5C9E69FD2466838042E8AEF27AD1188CFCA17B9CDD
+dump originale pre-analizza: rh051-pre-analizza-20261115T184412.dump 472295 byte SHA-256=FD8E025FC7F3D7B7C9F666983F982D3DD6941E713354C3A80970A387BD379174
+copia durevole finale SHA-256=524623E70BBEC58B67E91A5C9E69FD2466838042E8AEF27AD1188CFCA17B9CDD
+ripristinato in rh051_resume_real; hash originale dopo: 524623E70BBEC58B67E91A5C9E69FD2466838042E8AEF27AD1188CFCA17B9CDD
+== controlli SQL sulla copia destinata all'esecuzione reale
+-- run
+Status | ErrorCode | WorkflowDefinitionVersion | AttemptCount | MaxAttempts | CallCount | FencingToken | lease_null | LeaseUntil | RetryOfId | DeadlineAt | EffectiveDeadlineAt | HardDeadlineAt | ClassificationStatus
+Failed | work_output_invalid | project-analysis-documents-v11 | 1 | 3 | 31 | 1 | t |  |  | 2026-11-15 19:44:13.91+00 | 2026-11-15 19:44:13.91+00 | 2026-11-15 19:44:13.91+00 | Classified
+(1 row)
+-- limiti congelati
+max_calls_frozen
+512
+(1 row)
+-- telemetria delle inferenze (consumo reale persistito)
+Phase | State | Attempt | count
+Analysis | Completed | 1 | 31
+Chat | Completed | 1 | 3
+Extraction | Completed | 1 | 12
+(3 rows)
+chiamate_reali_totali
+46
+(1 row)
+-- manifesto del run
+-- batch e output per stadio (manifest_ok = ManifestHash
+ERROR:  column reference "PolicyHash" is ambiguous
+LINE 1: ...onfigHash",16) cfg,left("SourceHash",16) src,left("PolicyHas...
+                                                             ^
+unterminated quoted string
+Stage | batch | committed | manifest_ok | con_storage_key
+compare | 12 | 12 | 12 | 0
+cross | 1 | 1 | 1 | 0
+expand | 8 | 7 | 7 | 0
+leaf | 8 | 8 | 8 | 0
+reduce | 2 | 2 | 2 | 0
+(5 rows)
+-- batch senza output committato
+Ordinal | Stage | left
+30 | expand | bf787941c8fa
+(1 row)
+-- artefatti esterni (StorageKey): quanti e con payload inline
+t | con_key | senza_payload_inline
+WorkOutputs | 0 | 0
+(1 row)
+t | con_key
+ParsedArtifacts | 2
+(1 row)
+t | con_key
+DocumentVersions | 2
+(1 row)
+-- contaminazione sintetica: nessun tentativo oltre il primo
+inferenze_attempt_gt1
+0
+(1 row)
+-- estrazione: job e output
+extraction_jobs
+6
+(1 row)
+extraction_outputs
+9
+(1 row)
+== runtime del DGX (sola lettura, nessuna inferenza)
+modelli caricati: Qwen3.6-35B-Smart[loaded]
+props salvato (build_info: b10703-0b5be7e4a)
+== LookupAsync di produzione (sola lettura)
+totale: 1
+non riuscito: 0
+operazione completata: 1
+ignorato: 0
+backup pre-ripresa: rh051-run4-resume-real-PRE-20261115T234751.dump 690167 byte SHA-256=AC41CCA9CDA130EEDB7A78B21987D65A0E3C8468824FF854DE96B51AF3ACE208
+END 2026-11-15T23:47:52.3977349+01:00
+== manifesto del run (riesecuzione della query)
+DefinitionVersion | AlgorithmVersion | h | cfg | src | pol project-analysis-documents-v11 | gap-stage-1 | f43d13dae5ef3bf4 | 7d616f1695887c2b | ea3ba048ad267e79 | ea09e0a3eeae78e7 (1 row)

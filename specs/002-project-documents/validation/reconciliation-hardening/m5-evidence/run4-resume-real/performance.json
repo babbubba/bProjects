@@ -1,0 +1,167 @@
+{
+  "calls": 43,
+  "byStage": [
+    {
+      "stage": "compare",
+      "calls": 27,
+      "promptTokens": 58641.0,
+      "completionTokens": 4336.0,
+      "httpMsSum": 78929.0,
+      "httpMsAvg": 2923.0,
+      "httpMsMax": 4053.0,
+      "finish": "stop=27"
+    },
+    {
+      "stage": "expand",
+      "calls": 16,
+      "promptTokens": 106167.0,
+      "completionTokens": 29137.0,
+      "httpMsSum": 512923.0,
+      "httpMsAvg": 32058.0,
+      "httpMsMax": 35375.0,
+      "finish": "stop=16"
+    }
+  ],
+  "totals": {
+    "promptTokens": 164808.0,
+    "completionTokens": 33473.0,
+    "httpMsSum": 591852.0,
+    "cachedTokens": 75726.0,
+    "maxRequestMaxTokens": null,
+    "models": "Qwen3.6-35B-Smart"
+  },
+  "timeline": {
+    "firstEventUtc": "2026-11-15T22:54:19.9891047Z",
+    "runningUtc": "2026-11-15T22:54:22.6661894Z",
+    "firstCallStartUtc": "2026-11-15T22:58:41.8150954Z",
+    "endedUtc": "2026-11-15T23:10:45.1122798Z",
+    "lastEventUtc": "2026-11-15T23:10:45.1432367Z",
+    "totalSeconds": 985.1,
+    "claimToFirstCallSeconds": 259.1,
+    "firstCallToEndSeconds": 723.3
+  },
+  "spans": [
+    {
+      "name": "formal.total",
+      "count": 1,
+      "totalMs": 982941.0,
+      "avgMs": 982941.36,
+      "maxMs": 982941.0
+    },
+    {
+      "name": "formal.execute",
+      "count": 1,
+      "totalMs": 982664.0,
+      "avgMs": 982663.82,
+      "maxMs": 982664.0
+    },
+    {
+      "name": "send.model",
+      "count": 43,
+      "totalMs": 614471.0,
+      "avgMs": 14290.02,
+      "maxMs": 35938.0
+    },
+    {
+      "name": "port.persist",
+      "count": 44,
+      "totalMs": 296577.0,
+      "avgMs": 6740.38,
+      "maxMs": 257073.0
+    },
+    {
+      "name": "port.lookup",
+      "count": 86,
+      "totalMs": 24351.0,
+      "avgMs": 283.15,
+      "maxMs": 540.0
+    },
+    {
+      "name": "port.prepare",
+      "count": 43,
+      "totalMs": 23434.0,
+      "avgMs": 544.98,
+      "maxMs": 914.0
+    },
+    {
+      "name": "checkpoint.create",
+      "count": 215,
+      "totalMs": 2482.0,
+      "avgMs": 11.54,
+      "maxMs": 25.0
+    },
+    {
+      "name": "dispatch.idle",
+      "count": 1,
+      "totalMs": 571.0,
+      "avgMs": 571.06,
+      "maxMs": 571.0
+    },
+    {
+      "name": "port.reserveCall",
+      "count": 43,
+      "totalMs": 428.0,
+      "avgMs": 9.95,
+      "maxMs": 19.0
+    },
+    {
+      "name": "dispatch.classify",
+      "count": 2,
+      "totalMs": 243.0,
+      "avgMs": 121.27,
+      "maxMs": 235.0
+    },
+    {
+      "name": "port.callTimeout",
+      "count": 43,
+      "totalMs": 94.0,
+      "avgMs": 2.19,
+      "maxMs": 5.0
+    },
+    {
+      "name": "dispatch.claim",
+      "count": 2,
+      "totalMs": 78.0,
+      "avgMs": 38.78,
+      "maxMs": 40.0
+    },
+    {
+      "name": "dispatch.aggregate",
+      "count": 2,
+      "totalMs": 43.0,
+      "avgMs": 21.27,
+      "maxMs": 29.0
+    },
+    {
+      "name": "dispatch.recordQueue",
+      "count": 1,
+      "totalMs": 12.0,
+      "avgMs": 11.78,
+      "maxMs": 12.0
+    },
+    {
+      "name": "checkpoint.index",
+      "count": 2,
+      "totalMs": 7.0,
+      "avgMs": 3.42,
+      "maxMs": 4.0
+    },
+    {
+      "name": "checkpoint.retrieve",
+      "count": 1,
+      "totalMs": 5.0,
+      "avgMs": 4.74,
+      "maxMs": 5.0
+    }
+  ],
+  "timelineEvents": [
+    "call_end=43",
+    "call_start=43",
+    "harness=4",
+    "span=530",
+    "state=77"
+  ],
+  "sources": [
+    "bProjects.Documents.Timing=530"
+  ]
+}
