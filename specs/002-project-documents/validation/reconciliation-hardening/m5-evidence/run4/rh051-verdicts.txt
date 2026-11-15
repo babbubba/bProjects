@@ -1,0 +1,39 @@
+  RH051: 1 verifiche fallite: [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) — Failed work_output_invalid: Output del batch bf787941c8faa275e8af174d9c87d2c31322d45e40a081985a9c743218d4a1ab non valido (1 violazioni): candidates[13].key: chiave locale f13 duplicata.
+    == RH051 FAIL (20 PASS / 1 FAIL) ==
+      NOTE configurazione: finestra misurata W=65536 output O=8192 margine M=1024 ragionamento=False => budget di input Analysis B=W-O-M=56320 token; modello=Qwen3.6-35B-Smart
+      NOTE corpus generato (seed 20261106) in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\RH051-20261115182329: 2 documenti, 15553 caratteri, 4485 token misurati = 0,08x B; hash in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\RH051-20261115182329\hashes.txt
+      NOTE   af-integrazione-edi.md sha256=f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b testo-sha256=f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b byte=14316 regole-secondarie=0
+      NOTE   verbale-riunione-2.md sha256=b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778 testo-sha256=b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778 byte=1305 regole-secondarie=0
+      NOTE [MISURA] il testo generato (tokenizer reale, prima dell'upload): 4485 token = 0,08x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [STRUTTURALE] af-integrazione-edi.md: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] af-integrazione-edi.md: upload 201 — 201
+      PASS [STRUTTURALE] verbale-riunione-2.md: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] verbale-riunione-2.md: upload 201 — 201
+      PASS [COMPLETAMENTO] af-integrazione-edi.md: preparazione Ready (parser reale + estrazione reale su tutte le porzioni) — Ready
+      PASS [COMPLETAMENTO] verbale-riunione-2.md: preparazione Ready (parser reale + estrazione reale su tutte le porzioni) — Ready
+      PASS [COPERTURA] af-integrazione-edi.md: tutte le 15 porzioni di estrazione sono Completed (nessuna omessa o fallita) — 0 non completate
+      PASS [COPERTURA] af-integrazione-edi.md: il testo estratto copre il testo generato (nessun blocco perso dal parser) — 14075 contro 14253 caratteri
+      PASS [COPERTURA] verbale-riunione-2.md: tutte le 4 porzioni di estrazione sono Completed (nessuna omessa o fallita) — 0 non completate
+      PASS [COPERTURA] verbale-riunione-2.md: il testo estratto copre il testo generato (nessun blocco perso dal parser) — 1277 contro 1300 caratteri
+      NOTE testo estratto dal parser: 4328 token = 0,08x B
+      NOTE [MISURA] il testo REALMENTE estratto dal parser (nessuna riduzione, finestra non aumentata): 4328 token = 0,08x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      NOTE BUDGET (prima di Analizza) — MISURATO: W=65536 O=8192 M=1024 B=56320; ledger=194 evidenze; enunciati=3793 token (tokenizer reale del modello).
+      PASS [STRUTTURALE/MISURATO] ledger non vuoto e i soli enunciati (token reali) entrano nel budget di input B: condizione necessaria per lo stadio Gap — 194 evidenze, 3793 token contro B=56320
+      NOTE STIMA EURISTICA (non autorevole, non bloccante): Gap ≈ 25133 token = enunciati + 110/voce (margine 15% → 28903 contro B=56320); soglia di instradamento gerarchico ≈ 68 evidenze (O/120 per evidenza) → ledger 194 oltre la soglia. Il ramo effettivo e verificato dopo il run dagli stadi dei batch.
+      NOTE fattore di espansione dell'estrazione RISOLTO=24 (autorevole, verificato prima dell'upload); manifesti di estrazione osservati: 1 ConfigHash distinti (il fattore e uno dei suoi ingressi)
+      PASS [STRUTTURALE] il freeze di produzione delle nuove richieste di Analizza (opzioni risolte) e la v6: il trigger di prova lo trasforma in v11 — freeze=project-analysis-documents-v6 recupero abilitato=False
+      NOTE copia consistente del database di test (pre-analizza): C:\Users\fcavallari\AppData\Local\Temp\bprojects-rh051-backup\rh051-pre-analizza-20261115T184412.dump (472295 byte). Ripristino: createdb + pg_restore nel container di test; non committare
+      NOTE la nuova analisi sara congelata v11 da un trigger del database di test (il default del prodotto resta v6)
+      PASS [COMPLETAMENTO] POST Analizza 202 — 202 {"id":"7f430f39-a1af-4323-adc0-6a2d48be802f","kind":"Analysis","analysisId":null,"sourceCutoffSequence":5,"inputRevisionId":null,"status":"Queued","requestedAt":"2026-11-15T18:44:13.91+00:00","startedAt":null,"completedAt":null,"deadlineAt":"2026-11-15T19:44:13.91+00:00","attemptCount":0,"maxAttempt…
+      FAIL [COMPLETAMENTO] run di analisi terminale Completed (un errore gestito non e un PASS) — Failed work_output_invalid: Output del batch bf787941c8faa275e8af174d9c87d2c31322d45e40a081985a9c743218d4a1ab non valido (1 violazioni): candidates[13].key: chiave locale f13 duplicata.
+      NOTE [CAUSA] non classificata (work_output_invalid)
+      NOTE chiamate al modello fase=Analysis: n=31 durata totale=518s finish=length=0
+      NOTE chiamate al modello fase=Chat: n=3 durata totale=4s finish=length=0
+      NOTE chiamate al modello fase=Extraction: n=12 durata totale=1022s finish=length=0
+      PASS [COMPLETAMENTO] nessuna chiamata troncata (finish=length) — 0 troncate

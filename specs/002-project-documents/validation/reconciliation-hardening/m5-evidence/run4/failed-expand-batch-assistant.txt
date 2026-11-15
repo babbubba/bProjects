@@ -1,0 +1,138 @@
+{
+  "contract": "reconcile-alias-1",
+  "descriptor": null,
+  "noFindings": null,
+  "items": [],
+  "candidates": [
+    {
+      "key": "f1",
+      "left": "E127",
+      "right": "E178",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E127 definisce un timeout di due ore per il riprocessamento automatico, mentre E178 presenta l'alternativa tra scadenza automatica e riprocessamento senza scadenza; il primo potrebbe essere la specifica tecnica che qualifica o esclude una delle alternative valutate nel secondo."
+    },
+    {
+      "key": "f2",
+      "left": "E45",
+      "right": "E7",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E45 impone il blocco dell'invio DESADV se la spedizione non è chiusa, vincolo tecnico necessario per raggiungere l'obiettivo di E7 di rendere disponibile l'avviso al cliente entro la chiusura della spedizione."
+    },
+    {
+      "key": "f3",
+      "left": "E140",
+      "right": "E125",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E140 vieta l'invio fuori dalla finestra di manutenzione, mentre E125 fissa a quindici minuti l'intervallo tra i ritentativi; il vincolo temporale di E140 qualifica le condizioni operative dei ritentativi descritti in E125."
+    },
+    {
+      "key": "f4",
+      "left": "E167",
+      "right": "E58",
+      "type": "DependsOn",
+      "basis": "Inferred",
+      "rationale": "E167 dichiara che il collaudo dipende dalla disponibilità dell'ambiente di prova di Hub Beta, presupposto necessario per poter gestire l'ambiente di collaudo separato richiesto da E58."
+    },
+    {
+      "key": "f5",
+      "left": "E14",
+      "right": "E173",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E14 stima il volume giornaliero (400-1000 ordini), da cui E173 deduce il carico medio inferiore a un messaggio al minuto; il primo qualifica le assunzioni di performance del secondo."
+    },
+    {
+      "key": "f6",
+      "left": "E19",
+      "right": "E20",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E19 descrive il flusso di validazione dell'ordine, mentre E20 specifica che un ordine duplicato non crea un secondo ordine; la logica di duplicazione in E20 qualifica il comportamento del sistema durante la fase di creazione e validazione descritta in E19."
+    },
+    {
+      "key": "f7",
+      "left": "E34",
+      "right": "E6",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E34 richiede la validazione dell'ordine rispetto all'anagrafica, azione tecnica che realizza l'obiettivo strategico di E6 di eliminare la digitazione manuale degli ordini."
+    },
+    {
+      "key": "f8",
+      "left": "E155",
+      "right": "E37",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E155 decide di conservare i messaggi in un archivio separato, mentre E37 richiede la conservazione dell'originale per cinque anni; la decisione architetturale di E155 qualifica il metodo di adempimento del requisito di retention in E37."
+    },
+    {
+      "key": "f9",
+      "left": "E26",
+      "right": "E180",
+      "type": "AlternativeTo",
+      "basis": "Inferred",
+      "rationale": "E26 stabilisce che una spedizione parziale genera un DESADV per ogni parte, mentre E180 valuta l'alternativa tra un unico DESADV per ordine o uno per spedizione; E26 rappresenta una scelta operativa che esclude o confronta con le alternative di E180."
+    },
+    {
+      "key": "f10",
+      "left": "E154",
+      "right": "E156",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E154 decide un unico endpoint di ricezione, mentre E156 definisce la prima fase con dodici clienti; la decisione infrastrutturale di E154 qualifica l'ambito tecnico della rollout definita in E156."
+    },
+    {
+      "key": "f11",
+      "left": "E157",
+      "right": "E33",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E157 esclude i messaggi di variazione ordine dalla prima fase, mentre E33 descrive il comportamento per le fatture respinte; l'esclusione in E157 qualifica l'ambito di applicazione delle regole di gestione degli errori come quella descritta in E33."
+    },
+    {
+      "key": "f12",
+      "left": "E8",
+      "right": "E33",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E8 è l'obiettivo di inviare fatture elettroniche tramite Hub Beta, mentre E33 descrive il flusso di ritorno per una fattura respinta; la gestione dell'errore in E33 qualifica l'affidabilità del processo definito in E8."
+    },
+    {
+      "key": "f13",
+      "left": "E104",
+      "right": "E85",
+      "type": "SameRule",
+      "basis": "Declared",
+      "rationale": "Entrambe le evidenze definiscono le caratteristiche del campo 'vettore' (o importoIva in E104, ma il contesto suggerisce una possibile confusione o duplicazione di specifiche tecniche sui campi dei tracciati; tuttavia, guardando attentamente, E104 parla di importoIva e E85 di vettore. Correzione: E86 e E85 parlano di vettore. Cerchiamo un collegamento diverso. E104 (importoIva) non ha un chiaro parallelo in N2. Rivediamo E86/E85 vs E104? No. Cerchiamo collegamenti più forti. E179 ed E180 sono duplicate/alternative. E177 ed E178 sono duplicate/alternative. E155 (archivio separato) vs E37 (conservazione 5 anni). E127 (timeout 2h) vs E178 (alternativa riprocessamento). E45 (blocco DESADV) vs E7 (obiettivo avviso). E140 (finestra manutenzione) vs E125 (ritentativo 15 min). E167 (collaudo dipende da Hub Beta) vs E58 (ambiente collaudo separato). E14 (volume) vs E173 (carico medio). E19 (stato ordine) vs E20 (duplicati). E34 (validazione anagrafica) vs E6 (eliminare digitazione manuale). E26 (DESADV parziale) vs E180 (alternativa DESADV). E154 (endpoint unico) vs E156 (prima fase 12 clienti). E157 (no variazioni) vs E33 (fattura respinta). E8 (invio fatture) vs E33 (gestione errore fattura). E104 (campo importoIva) non ha un chiaro match in N2. Forse E104 e E86? No, campi diversi. E104 è un requisito tecnico specifico. N2 ha E85/E86 sul campo vettore. Non c'è sovrapposizione diretta. Saltiamo E104 per ora o cerchiamo un legame indiretto. Forse E104 e E173? No. E104 e E14? No. E104 è isolato in N1 rispetto a N2. Cerchiamo altri collegamenti. E160 (no fatture proforma) vs E8 (invio fatture)? E160 esclude un tipo di fattura, E8 definisce l'obiettivo per le fatture. Collegamento debole ma plausibile: Qualifies. E127 (timeout 2h) vs E182 (chi gestisce i rinvii dopo scadenza)? E127 definisce la scadenza, E182 chiede chi gestisce il post-scadenza. Collegamento forte: DependsOn o Qualifies."
+    },
+    {
+      "key": "f13",
+      "left": "E127",
+      "right": "E182",
+      "type": "DependsOn",
+      "basis": "Inferred",
+      "rationale": "E127 definisce il timeout di due ore per il riprocessamento, mentre E182 lascia aperta la decisione su chi gestisce i rinvii dopo tale scadenza; la definizione del limite temporale in E127 è presupposto necessario per risolvere l'incertezza operativa di E182."
+    },
+    {
+      "key": "f14",
+      "left": "E160",
+      "right": "E8",
+      "type": "Qualifies",
+      "basis": "Inferred",
+      "rationale": "E160 esclude la gestione delle fatture proforma, mentre E8 definisce l'obiettivo di inviare fatture elettroniche; l'esclusione in E160 qualifica l'ambito degli obiettivi definiti in E8."
+    },
+    {
+      "key": "f15",
+      "left": "E3",
+      "right": "E9",
+      "type": "DependsOn",
+      "basis": "Inferred",
+      "rationale": "E3 chiede chi gestisce gli scarti della DESADV, mentre E9 ha l'obiettivo di ridurre gli scarti sotto l'1%; la definizione del responsabile in E3 è necessaria per raggiungere il KPI definito in E9."
+    }
+  ],
+  "focus": null,
+  "patches": []
+}
