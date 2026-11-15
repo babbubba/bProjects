@@ -333,7 +333,11 @@ public static class ReconcileAliasComposer
             {
                 var c = dto.Candidates[i];
                 var path = $"candidates[{i}]";
-                if (!keys.Add(c.Key))
+                // v11, espansione (RH-051, 4ª run): la chiave locale di un candidato non è persistita né referenziata (il canonico <see cref="ReconcileCandidate"/> non la contiene; l'identità è
+                // <c>CandidateId</c>, derivata da estremi, tipo, classe e SourceHash; le patch indirizzano item e relazioni, non i candidati). Una chiave ripetuta in questo stadio è quindi un difetto di
+                // numerazione senza effetto sul canonico: non è un rifiuto. L'output grezzo resta intatto (aiHash) e l'unicità sostanziale resta garantita da <c>DuplicateCandidate</c> qui sotto.
+                // Compare, v6/v10 e ogni altro stadio mantengono la regola storica.
+                if (!keys.Add(c.Key) && !(stageContract && _stage == "expand"))
                 {
                     Fail(ReconcileViolationKind.Duplicate, $"{path}.key", $"{path}.key: chiave locale {c.Key} duplicata.");
                 }
