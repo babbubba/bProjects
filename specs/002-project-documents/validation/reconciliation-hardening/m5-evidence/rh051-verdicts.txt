@@ -1,0 +1,16 @@
+      NOTE configurazione: finestra misurata W=40960 output O=8192 margine M=1024 ragionamento=False => budget di input Analysis B=W-O-M=31744 token; modello=Qwen3.6-35B-Smart
+      NOTE corpus generato (seed 20261106) in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\RH051-20261115075119: 2 documenti, 15553 caratteri, 4485 token misurati = 0,14x B; hash in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\RH051-20261115075119\hashes.txt
+      NOTE   af-integrazione-edi.md sha256=f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b testo-sha256=f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b byte=14316 regole-secondarie=0
+      NOTE   verbale-riunione-2.md sha256=b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778 testo-sha256=b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778 byte=1305 regole-secondarie=0
+      NOTE [MISURA] il testo generato (tokenizer reale, prima dell'upload): 4485 token = 0,14x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [STRUTTURALE] af-integrazione-edi.md: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] af-integrazione-edi.md: upload 201 — 201
+      PASS [STRUTTURALE] verbale-riunione-2.md: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] verbale-riunione-2.md: upload 201 — 201
+      FAIL [COMPLETAMENTO] af-integrazione-edi.md: preparazione Ready (parser reale + estrazione reale su tutte le porzioni) — Failed: {"id":"22b880ae-99ba-4c82-ab2d-e707e81801f9","documentVersionId":"ce8b2d0e-1547-4b3f-8527-cd326d64a401","documentId":"d1dab47d-2583-4dc9-8d71-e66d09cb2cce","version":1,"generation":1,"processingStatus":"Failed","isReady":false,"contentState":"Parsed","blockCount":133,"retryOfId":null,"requestedAt":"2026-11-15T07:51:44.145234+00:00","issuesSummary":{"code":"work_output_invalid","message":"La preparazione del documento non è riuscita"},"issues":[],"allowedActions":["download","retry"],"parseJobId"… | job ExtractUnit/Failed work_output_invalid: Output del modell

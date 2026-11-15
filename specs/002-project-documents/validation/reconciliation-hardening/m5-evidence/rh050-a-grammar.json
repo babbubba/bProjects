@@ -1,0 +1,526 @@
+﻿{
+  "scenario": "rh050-a-grammar",
+  "writtenAtUtc": "2026-11-15T07:36:31.5657911+00:00",
+  "model": "Qwen3.6-35B-Smart",
+  "requestBudget": 4,
+  "requestsAttempted": 4,
+  "temperature": 0,
+  "maxOutputTokens": 1024,
+  "systemPrompt": "Sei un verificatore di formato. Rispondi SOLO con un oggetto JSON conforme allo schema fornito, senza testo prima o dopo.",
+  "promptX": "Prova di formato, nessun contenuto reale. Il candidato in esame e f1 fra E1 = «Il pagamento avviene entro 30 giorni.» ed E2 = «Il pagamento avviene entro 60 giorni.». Compila la risposta ESATTAMENTE cosi: contract = reconcile-alias-1; descriptor null; noFindings null; items: []; candidates: DUE candidati, f1 fra E1 ed E2 (type Contradicts) e f2 fra E2 ed E1 (type Contradicts), ciascuno con basis e rationale ammessi (scegli i valori degli enum fra quelli ammessi dallo schema); focus: outcome \"Open\" e reason null (nessun motivo); patches: [].",
+  "promptY": "Prova di formato, nessun contenuto reale. Il candidato in esame e f1 fra E1 = «Il pagamento avviene entro 30 giorni.» ed E2 = «Il pagamento avviene entro 60 giorni.». Compila la risposta ESATTAMENTE cosi: contract = reconcile-alias-1; descriptor null; noFindings null; items: []; candidates: []; focus: outcome \"Unresolved\" e reason \"non risolto\"; patches: [].",
+  "compareSchemaHash": "2830aebf25fff4f811dca3b5311f35eb219000544f8a4106054a0321a37ea200",
+  "fullSchemaHash": "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
+  "compareSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "contract",
+      "descriptor",
+      "noFindings",
+      "items",
+      "candidates",
+      "focus",
+      "patches"
+    ],
+    "properties": {
+      "contract": {
+        "type": "string",
+        "enum": [
+          "reconcile-alias-1"
+        ]
+      },
+      "descriptor": {
+        "type": "null"
+      },
+      "noFindings": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "section",
+            "text",
+            "classification",
+            "evidence"
+          ],
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^i[1-9][0-9]*$"
+            },
+            "section": {
+              "type": "string",
+              "enum": [
+                "goals",
+                "scopeOverview",
+                "scopeIncluded",
+                "scopeExcluded",
+                "requirements",
+                "flows",
+                "constraints",
+                "dependencies",
+                "assumptions",
+                "openQuestions"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "classification": {
+              "type": "string",
+              "enum": [
+                "Declared",
+                "Documented",
+                "Inferred",
+                "Assumed"
+              ]
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^E[1-9][0-9]*$"
+              }
+            }
+          }
+        },
+        "maxItems": 0
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "left",
+            "right",
+            "type",
+            "basis",
+            "rationale"
+          ],
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^f[1-9][0-9]*$"
+            },
+            "left": {
+              "type": "string",
+              "pattern": "^E[1-9][0-9]*$"
+            },
+            "right": {
+              "type": "string",
+              "pattern": "^E[1-9][0-9]*$"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Qualifies",
+                "Confirms",
+                "Contradicts",
+                "Corrects",
+                "Supersedes",
+                "DependsOn",
+                "AlternativeTo",
+                "SameRule",
+                "Alias"
+              ]
+            },
+            "basis": {
+              "type": "string",
+              "enum": [
+                "Declared",
+                "Inferred"
+              ]
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "maxItems": 0
+      },
+      "focus": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "outcome",
+              "reason"
+            ],
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "Compared"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "outcome",
+              "reason"
+            ],
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "Open"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      },
+      "patches": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "op",
+                "target",
+                "evidence",
+                "value"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^p[1-9][0-9]*$"
+                },
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "AddSupport"
+                  ]
+                },
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "item",
+                    "relation"
+                  ],
+                  "properties": {
+                    "item": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^i[1-9][0-9]*$"
+                    },
+                    "relation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^R[1-9][0-9]*$"
+                    }
+                  }
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^E[1-9][0-9]*$"
+                  }
+                },
+                "value": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "op",
+                "target",
+                "evidence",
+                "value"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^p[1-9][0-9]*$"
+                },
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "AddRelation"
+                  ]
+                },
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "item",
+                    "relation"
+                  ],
+                  "properties": {
+                    "item": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^i[1-9][0-9]*$"
+                    },
+                    "relation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^R[1-9][0-9]*$"
+                    }
+                  }
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^E[1-9][0-9]*$"
+                  }
+                },
+                "value": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "from",
+                    "to",
+                    "type",
+                    "basis",
+                    "rationale"
+                  ],
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "pattern": "^E[1-9][0-9]*$"
+                    },
+                    "to": {
+                      "type": "string",
+                      "pattern": "^E[1-9][0-9]*$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "Qualifies",
+                        "Confirms",
+                        "Contradicts",
+                        "Corrects",
+                        "Supersedes",
+                        "DependsOn",
+                        "AlternativeTo",
+                        "SameRule"
+                      ]
+                    },
+                    "basis": {
+                      "type": "string",
+                      "enum": [
+                        "Declared",
+                        "Inferred"
+                      ]
+                    },
+                    "rationale": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "op",
+                "target",
+                "evidence",
+                "value"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^p[1-9][0-9]*$"
+                },
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "ProposeAlternative"
+                  ]
+                },
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "item",
+                    "relation"
+                  ],
+                  "properties": {
+                    "item": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^i[1-9][0-9]*$"
+                    },
+                    "relation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^R[1-9][0-9]*$"
+                    }
+                  }
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^E[1-9][0-9]*$"
+                  }
+                },
+                "value": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "text",
+                    "classification",
+                    "reason"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "Declared",
+                        "Documented",
+                        "Inferred",
+                        "Assumed"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "perCall": [
+    {
+      "id": "P1-control-X",
+      "schema": "Full",
+      "prompt": "X",
+      "http": 200,
+      "finish": "stop",
+      "error": null,
+      "sentSchemaHash": "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
+      "hashMatches": true,
+      "inputTokens": 189,
+      "outputTokens": 205,
+      "millis": 6643,
+      "rawOutput": "{\n  \"contract\": \"reconcile-alias-1\",\n  \"descriptor\": null,\n  \"noFindings\": null,\n  \"items\": [],\n  \"candidates\": [\n    {\n      \"key\": \"f1\",\n      \"left\": \"E1\",\n      \"right\": \"E2\",\n      \"type\": \"Contradicts\",\n      \"basis\": \"Declared\",\n      \"rationale\": \"Different payment terms\"\n    },\n    {\n      \"key\": \"f2\",\n      \"left\": \"E2\",\n      \"right\": \"E1\",\n      \"type\": \"Contradicts\",\n      \"basis\": \"Declared\",\n      \"rationale\": \"Different payment terms\"\n    }\n  ],\n  \"focus\": {\n    \"outcome\": \"Open\",\n    \"reason\": null\n  },\n  \"patches\": []\n}",
+      "schemaViolations": []
+    },
+    {
+      "id": "P2-compare-X",
+      "schema": "Compare",
+      "prompt": "X",
+      "http": 200,
+      "finish": "stop",
+      "error": null,
+      "sentSchemaHash": "2830aebf25fff4f811dca3b5311f35eb219000544f8a4106054a0321a37ea200",
+      "hashMatches": true,
+      "inputTokens": 189,
+      "outputTokens": 77,
+      "millis": 1593,
+      "rawOutput": "{\n  \"contract\": \"reconcile-alias-1\",\n  \"descriptor\": null,\n  \"noFindings\": null,\n  \"items\": [],\n  \"candidates\": [\n    \t],\n  \"focus\": {\n    \"outcome\": \"Open\",\n    \"reason\": \"]}s\"},\"patches\": []}",
+      "schemaViolations": []
+    },
+    {
+      "id": "P3-control-Y",
+      "schema": "Full",
+      "prompt": "Y",
+      "http": 200,
+      "finish": "stop",
+      "error": null,
+      "sentSchemaHash": "648915d419475bb78220e92aecebe0fd398c47a2032f2cee6e031d7be1535c54",
+      "hashMatches": true,
+      "inputTokens": 138,
+      "outputTokens": 80,
+      "millis": 1522,
+      "rawOutput": "{\n  \"contract\": \"reconcile-alias-1\",\n  \"descriptor\": null,\n  \"noFindings\": null,\n  \"items\": [],\n  \"candidates\": [],\n  \"focus\": {\n    \"outcome\": \"Unresolved\",\n    \"reason\": \"non risolto\"\n  },\n  \"patches\": []\n}",
+      "schemaViolations": []
+    },
+    {
+      "id": "P4-compare-Y",
+      "schema": "Compare",
+      "prompt": "Y",
+      "http": 200,
+      "finish": "stop",
+      "error": null,
+      "sentSchemaHash": "2830aebf25fff4f811dca3b5311f35eb219000544f8a4106054a0321a37ea200",
+      "hashMatches": true,
+      "inputTokens": 138,
+      "outputTokens": 77,
+      "millis": 1399,
+      "rawOutput": "{\n  \"contract\": \"reconcile-alias-1\",\n  \"descriptor\": null,\n  \"noFindings\": null,\n  \"items\": [],\n  \"candidates\": [],\n  \"focus\": {\n    \"outcome\": \"Open\",\"reason\": \"non risolto\"\n  },\n  \"patches\": []\n}",
+      "schemaViolations": []
+    }
+  ],
+  "verdicts": [
+    {
+      "feature": "candidates.maxItems = 0 (confronto)",
+      "outcome": "Honored",
+      "detail": "controllo: outcome=Open, reason=False, candidati=2; confronto: outcome=Open, reason=True, candidati=0"
+    },
+    {
+      "feature": "anyOf: Open => reason non vuoto (confronto)",
+      "outcome": "Honored",
+      "detail": "controllo: outcome=Open, reason=False, candidati=2; confronto: outcome=Open, reason=True, candidati=0"
+    },
+    {
+      "feature": "enum di focus.outcome = {Compared, Open} (confronto)",
+      "outcome": "Honored",
+      "detail": "controllo: outcome=Unresolved, reason=True, candidati=0; confronto: outcome=Open, reason=True, candidati=0"
+    }
+  ]
+}

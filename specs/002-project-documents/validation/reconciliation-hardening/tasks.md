@@ -532,7 +532,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 
 ## M5 — Verifiche reali (da autorizzare separatamente, D8)
 
-### [ ] RH-050 — Sonda della grammatica v11 e batch singoli reali (al massimo 14 richieste)
+### [x] RH-050 (T178, esito in [evidence-m5.md](evidence-m5.md)) — Sonda della grammatica v11 e batch singoli reali (al massimo 14 richieste)
 - **Contenuto:**
   - sonda (≤ 4 richieste, controllo più variante): `anyOf` con `enum` del confronto (un prompt che induce `Open` senza motivo); `candidates.maxItems = 0` del confronto;
   - batch singoli (≤ 10), ricostruiti con `ReplayFixtureBuilder` e inviati con la v11:
@@ -545,7 +545,7 @@ Diagnosi: [assessment.md](assessment.md). Piano: [plan.md](plan.md). Gli ID `RH-
 - **Registrazione:** violazioni residue osservate, criterio dell'opzione O1.
 - **Dipendenze:** C4, autorizzazione D8. **Effort:** 1 gg di preparazione.
 
-### [ ] RH-051 — Prova integrata v11 sulla fixture ERP/EDI
+### [ ] RH-051 (T179, NON completata: vedi [evidence-m5.md](evidence-m5.md)) — Prova integrata v11 sulla fixture ERP/EDI
 - **Contenuto:** una sola esecuzione reale (parser, estrazione, gerarchia v11, stadio Gap), con W=32768 per forzare la gerarchia.
 - **Criteri dal gold:**
   - ≥ 90% dei fatti gold presenti come item o alternative;

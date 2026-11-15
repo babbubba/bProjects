@@ -663,3 +663,17 @@ Task aggiunti **manualmente in coda** (T001–T172 invariati, nessuna rigenerazi
 - [x] T175 [US2] DET+TEST — RH-042: fault injection nella stessa classe (crash a cinque confini, takeover con nuovo lease, scadenza a metà gerarchia, limite chiamate). Dip.: T174. Dettaglio: RH-042.
 - [x] T176 [US2] DOC — RH-043: paragrafi «Emendamento v11» in `contracts/ai-workflow.md` §4.1, §4.3, §11, §13.7; il testo v2–v10 non è cambiato (solo aggiunte). Dip.: T172. Dettaglio: RH-043.
 - [x] T177 [US2] DET+TEST — RH-044: `ReconcileV11FreezeTests` (`configHash`, piano, sei schemi `by-stage-1`, prompt v6, `leaf-projection-1`, `stageContract`). Dip.: T174–T176. Dettaglio: RH-044.
+
+---
+
+### Delta Reconciliation Hardening M5 — mandato del 2026-11-15, T178–T179
+
+Task aggiunti **manualmente in coda** (T001–T177 invariati). Verifiche reali sul DGX (D8 autorizzato); dettaglio: [tasks.md RH](validation/reconciliation-hardening/tasks.md), evidenze: [evidence-m5.md](validation/reconciliation-hardening/evidence-m5.md). M6 **non è avviata**; la v11 non è il default.
+
+| Txxx | RH | Contenuto (sintesi) |
+|---|---|---|
+| T178 | RH-050 | Sonda della grammatica (4 chiamate) e replay di 10 batch reali: superati |
+| T179 | RH-051 | Prova integrata reale: **non completata**, bloccata nell'estrazione (output troncato) prima della v11 |
+
+- [x] T178 [US2] TEST — RH-050: `ReconcileV11RealProbeTests` (sonda `anyOf`/`enum`/`maxItems` e 10 batch reali, 0 retry). Dip.: T177. Dettaglio: RH-050.
+- [ ] T179 [US2] TEST — RH-051: `ReconcileV11RealFlowTests` (una run reale, gold fissato prima). **Non superata**: la preparazione del documento AF è fallita in estrazione (finish=length); gerarchia v11 e Gap non raggiunti. Dip.: T178. Dettaglio: RH-051.
