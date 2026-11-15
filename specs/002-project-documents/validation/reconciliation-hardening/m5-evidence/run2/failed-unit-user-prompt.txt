@@ -1,0 +1,52 @@
+Dati affidabili del server per questa unità di estrazione:
+- schema: evidence-1.1.0
+- intervalli: 8 (5 Primary, 3 Context)
+
+<<<INTERVALLO rangeKey=c7:2 ruolo=Context>>>
+Analisi funzionale — Integrazione EDI fra Gestionale Alfa e Hub Beta
+<<<FINE rangeKey=c7:2>>>
+<<<INTERVALLO rangeKey=c7:1 ruolo=Primary>>>
+| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |
+|---|---|---|---|---|---|
+| ORD-01 | numeroOrdineCliente | testo | 20 | sì | identifica l'ordine presso il cliente |
+| ORD-02 | dataOrdine | data | 10 | sì | formato AAAA-MM-GG |
+| ORD-03 | codiceCliente | testo | 12 | sì | codice assegnato da Gestionale Alfa |
+| ORD-04 | partitaIvaCliente | testo | 16 | sì | senza prefisso del paese |
+| ORD-05 | codiceDestinazione | testo | 8 | no | facoltativo, se vuoto vale la sede legale |
+| ORD-06 | dataConsegnaRichiesta | data | 10 | no | se assente si applica il calendario del magazzino |
+| ORD-07 | divisa | testo | 3 | sì | codice ISO 4217 |
+| ORD-08 | condizioniPagamento | testo | 6 | no | codice delle condizioni concordate |
+| ORD-09 | noteOrdine | testo | 200 | no | testo libero senza vincoli di formato |
+| ORD-10 | numeroRighe | numero | 3 | sì | non superiore a cinquecento |
+<<<FINE rangeKey=c7:1>>>
+<<<INTERVALLO rangeKey=c7:3 ruolo=Primary>>>
+4. Tracciati
+<<<FINE rangeKey=c7:3>>>
+<<<INTERVALLO rangeKey=c7:4 ruolo=Primary>>>
+4.1 Tracciato ORDERS (testata)
+<<<FINE rangeKey=c7:4>>>
+<<<INTERVALLO rangeKey=c8:2 ruolo=Context>>>
+Analisi funzionale — Integrazione EDI fra Gestionale Alfa e Hub Beta
+<<<FINE rangeKey=c8:2>>>
+<<<INTERVALLO rangeKey=c8:3 ruolo=Context>>>
+4. Tracciati
+<<<FINE rangeKey=c8:3>>>
+<<<INTERVALLO rangeKey=c8:1 ruolo=Primary>>>
+| ID | Campo | Tipo | Lunghezza | Obbligatorio | Note |
+|---|---|---|---|---|---|
+| DES-01 | numeroSpedizione | testo | 15 | sì | numero interno di Gestionale Alfa |
+| DES-02 | numeroOrdineCliente | testo | 20 | sì | ripetuto dall'ordine originale |
+| DES-03 | dataSpedizione | data | 10 | sì | data di chiusura della spedizione |
+| DES-04 | codiceDestinazione | testo | 8 | sì | destinazione fisica della merce |
+| DES-05 | vettore | testo | 30 | no | ragione sociale del vettore |
+| DES-06 | numeroColli | numero | 4 | sì | somma dei colli della spedizione |
+| DES-07 | pesoLordoKg | decimale | 9 | sì | peso lordo complessivo in chilogrammi |
+| DES-08 | codiceSSCC | testo | 18 | sì | un codice per ogni collo |
+| DES-09 | tipoSpedizione | testo | 1 | sì | T totale oppure P parziale |
+| DES-10 | noteSpedizione | testo | 100 | no | testo libero per il cliente |
+<<<FINE rangeKey=c8:1>>>
+<<<INTERVALLO rangeKey=c8:4 ruolo=Primary>>>
+4.2 Tracciato DESADV (testata)
+<<<FINE rangeKey=c8:4>>>
+
+Produci ora l'unico oggetto JSON evidence-1.1.0 per i soli intervalli Primary.

@@ -272,7 +272,35 @@ public static partial class DocumentEvidenceValidator
             accepted.Add(located);
         }
 
-        return accepted;
+        return NormalizeListingOrder(accepted);
+    }
+
+    /// <summary>
+    /// Solo l'ORDINE di elencazione dei gruppi il cui insieme di part è già valido (distinte e contigue da zero) viene reso crescente per part:
+    /// l'ordine non porta significato (part, ruolo, intervallo, citazione e gruppo restano intatti) e lo schema JSON non può esprimerlo.
+    /// Ogni gruppo mantiene gli stessi slot nell'elenco; part duplicate, buchi o gruppi incoerenti restano intatti e vengono rifiutati da <see cref="CheckGroups"/>.
+    /// </summary>
+    private static List<Checked> NormalizeListingOrder(List<Checked> sources)
+    {
+        var result = new List<Checked>(sources);
+        foreach (var group in sources.Select((s, i) => (s, i)).GroupBy(x => x.s.Source.CitationGroupKey, StringComparer.Ordinal))
+        {
+            var members = group.ToList();
+            var parts = members.Select(m => m.s.Source.Part).ToList();
+            if (parts.Distinct().Count() != parts.Count || !parts.Order().SequenceEqual(Enumerable.Range(0, parts.Count)) || parts.SequenceEqual(parts.Order()))
+            {
+                continue;
+            }
+
+            var slots = members.Select(m => m.i).ToList();
+            var ordered = members.OrderBy(m => m.s.Source.Part).Select(m => m.s).ToList();
+            for (var k = 0; k < slots.Count; k++)
+            {
+                result[slots[k]] = ordered[k];
+            }
+        }
+
+        return result;
     }
 
     private static Checked? Locate(CandidateSource source, string key, DocumentExtractionContext context, string where, List<string> violations)

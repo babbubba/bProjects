@@ -290,10 +290,76 @@ public sealed class DocumentEvidenceValidationTests
         AssertRejected(Validate(Evidence("e1", [At("g", 0), At("g", 2, "rEmoji", "Prezzo")])), "contigu");                              // buco
         AssertRejected(Validate(Evidence("e1", [At("g", 1)])), "contigu");                                                              // non parte da zero
         AssertRejected(Validate(Evidence("e1", [At("g", 0), At("g", 0, "rEmoji", "Prezzo")])), "duplicat");                              // part duplicata
-        AssertRejected(Validate(Evidence("e1", [At("g", 1, "rEmoji", "Prezzo"), At("g", 0)])), "ordin");                                 // elencate fuori ordine
         AssertRejected(Validate(Evidence("e1", [At("g", -1)])), "part");
+        AssertRejected(Validate(Evidence("e1", [At("g", 2, "rEmoji", "Prezzo"), At("g", 0)])), "contigu");                               // fuori ordine E con buco: resta rifiutato
+        AssertRejected(Validate(Evidence("e1", [At("g", 1, "rEmoji", "Prezzo"), At("g", 1)])), "duplicat");                              // fuori ordine con part duplicata: resta rifiutato
         Assert.True(Validate(Evidence("e1", [At("g", 0), At("g", 1, "rEmoji", "Prezzo"), At("h", 0, "rVendor", "Rossi SRL")])).Accepted);   // gruppi indipendenti
         AssertRejected(Validate(Evidence("e1", [At("", 0)])), "citationGroupKey");
+    }
+
+    [Fact]
+    public void Out_of_order_listing_of_a_valid_group_is_normalized_without_changing_any_source_property()
+    {
+        var ordered = Validate(Evidence("e1", [
+            Passage("rEmoji", "Prezzo", EvidenceSourceRole.Context, group: "g", part: 0),
+            Passage("r25", "Cliente A | 5 ordini", group: "g", part: 1),
+            Passage("rVendor", "Rossi SRL", group: "h", part: 0)]));
+        var swapped = Validate(Evidence("e1", [
+            Passage("r25", "Cliente A | 5 ordini", group: "g", part: 1),
+            Passage("rEmoji", "Prezzo", EvidenceSourceRole.Context, group: "g", part: 0),
+            Passage("rVendor", "Rossi SRL", group: "h", part: 0)]));
+
+        Assert.True(ordered.Accepted);
+        Assert.True(swapped.Accepted);
+        // Stesso contenuto persistito dell'elenco già ordinato (part, ruoli, offset, identificativi, gruppi).
+        Assert.Equal(ordered.Evidences[0].Content.Sources, swapped.Evidences[0].Content.Sources);
+        Assert.Equal([0, 1, 0], swapped.Evidences[0].Content.Sources.Select(s => s.Part));
+        Assert.Equal([EvidenceSourceRole.Context, EvidenceSourceRole.Primary, EvidenceSourceRole.Primary], swapped.Evidences[0].Content.Sources.Select(s => s.Role));
+    }
+
+    // Replay OFFLINE (nessuna inferenza) dell'unità reale che ha fatto fallire la 2ª esecuzione RH-051: 34 evidenze, tutte con sources [part 1 Primary, part 0 Context].
+    [Fact]
+    public void Real_rh051_run2_output_with_34_inverted_source_orders_is_accepted_without_changing_any_source_property()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !Directory.Exists(Path.Combine(dir, "specs", "002-project-documents")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        Assert.NotNull(dir);
+        var evidenceDir = Path.Combine(dir!, "specs", "002-project-documents", "validation", "reconciliation-hardening", "m5-evidence", "run2");
+        var prompt = File.ReadAllText(Path.Combine(evidenceDir, "failed-unit-user-prompt.txt"));
+        var raw = File.ReadAllText(Path.Combine(evidenceDir, "failed-unit-assistant.txt"));
+
+        var ranges = System.Text.RegularExpressions.Regex.Matches(prompt, @"(?s)<<<INTERVALLO rangeKey=(\S+) ruolo=(\w+)>>>\n(.*?)\n<<<FINE rangeKey=\1>>>")
+            .Select((m, i) => Range(m.Groups[1].Value, Guid.Parse($"b0000000-0000-4000-8000-{i + 100:D12}"), m.Groups[3].Value, owned: m.Groups[2].Value == "Primary"))
+            .ToArray();
+        Assert.Equal(8, ranges.Length);
+        var context = Context(new DocumentSourceMap(ranges), unit: 13);
+
+        var original = DocumentEvidenceCodec.DecodeOutput(raw.Trim());
+        Assert.Equal(34, original.Evidences!.Count);
+        Assert.All(original.Evidences, e => Assert.Equal([1, 0], e.Sources!.Select(s => s.Part)));   // premessa: tutte invertite, e solo questo
+
+        var result = DocumentEvidenceValidator.ValidateText(raw, context);
+
+        Assert.True(result.Accepted, string.Join(" | ", result.Violations.Take(3)));
+        Assert.Empty(result.Violations);
+        Assert.Equal(34, result.Evidences.Count);
+        for (var i = 0; i < 34; i++)
+        {
+            var sent = original.Evidences![i];
+            var kept = result.Evidences[i];
+            Assert.Equal(sent.Key, kept.Key);
+            Assert.Equal(sent.Statement.Trim(), kept.Statement);
+            Assert.Equal([0, 1], kept.Content.Sources.Select(s => s.Part));
+            Assert.Equal([EvidenceSourceRole.Context, EvidenceSourceRole.Primary], kept.Content.Sources.Select(s => s.Role));
+            // Stesse fonti (citazione, ruolo, part, gruppo), solo elencate al contrario.
+            var sentByPart = sent.Sources!.OfType<DocumentPassageCandidateSource>().OrderBy(s => s.Part).ToList();
+            Assert.Equal(sentByPart.Select(s => s.Quote), kept.Content.Sources.Select(s => s.Quote));
+            Assert.Single(kept.Content.Sources.Select(s => s.CitationGroupId).Distinct());
+        }
     }
 
     [Fact]
