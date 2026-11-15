@@ -1,0 +1,14 @@
+{
+  "fixture": "representative-erp-edi-1",
+  "author": "Claude Code (agente di sviluppo), su mandato dell'autore del progetto",
+  "date": "2026-11-14",
+  "origin": "sintetico, scritto da zero, nessun documento cliente, nessuna parafrasi di documenti reali",
+  "hashAlgorithm": "SHA-256 del contenuto UTF-8 con fine riga LF",
+  "files": {
+    "af-integrazione-edi.md": "f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b",
+    "verbale-riunione-2.md": "b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778",
+    "pm-messages.json": "3ae1decddb72cb9c7525193d840ab71f5362d4717d43588233585ed7de1d53f5",
+    "gold.json": "513c1b646a090000f53042b038bdf524be7c4e03029b7265f0bb7830fb90b8d7"
+  },
+  "goldAnnotatedBeforeLedgerAndExecutions": true
+}

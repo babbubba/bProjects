@@ -1,0 +1,46 @@
+{
+  "goldVersion": "representative-gold-1",
+  "annotatedBeforeAnyExecution": true,
+  "note": "Gold annotato dall'autore della fixture PRIMA di ogni esecuzione e del ledger; non si adatta ai risultati di nessun modello. `ref` è l'identificativo di riga nel documento; `phrase` è la frase esatta del fatto atteso. Sezione e classificazione derivano dalla tabella leaf-projection-1 (la certezza prevale sul tipo; Gap e ToClarify vanno in openQuestions).",
+  "facts": [
+    { "ref": "OB-02", "doc": "af", "phrase": "L'obiettivo è eliminare la digitazione manuale degli ordini ricevuti dai clienti tramite Hub Beta.", "kind": "Goal", "certainty": "Declared", "section": "Goals", "classification": "Documented" },
+    { "ref": "CT-05", "doc": "af", "phrase": "Il volume atteso è di circa quattrocento ordini al giorno con punte di mille nei periodi promozionali.", "kind": "Context", "certainty": "Declared", "section": "ScopeOverview", "classification": "Documented" },
+    { "ref": "FO-03", "doc": "af", "phrase": "Alla ricezione Gestionale Alfa risponde con una conferma tecnica entro cinque secondi.", "kind": "Action", "certainty": "Declared", "section": "Flows", "classification": "Documented" },
+    { "ref": "FI-03", "doc": "af", "phrase": "La fattura va inviata a Hub Beta entro 24 ore dalla registrazione contabile.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "RF-02", "doc": "af", "phrase": "Il sistema deve accettare ordini con un massimo di cinquecento righe.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "RF-04", "doc": "af", "phrase": "Il sistema deve conservare il messaggio ORDERS originale per cinque anni.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "RF-23", "doc": "af", "phrase": "Il sistema deve autenticare Hub Beta con un certificato client.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "RF-24", "doc": "af", "phrase": "Il sistema deve rispondere alle richieste di Hub Beta entro dieci secondi.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "ER-02", "doc": "af", "phrase": "Gli errori tecnici di Hub Beta vengono ritentati automaticamente fino a cinque volte.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "ER-05", "doc": "af", "phrase": "Il riprocessamento automatico dei messaggi in errore scade dopo un timeout di due ore.", "kind": "Requirement", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "VN-02", "doc": "af", "phrase": "Hub Beta accetta messaggi di dimensione non superiore a cinque megabyte.", "kind": "Constraint", "certainty": "Declared", "section": "Constraints", "classification": "Documented" },
+    { "ref": "VN-05", "doc": "af", "phrase": "La finestra di manutenzione di Hub Beta è la domenica dalle due alle quattro del mattino.", "kind": "Constraint", "certainty": "Declared", "section": "Constraints", "classification": "Documented" },
+    { "ref": "VN-08", "doc": "af", "phrase": "Il numero di richieste verso Hub Beta non può superare dieci al secondo.", "kind": "Constraint", "certainty": "Declared", "section": "Constraints", "classification": "Documented" },
+    { "ref": "EX-01", "doc": "af", "phrase": "Sono esclusi dalla prima fase i clienti che richiedono lo standard ANSI X12.", "kind": "Exclusion", "certainty": "Declared", "section": "ScopeExcluded", "classification": "Documented" },
+    { "ref": "DP-01", "doc": "af", "phrase": "L'integrazione dipende dal rilascio del certificato client da parte di Hub Beta.", "kind": "Dependency", "certainty": "Declared", "section": "Dependencies", "classification": "Documented" },
+    { "ref": "DC-01", "doc": "af", "phrase": "È stato deciso di usare un solo endpoint di ricezione per tutti i flussi in ingresso.", "kind": "Decision", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "AS-02", "doc": "af", "phrase": "Si assume che il volume degli ordini non superi mille al giorno anche nei periodi promozionali.", "kind": "Assumption", "certainty": "Hypothesized", "section": "Assumptions", "classification": "Assumed" },
+    { "ref": "AS-04", "doc": "af", "phrase": "Si ipotizza che i clienti accettino la conferma d'ordine ORDRSP entro un'ora.", "kind": "Assumption", "certainty": "Hypothesized", "section": "Assumptions", "classification": "Assumed" },
+    { "ref": "IN-03", "doc": "af", "phrase": "Dal vincolo di manutenzione si deduce che le fatture della domenica notte vengono inviate dopo le quattro.", "kind": "Constraint", "certainty": "Inferred", "section": "Constraints", "classification": "Inferred" },
+    { "ref": "AL-01", "doc": "af", "phrase": "Per il riprocessamento si valuta un'alternativa: la scadenza automatica oppure un riprocessamento senza scadenza.", "kind": "Alternative", "certainty": "Hypothesized", "section": "Assumptions", "classification": "Assumed", "note": "la certezza Hypothesized prevale sul tipo Alternative (regola leaf-projection-1); nei conflitti Open un'Alternative contestata non si presenta come decisione acquisita" },
+    { "ref": "AL-03", "doc": "af", "phrase": "Per l'archivio dei messaggi è da chiarire se usare lo storage interno o quello del fornitore dell'hub.", "kind": "Alternative", "certainty": "ToClarify", "section": "OpenQuestions", "classification": "Documented" },
+    { "ref": "DA-02", "doc": "af", "phrase": "Resta aperta la decisione sul termine massimo di invio della fattura, ventiquattro o quarantotto ore.", "kind": "Decision", "certainty": "ToClarify", "section": "OpenQuestions", "classification": "Documented" },
+    { "ref": "VB-03", "doc": "verbale", "phrase": "Il timeout del riprocessamento automatico dei messaggi in errore passa da due ore a quattro ore.", "kind": "Decision", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "VB-05", "doc": "verbale", "phrase": "Il campo codiceDestinazione dell'ordine diventa obbligatorio, mentre nell'analisi era facoltativo.", "kind": "Decision", "certainty": "Declared", "section": "Requirements", "classification": "Documented" },
+    { "ref": "PM-01", "doc": "pm", "phrase": "Gestionale Alfa resta il sistema di riferimento per le anagrafiche dei clienti.", "kind": "Constraint", "certainty": "Declared", "section": "Constraints", "classification": "Declared" },
+    { "ref": "PM-02", "doc": "pm", "phrase": "Il go-live della prima fase è fissato a marzo.", "kind": "Decision", "certainty": "Declared", "section": "Requirements", "classification": "Declared" }
+  ],
+  "versionConflicts": [
+    { "id": "C1", "older": "ER-05", "newer": "VB-03", "topic": "timeout di riprocessamento", "expected": "conflitto di versione fra documenti: 2 ore (analisi) contro 4 ore (verbale); il verbale è successivo ma la sostituzione non è dichiarata nell'analisi", "mustStayOpenUnlessDeclared": true },
+    { "id": "C2", "older": "ORD-05", "newer": "VB-05", "topic": "codiceDestinazione facoltativo/obbligatorio", "expected": "conflitto di versione fra documenti: facoltativo (analisi, tracciato ORDERS) contro obbligatorio (verbale)", "mustStayOpenUnlessDeclared": true }
+  ],
+  "gaps": [
+    { "ref": "PM-03", "question": "Chi gestisce gli scarti della DESADV?", "expectedOutcome": "PartialOrNone", "relatedRefs": ["FD-06", "ER-10", "ER-11", "DA-01"], "expected": "nessun documento assegna in modo esplicito gli scarti della DESADV (FD-06 li mette in coda, ER-10/ER-11 assegnano solo scarti di anagrafica e articolo, DA-01 è una decisione aperta sui rinvii): il Gap resta aperto con evidenze parziali" },
+    { "ref": "PM-04", "question": "La fattura va inviata entro 24 o 48 ore?", "expectedOutcome": "ConflictingCandidates", "relatedRefs": ["FI-03", "DA-02"], "expected": "FI-03 dichiara 24 ore mentre DA-02 lascia aperta la scelta fra 24 e 48: il Gap non ha una risposta univoca e deve restare aperto come domanda canonica, anche se estremo di un conflitto Open (R-D2b-1)" }
+  ],
+  "multiSourceEvidence": {
+    "note": "Evidenze con più di una fonte documentale (anche di documenti diversi) per i test di provenienza: l'evidenza `ref` cita, oltre alla propria riga, anche la riga `extraSourceRef`.",
+    "refs": [ { "ref": "ER-02", "extraSourceRef": "VB-08" }, { "ref": "ER-14", "extraSourceRef": "FO-05" }, { "ref": "RF-06", "extraSourceRef": "AS-04" } ]
+  },
+  "counts": { "factsMin": 20, "versionConflicts": 2, "pmGaps": 2, "evidenceMin": 160, "evidenceMax": 190 }
+}

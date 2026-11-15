@@ -1,0 +1,7 @@
+{
+  "messages": [
+    { "id": "pm-1", "sequence": 1, "text": "Gestionale Alfa resta il sistema di riferimento per le anagrafiche dei clienti. Il go-live della prima fase è fissato a marzo." },
+    { "id": "pm-2", "sequence": 2, "text": "Chi gestisce gli scarti della DESADV?" },
+    { "id": "pm-3", "sequence": 3, "text": "La fattura va inviata entro 24 o 48 ore?" }
+  ]
+}
