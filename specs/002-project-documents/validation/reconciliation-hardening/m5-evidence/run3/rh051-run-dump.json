@@ -1,0 +1,1307 @@
+{
+  "generativeCalls": 15,
+  "generativeBlocked": 0,
+  "generativeCap": 200,
+  "window": 65536,
+  "output": 8192,
+  "margin": 1024,
+  "runError": "InvalidCastException",
+  "runRow": [],
+  "inferenceCalls": [
+    {
+      "ms": 1433,
+      "phase": "Chat",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 4096,
+      "startedAt": "2026-11-15T09:43:31.415388+00:00",
+      "promptTokens": 660,
+      "completionTokens": 50
+    },
+    {
+      "ms": 9995,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:43:33.649535+00:00",
+      "promptTokens": 1940,
+      "completionTokens": 530
+    },
+    {
+      "ms": 1162,
+      "phase": "Chat",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 4096,
+      "startedAt": "2026-11-15T09:43:45.014462+00:00",
+      "promptTokens": 729,
+      "completionTokens": 41
+    },
+    {
+      "ms": 4929,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:43:46.838945+00:00",
+      "promptTokens": 2256,
+      "completionTokens": 258
+    },
+    {
+      "ms": 1111,
+      "phase": "Chat",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 4096,
+      "startedAt": "2026-11-15T09:43:52.658163+00:00",
+      "promptTokens": 795,
+      "completionTokens": 41
+    },
+    {
+      "ms": 5823,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:43:54.303284+00:00",
+      "promptTokens": 2329,
+      "completionTokens": 314
+    },
+    {
+      "ms": 109594,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:45:28.087448+00:00",
+      "promptTokens": 3689,
+      "completionTokens": 6501
+    },
+    {
+      "ms": 128323,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:47:19.184976+00:00",
+      "promptTokens": 3640,
+      "completionTokens": 7659
+    },
+    {
+      "ms": 19572,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:49:28.83059+00:00",
+      "promptTokens": 2413,
+      "completionTokens": 1153
+    },
+    {
+      "ms": 226949,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:50:38.739787+00:00",
+      "promptTokens": 2997,
+      "completionTokens": 13488
+    },
+    {
+      "ms": 116968,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:54:27.080122+00:00",
+      "promptTokens": 3173,
+      "completionTokens": 7065
+    },
+    {
+      "ms": 114295,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:56:25.342751+00:00",
+      "promptTokens": 3499,
+      "completionTokens": 6904
+    },
+    {
+      "ms": 159722,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T09:59:03.989572+00:00",
+      "promptTokens": 3671,
+      "completionTokens": 9361
+    },
+    {
+      "ms": 18988,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T10:01:45.052358+00:00",
+      "promptTokens": 2451,
+      "completionTokens": 1109
+    },
+    {
+      "ms": 47173,
+      "phase": "Extraction",
+      "runId": null,
+      "finish": "stop",
+      "maxOut": 16384,
+      "startedAt": "2026-11-15T10:02:06.534478+00:00",
+      "promptTokens": 2948,
+      "completionTokens": 2833
+    }
+  ],
+  "derivedBatches": [],
+  "workOutputs": [],
+  "ledger": [
+    {
+      "kind": "Goal",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'integrazione automatizza lo scambio di ordini, avvisi di spedizione e fatture fra Gestionale Alfa e Hub Beta."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Alla riunione hanno partecipato l'ufficio sistemi informativi, l'ufficio ordini e il referente di Hub Beta."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'ordine del giorno comprendeva la revisione delle regole di riprocessamento e dei campi dei tracciati."
+    },
+    {
+      "kind": "Goal",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'obiettivo è eliminare la digitazione manuale degli ordini ricevuti dai clienti tramite Hub Beta."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il timeout del riprocessamento automatico dei messaggi in errore è fissato a quattro ore."
+    },
+    {
+      "kind": "Goal",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'obiettivo è rendere disponibile l'avviso di spedizione al cliente entro la chiusura della spedizione."
+    },
+    {
+      "kind": "Assumption",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il tempo di ripristino dichiarato da Hub Beta dopo un'interruzione è il motivo della modifica del timeout."
+    },
+    {
+      "kind": "Goal",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'obiettivo è inviare le fatture ai clienti in formato elettronico tramite Hub Beta."
+    },
+    {
+      "kind": "Goal",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'obiettivo è ridurre gli scarti dei messaggi sotto l'uno per cento dei messaggi scambiati."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceDestinazione dell'ordine è obbligatorio."
+    },
+    {
+      "kind": "Action",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'ufficio ordini comunicherà ai dodici clienti il nuovo obbligo del codice destinazione."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gestionale Alfa è il sistema gestionale dell'azienda e custodisce anagrafiche, ordini, spedizioni e fatture."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Hub Beta è l'hub EDI del fornitore di servizi che instrada i messaggi verso i clienti."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "I tracciati INVOIC e DESADV restano invariati rispetto all'analisi funzionale."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il numero massimo di tentativi automatici è fissato a cinque."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "I clienti coinvolti nella prima fase sono dodici e usano lo standard EDIFACT D96A."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'integrazione sostituisce lo scambio attuale di file CSV via posta elettronica."
+    },
+    {
+      "kind": "Action",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'ufficio sistemi informativi aggiorna l'analisi funzionale con le due regole modificate."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il volume atteso è di circa quattrocento ordini al giorno con punte di mille nei periodi promozionali."
+    },
+    {
+      "kind": "Action",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il referente di Hub Beta conferma la finestra di manutenzione entro la settimana successiva."
+    },
+    {
+      "kind": "Context",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il responsabile funzionale dell'integrazione per l'azienda è l'ufficio sistemi informativi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Hub Beta consegna ogni ordine cliente a Gestionale Alfa come messaggio ORDERS in formato JSON."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gestionale Alfa riceve gli ordini tramite un endpoint HTTPS esposto solo verso Hub Beta."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Alla ricezione Gestionale Alfa risponde con una conferma tecnica entro cinque secondi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'ordine viene creato in stato «da validare» e passa a «confermato» dopo i controlli di anagrafica."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Un ordine duplicato, riconosciuto dal numero ordine del cliente, non crea un secondo ordine."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'ordine con articoli non presenti in anagrafica viene sospeso e segnalato all'ufficio ordini."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gestionale Alfa genera un messaggio DESADV alla chiusura di ogni spedizione."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il messaggio DESADV riporta per ogni collo il codice SSCC e le quantità spedite."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gestionale Alfa invia il DESADV a Hub Beta tramite chiamata HTTPS autenticata."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Hub Beta restituisce una conferma di consegna del messaggio al cliente."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Una spedizione parziale genera un DESADV per ogni parte spedita."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gli scarti del DESADV restituiti da Hub Beta vengono registrati in una coda di errori."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gestionale Alfa genera un messaggio INVOIC per ogni fattura emessa a un cliente collegato all'hub."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'invio della fattura a Hub Beta avviene solo dopo la registrazione contabile definitiva."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "La fattura va inviata a Hub Beta entro 24 ore dalla registrazione contabile."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Le note di credito seguono lo stesso flusso della fattura con tipo documento diverso."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Hub Beta restituisce l'esito di accettazione della fattura da parte del cliente."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Una fattura respinta dal cliente torna in stato «da correggere» in Gestionale Alfa."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve validare ogni ordine ricevuto rispetto all'anagrafica clienti di Gestionale Alfa."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve accettare ordini con un massimo di cinquecento righe."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve convertire le unità di misura del cliente in quelle di Gestionale Alfa."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve conservare il messaggio ORDERS originale per cinque anni."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve assegnare a ogni ordine un numero interno progressivo."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve confermare l'ordine al cliente con un messaggio ORDRSP entro un'ora dalla validazione."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve calcolare la data di consegna richiesta in base al calendario del magazzino."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve rifiutare gli ordini di clienti sospesi per insolvenza."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve generare i colli del DESADV rispettando il peso massimo di venticinque chilogrammi per collo."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve riportare nel DESADV il numero ordine originale del cliente."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve stampare l'etichetta SSCC per ogni collo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve impedire l'invio del DESADV se la spedizione non è chiusa."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve emettere la fattura con aliquote IVA coerenti con la destinazione."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve riportare nell'INVOIC il riferimento al DESADV di spedizione."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve inviare le note di credito entro lo stesso termine delle fatture."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve registrare ogni messaggio inviato o ricevuto con data, esito e identificativo."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve permettere all'ufficio ordini di consultare lo stato di ogni messaggio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve segnalare via posta elettronica i messaggi scartati dopo l'ultimo tentativo."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve permettere il riprocessamento manuale di un singolo messaggio scartato."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve consentire la sospensione dell'integrazione per un singolo cliente."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve produrre ogni giorno un riepilogo dei messaggi scambiati per cliente."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve cifrare i messaggi in transito con TLS 1.2 o superiore."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve autenticare Hub Beta con un certificato client."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve rispondere alle richieste di Hub Beta entro dieci secondi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve poter gestire un ambiente di collaudo separato dalla produzione."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroOrdineCliente è di tipo testo con lunghezza massima 20 ed è obbligatorio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo dataOrdine è di tipo data con lunghezza 10 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo dataOrdine deve rispettare il formato AAAA-MM-GG."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceCliente è di tipo testo con lunghezza massima 12 ed è obbligatorio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo partitaIvaCliente è di tipo testo con lunghezza massima 16 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo partitaIvaCliente non deve contenere il prefisso del paese."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceDestinazione è di tipo testo con lunghezza massima 8 ed è facoltativo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Se il campo codiceDestinazione è vuoto, vale la sede legale."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo dataConsegnaRichiesta è di tipo data con lunghezza 10 ed è facoltativo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Se il campo dataConsegnaRichiesta è assente, si applica il calendario del magazzino."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo divisa è di tipo testo con lunghezza massima 3 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo divisa deve essere un codice ISO 4217."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo condizioniPagamento è di tipo testo con lunghezza massima 6 ed è facoltativo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo condizioniPagamento è il codice delle condizioni concordate."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo noteOrdine è di tipo testo con lunghezza massima 200 ed è facoltativo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo noteOrdine è testo libero senza vincoli di formato."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroRighe è di tipo numero con lunghezza 3 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroRighe non deve essere superiore a cinquecento."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroSpedizione è di tipo testo con lunghezza massima 15 ed è obbligatorio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroOrdineCliente è di tipo testo con lunghezza massima 20 ed è obbligatorio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo dataSpedizione è di tipo data con lunghezza 10 ed è obbligatorio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceDestinazione è di tipo testo con lunghezza massima 8 ed è obbligatorio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo vettore è di tipo testo con lunghezza massima 30 ed è facoltativo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo vettore è la ragione sociale del vettore."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroColli è di tipo numero con lunghezza 4 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroColli è la somma dei colli della spedizione."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo pesoLordoKg è di tipo decimale con lunghezza 9 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo pesoLordoKg è il peso lordo complessivo in chilogrammi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceSSCC è di tipo testo con lunghezza massima 18 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceSSCC è un codice per ogni collo."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo tipoSpedizione è di tipo testo con lunghezza massima 1 ed è obbligatorio."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo tipoSpedizione può essere T totale oppure P parziale."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo noteSpedizione è di tipo testo con lunghezza massima 100 ed è facoltativo."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo noteSpedizione è testo libero per il cliente."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo numeroFattura è di tipo testo, lunghezza 15, obbligatorio e rappresenta il progressivo annuale."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo dataFattura è di tipo data, lunghezza 10, obbligatorio e rappresenta la data di registrazione contabile."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo tipoDocumento è di tipo testo, lunghezza 2, obbligatorio e può assumere i valori FT (fattura) oppure NC (nota di credito)."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo codiceCliente è di tipo testo, lunghezza 12, obbligatorio e deve corrispondere allo stesso codice dell'ordine."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo riferimentoSpedizione è di tipo testo, lunghezza 15, obbligatorio e rappresenta il numero del DESADV collegato."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo imponibile è di tipo decimale, lunghezza 12, obbligatorio e deve avere due decimali."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo aliquotaIva è di tipo decimale, lunghezza 5, obbligatorio e rappresenta una percentuale con due decimali."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo importoIva è di tipo decimale, lunghezza 12, obbligatorio e deve avere due decimali."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo totaleDocumento è di tipo decimale, lunghezza 12, obbligatorio e rappresenta la somma di imponibile più imposta."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il campo scadenzaPagamento è di tipo data, lunghezza 10, non obbligatorio e viene calcolato dalle condizioni di pagamento."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta PCE corrisponde al codice Gestionale Alfa PZ e significa pezzi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta KGM corrisponde al codice Gestionale Alfa KG e significa chilogrammi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta LTR corrisponde al codice Gestionale Alfa LT e significa litri."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta MTR corrisponde al codice Gestionale Alfa MT e significa metri."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta PK corrisponde al codice Gestionale Alfa CF e significa confezioni."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta BX corrisponde al codice Gestionale Alfa SC e significa scatole."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta PF corrisponde al codice Gestionale Alfa PL e significa pallet."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta SET corrisponde al codice Gestionale Alfa KT e significa kit."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E01 corrisponde al codice Gestionale Alfa SCH01 e indica formato del messaggio non valido."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E02 corrisponde al codice Gestionale Alfa SCH02 e indica cliente non riconosciuto."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E03 corrisponde al codice Gestionale Alfa SCH03 e indica articolo non riconosciuto."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E04 corrisponde al codice Gestionale Alfa SCH04 e indica destinatario non raggiungibile."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E05 corrisponde al codice Gestionale Alfa SCH05 e indica messaggio duplicato."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E06 corrisponde al codice Gestionale Alfa SCH06 e indica firma o certificato non validi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E07 corrisponde al codice Gestionale Alfa SCH07 e indica quantità non coerente con l'ordine."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il codice Hub Beta E08 corrisponde al codice Gestionale Alfa SCH08 e indica errore tecnico dell'hub."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gli errori di formato vengono respinti subito e non subiscono ritentativi automatici."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gli errori tecnici di Hub Beta vengono ritentati automaticamente fino a cinque volte."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Fra un tentativo di ritentativo e il successivo trascorrono quindici minuti."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Dopo l'ultimo tentativo fallito il messaggio passa nello stato «scartato»."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il riprocessamento automatico dei messaggi in errore scade dopo un timeout di due ore."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Un messaggio scaduto resta disponibile per il riprocessamento manuale."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il riprocessamento manuale non modifica il contenuto originale del messaggio."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Ogni riprocessamento genera una nuova riga nel registro dei messaggi."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Un messaggio riprocessato con successo chiude automaticamente lo scarto collegato."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gli scarti per cliente non riconosciuto vengono assegnati all'ufficio anagrafiche."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gli scarti per articolo non riconosciuto vengono assegnati all'ufficio ordini."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gli scarti tecnici ripetuti per più di un'ora generano una segnalazione al referente dell'hub."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il registro degli errori non contiene mai il testo completo delle note libere."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Un messaggio duplicato viene scartato con la causale SCH05 senza notifica al cliente."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'integrazione deve usare esclusivamente il protocollo HTTPS."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Hub Beta accetta messaggi di dimensione non superiore a cinque megabyte."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Gestionale Alfa non deve esporre endpoint verso reti diverse da quella di Hub Beta."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'invio dei messaggi non può avvenire fuori dalla finestra di manutenzione di Hub Beta."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "La finestra di manutenzione di Hub Beta è la domenica dalle due alle quattro del mattino."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "I messaggi devono usare la codifica UTF-8."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "I certificati client scadono dopo dodici mesi e vanno rinnovati prima della scadenza."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "I certificati client vanno rinnovati prima della scadenza."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il numero di richieste verso Hub Beta non può superare dieci al secondo."
+    },
+    {
+      "kind": "Exclusion",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Le anagrafiche dei clienti non vengono scambiate tramite l'integrazione."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il collaudo con i clienti avviene solo nell'ambiente di prova di Hub Beta."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve mostrare il numero di messaggi in coda per ciascun flusso."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve segnalare una coda ferma da più di trenta minuti."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve conservare le statistiche giornaliere per un anno."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve permettere l'esportazione del registro dei messaggi in formato CSV."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve tracciare la latenza media di risposta di Hub Beta."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il sistema deve notificare un'interruzione del servizio di Hub Beta entro cinque minuti."
+    },
+    {
+      "kind": "Decision",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "È stato deciso di usare un solo endpoint di ricezione per tutti i flussi in ingresso."
+    },
+    {
+      "kind": "Decision",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "È stato deciso di conservare i messaggi originali in un archivio separato dal database operativo."
+    },
+    {
+      "kind": "Decision",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "È stato deciso di avviare la prima fase con i dodici clienti già collegati ad Hub Beta."
+    },
+    {
+      "kind": "Decision",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "È stato deciso di non gestire in prima fase i messaggi di variazione ordine."
+    },
+    {
+      "kind": "Exclusion",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Sono esclusi dalla prima fase i clienti che richiedono lo standard ANSI X12."
+    },
+    {
+      "kind": "Exclusion",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Sono esclusi dall'integrazione gli ordini di assistenza tecnica."
+    },
+    {
+      "kind": "Exclusion",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "È esclusa la gestione delle fatture proforma."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'integrazione dipende dal rilascio del certificato client da parte di Hub Beta."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il rilascio del certificato client da parte di Hub Beta è un prerequisito per l'integrazione."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "L'invio delle fatture dipende dalla chiusura contabile giornaliera di Gestionale Alfa."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "La chiusura contabile giornaliera di Gestionale Alfa è un prerequisito per l'invio delle fatture."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "La stampa delle etichette SSCC dipende dalla configurazione delle stampanti di magazzino."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "La configurazione delle stampanti di magazzino è un prerequisito per la stampa delle etichette SSCC."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "Il collaudo dipende dalla disponibilità dell'ambiente di prova di Hub Beta."
+    },
+    {
+      "kind": "Dependency",
+      "origin": "Document",
+      "certainty": "Declared",
+      "statement": "La disponibilità dell'ambiente di prova di Hub Beta è un prerequisito per il collaudo."
+    },
+    {
+      "kind": "Assumption",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Si assume che i clienti usino sempre le unità di misura della tabella di trascodifica."
+    },
+    {
+      "kind": "Assumption",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Si assume che il volume degli ordini non superi mille al giorno anche nei periodi promozionali."
+    },
+    {
+      "kind": "Assumption",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Si assume che Hub Beta mantenga invariato il formato dei messaggi durante la prima fase."
+    },
+    {
+      "kind": "Assumption",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Si ipotizza che i clienti accettino la conferma d'ordine ORDRSP entro un'ora."
+    },
+    {
+      "kind": "Other",
+      "origin": "Document",
+      "certainty": "Inferred",
+      "statement": "Il carico medio è inferiore a un messaggio ogni minuto."
+    },
+    {
+      "kind": "Requirement",
+      "origin": "Document",
+      "certainty": "Inferred",
+      "statement": "I colli devono essere identificati singolarmente."
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Document",
+      "certainty": "Inferred",
+      "statement": "Le fatture della domenica notte vengono inviate dopo le quattro."
+    },
+    {
+      "kind": "Other",
+      "origin": "Document",
+      "certainty": "Inferred",
+      "statement": "L'archivio dei messaggi cresce di circa duecentomila messaggi l'anno."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Per il riprocessamento si valuta un'alternativa: la scadenza automatica oppure un riprocessamento senza scadenza."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Per il riprocessamento si valuta un'alternativa: la scadenza automatica oppure un riprocessamento senza scadenza."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Per gli avvisi di spedizione si valuta un'alternativa: un unico DESADV per ordine oppure uno per spedizione."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "Hypothesized",
+      "statement": "Per gli avvisi di spedizione si valuta un'alternativa: un unico DESADV per ordine oppure uno per spedizione."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "ToClarify",
+      "statement": "Per l'archivio dei messaggi è da chiarire se usare lo storage interno o quello del fornitore dell'hub."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "ToClarify",
+      "statement": "Resta aperta la decisione su chi gestisce i rinvii dei messaggi dopo la scadenza del riprocessamento."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "ToClarify",
+      "statement": "Resta aperta la decisione sul termine massimo di invio della fattura, ventiquattro o quarantotto ore."
+    },
+    {
+      "kind": "Alternative",
+      "origin": "Document",
+      "certainty": "ToClarify",
+      "statement": "Resta aperta la decisione sul formato del numero ordine per i clienti con più sedi."
+    },
+    {
+      "kind": "Context",
+      "origin": "Message",
+      "certainty": "Declared",
+      "statement": "Il Gestionale Alfa è il sistema di riferimento per le anagrafiche dei clienti."
+    },
+    {
+      "kind": "Gap",
+      "origin": "Message",
+      "certainty": "ToClarify",
+      "statement": "Il PM chiede se la fattura debba essere inviata entro 24 o 48 ore."
+    },
+    {
+      "kind": "Gap",
+      "origin": "Message",
+      "certainty": "ToClarify",
+      "statement": "Chi gestisce gli scarti della DESADV?"
+    },
+    {
+      "kind": "Constraint",
+      "origin": "Message",
+      "certainty": "Declared",
+      "statement": "Il go-live della prima fase è fissato a marzo."
+    }
+  ],
+  "analysisRevision": []
+}

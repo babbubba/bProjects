@@ -1,0 +1,32 @@
+  RH051: 1 verifiche fallite: [STRUTTURALE] il fattore di espansione 24 e congelato nel piano di estrazione (manifesto del run) — 0 manifesti con outputExpansion=24
+    == RH051 FAIL (19 PASS / 1 FAIL) ==
+      NOTE configurazione: finestra misurata W=65536 output O=8192 margine M=1024 ragionamento=False => budget di input Analysis B=W-O-M=56320 token; modello=Qwen3.6-35B-Smart
+      NOTE corpus generato (seed 20261106) in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\RH051-20261115094330: 2 documenti, 15553 caratteri, 4485 token misurati = 0,08x B; hash in C:\Users\fcavallari\AppData\Local\Temp\bprojects-i5-real\RH051-20261115094330\hashes.txt
+      NOTE   af-integrazione-edi.md sha256=f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b testo-sha256=f966d143d16fa8ad30ac2edfd5e7ca45b435743524dcf4a1213159fd71afe61b byte=14316 regole-secondarie=0
+      NOTE   verbale-riunione-2.md sha256=b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778 testo-sha256=b9c60b61b6777a2a3cb190774b4f948c4056fd9f2380a46cd1f4f1a348baf778 byte=1305 regole-secondarie=0
+      NOTE [MISURA] il testo generato (tokenizer reale, prima dell'upload): 4485 token = 0,08x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [COMPLETAMENTO] dichiarazione del PM: POST messaggio 201 — 201
+      PASS [COMPLETAMENTO] dichiarazione del PM: turno di chat Completed (l'estrazione della dichiarazione e in coda al turno) — Completed
+      PASS [STRUTTURALE] af-integrazione-edi.md: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] af-integrazione-edi.md: upload 201 — 201
+      PASS [STRUTTURALE] verbale-riunione-2.md: originale su disco con SHA-256 registrato
+      PASS [STRUTTURALE] verbale-riunione-2.md: upload 201 — 201
+      PASS [COMPLETAMENTO] af-integrazione-edi.md: preparazione Ready (parser reale + estrazione reale su tutte le porzioni) — Ready
+      PASS [COMPLETAMENTO] verbale-riunione-2.md: preparazione Ready (parser reale + estrazione reale su tutte le porzioni) — Ready
+      PASS [COPERTURA] af-integrazione-edi.md: tutte le 15 porzioni di estrazione sono Completed (nessuna omessa o fallita) — 0 non completate
+      PASS [COPERTURA] af-integrazione-edi.md: il testo estratto copre il testo generato (nessun blocco perso dal parser) — 14075 contro 14253 caratteri
+      PASS [COPERTURA] verbale-riunione-2.md: tutte le 4 porzioni di estrazione sono Completed (nessuna omessa o fallita) — 0 non completate
+      PASS [COPERTURA] verbale-riunione-2.md: il testo estratto copre il testo generato (nessun blocco perso dal parser) — 1277 contro 1300 caratteri
+      NOTE testo estratto dal parser: 4328 token = 0,08x B
+      NOTE [MISURA] il testo REALMENTE estratto dal parser (nessuna riduzione, finestra non aumentata): 4328 token = 0,08x B; MinimumRatio=0: nessun requisito sul testo grezzo (non e un PASS); il requisito di overflow e quello del ledger dello stadio Gap
+      NOTE BUDGET (prima di Analizza) — MISURATO: W=65536 O=8192 M=1024 B=56320; ledger=190 evidenze; enunciati=3750 token (tokenizer reale del modello). STIMA EURISTICA (non autorevole): Gap≈24650 token = enunciati + 110/voce; soglia gerarchia ≈ 68 evidenze. La misura AUTOREVOLE dello stadio Gap e quella del prodotto durante il run (fail-fast a zero invii se l'intero ledger non entra in B)
+      PASS [STRUTTURALE/EURISTICA] la gerarchia sara verosimilmente instradata (evidenze oltre la soglia di output della chiamata singola) — 190 evidenze contro soglia ≈ 68
+      PASS [STRUTTURALE/EURISTICA] lo stadio Gap entra verosimilmente nel budget (stima con margine del 15%; salvaguardia, non misura del prodotto) — stima 24650 contro B=56320
+      FAIL [STRUTTURALE] il fattore di espansione 24 e congelato nel piano di estrazione (manifesto del run) — 0 manifesti con outputExpansion=24
+      NOTE chiamate al modello fase=Chat: n=3 durata totale=3s finish=length=0
+      NOTE chiamate al modello fase=Extraction: n=12 durata totale=962s finish=length=0
+      PASS [COMPLETAMENTO] nessuna chiamata troncata (finish=length) — 0 troncate
