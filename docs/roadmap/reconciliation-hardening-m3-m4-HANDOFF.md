@@ -1,5 +1,7 @@
 # Handoff — Reconciliation Hardening M3 + M4 (sessione interrotta il 2026-11-14)
 
+> **SUPERATO il 2026-11-15:** M3 e M4 sono completate e committate (T171–T177); lo stato, i numeri e le divergenze aperte sono in «Evidenze M3» e «Evidenze M4» di `specs/002-project-documents/validation/reconciliation-hardening/assessment.md`. Questo handoff resta come storico della sessione interrotta.
+
 Branch `feature/003-retrieval-evidence-search`, worktree `C:\source\repos\babbubba\bProjects`. Nessun push, merge o rebase. v11 NON è default. 003 e DGX non toccati. Nessun test DGX/T040.
 
 ## Stato
