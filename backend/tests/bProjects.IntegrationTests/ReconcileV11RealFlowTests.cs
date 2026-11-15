@@ -14,16 +14,30 @@ namespace bProjects.IntegrationTests;
 // ERP/EDI sintetica, con modello DGX reale. La v11 NON e il default: il run viene congelato v11 da un trigger SOLO nel database di test (nessuna modifica del prodotto). Nessun rilancio automatico. Tetto duro di
 // chiamate GENERATIVE (completions) per l'intero test. Il gold (fatti, conflitti, Gap) e dichiarato QUI, nel commit che precede l'esecuzione, e non si adatta alle risposte.
 //
-// Configurazione della prova (adeguamento esplicito della configurazione del test, motivato in specs/002-project-documents/validation/reconciliation-hardening/evidence-m5.md): W=40960, O=8192, M=1024
-// => B=31744. Con W=32768 e O=16384 (B=15360) lo stadio Gap del ledger da ~170 evidenze (21.810 token misurati in M4) non entra nel budget; con O=8192 la gerarchia e comunque instradata (soglia ~68 evidenze).
+// Configurazione della prova (adeguamento esplicito della configurazione del test, motivato in specs/002-project-documents/validation/reconciliation-hardening/evidence-m5.md): W=65536, O=8192, M=1024
+// => B=56320, ExtractionOutputExpansion=24, Extraction MaxOutputTokens=16384, thinking spento. Seconda e ultima esecuzione. Motivi: (1) con W=32768 e O=16384 (B=15360) lo stadio Gap del ledger da ~170 evidenze
+// (21.810 token in M4) non entra nel budget; (2) la prima run (W=40960, fattore 16) si e fermata nell'estrazione: unita di tre tabelle da 10 righe, 916 token proprietari, ~23x di output contro 16x del planner;
+// con 24 il planner divide le unita con piu di 682 token proprietari; (3) con ~2 evidenze per riga di tabella il ledger atteso e 250-300 voci: a ~135 token per voce lo stadio Gap richiede ~40k token, oltre
+// B=31744 e dentro B=56320. Con O=8192 la gerarchia e comunque instradata (soglia ~68 evidenze).
 [Trait("Category", TestCategories.MafReal)]
 [Trait("Campaign", "ReconcileV11RealFlow")]
 [Collection(RealParser.CollectionName)]
 public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
 {
-    public const int Window = 40960;
+    public const int Window = 65536;
     public const int Output = 8192;
     public const int Margin = 1024;
+
+    /// <summary>Fattore di espansione dell'output dell'estrazione per la prova (default del prodotto: 16, invariato); letto dal banco da BPROJECTS_TEST_EXTRACTION_OUTPUT_EXPANSION.</summary>
+    public const double ExtractionExpansion = 24;
+
+    public const int ExtractionMaxOutput = 16384;
+
+    protected override string? RejectOptions(AiOptions options) =>
+        Math.Abs(options.ExtractionOutputExpansion - ExtractionExpansion) > 1e-9 ? $"ExtractionOutputExpansion risolto {options.ExtractionOutputExpansion} invece di {ExtractionExpansion}"
+        : options.Phases.Extraction.MaxOutputTokens != ExtractionMaxOutput ? $"MaxOutputTokens di Extraction {options.Phases.Extraction.MaxOutputTokens} invece di {ExtractionMaxOutput}"
+        : options.Phases.Extraction.EnableThinking == true ? "thinking di Extraction acceso"
+        : null;
 
     /// <summary>Tetto duro di chiamate generative (chat/completions) dell'intera prova: estrazione, turni di chat, gerarchia e stadio Gap.</summary>
     public const int GenerativeCap = 200;
@@ -191,10 +205,12 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         // e quella del prodotto: senza l'intero ledger nel budget lo stadio Gap e un fail-fast a zero invii, PRIMA della gerarchia.
         var gapEstimate = statementTokens + 110L * n;
         var hierarchyThreshold = Output / 120;   // ~120 token di output per evidenza nella stima della chiamata singola (assessment §8)
-        v.Note($"BUDGET (prima di Analizza): W={profile.WindowTokens} O={profile.OutputTokens} M={profile.MarginTokens} B={budget}; ledger={n} evidenze, enunciati={statementTokens} token (tokenizer reale); stima Gap={gapEstimate} token; soglia gerarchia ≈ {hierarchyThreshold} evidenze");
-        v.Check("[STRUTTURALE] la gerarchia sara instradata (evidenze oltre la soglia di output della chiamata singola)", n > hierarchyThreshold, $"{n} evidenze contro soglia ≈ {hierarchyThreshold}");
-        v.Check("[STRUTTURALE] lo stadio Gap e eseguibile entro il budget (stima con margine del 15%)", gapEstimate * 1.15 < budget, $"stima {gapEstimate} contro B={budget}");
-        if (n <= hierarchyThreshold || gapEstimate * 1.15 >= budget)
+        v.Note($"BUDGET (prima di Analizza) — MISURATO: W={profile.WindowTokens} O={profile.OutputTokens} M={profile.MarginTokens} B={budget}; ledger={n} evidenze; enunciati={statementTokens} token (tokenizer reale del modello). STIMA EURISTICA (non autorevole): Gap≈{gapEstimate} token = enunciati + 110/voce; soglia gerarchia ≈ {hierarchyThreshold} evidenze. La misura AUTOREVOLE dello stadio Gap e quella del prodotto durante il run (fail-fast a zero invii se l'intero ledger non entra in B)");
+        v.Check("[STRUTTURALE/EURISTICA] la gerarchia sara verosimilmente instradata (evidenze oltre la soglia di output della chiamata singola)", n > hierarchyThreshold, $"{n} evidenze contro soglia ≈ {hierarchyThreshold}");
+        v.Check("[STRUTTURALE/EURISTICA] lo stadio Gap entra verosimilmente nel budget (stima con margine del 15%; salvaguardia, non misura del prodotto)", gapEstimate * 1.15 < budget, $"stima {gapEstimate} contro B={budget}");
+        var frozenExpansion = await Count("SELECT count(*) FROM \"WorkManifests\" WHERE \"PlanJson\"::jsonb @? '$.** ? (@.outputExpansion == 24)'");
+        v.Check("[STRUTTURALE] il fattore di espansione 24 e congelato nel piano di estrazione (manifesto del run)", frozenExpansion >= 1, $"{frozenExpansion} manifesti con outputExpansion=24");
+        if (n <= hierarchyThreshold || gapEstimate * 1.15 >= budget || frozenExpansion < 1)
         {
             return false;   // nessuna analisi: la prova non e valida e non viene avviata
         }
@@ -239,6 +255,21 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         v.Check($"[SEMANTICA/GOLD] almeno il 90% dei fatti attesi e rappresentato (item, alternativa di conflitto o domanda aperta): {represented}/{GoldFacts.Length}", ratio >= FactThreshold,
             string.Join(", ", GoldFacts.Where(f => !content.Items.Any(i => f.Tokens.All(i.Has))).Select(f => f.Id)));
 
+        // ---- classificazioni sostanziali (contratto: Declared = messaggio PM, Assumed = ipotesi, Inferred = deduzione). La SEZIONE non e un requisito: un fatto conservato come alternativa di un conflitto Open e corretto.
+        var substantive = GoldFacts.Where(f => f.Classification is "Declared" or "Assumed" or "Inferred").ToList();
+        var classWrong = substantive.Where(f => content.Items.Any(i => f.Tokens.All(i.Has)) && !content.Items.Where(i => f.Tokens.All(i.Has)).Any(i => i.Classification == f.Classification)).Select(f => f.Id).ToList();
+        v.Check($"[SEMANTICA/GOLD] classificazioni sostanziali (Declared/Assumed/Inferred) dei fatti presenti coerenti con il gold: {substantive.Count - classWrong.Count}/{substantive.Count} (assenti: valutati dalla presenza)", classWrong.Count == 0, string.Join(", ", classWrong));
+        var clarify = new[] { "AL-03", "DA-02" };
+        var clarifyAsDecision = clarify.Select(id => GoldFacts.Single(f => f.Id == id)).Where(f => content.Items.Where(i => f.Tokens.All(i.Has)).Any() && !content.Items.Where(i => f.Tokens.All(i.Has)).Any(i => i.Section == "openQuestions" || i.InConflict)).Select(f => f.Id).ToList();
+        v.Check("[SEMANTICA/GOLD] i punti da chiarire (AL-03, DA-02) restano domande aperte o alternative di un conflitto, mai decisioni acquisite", clarifyAsDecision.Count == 0, string.Join(", ", clarifyAsDecision));
+        report["classificationMismatches"] = new JsonArray([.. classWrong.Select(id => (JsonNode?)JsonValue.Create(id))]);
+
+        // ---- ramo effettivamente scelto dalla v11 e stadi del run (misura autorevole del prodotto)
+        var stages = await Rows("SELECT \"Stage\" || ':' || count(*) FROM \"DerivedBatches\" WHERE \"OwnerId\" = @r GROUP BY \"Stage\" ORDER BY 1", ("r", run));
+        report["batchesByStage"] = new JsonArray([.. stages.Select(s => (JsonNode?)JsonValue.Create(s))]);
+        v.Note($"RAMO v11 (misura del prodotto): batch per stadio = {string.Join(", ", stages)}; il ramo gerarchia + stadio Gap e quello eseguito se compaiono stadi leaf/cross/compare e gap");
+        v.Check("[STRUTTURALE] la v11 ha eseguito la gerarchia (foglie) e lo stadio Gap", stages.Any(s => s.StartsWith("leaf:", StringComparison.Ordinal)) && stages.Any(s => s.StartsWith("gap:", StringComparison.Ordinal)), string.Join(", ", stages));
+
         // ---- conflitti attesi: Open, senza risoluzione, entrambi i lati come alternative; nessun lato affermato altrove
         var conflicts = new JsonArray();
         foreach (var spec in GoldConflicts)
@@ -272,6 +303,31 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         var reasons = assessments.Select(a => a.TryGetProperty("reason", out var r) ? r.GetString() : null).ToList();
         var outcomes = assessments.Select(a => a.TryGetProperty("outcome", out var o) ? o.GetString() : null).ToList();
         v.Note($"valutazioni dello stadio Gap: {string.Join("; ", outcomes.Zip(reasons, (o, r) => $"{o}/{r}"))} (attesi: tutte Open con motivo ammesso dal gold: PM-03 Partial|NoAnswer, PM-04 Ambiguous|Partial)");
+        // Collegamento record -> Gap del gold tramite l'enunciato dell'evidenza Gap (id canonico nel payload), poi motivo ammesso dal gold.
+        foreach (var spec in GoldGaps)
+        {
+            string? matchedReason = null;
+            string? matchedOutcome = null;
+            var linked = false;
+            foreach (var a in assessments)
+            {
+                if (!a.TryGetProperty("gapEvidenceId", out var idEl) || !Guid.TryParse(idEl.GetString(), out var gapId))
+                {
+                    continue;
+                }
+
+                var statement = (await Rows("SELECT \"Statement\" FROM \"Evidences\" WHERE \"Id\" = @i LIMIT 1", ("i", gapId))).FirstOrDefault() ?? string.Empty;
+                if (spec.Tokens.All(t => HasToken(statement, t)))
+                {
+                    linked = true;
+                    matchedOutcome = a.GetProperty("outcome").GetString();
+                    matchedReason = a.GetProperty("reason").GetString();
+                }
+            }
+
+            v.Check($"[COPERTURA/GOLD] {spec.Id}: la valutazione e collegata al Gap, esito Open e motivo ammesso ({string.Join('|', spec.AllowedReasons)})", linked && matchedOutcome == "Open" && spec.AllowedReasons.Contains(matchedReason ?? string.Empty), $"collegata={linked} esito={matchedOutcome} motivo={matchedReason}");
+        }
+
         v.Check("[SEMANTICA/GOLD] nessun Gap dichiarato risposto in modo univoco: tutte le valutazioni sono Open", outcomes.Count == GoldGaps.Length && outcomes.All(o => o == "Open"));
         report["gaps"] = gapRows;
 
@@ -328,6 +384,25 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         await Section("ledger", "SELECT jsonb_build_object('kind', e.\"Kind\"::text, 'certainty', e.\"Certainty\"::text, 'origin', e.\"OriginKind\"::text, 'statement', e.\"Statement\") FROM \"Evidences\" e ORDER BY e.\"OriginKind\", e.\"Ordinal\"");
         await Section("analysisRevision", "SELECT jsonb_build_object('revisionId', r.\"Id\", 'content', r.\"ContentJson\"::jsonb) FROM \"AnalysisRevisions\" r WHERE r.\"AnalysisId\" = @r", ("r", r));
         Persist("rh051-run-dump", dump);
+    }
+
+    private async Task<List<string>> Rows(string sql, params (string Name, object Value)[] args)
+    {
+        var rows = new List<string>();
+        await using var connection = await OpenConnection();
+        await using var command = new Npgsql.NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in args)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        while (await reader.ReadAsync(Ct))
+        {
+            rows.Add(reader.GetString(0));
+        }
+
+        return rows;
     }
 
     private async Task<JsonArray> RowsAsync(string sql, params (string Name, object Value)[] args)
