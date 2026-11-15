@@ -45,5 +45,24 @@ Una sola esecuzione, tetto di 200 chiamate generative, parser Docling reale (con
 - Classe del difetto: **ambientale/modello nello stadio di estrazione** (output troncato), preesistente e indipendente dalla v11.
 - Non rilanciata (mandato: una sola run).
 
+## Diagnosi del blocco di estrazione (2026-11-15, solo dati esistenti, 0 nuove inferenze)
+Fonte: telemetria `bprojects-diag` del run (richieste, risposte, `usage`, `timings`) e `/tokenize` non generativo.
+
+| Unità | Primary (OwnedTokens) | Input totale | Output | Output/Owned | Evidenze | finish |
+|---|---|---|---|---|---|---|
+| 008 | 780 | 3937 | 9689 | 12,4 | 34 | stop |
+| 009 | 1005 | 4527 | 10478 | 10,4 | 37 | stop |
+| 010 | 406 | 3076 | 4648 | 11,4 | 17 | stop |
+| **011 (fallita)** | **916** | 3420 | **16384** | **17,9 (troncata)** | 47 (a metà della 3ª tabella) | **length** |
+
+- Limite richiesto: `max_completion_tokens` 16384 (Extraction); `--n-predict` del server 32768, quindi il limite applicato è quello della richiesta. Prompt di sistema+schema ≈ 2060 token (prefisso in cache per ~2065 token).
+- `ExtractionOutputExpansion` effettivo = 16 (default, candidato T040). `Fits`: 916 × 16 = 14.656 ≤ 16.384, quindi il planner ha ammesso l'unità.
+- **Thinking: spento, verificato.** Il template della build b10703 rispetta `chat_template_kwargs.enable_thinking=false` (emette `<think>` vuoto); nessun `reasoning_content`, nessun tag `<think>`; i token di completamento coincidono con il contenuto (≈3,2–3,4 caratteri per token in tutte le chiamate). Nessun consumo di ragionamento.
+- L'unità 011 contiene **tre tabelle di 10 righe** (ORDERS, DESADV, INVOIC). Il modello scompone ogni riga in **2 evidenze** (tipo/lunghezza/obbligatorio e nota), ciascuna con fonte di riga + intestazione `Context`: ≈ 1.130 caratteri ≈ 350 token per evidenza. Le 47 evidenze emesse sono fedeli, senza ripetizioni (2 enunciati duplicati su 47, ciascuno riferito a una riga diversa), con citazioni letterali (le 23 citazioni ripetute sono l'intestazione `Context`). Fabbisogno stimato: ≈ 60 evidenze ≈ 21.000 token ≈ 23× OwnedTokens.
+- **Causa: A + D, non C.** Estrazione corretta e densa; il fattore 16 del planner, calibrato su testo discorsivo (T040), sottostima le unità composte solo da tabelle (≈ 23×). Non è sovraestrazione ripetitiva (B) né thinking (C). Il fallimento è terminale (`work_output_invalid`, nessun retry automatico) e interrompe l'intera preparazione.
+- Mancante: il testo dell'output è recuperabile fino al troncamento; la stima di 60 evidenze/21.000 token è un'estrapolazione, non misurata.
+
+**Raccomandazione.** Modifica minima per ripetere RH-051: solo configurazione del test, `Ai:ExtractionOutputExpansion` = **24** (ammesso 1–64; il banco lo legge da `BPROJECTS_TEST_EXTRACTION_OUTPUT_EXPANSION`). Con 24 le unità con Owned > 682 token si dividono (la 011 con Owned 916 non passa più; le tre tabelle sono intervalli distinti). Nessuna modifica di `MaxOutputTokens`, finestra, prompt o contratti. Stima d'impatto: +1–3 chiamate di estrazione e +3–6 minuti. Rischio sulle evidenze: nessuno sulla fedeltà (intestazioni `Context` replicate per intervallo); cambia però la dimensione del ledger, che con ≈ 2 evidenze per riga di tabella sarà verosimilmente 250–300 (non 160–190), quindi lo stadio Gap supera B=31.744: per RH-051 serve W=65536 (B=56.320), O=8192, M=1024, oppure il controllo preventivo di budget fermerà la run a zero invii. Il valore 16 predefinito del prodotto resta invariato: rivederne la calibrazione per le tabelle è una decisione separata (nuova versione di calibrazione, non decisa qui).
+
 ## Limiti
 La v11 è provata sulla grammatica e su singoli batch reali, non sulla catena completa. Il gold di RH-051 è fissato nel commit del test e non è stato valutato.
