@@ -182,7 +182,7 @@ public sealed class DocumentReconcileV11FlowTests : ReconcileRig
             var d = docs[docKey];
             return new PersistedSource
             {
-                SourceId = MeasurementLedger.Id("flow|src|" + tag), Kind = EvidenceSourceKind.DocumentPassage, Role = EvidenceSourceRole.Primary, CitationGroupId = MeasurementLedger.Id("flow|grp|" + tag), Part = 0,
+                SourceId = MeasurementLedger.Id($"flow|src|{project}|{tag}"), Kind = EvidenceSourceKind.DocumentPassage, Role = EvidenceSourceRole.Primary, CitationGroupId = MeasurementLedger.Id($"flow|grp|{project}|{tag}"), Part = 0,
                 MessageId = null, Sequence = null, DocumentId = d.Document, DocumentVersionId = d.Version, PreparationId = d.Preparation, ArtifactId = d.Artifact, BlockId = d.Blocks[block],
                 Start = start, End = end, Quote = quote,
             };
@@ -310,7 +310,7 @@ public sealed class DocumentReconcileV11FlowTests : ReconcileRig
         var items = new List<EvSeed>();
         foreach (var r in rows.Where(r => r.Doc != "pm"))
         {
-            ids[r.Ref] = RepresentativeLedger.EvidenceId(r.Ref);
+            ids[r.Ref] = MeasurementLedger.Id($"flow|ev|{project}|{r.Ref}");
             var (subject, scope) = StructureOf(r.Ref);
             (string, int, int, int, string)? extra = null;
             if (r.ExtraRef is { } er && rows.Any(x => x.Ref == er))
@@ -566,5 +566,189 @@ public sealed class DocumentReconcileV11FlowTests : ReconcileRig
         var replay = await RunV11Async(claim, again);
         Assert.Equal(result.ResultRevisionId, replay.ResultRevisionId);
         Assert.Empty(again.Requests);
+    }
+
+    // ================================================================ RH-042 — fault injection (estensione di RH-041, ledger rappresentativo, scenario A)
+
+    private static string Respond(DocumentChatWorkflowTests.ChatRequest r) =>
+        DocumentGapStageWorkflowTests.IsStage(r) ? GapStage(r) : Hierarchy(r, ScriptedPairs());
+
+    /// <summary>Contenuto confrontabile fra due run dello stesso ledger: domande aperte, alternative dei conflitti e sezioni (testi ordinati).</summary>
+    private static string Fingerprint(DocumentAnalysisContent c) => string.Join(
+        "\n", new[]
+        {
+            "Q:" + string.Join('|', c.OpenQuestions.Select(i => i.Text).Order(StringComparer.Ordinal)),
+            "C:" + string.Join('|', c.Conflicts.Select(x => string.Join('+', x.Alternatives.Select(a => a.Text).Order(StringComparer.Ordinal))).Order(StringComparer.Ordinal)),
+            "R:" + string.Join('|', c.Requirements.Select(i => i.Text).Order(StringComparer.Ordinal)),
+            "A:" + string.Join('|', c.Assumptions.Select(i => i.Text).Order(StringComparer.Ordinal)),
+        });
+
+    private async Task<string> CleanFingerprintAsync()
+    {
+        var clean = await ArrangeRepresentativeAsync();
+        using var _ = clean.Client;
+        var result = await RunV11Async(clean.Claim, Model(ScriptedPairs()));
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(clean.Run));
+        return Fingerprint(await ContentAsync(clean.Run));
+    }
+
+    /// <summary>Richieste in ordine: 1 foglia A, 2 foglia B, 3 cross, 4–6 confronti, 7 stadio Gap (ordine osservato in scenario A; la riduzione e l'espansione non si generano perché il ledger entra in due foglie).</summary>
+    [Theory]
+    [InlineData(2, "dopo il commit della foglia A")]
+    [InlineData(3, "prima del commit del cross")]
+    [InlineData(4, "prima del commit del primo confronto")]
+    [InlineData(6, "prima del commit dell'ultimo confronto")]
+    [InlineData(7, "durante lo stadio Gap")]
+    public async Task A_crash_resumes_in_a_new_process_without_reinferring_committed_batches_without_duplicates_and_with_the_same_analysis_as_a_clean_run(int crashAt, string label)
+    {
+        var expected = await CleanFingerprintAsync();
+        var a = await ArrangeRepresentativeAsync();
+        using var _ = a.Client;
+        var seen = 0;
+        var failing = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            ContextWindow = Window,
+            Responder = r => Interlocked.Increment(ref seen) == crashAt ? throw new InvalidOperationException("rete caduta") : Respond(r),
+        };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => RunV11Async(a.Claim, failing));
+        var before = await Committed(a.Run);
+        Assert.Equal(crashAt - 1, before);                                                          // {label}: esattamente i batch precedenti sono durevoli
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", a.Run)));
+        var hashesBefore = await Scalar<string>("SELECT string_agg(\"OutputHash\", ',' ORDER BY \"BatchId\") FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", a.Run));
+
+        var healthy = Model(ScriptedPairs());
+        var resumed = await RunV11Async(a.Claim, healthy);
+
+        Assert.True(resumed.Status == ProcessingRunStatus.Completed, label + ": " + await Message(a.Run));
+        var all = before + healthy.Requests.Count;
+        Assert.Equal(all, await Committed(a.Run));
+        Assert.Equal(all, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r", ("r", a.Run)));   // WorkOutput = batch, nessun duplicato
+        Assert.Empty(healthy.Requests.Select(r => r.AllText).Intersect(failing.Requests.Take(crashAt - 1).Select(r => r.AllText)));                                // nessun batch durevole è reinviato
+        var hashesAfter = await Scalar<string>("SELECT string_agg(\"OutputHash\", ',' ORDER BY \"BatchId\") FROM \"WorkOutputs\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r AND \"Status\" = 'Committed'", ("r", a.Run));
+        Assert.True(hashesBefore is null || hashesBefore.Split(',').All(h => hashesAfter.Split(',').Contains(h)), "gli output già durevoli restano identici");
+        Assert.Equal(expected, Fingerprint(await ContentAsync(a.Run)));                             // stessa analisi di un run senza guasti
+
+        var again = new DocumentChatWorkflowTests.FakeChatModel { ContextWindow = Window, Responder = _ => throw new InvalidOperationException("nessuna inferenza al replay") };
+        var replay = await RunV11Async(a.Claim, again);
+        Assert.Equal(resumed.ResultRevisionId, replay.ResultRevisionId);
+        Assert.Empty(again.Requests);
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", a.Run)));
+        Record($"| RH-042 | crash {label} | ripresa Completed | durevoli prima {before}, richieste dopo {healthy.Requests.Count}, totale {all} | stessa analisi del run pulito |");
+    }
+
+    [Fact]
+    public async Task A_takeover_with_a_new_lease_completes_once_and_the_stale_owner_cannot_commit_or_duplicate_effects()
+    {
+        var a = await ArrangeRepresentativeAsync();
+        using var _ = a.Client;
+        var seen = 0;
+        var failing = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            ContextWindow = Window,
+            Responder = r => Interlocked.Increment(ref seen) == 4 ? throw new InvalidOperationException("processo morto") : Respond(r),
+        };
+        await Assert.ThrowsAnyAsync<Exception>(() => RunV11Async(a.Claim, failing));
+        var before = await Committed(a.Run);
+
+        // Nuovo lease: un altro proprietario con fence maggiore.
+        await Execute(
+            "UPDATE \"ProcessingRuns\" SET \"Status\" = 'Running', \"LeaseOwner\" = 'owner-2', \"FencingToken\" = 2, \"AttemptCount\" = 2, \"LeaseUntil\" = now() + interval '10 minutes' WHERE \"Id\" = @r", ("r", a.Run));
+        var takeover = new AnalysisRunClaim(a.Run, "owner-2", 2, 2);
+
+        // Il proprietario vecchio (fence 1) non può né completare né aggiungere effetti.
+        var stale = Model(ScriptedPairs());
+        try
+        {
+            var staleResult = await RunV11Async(a.Claim, stale);
+            Assert.NotEqual(ProcessingRunStatus.Completed, staleResult.Status);
+        }
+        catch (Exception)
+        {
+            // un'eccezione di fence è un esito ammesso: l'invariante è l'assenza di effetti
+        }
+
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", a.Run)));
+        Assert.Equal(before, await Committed(a.Run));
+
+        var healthy = Model(ScriptedPairs());
+        var result = await RunV11Async(takeover, healthy);
+        Assert.True(result.Status == ProcessingRunStatus.Completed, await Message(a.Run));
+        Assert.Equal(1, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", a.Run)));
+        var total = await Committed(a.Run);
+        Assert.Equal(total, await Count("SELECT count(*) FROM \"DerivedBatches\" WHERE \"OwnerKind\" = 'ProcessingRun' AND \"OwnerId\" = @r", ("r", a.Run)));
+        Assert.Equal(7, total);
+        Record($"| RH-042 | takeover con nuovo lease (fence 2) | Completed | proprietario vecchio senza effetti | batch {total} |");
+    }
+
+    [Fact]
+    public async Task A_call_limit_exhausted_mid_hierarchy_fails_closed_with_no_partial_analysis_and_the_committed_batches_preserved()
+    {
+        // I limiti si congelano nello snapshot del run alla richiesta: il tetto va impostato PRIMA di crearlo (come in DocumentGapStageWorkflowTests).
+        using (var scope = App.Services.CreateScope())
+        {
+            var (_, snapshot) = await scope.ServiceProvider.GetRequiredService<DocumentPolicyService>().GetAsync(Ct);
+            var limits = snapshot.Limits with { MaxAiCallsPerRun = 4 };
+            Assert.Empty(limits.Validate());
+            await Execute("UPDATE \"DocumentPolicies\" SET \"LimitsJson\" = @j::jsonb, \"PolicyHash\" = @h WHERE \"Id\" = 1", ("j", limits.ToJson()), ("h", limits.Hash()));
+        }
+
+        var a = await ArrangeRepresentativeAsync();
+        using var _ = a.Client;
+        var limited = Model(ScriptedPairs());
+
+        var result = await RunV11Async(a.Claim, limited);
+
+        Assert.Equal(ProcessingRunStatus.Failed, result.Status);
+        Assert.Equal("document_limit_exceeded", result.ErrorCode);
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", a.Run)));    // fail-closed: nessuna analisi parziale
+        Assert.Equal(4, limited.Requests.Count);                                                                                // nessuna chiamata oltre il tetto
+        Assert.Equal(4, await Committed(a.Run));                                                                               // i batch già validati restano durevoli
+        Record($"| RH-042 | limite chiamate 4 | {result.Status} {result.ErrorCode} | richieste {limited.Requests.Count} | nessuna revisione, 4 batch durevoli |");
+    }
+
+    [Fact]
+    public async Task A_deadline_expired_in_the_middle_of_the_hierarchy_stops_without_a_partial_analysis_and_keeps_the_committed_batches()
+    {
+        var a = await ArrangeRepresentativeAsync();
+        using var _ = a.Client;
+        var seen = 0;
+        var model = new DocumentChatWorkflowTests.FakeChatModel
+        {
+            ContextWindow = Window,
+            Responder = Respond,
+            OnRequest = async _ =>
+            {
+                if (Interlocked.Increment(ref seen) == 3)
+                {
+                    // Scadenze coerenti con i vincoli del registro (come in DocumentReconcileAliasWorkflowTests): richiesta due ore fa, scadenze a 180 s e 3600 s dalla richiesta, quindi già trascorse.
+                    await Execute(
+                        """
+                        UPDATE "ProcessingRuns" SET "RequestedAt" = now() - interval '2 hours', "OrdinaryDeadlineAt" = now() - interval '2 hours' + interval '180 seconds',
+                               "EffectiveDeadlineAt" = now() - interval '2 hours' + interval '180 seconds', "DeadlineAt" = now() - interval '2 hours' + interval '180 seconds',
+                               "HardDeadlineAt" = now() - interval '2 hours' + interval '3600 seconds'
+                        WHERE "Id" = @r
+                        """,
+                        ("r", a.Run));
+                }
+            },
+        };
+
+        AnalysisRunResult? result = null;
+        Exception? thrown = null;
+        try
+        {
+            result = await RunV11Async(a.Claim, model);
+        }
+        catch (Exception ex)
+        {
+            thrown = ex;
+        }
+
+        Assert.False(thrown is PostgresException, "la scadenza non è stata impostata: " + thrown?.Message);             // il vincolo del registro rifiuterebbe l'UPDATE e il test sarebbe vacuo
+        Assert.True(thrown is not null || result!.Status != ProcessingRunStatus.Completed, "una scadenza a metà gerarchia non può chiudere con successo");
+        Assert.Equal(0, await Count("SELECT count(*) FROM \"AnalysisRevisions\" WHERE \"AnalysisId\" = @r", ("r", a.Run)));
+        Assert.True(await Committed(a.Run) < 7);
+        Record($"| RH-042 | scadenza a metà gerarchia | {(result is null ? "eccezione " + thrown!.GetType().Name : result.Status + " " + result.ErrorCode)} | batch durevoli {await Committed(a.Run)} | nessuna revisione |");
     }
 }
