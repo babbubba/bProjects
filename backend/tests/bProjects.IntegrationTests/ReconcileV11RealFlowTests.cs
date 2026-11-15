@@ -205,15 +205,30 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         // e quella del prodotto: senza l'intero ledger nel budget lo stadio Gap e un fail-fast a zero invii, PRIMA della gerarchia.
         var gapEstimate = statementTokens + 110L * n;
         var hierarchyThreshold = Output / 120;   // ~120 token di output per evidenza nella stima della chiamata singola (assessment §8)
-        v.Note($"BUDGET (prima di Analizza) — MISURATO: W={profile.WindowTokens} O={profile.OutputTokens} M={profile.MarginTokens} B={budget}; ledger={n} evidenze; enunciati={statementTokens} token (tokenizer reale del modello). STIMA EURISTICA (non autorevole): Gap≈{gapEstimate} token = enunciati + 110/voce; soglia gerarchia ≈ {hierarchyThreshold} evidenze. La misura AUTOREVOLE dello stadio Gap e quella del prodotto durante il run (fail-fast a zero invii se l'intero ledger non entra in B)");
-        v.Check("[STRUTTURALE/EURISTICA] la gerarchia sara verosimilmente instradata (evidenze oltre la soglia di output della chiamata singola)", n > hierarchyThreshold, $"{n} evidenze contro soglia ≈ {hierarchyThreshold}");
-        v.Check("[STRUTTURALE/EURISTICA] lo stadio Gap entra verosimilmente nel budget (stima con margine del 15%; salvaguardia, non misura del prodotto)", gapEstimate * 1.15 < budget, $"stima {gapEstimate} contro B={budget}");
-        var frozenExpansion = await Count("SELECT count(*) FROM \"WorkManifests\" WHERE \"PlanJson\"::jsonb @? '$.** ? (@.outputExpansion == 24)'");
-        v.Check("[STRUTTURALE] il fattore di espansione 24 e congelato nel piano di estrazione (manifesto del run)", frozenExpansion >= 1, $"{frozenExpansion} manifesti con outputExpansion=24");
-        if (n <= hierarchyThreshold || gapEstimate * 1.15 >= budget || frozenExpansion < 1)
+        // MISURE AUTOREVOLI (bloccanti): token reali degli enunciati; una condizione NECESSARIA, non una stima — se i soli enunciati non entrano in B lo stadio Gap non puo entrare (il prodotto fallirebbe a zero invii).
+        v.Note($"BUDGET (prima di Analizza) — MISURATO: W={profile.WindowTokens} O={profile.OutputTokens} M={profile.MarginTokens} B={budget}; ledger={n} evidenze; enunciati={statementTokens} token (tokenizer reale del modello).");
+        v.Check("[STRUTTURALE/MISURATO] ledger non vuoto e i soli enunciati (token reali) entrano nel budget di input B: condizione necessaria per lo stadio Gap", n > 0 && statementTokens < budget, $"{n} evidenze, {statementTokens} token contro B={budget}");
+
+        // STIME EURISTICHE (NON bloccanti: solo informative; la misura autorevole e quella del prodotto durante il run — fail-fast a zero invii per lo stadio Gap, instradamento gerarchico dalla stima di output).
+        v.Note($"STIMA EURISTICA (non autorevole, non bloccante): Gap ≈ {gapEstimate} token = enunciati + 110/voce (margine 15% → {gapEstimate * 1.15:F0} contro B={budget}); soglia di instradamento gerarchico ≈ {hierarchyThreshold} evidenze (O/120 per evidenza) → ledger {n} {(n > hierarchyThreshold ? "oltre" : "SOTTO")} la soglia. Il ramo effettivo e verificato dopo il run dagli stadi dei batch.");
+
+        // Il fattore 24 NON e nel PlanJson: e nella configurazione effettiva (opzioni risolte, verificate PRIMA dell'upload da RejectOptions) e congelato nel ConfigHash del manifesto di estrazione
+        // (DocumentEvidenceAgent: configHash include outputExpansion; test DocumentEvidenceAgentTests.The_extraction_output_expansion_is_frozen_...). Qui si registra solo il fatto osservabile.
+        var resolved = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+        var manifestHashes = await Rows("SELECT DISTINCT \"ConfigHash\" FROM \"WorkManifests\" WHERE \"DefinitionVersion\" = '" + DocumentEvidenceAgent.DefinitionVersion + "' ORDER BY 1");
+        v.Note($"fattore di espansione dell'estrazione RISOLTO={resolved.ExtractionOutputExpansion} (autorevole, verificato prima dell'upload); manifesti di estrazione osservati: {manifestHashes.Count} ConfigHash distinti (il fattore e uno dei suoi ingressi)");
+
+        // Precondizione del trigger di congelamento: il freeze di produzione, con le opzioni di recupero RISOLTE, deve essere la v6 (altrimenti il trigger non scatterebbe e il run non sarebbe v11).
+        var retrieval = sp.GetRequiredService<IOptions<bProjects.App.Retrieval.RetrievalOptions>>().Value;
+        var productFreeze = SourceSnapshotStore.DocumentaryAnalysisFreeze(retrieval.Enabled, retrieval).Definition;
+        v.Check("[STRUTTURALE] il freeze di produzione delle nuove richieste di Analizza (opzioni risolte) e la v6: il trigger di prova lo trasforma in v11", productFreeze == SourceSnapshotStore.AnalysisDefinitionV6, $"freeze={productFreeze} recupero abilitato={retrieval.Enabled}");
+        if (n == 0 || statementTokens >= budget || productFreeze != SourceSnapshotStore.AnalysisDefinitionV6)
         {
             return false;   // nessuna analisi: la prova non e valida e non viene avviata
         }
+
+        // Copia consistente della preparazione (documenti, evidenze, snapshot, manifesti) PRIMA di Analizza: se la riconciliazione fallisce non si ripete l'estrazione.
+        await BackupDatabaseAsync("pre-analizza", v);
 
         // Congelamento v11 SOLO nel database di test (trigger sulla creazione del run di analisi v6): nessuna modifica del prodotto, nessuna corsa con il worker.
         var prompts = SourceSnapshotStore.AnalysisPromptVersionsV11();
@@ -288,7 +303,14 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
 
         // ---- Gap: domanda canonica presente e valutazione dello stadio Gap
         var gapRows = new JsonArray();
-        var payloadText = await Scalar<string>("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1' AND \"Status\" = 'Committed' LIMIT 1", ("r", run));
+        var payloadText = (await Rows("SELECT \"PayloadJson\"::text FROM \"WorkOutputs\" WHERE \"OwnerId\" = @r AND \"SchemaVersion\" = 'gap-stage-alias-1' AND \"Status\" = 'Committed' LIMIT 1", ("r", run))).FirstOrDefault();
+        if (payloadText is null)
+        {
+            v.Check("[COPERTURA/GOLD] lo stadio Gap ha un WorkOutput Committed (schema gap-stage-alias-1): senza di esso le valutazioni dei Gap non sono verificabili", false, "nessun output committato");
+            Persist("rh051-gold-evaluation", report);
+            return;
+        }
+
         using var payload = JsonDocument.Parse(payloadText);
         report["gapStagePayload"] = JsonNode.Parse(payloadText);
         var assessments = payload.RootElement.TryGetProperty("gapAssessments", out var g) && g.ValueKind == JsonValueKind.Array ? g.EnumerateArray().ToList() : [];
@@ -303,7 +325,22 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         var reasons = assessments.Select(a => a.TryGetProperty("reason", out var r) ? r.GetString() : null).ToList();
         var outcomes = assessments.Select(a => a.TryGetProperty("outcome", out var o) ? o.GetString() : null).ToList();
         v.Note($"valutazioni dello stadio Gap: {string.Join("; ", outcomes.Zip(reasons, (o, r) => $"{o}/{r}"))} (attesi: tutte Open con motivo ammesso dal gold: PM-03 Partial|NoAnswer, PM-04 Ambiguous|Partial)");
-        // Collegamento record -> Gap del gold tramite l'enunciato dell'evidenza Gap (id canonico nel payload), poi motivo ammesso dal gold.
+        // Collegamento record -> Gap del gold: il record (gap-assessment-1) indica il Gap con l'ALIAS `gap` (E<n>); il catalogo alias del run, dentro lo stesso payload (`catalog.evidence[]`: alias → evidenceId),
+        // lo risolve nell'evidenza, il cui enunciato e confrontato con la domanda del gold. Poi motivo ammesso dal gold.
+        var aliasToEvidence = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        if (payload.RootElement.TryGetProperty("catalog", out var catalogEl) && catalogEl.TryGetProperty("evidence", out var catalogEvidence) && catalogEvidence.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in catalogEvidence.EnumerateArray())
+            {
+                if (entry.TryGetProperty("alias", out var aliasEl) && entry.TryGetProperty("evidenceId", out var idEl) && Guid.TryParse(idEl.GetString(), out var evidenceId) && aliasEl.GetString() is { } alias)
+                {
+                    aliasToEvidence[alias] = evidenceId;
+                }
+            }
+        }
+
+        report["gapCatalogAliases"] = aliasToEvidence.Count;
+        v.Check("[COPERTURA/GOLD] il catalogo alias del payload dello stadio Gap risolve i record (alias → evidenza): precondizione del collegamento ai Gap del gold", aliasToEvidence.Count > 0 && assessments.All(a => a.TryGetProperty("gap", out var gp) && gp.GetString() is { } al && aliasToEvidence.ContainsKey(al)), $"alias nel catalogo={aliasToEvidence.Count} record={assessments.Count}");
         foreach (var spec in GoldGaps)
         {
             string? matchedReason = null;
@@ -311,7 +348,7 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
             var linked = false;
             foreach (var a in assessments)
             {
-                if (!a.TryGetProperty("gapEvidenceId", out var idEl) || !Guid.TryParse(idEl.GetString(), out var gapId))
+                if (!a.TryGetProperty("gap", out var gapAlias) || gapAlias.GetString() is not { } aliasValue || !aliasToEvidence.TryGetValue(aliasValue, out var gapId))
                 {
                     continue;
                 }
@@ -374,6 +411,8 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
             }
         }
 
+        // Copia consistente dello stato finale (anche a run fallito), PRIMA che il database di test venga eliminato.
+        dump["finalBackup"] = await BackupDatabaseAsync("finale", null);
         var r = run ?? Guid.Empty;
         await Section("runRow", "SELECT to_jsonb(r) - 'PromptVersions' FROM \"ProcessingRuns\" r WHERE r.\"Id\" = @r", ("r", r));
         await Section(
@@ -384,6 +423,69 @@ public sealed class ReconcileV11RealFlowTests : LargeDocumentRealFlow
         await Section("ledger", "SELECT jsonb_build_object('kind', e.\"Kind\"::text, 'certainty', e.\"Certainty\"::text, 'origin', e.\"OriginKind\"::text, 'statement', e.\"Statement\") FROM \"Evidences\" e ORDER BY e.\"OriginKind\", e.\"Ordinal\"");
         await Section("analysisRevision", "SELECT jsonb_build_object('revisionId', r.\"Id\", 'content', r.\"ContentJson\"::jsonb) FROM \"AnalysisRevisions\" r WHERE r.\"AnalysisId\" = @r", ("r", r));
         Persist("rh051-run-dump", dump);
+    }
+
+    // ----------------------------------------------------------------------------------------------- copia consistente del database di test (circoscritta a questa prova)
+
+    /// <summary>
+    /// Copia consistente (pg_dump -Fc, snapshot transazionale, funziona con l'app in esecuzione) del SOLO database di test di questa prova, eseguita dentro il container PostgreSQL di test
+    /// (variabile BPROJECTS_TEST_PG_CONTAINER, default «bprojects-test-pg»; autenticazione locale del container: nessuna password nei comandi, nei log o nel file).
+    /// Il file va in %TEMP%\bprojects-rh051-backup (fuori dal repository, mai committato). Un errore non fa fallire la prova: e registrato. Contiene i dati sintetici della prova, inclusi gli account
+    /// di test creati dal banco (hash di password usa-e-getta); i file originali dei documenti sono in %TEMP%\bprojects-i5-real e i blob dei parser nello storage locale del banco (non nel dump).
+    /// </summary>
+    private async Task<string?> BackupDatabaseAsync(string label, Verdicts? v)
+    {
+        try
+        {
+            await using var connection = await OpenConnection();
+            var database = connection.Database;
+            var user = new Npgsql.NpgsqlConnectionStringBuilder(connection.ConnectionString).Username ?? "postgres";
+            if (!database.StartsWith("bprojects_test_", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("il database non e un database di test del banco: nessuna copia");
+            }
+
+            var container = Environment.GetEnvironmentVariable("BPROJECTS_TEST_PG_CONTAINER") is { Length: > 0 } c ? c : "bprojects-test-pg";
+            var directory = Path.Combine(Path.GetTempPath(), "bprojects-rh051-backup");
+            Directory.CreateDirectory(directory);
+            var file = $"rh051-{label}-{DateTime.UtcNow.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture)}.dump";
+            var inside = "/tmp/" + file;
+            await RunDockerAsync(["exec", container, "pg_dump", "-U", user, "-Fc", "-f", inside, database]);
+            var target = Path.Combine(directory, file);
+            await RunDockerAsync(["cp", $"{container}:{inside}", target]);
+            await RunDockerAsync(["exec", container, "rm", "-f", inside]);
+            var size = new FileInfo(target).Length;
+            var message = $"copia consistente del database di test ({label}): {target} ({size} byte). Ripristino: createdb + pg_restore nel container di test; non committare";
+            v?.Note(message);
+            TestContext.Current.SendDiagnosticMessage(message);
+            return target;
+        }
+        catch (Exception e)
+        {
+            var message = $"copia del database di test ({label}) NON riuscita: {e.GetType().Name}: {e.Message}";
+            v?.Note(message);
+            TestContext.Current.SendDiagnosticMessage(message);
+            return null;
+        }
+    }
+
+    private static async Task RunDockerAsync(string[] arguments)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("docker") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var a in arguments)
+        {
+            start.ArgumentList.Add(a);
+        }
+
+        using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("docker non avviabile");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        var error = process.StandardError.ReadToEndAsync(timeout.Token);
+        await process.WaitForExitAsync(timeout.Token);
+        if (process.ExitCode != 0)
+        {
+            var text = (await error).Trim();
+            throw new InvalidOperationException($"docker {arguments[0]} codice {process.ExitCode}: {text[..Math.Min(200, text.Length)]}");
+        }
     }
 
     private async Task<List<string>> Rows(string sql, params (string Name, object Value)[] args)

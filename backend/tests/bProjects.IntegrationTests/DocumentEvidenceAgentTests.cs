@@ -202,6 +202,33 @@ public sealed partial class DocumentEvidenceAgentTests
         Assert.NotEqual(historicBatch, currentBatch);
     }
 
+    // RH-051: il fattore di espansione NON è nel PlanJson del manifesto: è congelato nel ConfigHash (insieme al resto della configurazione effettiva). Il banco reale non deve cercarlo nel piano.
+    [Fact]
+    public async Task The_extraction_output_expansion_is_frozen_in_the_manifest_config_hash_and_not_in_the_plan_json()
+    {
+        TestEnvironment.RequirePostgres();
+        string[] portions = [Words(30, "q")];
+        string configLow, configHigh, planLow, planHigh;
+
+        await using (var low = await UnitRig.CreateAsync(portions))
+        {
+            await low.RunAsync(new FakeUnitModel(), expansion: 8);
+            configLow = await low.Db.ScalarAsync<string>("""SELECT "ConfigHash" FROM "WorkManifests" LIMIT 1""");
+            planLow = await low.Db.ScalarAsync<string>("""SELECT "PlanJson"::text FROM "WorkManifests" LIMIT 1""");
+        }
+
+        await using (var high = await UnitRig.CreateAsync(portions))
+        {
+            await high.RunAsync(new FakeUnitModel(), expansion: 12);
+            configHigh = await high.Db.ScalarAsync<string>("""SELECT "ConfigHash" FROM "WorkManifests" LIMIT 1""");
+            planHigh = await high.Db.ScalarAsync<string>("""SELECT "PlanJson"::text FROM "WorkManifests" LIMIT 1""");
+        }
+
+        Assert.NotEqual(configLow, configHigh);   // il fattore effettivo cambia l'identità del manifesto
+        Assert.DoesNotContain("outputExpansion", planLow, StringComparison.Ordinal);   // e non compare nel piano: cercarlo lì darebbe sempre 0
+        Assert.DoesNotContain("outputExpansion", planHigh, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_job_frozen_with_an_unknown_prompt_version_fails_as_incompatible_before_any_model_call()
     {
@@ -467,13 +494,13 @@ public sealed partial class DocumentEvidenceAgentTests
             return new UnitRig(db, seed, job, configJson);
         }
 
-        public async Task RunAsync(FakeUnitModel model, long fence = 5, int attempt = 1, string lease = "worker-a", Func<Microsoft.Extensions.AI.IChatClient, Microsoft.Extensions.AI.IChatClient>? wrap = null)
+        public async Task RunAsync(FakeUnitModel model, long fence = 5, int attempt = 1, string lease = "worker-a", Func<Microsoft.Extensions.AI.IChatClient, Microsoft.Extensions.AI.IChatClient>? wrap = null, double? expansion = null)
         {
             var options = new AiOptions
             {
                 Endpoint = "http://dgx.internal:8080/v1/", ModelId = "Qwen-A", ApiKey = "test-key", ContextWindowTokens = FakeUnitModel.Window,
                 MaxOutputTokens = 1500, SafetyMarginTokens = 20, RuntimeCheckSeconds = 60,
-                ExtractionOutputExpansion = PlannerLimits.DefaultOutputExpansion,   // fixture dimensionata sul fattore 8: questi test verificano meccaniche (tetti, retry), non la calibrazione (ExtractionOutputExpansionTests)
+                ExtractionOutputExpansion = expansion ?? PlannerLimits.DefaultOutputExpansion,   // fixture dimensionata sul fattore 8: questi test verificano meccaniche (tetti, retry), non la calibrazione (ExtractionOutputExpansionTests)
             };
             using var client = new InternalModelClient(options, model);
             var monitor = new ModelRuntimeMonitor(client, options, NullLogger<ModelRuntimeMonitor>.Instance);
