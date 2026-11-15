@@ -440,6 +440,25 @@ public sealed class DocumentReconcileV11FlowTests : ReconcileRig
             Assert.Single(content.OpenQuestions, q => q.Text == RepresentativeLedger.Row(gap.Ref).Statement);
         }
 
+        // Rischi semantici di M2 (D2b-2, leaf-projection-1) sul ledger rappresentativo: ToClarify e Alternative restano domande aperte (mai decisioni acquisite), le ipotesi sono assunzioni `Assumed`,
+        // le deduzioni mantengono la classificazione `Inferred`.
+        foreach (var row in RepresentativeLedger.Rows.Where(r => r.Certainty == EvidenceCertainty.ToClarify || r.Kind == EvidenceKind.Alternative && r.Certainty is not (EvidenceCertainty.Hypothesized or EvidenceCertainty.ToClarify)))
+        {
+            Assert.Contains(content.OpenQuestions, q => q.Text == row.Statement);
+            Assert.DoesNotContain(content.Requirements, i => i.Text == row.Statement);
+        }
+
+        foreach (var row in RepresentativeLedger.Rows.Where(r => r.Certainty == EvidenceCertainty.Hypothesized && r.Kind != EvidenceKind.Gap))
+        {
+            Assert.Contains(content.Assumptions, i => i.Text == row.Statement && i.Classification == DocumentAnalysisClassification.Assumed);
+        }
+
+        foreach (var row in RepresentativeLedger.Rows.Where(r => r.Certainty == EvidenceCertainty.Inferred))
+        {
+            var item = Assert.Single(SectionItems(content), i => i.Text == row.Statement);
+            Assert.Equal(DocumentAnalysisClassification.Inferred, item.Classification);
+        }
+
         // Conflitti non risolti rappresentati come tali: Open, senza risoluzione, con le due alternative integrali.
         Assert.Equal(script.Count, content.Conflicts.Count);
         Assert.All(content.Conflicts, c => Assert.Equal((AnalysisConflictStatus.Open, null), (c.Status, c.Resolution)));
