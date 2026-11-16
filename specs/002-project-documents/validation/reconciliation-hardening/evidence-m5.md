@@ -118,5 +118,8 @@ Dettaglio, ledger e manifesto degli artefatti in [`m5-evidence/run4-resume-real/
 - **Carico residuo (stima):** 368 candidati dalle 23 espansioni committate contro 39 confronti eseguiti (10 `Open`, 29 `Compared`): il budget residuo (111) probabilmente non basterebbe a completare la run neppure con output validi; da misurare prima di ripetere.
 - **Decisioni aperte prima di M6:** politica del prodotto per un batch `expand` non valido (oggi termina la run); percorso di ripresa dai checkpoint nel prodotto; budget sperimentale; attribuzione del costo fisso di ripresa. Nessuna modifica del prodotto, del gold o dei default in questa prosecuzione.
 
+## Diagnosi offline della crescita della riconciliazione (2026-11-16)
+Analisi senza chiamate al DGX, in [`m5-evidence/rh051-frontier-analysis.md`](m5-evidence/rh051-frontier-analysis.md) con ledger deterministici in [`m5-evidence/rh051-frontier/`](m5-evidence/rh051-frontier/). Esito: **NO-GO** a un nuovo test reale con la v11 attuale; M5 resta aperto. Correzioni al paragrafo precedente: `E109` non è un alias inventato del catalogo del run (è un membro valido di altre due espansioni) ma è **fuori dal batch**, che ha 41 voci (non 42); le «23 espansioni» sono 23 **blocchi** di 5 candidati-gruppo, tutti al tetto di 16 (saturi), e un padre saturo resta `NotProcessed` e impedisce `Completed` per costruzione; la frontiera minima dimostrata è ≥ 311 chiamate contro 111 residue.
+
 ## Limiti
 La v11 è provata sulla grammatica, su singoli batch reali e su una catena parziale (73 batch validi su 74, 89 chiamate reali), non sulla catena completa. Il gold di RH-051 è fissato nel commit del test e non è stato valutato.

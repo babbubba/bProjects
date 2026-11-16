@@ -1,0 +1,16 @@
+{
+  "committedBatches": 73,
+  "compareBatches": 39,
+  "expandBatches": 23,
+  "expandAtCap": 23,
+  "expansionCandidates": 368.0,
+  "expansionUniquePairs": 283,
+  "expansionDuplicateAcross": 84.0,
+  "childPairsAlreadyCompared": 11,
+  "pendingModelEE_A": 18,
+  "pendingModelEE_A_cacheHit": 4,
+  "pendingModelEE_B": 43,
+  "distinctComparesOwedPhaseA": 274,
+  "distinctComparesOwedPhaseAplusBEE": 303,
+  "groupCandidatesNotStarted": 6
+}
